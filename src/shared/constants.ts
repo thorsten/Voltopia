@@ -369,7 +369,7 @@ export const BALANCE = {
     /** Chebyshev distance kept between two field seeds. */
     minSpotDistance: 8,
     /** A field grows to this many tiles (inclusive). */
-    clusterSizeRange: [2, 5],
+    clusterSizeRange: [2, 5] as const,
     /** Elevation from which a tile counts as highland. */
     highlandLevel: 3,
     /** How much more often a highland tile is drawn as a field seed. */
