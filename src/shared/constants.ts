@@ -313,10 +313,13 @@ export const BALANCE = {
 
   hydrogen: {
     /**
-     * A hydrogen plant bundles electrolyser, tank and fuel cell. It only
-     * absorbs surplus that batteries, pumped storage AND the export link
-     * cannot take — energy that would otherwise be curtailed — and
-     * re-electrifies in a deficit after the other storages ran dry.
+     * A hydrogen plant bundles electrolyser, tank and fuel cell. It
+     * absorbs surplus that batteries and pumped storage cannot take —
+     * ahead of the export link, because a stored unit later displaces an
+     * import instead of earning the link's thin margin — and
+     * re-electrifies in a deficit after the other storages ran dry. Once
+     * the tanks are full the electrolysers keep running for direct sale
+     * whenever that pays better than exporting (see energyStep).
      */
     /** Hydrogen one plant's tank can store (energy units). */
     capacity: 30_000,

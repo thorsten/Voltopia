@@ -316,10 +316,12 @@ function dischargePool(
  * 1. renewable generation (solar + wind + rooftop + hydro + tidal + geothermal) covers
  *    consumption (buildings, heating, cooling, charging),
  * 2. surplus charges batteries, then pumped storage, then the heat store
- *    through the heat pumps (only while the nights are cold), anything
- *    beyond is exported over the transmission link; electrolysers absorb
- *    what the link cannot take (selling hydrogen once the tanks are
- *    full) and only the rest is curtailed,
+ *    through the heat pumps (only while the nights are cold), then the
+ *    hydrogen tanks — storing beats selling, because a stored unit later
+ *    displaces an import priced far above either sale. What the tanks
+ *    cannot hold is sold over whichever route pays more at the current
+ *    spot price: the export link, or the electrolysers running for
+ *    direct sale. Only what neither route can take is curtailed,
  * 3. deficit discharges batteries, then pumped storage, then the
  *    hydrogen fuel cells, then dispatches biogas, then sheds contracted
  *    business load (demand response), then imports over the
@@ -507,29 +509,51 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     state.pumpedStorageEnergy = pumped.stored;
     pumpedPowerUsed = pumped.absorbed;
     // The heat store drinks after the electric storages and before the
-    // link: a cheap one-way sink that shifts the heating peak.
+    // hydrogen tanks: a cheap one-way sink that shifts the heating peak.
     heatStoreCharge = chargeHeatStore(state, heat, net - battery.absorbed - pumped.absorbed);
-    const remaining = net - battery.absorbed - pumped.absorbed - heatStoreCharge;
-    // Sell what storage cannot absorb over the link, then electrolyse
-    // what the link cannot take; only the rest is curtailed.
-    gridExport = Math.min(remaining, BALANCE.market.exportCapacity);
-    const beyondExport = remaining - gridExport;
+    let remaining = net - battery.absorbed - pumped.absorbed - heatStoreCharge;
+    // Filling the tanks comes before either sale: a stored unit is
+    // released 1:1 by the fuel cell later and so displaces an import at
+    // importCostPerEnergyUnit * spot, worth several times what selling
+    // the same surplus now earns.
     const hydrogen = chargePool(
       state.hydrogenEnergy,
       hydrogenCapacity,
       electrolyserLimit,
       BALANCE.hydrogen.chargeEfficiency,
-      beyondExport,
+      remaining,
     );
     state.hydrogenEnergy = hydrogen.stored;
-    // Full tanks keep the electrolysers running and sell the output.
-    const saleInput = Math.min(
-      beyondExport - hydrogen.absorbed,
-      electrolyserLimit - hydrogen.absorbed,
-    );
-    hydrogenSold = saleInput * BALANCE.hydrogen.chargeEfficiency;
-    electrolysis = hydrogen.absorbed + saleInput;
-    curtailment = beyondExport - electrolysis;
+    electrolysis = hydrogen.absorbed;
+    remaining -= hydrogen.absorbed;
+
+    // What the tanks cannot hold is sold over the better-paying route
+    // and the other one mops up. The link earns exportRevenue * spot per
+    // energy unit; keeping the electrolysers running for direct sale
+    // earns chargeEfficiency * saleRevenue, independent of the spot
+    // price. Surplus usually falls at a sunny, windy midday — exactly
+    // when the spot price is at its lowest — so this is the common case,
+    // not an edge case.
+    const exportValue = BALANCE.market.exportRevenuePerEnergyUnit * spotPrice;
+    const hydrogenSaleValue =
+      BALANCE.hydrogen.chargeEfficiency * BALANCE.hydrogen.saleRevenuePerEnergyUnit;
+    const sellOverLink = (amount: number): number => {
+      const sold = Math.min(amount, BALANCE.market.exportCapacity - gridExport);
+      gridExport += sold;
+      return sold;
+    };
+    const sellAsHydrogen = (amount: number): number => {
+      const used = Math.min(amount, electrolyserLimit - electrolysis);
+      electrolysis += used;
+      hydrogenSold += used * BALANCE.hydrogen.chargeEfficiency;
+      return used;
+    };
+    const routes =
+      exportValue >= hydrogenSaleValue
+        ? [sellOverLink, sellAsHydrogen]
+        : [sellAsHydrogen, sellOverLink];
+    for (const sell of routes) remaining -= sell(remaining);
+    curtailment = remaining;
   } else {
     let shortfall = -net;
     const battery = dischargePool(state.storedEnergy, powerLimit, shortfall);

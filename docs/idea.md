@@ -177,9 +177,11 @@ terrain elevation, sound, the import/export market, and more.)
 Collected 2026-09-24; roughly in the order we want to build them.
 
 - **Hydrogen & electrolysers** (done): a hydrogen plant that
-  electrolyses surplus that would otherwise be curtailed, stores H2,
-  re-electrifies it in a Dunkelflaute, and sells the overflow once the
-  tank is full — curtailment gets a value.
+  electrolyses the surplus batteries and pumped storage cannot take —
+  ahead of the export link, since a stored unit later replaces an
+  expensive import — stores H2, re-electrifies it in a Dunkelflaute, and
+  once the tank is full sells hydrogen whenever that beats exporting:
+  curtailment gets a value.
 - **Dynamic electricity market** (done): the existing import/export
   market gets a moving spot price driven by weather/time of the
   neighbouring region, a price chart, and storage arbitrage (charge

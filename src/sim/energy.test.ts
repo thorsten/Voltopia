@@ -1044,6 +1044,17 @@ describe('service stations', () => {
   });
 });
 
+/**
+ * Spot factor at which exporting an energy unit earns exactly what
+ * running the electrolysers for direct sale does.
+ */
+function hydrogenSaleBreakEvenSpot(): number {
+  return (
+    (BALANCE.hydrogen.chargeEfficiency * BALANCE.hydrogen.saleRevenuePerEnergyUnit) /
+    BALANCE.market.exportRevenuePerEnergyUnit
+  );
+}
+
 describe('hydrogen plants', () => {
   it('census counts hydrogen plants and they are supply sources', () => {
     const state = makeState();
@@ -1055,21 +1066,22 @@ describe('hydrogen plants', () => {
     expect(state.layers.supplied[at(6, 5)]).not.toBe(SupplyStatus.NotConnected);
   });
 
-  it('electrolyses only the surplus the export link cannot take', () => {
+  it('fills the hydrogen tanks before anything is exported', () => {
     const state = makeState();
     state.money = 1e9;
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.HydrogenPlant);
     setNoonClearSky(state);
     energyStep(state, { chargingDemand: 0 });
-    // Export still comes first; only the would-be curtailment is electrolysed.
+    // A stored unit later displaces an import, which beats both sale
+    // routes, so the electrolysers get the surplus before the link does.
     const surplus = BALANCE.energy.solarPeakOutput;
-    const beyondExport = surplus - BALANCE.market.exportCapacity;
-    expect(state.lastEnergy.gridExport).toBeCloseTo(BALANCE.market.exportCapacity, 3);
-    expect(state.lastEnergy.electrolysis).toBeCloseTo(beyondExport, 3);
-    expect(state.hydrogenEnergy).toBeCloseTo(beyondExport * BALANCE.hydrogen.chargeEfficiency, 3);
-    expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
+    const stored = BALANCE.hydrogen.electrolyserPowerLimit;
+    expect(state.lastEnergy.electrolysis).toBeCloseTo(stored, 3);
+    expect(state.hydrogenEnergy).toBeCloseTo(stored * BALANCE.hydrogen.chargeEfficiency, 3);
+    expect(state.lastEnergy.gridExport).toBeCloseTo(surplus - stored, 3);
     expect(state.lastEnergy.hydrogenSold).toBe(0);
+    expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
   });
 
   it('sells hydrogen once the tanks are full instead of curtailing', () => {
@@ -1080,13 +1092,66 @@ describe('hydrogen plants', () => {
     setNoonClearSky(state);
     state.hydrogenEnergy = BALANCE.hydrogen.capacity;
     energyStep(state, { chargingDemand: 0 });
-    const beyondExport = BALANCE.energy.solarPeakOutput - BALANCE.market.exportCapacity;
-    expect(state.lastEnergy.electrolysis).toBeCloseTo(beyondExport, 3);
+    // Clear noon is a cheap hour, so direct sale outbids the link and
+    // takes the electrolysers' full input first; the link mops up.
+    const soldInput = BALANCE.hydrogen.electrolyserPowerLimit;
+    expect(state.lastEnergy.spotPrice).toBeLessThan(hydrogenSaleBreakEvenSpot());
+    expect(state.lastEnergy.electrolysis).toBeCloseTo(soldInput, 3);
     expect(state.lastEnergy.hydrogenSold).toBeCloseTo(
-      beyondExport * BALANCE.hydrogen.chargeEfficiency,
+      soldInput * BALANCE.hydrogen.chargeEfficiency,
       3,
     );
+    expect(state.lastEnergy.gridExport).toBeCloseTo(BALANCE.energy.solarPeakOutput - soldInput, 3);
     expect(state.hydrogenEnergy).toBe(BALANCE.hydrogen.capacity);
+    expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
+  });
+
+  it('prefers direct hydrogen sale over export below the break-even spot price', () => {
+    const state = makeState();
+    state.money = 1e9;
+    placePlant(state, at(5, 5), PlantType.SolarFarm);
+    placePlant(state, at(6, 5), PlantType.HydrogenPlant);
+    setNoonClearSky(state);
+    state.weather.windSpeed = 1; // regional abundance drives the spot price down
+    state.hydrogenEnergy = BALANCE.hydrogen.capacity; // tanks full: only sales left
+    // Trim the surplus to below the electrolyser limit plus the link's
+    // capacity, so the order of the two routes actually changes the split.
+    const surplus = BALANCE.hydrogen.electrolyserPowerLimit;
+    energyStep(state, { chargingDemand: BALANCE.energy.solarPeakOutput - surplus });
+    expect(state.lastEnergy.spotPrice).toBeLessThan(hydrogenSaleBreakEvenSpot());
+    expect(state.lastEnergy.electrolysis).toBeCloseTo(surplus, 3);
+    expect(state.lastEnergy.hydrogenSold).toBeCloseTo(
+      surplus * BALANCE.hydrogen.chargeEfficiency,
+      3,
+    );
+    expect(state.lastEnergy.gridExport).toBe(0);
+    expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
+  });
+
+  it('prefers export over direct hydrogen sale above the break-even spot price', () => {
+    const state = makeState();
+    state.money = 1e9;
+    // Overcast noon: PV still generates, but regional supply collapses
+    // and the spot price climbs above the break-even point.
+    const farms = 5;
+    for (let i = 0; i < farms; i++) placePlant(state, at(5 + i, 5), PlantType.SolarFarm);
+    placePlant(state, at(5, 6), PlantType.HydrogenPlant);
+    state.tick = TICKS_PER_DAY / 2;
+    state.weather.cloudCover = 1;
+    state.weather.windSpeed = 0;
+    state.season = { ...state.season, sunrise: SUNRISE, sunset: SUNSET, solarStrength: 1 };
+    state.hydrogenEnergy = BALANCE.hydrogen.capacity; // tanks full: only sales left
+    const generation = farms * BALANCE.energy.solarPeakOutput * 0.15; // 0.85 cloud attenuation
+    const surplus = BALANCE.hydrogen.electrolyserPowerLimit;
+    energyStep(state, { chargingDemand: generation - surplus });
+    expect(state.lastEnergy.spotPrice).toBeGreaterThan(hydrogenSaleBreakEvenSpot());
+    expect(state.lastEnergy.gridExport).toBeCloseTo(BALANCE.market.exportCapacity, 3);
+    const leftover = surplus - BALANCE.market.exportCapacity;
+    expect(state.lastEnergy.electrolysis).toBeCloseTo(leftover, 3);
+    expect(state.lastEnergy.hydrogenSold).toBeCloseTo(
+      leftover * BALANCE.hydrogen.chargeEfficiency,
+      3,
+    );
     expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
   });
 

@@ -185,7 +185,7 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
   run_of_river: 'an empty river tile',
   pumped_storage: 'an empty land tile with a lake tile as direct (4-)neighbour',
   hydrogen:
-    'any empty land tile; electrolyses surplus beyond the export link, re-electrifies in a lull, sells overflow',
+    'any empty land tile; electrolyses surplus beyond batteries and pumped storage (before the export link), re-electrifies in a lull, sells overflow',
   tidal:
     'an empty sea tile touching land; output follows the tide and rises in narrow water and at the river mouth',
   geothermal:
