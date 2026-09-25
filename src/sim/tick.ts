@@ -78,7 +78,7 @@ const MAX_LIFETIME_SAMPLES = 365;
 function recordLifetime(state: SimState, population: number, jobs: number): void {
   const e = state.lastEnergy;
   const sums = state.lifetime.daySums;
-  sums.generation += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.biogas;
+  sums.generation += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.biogas;
   sums.consumption +=
     e.buildingConsumption + e.chargingConsumption + e.heatingConsumption + e.coolingConsumption;
   sums.heating += e.heatingConsumption;
@@ -171,7 +171,7 @@ export function buildStats(state: SimState): GlobalStats {
         hydro: e.hydro,
         tidal: e.tidal,
         hydrogen: e.fuelCell,
-        geothermal: 0,
+        geothermal: e.geothermal,
       },
       consumption: {
         buildings: e.buildingConsumption,
