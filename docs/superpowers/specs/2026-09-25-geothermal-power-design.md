@@ -149,8 +149,11 @@ Following the `tidalCapacity` pattern in `src/sim/energy.ts`:
   with **no** weather, daylight, season or tide factor — that absence is
   the feature.
 - The term joins `generation` in `energyStep` and gets its own field in
-  the energy stats, its own row in the energy panel breakdown and its own
-  series in the graph.
+  the energy stats and its own row in the energy panel breakdown. The
+  history graph keeps only aggregate generation per sample
+  (`EnergyHistoryPoint`), so geothermal shows inside the total line there;
+  giving every source its own series is a separate change to the history
+  format and is out of scope here.
 
 Reservoir heat is stepped once per tick from the same place the census is
 available, so output and drain always agree on the same `load`.
