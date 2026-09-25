@@ -208,6 +208,24 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               ⚠ {t('inspector.steepSlope')}
             </p>
           )}
+          {info.hotspot && (
+            <>
+              <Row
+                label={t('inspect.hotspot')}
+                value={`${t('inspect.hotspotQuality')} ${info.hotspot.quality} · ${Math.round(
+                  info.hotspot.heat * 100,
+                )} %`}
+                hint={t('inspect.hotspotHint')}
+                testId="inspect-hotspot"
+              />
+              <Row
+                label={t('inspect.hotspotWells')}
+                value={`${info.hotspot.wells} / ${info.hotspot.capacity}`}
+                tone={info.hotspot.wells > info.hotspot.capacity ? 'negative' : 'muted'}
+                testId="inspect-hotspot-wells"
+              />
+            </>
+          )}
         </section>
       )}
 

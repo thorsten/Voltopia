@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PlantType } from '../shared/types.ts';
 import { PLANT_BY_TOOL, TOOL_HOTKEYS, type ToolId } from './useTools.ts';
 
 describe('tool hotkeys', () => {
@@ -20,5 +21,10 @@ describe('tool hotkeys', () => {
       expect(key).toBe(key.toLowerCase());
       expect(key).toHaveLength(1);
     }
+  });
+
+  it('binds the geothermal plant to E', () => {
+    expect(TOOL_HOTKEYS.e).toBe('plant-geothermal');
+    expect(PLANT_BY_TOOL['plant-geothermal']).toBe(PlantType.GeothermalPlant);
   });
 });
