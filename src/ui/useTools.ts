@@ -54,6 +54,7 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
   p: 'plant-park',
   w: 'plant-forest',
   h: 'plant-hydro',
+  i: 'plant-tidal',
   u: 'plant-pumped',
   y: 'plant-hydrogen',
   l: 'power-line',
