@@ -180,6 +180,40 @@ describe('sea build rules', () => {
   });
 });
 
+describe('geothermal build rules', () => {
+  it('accepts a hotspot tile and rejects anything else', () => {
+    const state = createSimState(5, 8);
+    state.layers.geothermal[20] = 2;
+    expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBeNull();
+    expect(buildRejection(state, 21, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
+      'needsHotspot',
+    );
+  });
+
+  it('never lets a hotspot override water or slope rules', () => {
+    const state = createSimState(5, 8);
+    state.layers.geothermal[20] = 2;
+    state.layers.terrain[20] = Terrain.Lake;
+    expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
+      'cannotBuildOnWater',
+    );
+
+    const steep = createSimState(5, 8);
+    steep.layers.geothermal[20] = 2;
+    // A cliff: centre at 20, east neighbour at 21 stays at 0 -> slope 3.
+    steep.layers.elevation[20] = 3;
+    expect(buildRejection(steep, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
+      'tooSteep',
+    );
+  });
+
+  it('leaves other plants unaffected by a hotspot', () => {
+    const state = createSimState(5, 8);
+    state.layers.geothermal[20] = 2;
+    expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.SolarFarm)).toBeNull();
+  });
+});
+
 describe('save round trip', () => {
   it('persists terrain, river flow and pumped storage', () => {
     const state = makeState();
@@ -465,6 +499,18 @@ describe('elevation', () => {
     expect(slopeCostMultiplier(state, 0)).toBe(1);
     state.layers.elevation[tileIndex(1, 0, 8)] = 1;
     expect(slopeCostMultiplier(state, 0)).toBe(BALANCE.terrain.slopeCostFactor);
+  });
+});
+
+describe('geothermal', () => {
+  it('carries the geothermal layers in tile diffs', () => {
+    const state = createSimState(7, 8);
+    state.layers.geothermal[5] = 2;
+    state.layers.reservoirHeat[5] = 200;
+    markDirty(state, 5);
+    const diff = collectDiffs(state).find((d) => d.index === 5);
+    expect(diff?.geothermal).toBe(2);
+    expect(diff?.reservoirHeat).toBe(200);
   });
 });
 

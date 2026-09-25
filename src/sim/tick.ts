@@ -4,6 +4,7 @@ import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
+import { reservoirStep } from './geothermal.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -54,6 +55,8 @@ export function stepTick(state: SimState): void {
   transitStep(state, occupancy);
   state.lastTransit = transitStats(state);
   updateTrafficLoad(state, occupancy);
+  // Reservoirs first: this tick's generation reads the heat they leave.
+  reservoirStep(state);
   energyStep(state, { chargingDemand: chargingDemand(state) });
   recomputeServices(state);
   state.lastServices = serviceCoverage(state);
@@ -75,7 +78,7 @@ const MAX_LIFETIME_SAMPLES = 365;
 function recordLifetime(state: SimState, population: number, jobs: number): void {
   const e = state.lastEnergy;
   const sums = state.lifetime.daySums;
-  sums.generation += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.biogas;
+  sums.generation += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.biogas;
   sums.consumption +=
     e.buildingConsumption + e.chargingConsumption + e.heatingConsumption + e.coolingConsumption;
   sums.heating += e.heatingConsumption;
@@ -168,6 +171,7 @@ export function buildStats(state: SimState): GlobalStats {
         hydro: e.hydro,
         tidal: e.tidal,
         hydrogen: e.fuelCell,
+        geothermal: e.geothermal,
       },
       consumption: {
         buildings: e.buildingConsumption,

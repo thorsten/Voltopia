@@ -52,6 +52,7 @@ export const PlantType = {
   BusDepot: 12,
   HydrogenPlant: 13,
   TidalPlant: 14,
+  GeothermalPlant: 15,
 } as const;
 export type PlantType = (typeof PlantType)[keyof typeof PlantType];
 
@@ -161,6 +162,8 @@ export interface EnergyStats {
     hydrogen: number;
     /** Tidal plant output this tick. */
     tidal: number;
+    /** Geothermal baseload output this tick. */
+    geothermal: number;
   };
   consumption: {
     buildings: number;
@@ -361,6 +364,17 @@ export interface TileInfo {
    * a hub's service ring. 0 when the tile projects nothing.
    */
   ringRadius: number;
+  /** Present on a hotspot tile: the field this tile belongs to. */
+  hotspot?: {
+    /** Hotspot quality 1..3. */
+    quality: number;
+    /** Reservoir temperature 0..1. */
+    heat: number;
+    /** Wells currently drilled into this field. */
+    wells: number;
+    /** Wells the field sustains before it starts cooling. */
+    capacity: number;
+  };
   /** Money upkeep of this tile per tick (roads and plants only). */
   upkeepPerTick: number;
   /** Fuel cost per tick attributed to this tile (biogas only). */
@@ -508,6 +522,10 @@ export interface TileDiff {
   elevation: number;
   /** Forest growth stage on this tile: 0 = none, 1..maxStage. */
   forest: number;
+  /** Geothermal hotspot quality on this tile: 0 = none, 1..3. */
+  geothermal: number;
+  /** Quantised reservoir temperature 0..255 of this tile's field (0 off a hotspot). */
+  reservoirHeat: number;
   /** DeliveryState of a retail building (0 elsewhere). */
   deliveryState: number;
   /** 1 when a bus stop is marked on this road tile. */
@@ -589,5 +607,9 @@ export interface SaveGame {
     busStop?: ArrayBuffer;
     /** Forest layer; absent in saves from before woods (treeless map). */
     forest?: ArrayBuffer;
+    /** Geothermal hotspot layer; absent in saves from before geothermal power. */
+    geothermal?: ArrayBuffer;
+    /** Quantised reservoir heat layer; absent in saves from before geothermal power. */
+    reservoirHeat?: ArrayBuffer;
   };
 }

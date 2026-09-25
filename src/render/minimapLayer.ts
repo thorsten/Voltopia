@@ -37,6 +37,7 @@ const COLORS = {
     [PlantType.LogisticsDepot]: '#8d99a6',
     [PlantType.BusDepot]: '#5b8fc7',
     [PlantType.TidalPlant]: '#1d7373',
+    [PlantType.GeothermalPlant]: '#b5482f',
   } as Record<number, string>,
 } as const;
 

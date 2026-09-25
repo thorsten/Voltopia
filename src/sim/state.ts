@@ -28,6 +28,12 @@ import {
   Zone,
 } from '../shared/types.ts';
 import { emptyPlantMap, type EconomyBreakdown } from './economy.ts';
+import {
+  discoverGeothermalFields,
+  generateGeothermal,
+  FULL_HEAT,
+  type GeothermalField,
+} from './geothermal.ts';
 import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
@@ -170,6 +176,10 @@ export interface TileLayers {
   elevation: Uint8Array;
   /** Forest growth stage per tile: 0 = none, 1..BALANCE.forest.maxStage. */
   forest: Uint8Array;
+  /** Geothermal hotspot quality per tile: 0 = none, 1..3. Immutable after generation. */
+  geothermal: Uint8Array;
+  /** Quantised reservoir temperature 0..255 (all tiles of a field share one value). */
+  reservoirHeat: Uint8Array;
   /** Power line mask per tile (0 = none, else LINE_PRESENT | connection bits). */
   powerLine: Uint8Array;
   /** 1 when the tile is within lineSupplyRadius of an energised line or supply plant. Derived, not persisted. */
@@ -223,6 +233,8 @@ export interface SimState {
   /** Elevation of the lake surface (derived; recomputed on load). */
   lakeLevel: number;
   layers: TileLayers;
+  /** Hotspot fields, derived from the geothermal layer; never persisted. */
+  geothermalFields: GeothermalField[];
   vehicles: Vehicle[];
   vans: Van[];
   buses: Bus[];
@@ -254,7 +266,15 @@ export interface SimState {
   lastTransit: TransitStats;
   /** Achieved goal ids (persisted with the save game). */
   goalsAchieved: Set<string>;
-  /** Goal progress counters; the season streaks are persisted, the rest is transient. */
+  /**
+   * Goal progress counters; the season streaks are persisted, the rest is
+   * transient. The rule: a counter is persisted when losing it costs a whole
+   * season, and left transient when losing it costs at most one in-game day.
+   * `winterTicks`, `summerTicks`, `freeFlowTicks`, `wellStockedTicks` and
+   * `transitTicks` are season-length, so they are persisted. `cleanDayTicks`
+   * and `geothermalTicks` are single-day streaks, so a reload resetting them
+   * is an accepted cost, not an oversight — they stay transient.
+   */
   goalProgress: {
     cleanDayTicks: number;
     exportedTotal: number;
@@ -263,6 +283,7 @@ export interface SimState {
     freeFlowTicks: number;
     wellStockedTicks: number;
     transitTicks: number;
+    geothermalTicks: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -294,6 +315,7 @@ export interface SimState {
     biogas: number;
     hydro: number;
     tidal: number;
+    geothermal: number;
     rooftop: number;
     buildingConsumption: number;
     chargingConsumption: number;
@@ -331,6 +353,8 @@ export function createTileLayers(size: number): TileLayers {
     terrain: new Uint8Array(tiles),
     elevation: new Uint8Array(tiles),
     forest: new Uint8Array(tiles),
+    geothermal: new Uint8Array(tiles),
+    reservoirHeat: new Uint8Array(tiles),
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
     services: new Uint8Array(tiles),
@@ -376,6 +400,7 @@ export function createSimState(
     },
     lakeLevel: 0,
     layers: createTileLayers(size),
+    geothermalFields: [],
     vehicles: [],
     vans: [],
     buses: [],
@@ -397,6 +422,7 @@ export function createSimState(
       freeFlowTicks: 0,
       wellStockedTicks: 0,
       transitTicks: 0,
+      geothermalTicks: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
@@ -427,6 +453,7 @@ export function createSimState(
       biogas: 0,
       hydro: 0,
       tidal: 0,
+      geothermal: 0,
       rooftop: 0,
       buildingConsumption: 0,
       chargingConsumption: 0,
@@ -504,6 +531,8 @@ export function collectDiffs(state: SimState): TileDiff[] {
       terrain: layers.terrain[index] as TileDiff['terrain'],
       elevation: layers.elevation[index],
       forest: layers.forest[index],
+      geothermal: layers.geothermal[index],
+      reservoirHeat: layers.reservoirHeat[index],
       deliveryState: deliveryStateOfAge(layers.deliveryAge[index]),
       busStop: layers.busStop[index],
       stopState:
@@ -663,6 +692,7 @@ export function buildRejection(
   const wantsRiver = intent === BuildIntent.Plant && plant === PlantType.RunOfRiver;
   const wantsTidal = intent === BuildIntent.Plant && plant === PlantType.TidalPlant;
   const offshoreWind = intent === BuildIntent.Plant && plant === PlantType.WindTurbine;
+  const wantsGeothermal = intent === BuildIntent.Plant && plant === PlantType.GeothermalPlant;
   if (terrain === Terrain.Sea) {
     // The sea carries tidal plants on its shore and offshore turbines;
     // roads stop at the coast (bridges cross the river, not the sea).
@@ -679,6 +709,8 @@ export function buildRejection(
   // Steep tiles reject everything the water rules did not already veto.
   if (slopeAt(state, index) > BALANCE.terrain.maxBuildSlope) return 'tooSteep';
   if (terrain === Terrain.River) return null; // bridge or run-of-river
+  // Hot rock only: the well has to reach the reservoir underneath.
+  if (wantsGeothermal && layers.geothermal[index] === 0) return 'needsHotspot';
   if (
     intent === BuildIntent.Plant &&
     plant === PlantType.PumpedStorage &&
@@ -751,6 +783,8 @@ export function serializeState(state: SimState): SaveGame {
       forest: copyBuffer(layers.forest),
       roadClass: copyBuffer(layers.roadClass),
       busStop: copyBuffer(layers.busStop),
+      geothermal: copyBuffer(layers.geothermal),
+      reservoirHeat: copyBuffer(layers.reservoirHeat),
     },
   };
 }
@@ -802,6 +836,28 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.forest) state.layers.forest.set(new Uint8Array(save.layers.forest));
   if (save.layers.roadClass) state.layers.roadClass.set(new Uint8Array(save.layers.roadClass));
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
+  if (save.layers.geothermal) {
+    state.layers.geothermal.set(new Uint8Array(save.layers.geothermal));
+    if (save.layers.reservoirHeat) {
+      state.layers.reservoirHeat.set(new Uint8Array(save.layers.reservoirHeat));
+    } else {
+      // A half-old save: hotspots but no reservoir — start them full.
+      for (let i = 0; i < state.layers.geothermal.length; i++) {
+        if (state.layers.geothermal[i] !== 0) state.layers.reservoirHeat[i] = FULL_HEAT;
+      }
+    }
+  } else {
+    // Saves from before geothermal: the generator is a pure function of
+    // seed, terrain and elevation, all of which this save carries, so the
+    // city gains exactly the hotspots a fresh map of this seed would have.
+    // A save old enough to also lack `terrain`/`elevation` (both optional,
+    // handled above) generates hotspots against a flat, all-land map instead,
+    // which can scatter fields across an already-built city. That's bounded —
+    // occupied tiles stay unbuildable — and is the price of guaranteeing a
+    // given seed always yields the same hotspots.
+    generateGeothermal(state);
+  }
+  discoverGeothermalFields(state);
   state.lakeLevel = computeLakeLevel(state);
   // Advance the RNG deterministically past the founding state so a loaded
   // game does not replay the exact random sequence from tick zero.

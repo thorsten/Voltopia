@@ -86,6 +86,7 @@ export const PLANT_NAMES = {
   pumped_storage: PlantType.PumpedStorage,
   hydrogen: PlantType.HydrogenPlant,
   tidal: PlantType.TidalPlant,
+  geothermal: PlantType.GeothermalPlant,
   logistics_depot: PlantType.LogisticsDepot,
   bus_depot: PlantType.BusDepot,
 } as const;
@@ -136,6 +137,7 @@ const PLANT_TOOL_KEY: Record<PlantName, TranslationKey> = {
   pumped_storage: 'tool.plant-pumped',
   hydrogen: 'tool.plant-hydrogen',
   tidal: 'tool.plant-tidal',
+  geothermal: 'tool.plant-geothermal',
   logistics_depot: 'tool.plant-depot',
   bus_depot: 'tool.plant-busdepot',
 };
@@ -153,6 +155,8 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
     'any empty land tile; electrolyses surplus beyond the export link, re-electrifies in a lull, sells overflow',
   tidal:
     'an empty sea tile touching land; output follows the tide and rises in narrow water and at the river mouth',
+  geothermal:
+    'an empty land tile carrying a geothermal hotspot; constant output, but a field only sustains so many wells before its reservoir cools',
   logistics_depot:
     'an empty land tile with a road as direct (4-)neighbour; vans serve shops within route reach',
   bus_depot:
@@ -167,6 +171,7 @@ export const FIND_KINDS = [
   'river',
   'lake_shore',
   'coastal_sea',
+  'geothermal_hotspot',
   'road',
   'power_line',
   'plant',
@@ -335,6 +340,11 @@ function isCoastalSeaTile(tiles: TileMirror, index: number): boolean {
   return neighbors4(index, tiles.size).some((n) => tiles.terrain[n] === Terrain.Land);
 }
 
+/** True on a tile that carries a geothermal hotspot. */
+function isHotspotTile(tiles: TileMirror, index: number): boolean {
+  return tiles.geothermal[index] !== 0;
+}
+
 function overviewGlyph(tiles: TileMirror, i: number): string {
   const terrain = tiles.terrain[i];
   if (tiles.tileType[i] === TileType.Road) return tiles.busStop[i] !== 0 ? 'o' : '+';
@@ -352,6 +362,7 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
       logistics_depot: 'D',
       bus_depot: 'T',
       tidal: 'X',
+      geothermal: 'E',
     };
     const name = PLANT_NAME_BY_TYPE.get(tiles.plantType[i] as PlantType);
     return name && name !== 'none' ? glyph[name] : '?';
@@ -373,7 +384,7 @@ const OVERVIEW_LEGEND =
   '= power line on empty land, ' +
   'r/c/s zoned but unbuilt (residential/commercial/retail), R/C/S building, ' +
   'plants: V solar, W wind, B battery, G biogas, H charging hub, P park, ' +
-  'F run-of-river, U pumped storage, X tidal, D logistics depot, T bus depot. ' +
+  'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot. ' +
   'Roads may also carry a power line (see the power layer).';
 
 function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
@@ -382,6 +393,7 @@ function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
     case 'overview':
       return overviewGlyph(tiles, i);
     case 'terrain':
+      if (tiles.geothermal[i] !== 0) return '^';
       return terrain === Terrain.River
         ? '~'
         : terrain === Terrain.Lake
@@ -435,7 +447,7 @@ function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
 
 const LAYER_LEGEND: Record<MapLayer, string> = {
   overview: OVERVIEW_LEGEND,
-  terrain: '. land, ~ river, # lake, % sea',
+  terrain: '. land, ~ river, # lake, % sea, ^ land with a geothermal hotspot',
   supply:
     '. no building, 0 building not connected to any plant, 1 building undersupplied, ' +
     '2 building fully supplied, ~ river, # lake, % sea',
@@ -702,7 +714,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Everything about one tile: terrain, road, power line, zone, building density, plant, ' +
         'supply status, bus stop and coverage, plus live figures (upkeep, tax, consumption, ' +
-        'generation, storage, residents, jobs, demand) and the reasons the tile is not growing.',
+        'generation, storage, residents, jobs, demand) and the reasons the tile is not growing. ' +
+        'On a geothermal hotspot or a geothermal plant, a "hotspot" field reports the field\'s ' +
+        'quality, reservoir heat (0..1) and how many of its wells its capacity sustains — heat ' +
+        "and every well's output fall once wells drilled exceed that capacity.",
       inputSchema: {
         type: 'object',
         properties: { x: { type: 'integer' }, y: { type: 'integer' } },
@@ -732,6 +747,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Coordinates of tiles matching a kind: empty_land, river, lake_shore (land next to the ' +
         'lake, for pumped storage), coastal_sea (empty sea tile touching land, for tidal plants), ' +
+        'geothermal_hotspot (empty land tile carrying a hotspot, for geothermal plants), ' +
         'road, power_line, plant, zoned_empty, building, not_connected_building, ' +
         'undersupplied_building, bus_stop. Optionally nearest to a point first.',
       inputSchema: {
@@ -861,7 +877,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Place a plant on one tile: solar, wind, battery, biogas, charging_hub, park, ' +
         'run_of_river (river tile), pumped_storage (land tile next to the lake), hydrogen, ' +
-        'tidal (coastal sea tile), logistics_depot, bus_depot. See get_build_catalog for costs and roles.',
+        'tidal (coastal sea tile), geothermal (hotspot tile), logistics_depot, bus_depot. ' +
+        'See get_build_catalog for costs and roles.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1115,6 +1132,8 @@ function plantFigures(type: PlantType): Record<string, number> {
       return { peakOutputPerTick: e.hydroPeakOutput };
     case PlantType.TidalPlant:
       return { peakOutputPerTick: e.tidalPeakOutput };
+    case PlantType.GeothermalPlant:
+      return { peakOutputPerTick: e.geothermalPeakOutput };
     case PlantType.Battery:
       return { capacity: e.batteryCapacity, powerLimitPerTick: e.batteryPowerLimit };
     case PlantType.PumpedStorage:
@@ -1143,6 +1162,7 @@ function liveFigures(info: TileInfo): Record<string, unknown> {
   return {
     connected: info.connected,
     ringRadius: info.ringRadius,
+    ...(info.hotspot ? { hotspot: info.hotspot } : {}),
     upkeepPerTick: round(info.upkeepPerTick, 4),
     fuelCostPerTick: round(info.fuelCostPerTick, 4),
     taxPerTick: round(info.taxPerTick, 4),
@@ -1182,6 +1202,8 @@ function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
       return terrain === Terrain.Land && empty && isLakeShore(tiles, i);
     case 'coastal_sea':
       return tiles.tileType[i] === TileType.Empty && isCoastalSeaTile(tiles, i);
+    case 'geothermal_hotspot':
+      return terrain === Terrain.Land && empty && isHotspotTile(tiles, i);
     case 'road':
       return tiles.tileType[i] === TileType.Road;
     case 'power_line':

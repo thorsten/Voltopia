@@ -4,8 +4,9 @@ import { tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import { PlantType, Terrain, TileType, Zone, type GlobalStats } from '../shared/types.ts';
 import { SimEngine } from '../sim/engine.ts';
+import { discoverGeothermalFields } from '../sim/geothermal.ts';
 import { isCoastalSea } from '../sim/sea.ts';
-import { slopeCostMultiplier } from '../sim/state.ts';
+import { markDirty, slopeCostMultiplier } from '../sim/state.ts';
 import { TileMirror } from './tileMirror.ts';
 import {
   callTool,
@@ -194,9 +195,19 @@ describe('agent tools: reading', () => {
       const glyph = terrainRows[Math.floor(i / SIZE)][i % SIZE];
       const t = engine.state.layers.terrain[i];
       const expected =
-        t === Terrain.River ? '~' : t === Terrain.Lake ? '#' : t === Terrain.Sea ? '%' : '.';
+        engine.state.layers.geothermal[i] !== 0
+          ? '^'
+          : t === Terrain.River
+            ? '~'
+            : t === Terrain.Lake
+              ? '#'
+              : t === Terrain.Sea
+                ? '%'
+                : '.';
       expect(glyph).toBe(expected);
     }
+    // The map always carves at least one geothermal hotspot, so the ^ branch is exercised for real.
+    expect(engine.state.layers.geothermal.some((g) => g !== 0)).toBe(true);
     // The map always carves a sea band, so the fix-up above is exercised for real.
     expect(engine.state.layers.terrain.some((t) => t === Terrain.Sea)).toBe(true);
     const window = await call('get_map', { origin: { x: 20, y: 21 }, width: 10, height: 10 });
@@ -244,6 +255,11 @@ describe('agent tools: reading', () => {
     expect(coastalSea.total).toBeGreaterThan(0);
     for (const { x, y } of coastalSea.tiles as Array<{ x: number; y: number }>) {
       expect(isCoastalSea(engine.state, tileIndex(x, y, SIZE))).toBe(true);
+    }
+    const hotspots = await call('find_tiles', { kind: 'geothermal_hotspot' });
+    expect(hotspots.total).toBeGreaterThan(0);
+    for (const { x, y } of hotspots.tiles as Array<{ x: number; y: number }>) {
+      expect(engine.state.layers.geothermal[tileIndex(x, y, SIZE)]).not.toBe(0);
     }
     const land = await call('find_tiles', { kind: 'empty_land', near: { x: 5, y: 5 }, limit: 3 });
     const tiles = land.tiles as Array<{ x: number; y: number }>;
@@ -481,5 +497,59 @@ describe('agent tools: building', () => {
     expect(engine.state.layers.plantType[tileIndex(tile.x, tile.y, SIZE)]).toBe(
       PlantType.TidalPlant,
     );
+  });
+
+  it('builds a geothermal plant on a hotspot and rejects it off the hotspot', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    const hotspot = tileIndex(x, y, SIZE);
+    const elsewhere = tileIndex(x + 1, y, SIZE);
+    // A hand-placed hotspot, independent of whatever the map generator drew.
+    engine.state.layers.geothermal[elsewhere] = 0;
+    engine.state.layers.geothermal[hotspot] = 2;
+    engine.state.layers.reservoirHeat[hotspot] = 255;
+    discoverGeothermalFields(engine.state);
+
+    const built = await call('place_plant', { plant: 'geothermal', x, y });
+    expect(built).toMatchObject({ ok: true });
+    expect(engine.state.layers.plantType[hotspot]).toBe(PlantType.GeothermalPlant);
+
+    const refused = await call('place_plant', { plant: 'geothermal', x: x + 1, y });
+    expect(refused).toMatchObject({ ok: false, error: 'needsHotspot' });
+  });
+
+  it('inspect_tile reports the hotspot field so an agent can watch its reservoir', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    const hotspot = tileIndex(x, y, SIZE);
+    engine.state.layers.geothermal[hotspot] = 2;
+    engine.state.layers.reservoirHeat[hotspot] = 255;
+    discoverGeothermalFields(engine.state);
+
+    await call('place_plant', { plant: 'geothermal', x, y });
+    const info = await call('inspect_tile', { x, y });
+    expect(info).toMatchObject({
+      ok: true,
+      plant: 'geothermal',
+      hotspot: { quality: 2, heat: 1, wells: 1, capacity: 1 },
+    });
+  });
+
+  it('finds a hand-placed geothermal hotspot once its diff reaches the tile mirror', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    const hotspot = tileIndex(x, y, SIZE);
+    engine.state.layers.geothermal[hotspot] = 2;
+    // Writing the layer directly (as opposed to the real generator, which
+    // marks its own tiles dirty) does not queue a diff by itself — mark it
+    // dirty so the next tick actually reaches the agent's tile mirror. Go
+    // through the advance_time tool (not a raw engine.tick()) so the tick
+    // is absorbed into the harness's own tile mirror, exactly as a real
+    // agent session would see it.
+    markDirty(engine.state, hotspot);
+    await call('advance_time', { ticks: 1 });
+
+    const found = await call('find_tiles', { kind: 'geothermal_hotspot' });
+    expect(found.tiles).toContainEqual({ x, y });
   });
 });

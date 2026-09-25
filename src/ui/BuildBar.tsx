@@ -67,6 +67,7 @@ const CATEGORIES: Category[] = [
       { id: 'plant-biogas', icon: '♻️', cost: BALANCE.costs.plant[PlantType.BiogasPlant] },
       { id: 'plant-hydro', icon: '💧', cost: BALANCE.costs.plant[PlantType.RunOfRiver] },
       { id: 'plant-tidal', icon: '🌊', cost: BALANCE.costs.plant[PlantType.TidalPlant] },
+      { id: 'plant-geothermal', icon: '♨️', cost: BALANCE.costs.plant[PlantType.GeothermalPlant] },
       { id: 'plant-pumped', icon: '🏔', cost: BALANCE.costs.plant[PlantType.PumpedStorage] },
       { id: 'plant-hydrogen', icon: '🫧', cost: BALANCE.costs.plant[PlantType.HydrogenPlant] },
     ],

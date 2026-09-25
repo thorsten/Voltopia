@@ -29,6 +29,7 @@ export type ToolId =
   | 'plant-tidal'
   | 'plant-pumped'
   | 'plant-hydrogen'
+  | 'plant-geothermal'
   | 'plant-forest'
   | 'bulldoze';
 
@@ -38,7 +39,7 @@ const ZONE_BY_TOOL: Partial<Record<ToolId, Zone>> = {
   'zone-retail': Zone.Retail,
 };
 
-/** Keyboard shortcuts for tools (digits row plus B, P, H, U, L, F, C, G, V, T and K). */
+/** Keyboard shortcuts for tools (digits row plus B, P, H, U, L, F, C, G, V, T, K, W, I, Y and E). */
 export const TOOL_HOTKEYS: Record<string, ToolId> = {
   '1': 'select',
   '2': 'road',
@@ -57,6 +58,7 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
   i: 'plant-tidal',
   u: 'plant-pumped',
   y: 'plant-hydrogen',
+  e: 'plant-geothermal',
   l: 'power-line',
   f: 'plant-fire',
   c: 'plant-police',
@@ -86,6 +88,7 @@ export const PLANT_BY_TOOL: Partial<Record<ToolId, PlantType>> = {
   'plant-tidal': PlantType.TidalPlant,
   'plant-pumped': PlantType.PumpedStorage,
   'plant-hydrogen': PlantType.HydrogenPlant,
+  'plant-geothermal': PlantType.GeothermalPlant,
 };
 
 /**

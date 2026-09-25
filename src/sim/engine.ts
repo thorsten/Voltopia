@@ -6,6 +6,7 @@ import { buildRoads, bulldozeTiles, undoLastAction, type BuildResult } from './r
 import { buyInsulation } from './economy.ts';
 import { drivingVans } from './deliveries.ts';
 import { placePlant } from './energy.ts';
+import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -47,6 +48,8 @@ export class SimEngine {
           this.state = createSimState(command.seed, command.size, command.startingMoney);
           generateTerrain(this.state);
           generateWater(this.state);
+          generateGeothermal(this.state);
+          discoverGeothermalFields(this.state);
           generateForest(this.state);
         }
         return [];

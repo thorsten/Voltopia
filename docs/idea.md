@@ -205,7 +205,13 @@ Collected 2026-09-24; roughly in the order we want to build them.
   fires (finally giving fire stations an active role), river floods.
 - **Heat sector**: heat pumps as seasonal winter load, district
   heating/power-to-heat as a consumer and storage.
-- **Geothermal plants** at special terrain spots.
+- **Geothermal plants** (done): seed-generated hotspot fields in the
+  highlands carry the game's only true baseload — constant through
+  night, storm and Dunkelflaute. Each field has a quality, a sustainable
+  well count and a shared heat reservoir that cools toward a lower
+  equilibrium when it is overdrilled and recovers once the excess wells
+  go, so a field drilled out yields clearly less than its well count
+  suggests.
 - **Demand response**: contracts with industry to shed load in a
   Dunkelflaute; maybe a grid-frequency minigame.
 - **Per-district grids** (deferred earlier): separate grid islands

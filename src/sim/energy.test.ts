@@ -1233,3 +1233,46 @@ describe('market trading', () => {
     expect(state.lastEnergy.tradeBuy).toBe(0);
   });
 });
+
+describe('geothermal generation', () => {
+  /** A map with one full-heat quality-2 hotspot carrying one plant. */
+  function plantOnHotspot(): SimState {
+    const state = createSimState(5, 16);
+    state.layers.geothermal[40] = 2;
+    state.layers.reservoirHeat[40] = 255;
+    state.layers.tileType[40] = TileType.Plant;
+    state.layers.plantType[40] = PlantType.GeothermalPlant;
+    return state;
+  }
+
+  it('counts the plant with its quality and heat', () => {
+    const census = censusPlants(plantOnHotspot());
+    expect(census.geothermalPlants).toBe(1);
+    // qualityFactor[2] = 1.0 at full heat.
+    expect(census.geothermalCapacity).toBeCloseTo(1, 6);
+  });
+
+  it('scales with quality and with a cooled reservoir', () => {
+    const state = plantOnHotspot();
+    state.layers.geothermal[40] = 3;
+    expect(censusPlants(state).geothermalCapacity).toBeCloseTo(1.3, 6);
+    state.layers.reservoirHeat[40] = 128;
+    expect(censusPlants(state).geothermalCapacity).toBeCloseTo(1.3 * (128 / 255), 6);
+  });
+
+  it('generates the same at midnight as at noon, in storm and in calm', () => {
+    const outputs = [0, TICKS_PER_DAY / 2].flatMap((tick) =>
+      [0, 1].map((cloudCover) => {
+        const state = plantOnHotspot();
+        state.tick = tick;
+        state.weather.cloudCover = cloudCover;
+        state.weather.windSpeed = cloudCover;
+        energyStep(state, { chargingDemand: 0 });
+        return state.lastEnergy.geothermal;
+      }),
+    );
+    for (const output of outputs) {
+      expect(output).toBeCloseTo(BALANCE.energy.geothermalPeakOutput, 6);
+    }
+  });
+});

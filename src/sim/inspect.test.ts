@@ -2,10 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex } from '../shared/grid.ts';
-import { DeliveryState, RoadClass, StopState } from '../shared/types.ts';
+import { DeliveryState, RoadClass, StopState, TileType } from '../shared/types.ts';
 import { syncFleet } from './deliveries.ts';
 import { economyStep } from './economy.ts';
 import { buildingConsumption, placePlant } from './energy.ts';
+import { discoverGeothermalFields } from './geothermal.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
@@ -201,6 +202,33 @@ describe('inspectTile', () => {
     expect(info.elevation).toBe(4);
     expect(info.slope).toBe(0);
     expect(info.terrainBonus).toBeCloseTo(1 + BALANCE.terrain.windBonusPerLevel * 4);
+  });
+
+  it('reports the hotspot and its field on a hotspot tile', () => {
+    const state = createSimState(3, 16);
+    for (const index of [34, 35, 50, 51]) {
+      state.layers.geothermal[index] = 2;
+      state.layers.reservoirHeat[index] = 204; // 80 %
+    }
+    discoverGeothermalFields(state);
+    state.layers.tileType[34] = TileType.Plant;
+    state.layers.plantType[34] = PlantType.GeothermalPlant;
+
+    const info = inspectTile(state, 35)!;
+    expect(info.hotspot).toEqual({ quality: 2, heat: 204 / 255, wells: 1, capacity: 2 });
+    expect(inspectTile(state, 0)!.hotspot).toBeUndefined();
+  });
+
+  it('shows a geothermal plant generating at its quality and heat', () => {
+    const state = createSimState(3, 16);
+    state.layers.geothermal[34] = 3;
+    state.layers.reservoirHeat[34] = 255;
+    discoverGeothermalFields(state);
+    state.layers.tileType[34] = TileType.Plant;
+    state.layers.plantType[34] = PlantType.GeothermalPlant;
+    const info = inspectTile(state, 34)!;
+    expect(info.generation).toBeCloseTo(BALANCE.energy.geothermalPeakOutput * 1.3, 6);
+    expect(info.peakGeneration).toBeCloseTo(BALANCE.energy.geothermalPeakOutput * 1.3, 6);
   });
 
   it('reports the offshore turbine bonus matching its generation', () => {

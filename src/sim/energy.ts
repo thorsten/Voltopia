@@ -1,6 +1,7 @@
 import { BALANCE, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
 import { PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
+import { FULL_HEAT } from './geothermal.ts';
 import { isSupplySource, recomputeGrid } from './powerGrid.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -101,10 +102,13 @@ interface PlantCensus {
   pumpedCapacity: number;
   /** Sum of tidal plants' site factors (narrowness and estuary bonus). */
   tidalCapacity: number;
+  geothermalPlants: number;
+  /** Sum of geothermal plants' quality factor × reservoir heat. */
+  geothermalCapacity: number;
 }
 
 export function censusPlants(state: SimState): PlantCensus {
-  const { tileType, plantType } = state.layers;
+  const { tileType, plantType, geothermal, reservoirHeat } = state.layers;
   const census: PlantCensus = {
     solarFarms: 0,
     windTurbines: 0,
@@ -124,6 +128,8 @@ export function censusPlants(state: SimState): PlantCensus {
     hydroCapacity: 0,
     pumpedCapacity: 0,
     tidalCapacity: 0,
+    geothermalPlants: 0,
+    geothermalCapacity: 0,
   };
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant) continue;
@@ -181,6 +187,15 @@ export function censusPlants(state: SimState): PlantCensus {
       case PlantType.TidalPlant:
         census.tidalPlants++;
         census.tidalCapacity += tidalSiteFactor(state, i);
+        break;
+      case PlantType.GeothermalPlant:
+        census.geothermalPlants++;
+        // Reads the quantised reservoirHeat layer, not the field's authoritative
+        // float `heat` — the gap is bounded by one step of 1/FULL_HEAT, and it's
+        // deliberate: energy, inspector, agent API and renderer all then agree on
+        // the same number.
+        census.geothermalCapacity +=
+          BALANCE.geothermal.qualityFactor[geothermal[i]] * (reservoirHeat[i] / FULL_HEAT);
         break;
       case PlantType.None:
         break;
@@ -279,7 +294,7 @@ function dischargePool(
 
 /**
  * One tick of the energy balance:
- * 1. renewable generation (solar + wind + rooftop + hydro + tidal) covers
+ * 1. renewable generation (solar + wind + rooftop + hydro + tidal + geothermal) covers
  *    consumption (buildings, heating, cooling, charging),
  * 2. surplus charges batteries, then pumped storage, anything beyond is
  *    exported over the transmission link; electrolysers absorb what the
@@ -301,6 +316,8 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const wind = census.windCapacity * BALANCE.energy.windPeakOutput * currentWindFactor(state);
   const hydro = census.hydroCapacity * BALANCE.energy.hydroPeakOutput * riverFlowFactor(state);
   const tidal = census.tidalCapacity * BALANCE.energy.tidalPeakOutput * tideFactor(state.tick);
+  // Baseload: no weather, no daylight, no tide — only the reservoir.
+  const geothermal = census.geothermalCapacity * BALANCE.energy.geothermalPeakOutput;
 
   // Consumption of all connected buildings, plus their rooftop PV
   // feed-in (rooftop capacity grows automatically with density).
@@ -337,7 +354,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
 
   const chargingDemand = Math.max(0, input.chargingDemand);
   const totalDemand = buildingDemand + heatingDemand + coolingDemand + chargingDemand;
-  const generation = solar + wind + rooftop + hydro + tidal;
+  const generation = solar + wind + rooftop + hydro + tidal + geothermal;
 
   const storageCapacity = census.batteries * BALANCE.energy.batteryCapacity;
   const powerLimit = census.batteries * BALANCE.energy.batteryPowerLimit;
@@ -496,6 +513,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     biogas,
     hydro,
     tidal,
+    geothermal,
     rooftop,
     buildingConsumption: buildingDemand,
     chargingConsumption: chargingDemand,

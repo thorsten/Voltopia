@@ -43,6 +43,7 @@ const PLANT_LABEL: Record<PlantType, TranslationKey | null> = {
   [PlantType.LogisticsDepot]: 'tool.plant-depot',
   [PlantType.BusDepot]: 'tool.plant-busdepot',
   [PlantType.TidalPlant]: 'tool.plant-tidal',
+  [PlantType.GeothermalPlant]: 'tool.plant-geothermal',
 };
 
 const ZONE_LABEL: Record<Zone, TranslationKey | null> = {
@@ -206,6 +207,24 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
             <p className="inspect-blockers" data-testid="inspect-steep-slope">
               ⚠ {t('inspector.steepSlope')}
             </p>
+          )}
+          {info.hotspot && (
+            <>
+              <Row
+                label={t('inspect.hotspot')}
+                value={`${t('inspect.hotspotQuality')} ${info.hotspot.quality} · ${Math.round(
+                  info.hotspot.heat * 100,
+                )} %`}
+                hint={t('inspect.hotspotHint')}
+                testId="inspect-hotspot"
+              />
+              <Row
+                label={t('inspect.hotspotWells')}
+                value={`${info.hotspot.wells} / ${info.hotspot.capacity}`}
+                tone={info.hotspot.wells > info.hotspot.capacity ? 'negative' : 'muted'}
+                testId="inspect-hotspot-wells"
+              />
+            </>
           )}
         </section>
       )}
