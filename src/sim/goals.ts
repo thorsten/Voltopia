@@ -20,6 +20,7 @@ export const GOAL_IDS = [
   'freeFlow',
   'wellStocked',
   'modalShift',
+  'geothermalBaseload',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -33,6 +34,8 @@ const EXPORTER_TARGET_ENERGY = 20_000;
 /** Minimum population for the clean-day goal to count. */
 const CLEAN_DAY_MIN_POPULATION = 50;
 const EV_FLEET_TARGET = 30;
+/** Share of generation that must come from geothermal for the goal. */
+const GEOTHERMAL_SHARE = 0.15;
 
 /**
  * Evaluate all goals for this tick. Achieved goals stay achieved (they
@@ -96,6 +99,15 @@ export function goalsStep(state: SimState): void {
     progress.transitTicks = 0;
   }
 
+  // A whole day with a real share of generation from geothermal.
+  const e = state.lastEnergy;
+  const generation = e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.biogas;
+  if (generation > 0 && e.geothermal / generation >= GEOTHERMAL_SHARE) {
+    progress.geothermalTicks++;
+  } else {
+    progress.geothermalTicks = 0;
+  }
+
   const achieved = state.goalsAchieved;
   if (!achieved.has('firstPower') && hasPowerInfrastructure(state)) {
     achieved.add('firstPower');
@@ -153,6 +165,9 @@ export function goalsStep(state: SimState): void {
   }
   if (!achieved.has('modalShift') && progress.transitTicks >= TICKS_PER_DAY) {
     achieved.add('modalShift');
+  }
+  if (!achieved.has('geothermalBaseload') && progress.geothermalTicks >= TICKS_PER_DAY) {
+    achieved.add('geothermalBaseload');
   }
 }
 

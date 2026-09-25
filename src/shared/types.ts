@@ -364,6 +364,17 @@ export interface TileInfo {
    * a hub's service ring. 0 when the tile projects nothing.
    */
   ringRadius: number;
+  /** Present on a hotspot tile: the field this tile belongs to. */
+  hotspot?: {
+    /** Hotspot quality 1..3. */
+    quality: number;
+    /** Reservoir temperature 0..1. */
+    heat: number;
+    /** Wells currently drilled into this field. */
+    wells: number;
+    /** Wells the field sustains before it starts cooling. */
+    capacity: number;
+  };
   /** Money upkeep of this tile per tick (roads and plants only). */
   upkeepPerTick: number;
   /** Fuel cost per tick attributed to this tile (biogas only). */

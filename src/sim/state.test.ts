@@ -197,6 +197,14 @@ describe('geothermal build rules', () => {
     expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
       'cannotBuildOnWater',
     );
+
+    const steep = createSimState(5, 8);
+    steep.layers.geothermal[20] = 2;
+    // A cliff: centre at 20, east neighbour at 21 stays at 0 -> slope 3.
+    steep.layers.elevation[20] = 3;
+    expect(buildRejection(steep, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
+      'tooSteep',
+    );
   });
 
   it('leaves other plants unaffected by a hotspot', () => {

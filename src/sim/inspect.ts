@@ -20,6 +20,7 @@ import {
   isTileConnected,
   loadProfileFactor,
 } from './energy.ts';
+import { fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -84,6 +85,16 @@ function plantGeneration(
       return {
         generation: e.tidalPeakOutput * tideFactor(state.tick) * bonus,
         peak: e.tidalPeakOutput * bonus,
+      };
+    }
+    case PlantType.GeothermalPlant: {
+      const factor =
+        BALANCE.geothermal.qualityFactor[state.layers.geothermal[index]] *
+        (state.layers.reservoirHeat[index] / 255);
+      return {
+        generation: e.geothermalPeakOutput * factor,
+        // A geothermal plant is always at its peak — the peak is what moves.
+        peak: e.geothermalPeakOutput * factor,
       };
     }
     default:
@@ -256,6 +267,20 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
               : 1
       : 1;
 
+  const field = fieldAt(state, index);
+  const hotspot = field
+    ? {
+        quality: field.quality,
+        heat: field.heat,
+        wells: field.tiles.filter(
+          (tile) =>
+            layers.tileType[tile] === TileType.Plant &&
+            layers.plantType[tile] === PlantType.GeothermalPlant,
+        ).length,
+        capacity: field.capacity,
+      }
+    : undefined;
+
   return {
     index,
     x: tileX(index, state.size),
@@ -268,6 +293,7 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     supplied: layers.supplied[index] as SupplyStatus,
     connected,
     ringRadius: ringRadius(state, index, connected),
+    ...(hotspot ? { hotspot } : {}),
     upkeepPerTick,
     fuelCostPerTick,
     taxPerTick:

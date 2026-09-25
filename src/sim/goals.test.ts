@@ -294,6 +294,24 @@ describe('goals', () => {
     });
   });
 
+  describe('geothermalBaseload', () => {
+    it('achieves the baseload goal after a day at share', () => {
+      const state = createSimState(3, 16);
+      state.lastEnergy.geothermal = 30;
+      state.lastEnergy.solar = 70;
+      for (let i = 0; i < TICKS_PER_DAY; i++) goalsStep(state);
+      expect(state.goalsAchieved.has('geothermalBaseload')).toBe(true);
+    });
+
+    it('does not achieve it below the share', () => {
+      const state = createSimState(3, 16);
+      state.lastEnergy.geothermal = 5;
+      state.lastEnergy.solar = 95;
+      for (let i = 0; i < TICKS_PER_DAY * 2; i++) goalsStep(state);
+      expect(state.goalsAchieved.has('geothermalBaseload')).toBe(false);
+    });
+  });
+
   describe('modalShift', () => {
     it('needs a big city and a whole day of riders', () => {
       const state = bigCity();

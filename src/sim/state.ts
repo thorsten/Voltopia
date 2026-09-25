@@ -275,6 +275,7 @@ export interface SimState {
     freeFlowTicks: number;
     wellStockedTicks: number;
     transitTicks: number;
+    geothermalTicks: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -413,6 +414,7 @@ export function createSimState(
       freeFlowTicks: 0,
       wellStockedTicks: 0,
       transitTicks: 0,
+      geothermalTicks: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
