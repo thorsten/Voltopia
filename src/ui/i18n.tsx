@@ -198,6 +198,7 @@ const en = {
   'rejection.needsLakeShore': 'Pumped storage must stand on the lake shore',
   'rejection.needsSeaTile': 'Tidal plants must stand on a sea tile',
   'rejection.needsCoast': 'Tidal plants need the shore: pick a sea tile touching land',
+  'rejection.needsHotspot': 'A geothermal plant needs a hotspot tile.',
   'rejection.cannotBuildOnWater': 'Cannot build on water',
   'rejection.needsLineSite': 'Power lines need free land, a road or water',
   'rejection.needsRoad': 'Needs a road next to it',
@@ -661,6 +662,7 @@ const de: Record<TranslationKey, string> = {
   'rejection.needsSeaTile': 'Gezeitenkraftwerke müssen auf einem Meeresfeld stehen',
   'rejection.needsCoast':
     'Gezeitenkraftwerke brauchen die Küste: ein Meeresfeld mit Landkontakt wählen',
+  'rejection.needsHotspot': 'Ein Geothermiekraftwerk braucht ein Hotspot-Feld.',
   'rejection.cannotBuildOnWater': 'Auf Wasser kann nicht gebaut werden',
   'rejection.needsLineSite': 'Leitungen brauchen freies Land, eine Straße oder Wasser',
   'rejection.needsRoad': 'Braucht eine Straße daneben',

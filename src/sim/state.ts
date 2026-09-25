@@ -675,6 +675,7 @@ export function buildRejection(
   const wantsRiver = intent === BuildIntent.Plant && plant === PlantType.RunOfRiver;
   const wantsTidal = intent === BuildIntent.Plant && plant === PlantType.TidalPlant;
   const offshoreWind = intent === BuildIntent.Plant && plant === PlantType.WindTurbine;
+  const wantsGeothermal = intent === BuildIntent.Plant && plant === PlantType.GeothermalPlant;
   if (terrain === Terrain.Sea) {
     // The sea carries tidal plants on its shore and offshore turbines;
     // roads stop at the coast (bridges cross the river, not the sea).
@@ -691,6 +692,8 @@ export function buildRejection(
   // Steep tiles reject everything the water rules did not already veto.
   if (slopeAt(state, index) > BALANCE.terrain.maxBuildSlope) return 'tooSteep';
   if (terrain === Terrain.River) return null; // bridge or run-of-river
+  // Hot rock only: the well has to reach the reservoir underneath.
+  if (wantsGeothermal && layers.geothermal[index] === 0) return 'needsHotspot';
   if (
     intent === BuildIntent.Plant &&
     plant === PlantType.PumpedStorage &&

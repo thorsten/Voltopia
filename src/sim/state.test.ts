@@ -180,6 +180,32 @@ describe('sea build rules', () => {
   });
 });
 
+describe('geothermal build rules', () => {
+  it('accepts a hotspot tile and rejects anything else', () => {
+    const state = createSimState(5, 8);
+    state.layers.geothermal[20] = 2;
+    expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBeNull();
+    expect(buildRejection(state, 21, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
+      'needsHotspot',
+    );
+  });
+
+  it('never lets a hotspot override water or slope rules', () => {
+    const state = createSimState(5, 8);
+    state.layers.geothermal[20] = 2;
+    state.layers.terrain[20] = Terrain.Lake;
+    expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.GeothermalPlant)).toBe(
+      'cannotBuildOnWater',
+    );
+  });
+
+  it('leaves other plants unaffected by a hotspot', () => {
+    const state = createSimState(5, 8);
+    state.layers.geothermal[20] = 2;
+    expect(buildRejection(state, 20, BuildIntent.Plant, PlantType.SolarFarm)).toBeNull();
+  });
+});
+
 describe('save round trip', () => {
   it('persists terrain, river flow and pumped storage', () => {
     const state = makeState();
