@@ -596,5 +596,9 @@ export interface SaveGame {
     busStop?: ArrayBuffer;
     /** Forest layer; absent in saves from before woods (treeless map). */
     forest?: ArrayBuffer;
+    /** Geothermal hotspot layer; absent in saves from before geothermal power. */
+    geothermal?: ArrayBuffer;
+    /** Quantised reservoir heat layer; absent in saves from before geothermal power. */
+    reservoirHeat?: ArrayBuffer;
   };
 }

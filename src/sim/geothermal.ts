@@ -158,6 +158,12 @@ export function reservoirStep(state: SimState): void {
     // The layer is only a quantised mirror for diffs, save and render; a
     // slow drift must not flood the diff channel every tick.
     const quantised = Math.round(field.heat * FULL_HEAT);
+    // Samples only tiles[0]: every tile of a field carries the same
+    // quantised value. That invariant is established when a field is
+    // first written (generateGeothermal fills every tile with FULL_HEAT)
+    // and kept here (the loop below always writes all of a field's
+    // tiles together); deserializeState in state.ts restores the whole
+    // layer at once, so a loaded save preserves it too.
     if (reservoirHeat[field.tiles[0]] === quantised) continue;
     for (const index of field.tiles) {
       reservoirHeat[index] = quantised;

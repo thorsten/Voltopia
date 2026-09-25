@@ -28,7 +28,12 @@ import {
   Zone,
 } from '../shared/types.ts';
 import { emptyPlantMap, type EconomyBreakdown } from './economy.ts';
-import type { GeothermalField } from './geothermal.ts';
+import {
+  discoverGeothermalFields,
+  generateGeothermal,
+  FULL_HEAT,
+  type GeothermalField,
+} from './geothermal.ts';
 import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
@@ -768,6 +773,8 @@ export function serializeState(state: SimState): SaveGame {
       forest: copyBuffer(layers.forest),
       roadClass: copyBuffer(layers.roadClass),
       busStop: copyBuffer(layers.busStop),
+      geothermal: copyBuffer(layers.geothermal),
+      reservoirHeat: copyBuffer(layers.reservoirHeat),
     },
   };
 }
@@ -819,6 +826,23 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.forest) state.layers.forest.set(new Uint8Array(save.layers.forest));
   if (save.layers.roadClass) state.layers.roadClass.set(new Uint8Array(save.layers.roadClass));
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
+  if (save.layers.geothermal) {
+    state.layers.geothermal.set(new Uint8Array(save.layers.geothermal));
+    if (save.layers.reservoirHeat) {
+      state.layers.reservoirHeat.set(new Uint8Array(save.layers.reservoirHeat));
+    } else {
+      // A half-old save: hotspots but no reservoir — start them full.
+      for (let i = 0; i < state.layers.geothermal.length; i++) {
+        if (state.layers.geothermal[i] !== 0) state.layers.reservoirHeat[i] = FULL_HEAT;
+      }
+    }
+  } else {
+    // Saves from before geothermal: the generator is a pure function of
+    // seed, terrain and elevation, all of which this save carries, so the
+    // city gains exactly the hotspots a fresh map of this seed would have.
+    generateGeothermal(state);
+  }
+  discoverGeothermalFields(state);
   state.lakeLevel = computeLakeLevel(state);
   // Advance the RNG deterministically past the founding state so a loaded
   // game does not replay the exact random sequence from tick zero.

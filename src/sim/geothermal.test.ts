@@ -9,7 +9,13 @@ import {
   reservoirStep,
   FULL_HEAT,
 } from './geothermal.ts';
-import { createSimState, slopeAt, type SimState } from './state.ts';
+import {
+  createSimState,
+  deserializeState,
+  serializeState,
+  slopeAt,
+  type SimState,
+} from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
 
@@ -159,6 +165,32 @@ describe('geothermal fields', () => {
     expect(fieldAt(state, 0)).toBeUndefined();
   });
 
+  it('separates two distinct fields', () => {
+    const state = createSimState(5, 16);
+    // Quality-2 cluster at rows 2-3, cols 2-3 (same as fieldMap()).
+    for (const index of [34, 35, 50, 51]) {
+      state.layers.geothermal[index] = 2;
+      state.layers.reservoirHeat[index] = FULL_HEAT;
+    }
+    // Quality-1 cluster far away at row 10, cols 10-11.
+    for (const index of [170, 171]) {
+      state.layers.geothermal[index] = 1;
+      state.layers.reservoirHeat[index] = FULL_HEAT;
+    }
+    discoverGeothermalFields(state);
+    expect(state.geothermalFields).toHaveLength(2);
+    const byQuality = (quality: number) =>
+      state.geothermalFields.find((field) => field.quality === quality)!;
+    const bigField = byQuality(2);
+    expect(bigField.tiles.sort((a, b) => a - b)).toEqual([34, 35, 50, 51]);
+    // 4 tiles × sustainablePerTile 0.5 × qualityFactor 1.0 = 2 wells.
+    expect(bigField.capacity).toBe(2);
+    const smallField = byQuality(1);
+    expect(smallField.tiles.sort((a, b) => a - b)).toEqual([170, 171]);
+    // 2 tiles × sustainablePerTile 0.5 × qualityFactor 0.7 = 0.7, rounds to 1.
+    expect(smallField.capacity).toBe(1);
+  });
+
   it('holds a full reservoir at or below capacity', () => {
     const state = fieldMap();
     drill(state, 34);
@@ -208,5 +240,30 @@ describe('geothermal fields', () => {
     expect(state.dirty.size).toBe(0);
     for (let i = 0; i < 200; i++) reservoirStep(state);
     expect(state.dirty.size).toBeGreaterThan(0);
+  });
+});
+
+describe('geothermal save compatibility', () => {
+  it('restores fields and heat from a save', () => {
+    const state = fieldMap();
+    state.geothermalFields[0].heat = 0.5;
+    state.layers.reservoirHeat.fill(0);
+    for (const index of state.geothermalFields[0].tiles) {
+      state.layers.reservoirHeat[index] = Math.round(0.5 * FULL_HEAT);
+    }
+    const restored = deserializeState(serializeState(state));
+    expect(restored.geothermalFields).toHaveLength(1);
+    expect(restored.geothermalFields[0].heat).toBeCloseTo(0.5, 2);
+    expect(restored.geothermalFields[0].capacity).toBe(2);
+  });
+
+  it('regenerates hotspots for a save written before the feature', () => {
+    const fresh = mapWithHotspots(21);
+    const save = serializeState(fresh);
+    delete save.layers.geothermal;
+    delete save.layers.reservoirHeat;
+    const restored = deserializeState(save);
+    expect([...restored.layers.geothermal]).toEqual([...fresh.layers.geothermal]);
+    expect(restored.geothermalFields.every((field) => field.heat === 1)).toBe(true);
   });
 });

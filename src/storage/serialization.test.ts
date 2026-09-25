@@ -92,6 +92,18 @@ describe('save game JSON export/import', () => {
     expect(saveFromJson(saveToJson(makeSave())).layers.forest).toBeUndefined();
   });
 
+  it('round-trips the optional geothermal layers', () => {
+    const save = makeSave();
+    const geothermal = new Uint8Array(save.size * save.size).fill(3);
+    const heat = new Uint8Array(save.size * save.size).fill(120);
+    save.layers.geothermal = geothermal.buffer as ArrayBuffer;
+    save.layers.reservoirHeat = heat.buffer as ArrayBuffer;
+    const restored = saveFromJson(saveToJson(save));
+    expect(new Uint8Array(restored.layers.geothermal!)).toEqual(geothermal);
+    expect(new Uint8Array(restored.layers.reservoirHeat!)).toEqual(heat);
+    expect(saveFromJson(saveToJson(makeSave())).layers.geothermal).toBeUndefined();
+  });
+
   it('accepts exports without the terrain layer', () => {
     const save = makeSave();
     const restored = saveFromJson(saveToJson(save));
