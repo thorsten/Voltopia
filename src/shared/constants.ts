@@ -300,8 +300,21 @@ export const BALANCE = {
     trading: {
       /** Storage sells into the link at or above this spot factor... */
       sellThreshold: 1.6,
-      /** ...but only the charge above this state-of-charge floor. */
-      sellFloor: 0.7,
+      /**
+       * ...but only the charge above this state of charge, and only
+       * while the city is running a surplus that will refill it (see
+       * energyStep). Both conditions together make a sale a time-shift
+       * of energy the city was going to export or curtail anyway into an
+       * expensive hour — worth exportRevenue * spot now against
+       * exportRevenue * (the lower) spot when the surplus arrives — and
+       * keep the reserve proper untouched. (Was 0.7, which sold nearly a
+       * third of the reserve on any price spike, for 0.03 * 1.6 = 0.048
+       * per energy unit against the 0.4 * 1.6 = 0.64 the same unit saves
+       * by covering a later import: switching market trading on made the
+       * player strictly worse off, and it emptied the reserve exactly
+       * when a multi-day Dunkelflaute was about to need it.)
+       */
+      sellFloor: 0.95,
       /** Storage buys from the link at or below this spot factor... */
       buyThreshold: 0.55,
       /** ...and only up to this state of charge. Keeping the bands

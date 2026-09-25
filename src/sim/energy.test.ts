@@ -1249,6 +1249,40 @@ describe('market trading', () => {
     expect(state.storedEnergy).toBeCloseTo(BALANCE.energy.batteryCapacity - expected, 3);
   });
 
+  it('does not sell while the city is running a deficit', () => {
+    const state = makeState();
+    placePlant(state, at(5, 5), PlantType.Battery);
+    setScarceEvening(state);
+    state.storedEnergy = BALANCE.energy.batteryCapacity; // 100%
+    state.marketTrading = true;
+    // A calm, dark evening with a load on it: the battery is covering
+    // the shortfall, so nothing it holds is spare, however dear the
+    // spot price is. Selling here would be raiding the reserve at the
+    // start of the very lull it exists for.
+    energyStep(state, { chargingDemand: 50 });
+    expect(state.lastEnergy.spotPrice).toBeGreaterThanOrEqual(BALANCE.market.trading.sellThreshold);
+    expect(state.lastEnergy.tradeSell).toBe(0);
+    expect(state.storedEnergy).toBeCloseTo(BALANCE.energy.batteryCapacity - 50, 3);
+  });
+
+  it('leaves the bulk of the reserve untouched even at the highest price', () => {
+    const state = makeState();
+    placePlant(state, at(5, 5), PlantType.Battery);
+    setScarceEvening(state);
+    state.storedEnergy = BALANCE.energy.batteryCapacity;
+    state.marketTrading = true;
+    // Ten ticks of standing at a scarcity price. Only the top slice is
+    // ever sellable, so the pool leaves the band after a tick or two and
+    // the reserve stays essentially intact — the point of the whole
+    // rule, stated here as an absolute rather than in terms of the
+    // constant under test.
+    for (let i = 0; i < 10; i++) energyStep(state, { chargingDemand: 0 });
+    expect(state.storedEnergy).toBeGreaterThan(0.9 * BALANCE.energy.batteryCapacity);
+    expect(state.storedEnergy).toBeGreaterThanOrEqual(
+      BALANCE.market.trading.sellFloor * BALANCE.energy.batteryCapacity,
+    );
+  });
+
   it('never sells below the reserve floor', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);

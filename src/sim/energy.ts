@@ -583,16 +583,18 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   }
 
   // Spot-market trading: with the toggle on, the storage pools work the
-  // link. At scarcity prices they sell the charge above a reserve floor;
-  // at abundance prices they buy up to a modest ceiling. The bands are
-  // disjoint (buyCeiling < sellFloor), so the same energy can never be
-  // bought low and sold high — selling monetises the city's own shifted
-  // surplus, buying pre-empts expensive imports.
+  // link. At scarcity prices they sell the top slice of a nearly full
+  // pool, and only while the city is in surplus, so the slice is refilled
+  // from energy that was headed for the export link or for curtailment:
+  // the sale time-shifts that energy into an expensive hour instead of
+  // eating the reserve a Dunkelflaute will need. At abundance prices they
+  // buy up to a modest ceiling. The bands are disjoint (buyCeiling <
+  // sellFloor), so the same energy can never be bought low and sold high.
   let tradeSell = 0;
   let tradeBuy = 0;
   if (state.marketTrading) {
     const trading = BALANCE.market.trading;
-    if (spotPrice >= trading.sellThreshold && deficit === 0 && gridImport === 0) {
+    if (net >= 0 && spotPrice >= trading.sellThreshold && deficit === 0 && gridImport === 0) {
       let exportRoom = BALANCE.market.exportCapacity - gridExport;
       const sellFrom = (stored: number, floor: number, power: number): number => {
         const sold = Math.min(exportRoom, power, Math.max(0, stored - floor));

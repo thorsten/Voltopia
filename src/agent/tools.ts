@@ -1121,7 +1121,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
     {
       name: 'set_market_trading',
       description:
-        'Enable or disable spot-market trading: storage sells its top charge at scarcity prices and buys cheap regional surplus.',
+        'Enable or disable spot-market trading: storage sells the top slice of a nearly full pool at scarcity prices while a surplus refills it, and buys cheap regional surplus.',
       inputSchema: {
         type: 'object',
         properties: { enabled: { type: 'boolean' } },
