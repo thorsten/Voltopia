@@ -64,6 +64,9 @@ const COLORS = {
   tidalHousing: 0x4d6b73,
   tidalPylon: 0x9aa3ad,
   tidalBuoy: 0xe8a23a,
+  geoHall: 0x6b5f57,
+  geoTower: 0xd7d2c8,
+  geoWellhead: 0xb5482f,
 } as const;
 
 /** Where a plant stands: which neighbours are water (for hydro shapes). */
@@ -256,6 +259,13 @@ function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
         { sx: 0.5, sy: 0.14, sz: 0.34, ox: 0, oy: 0.02, oz: 0, color: COLORS.tidalHousing },
         { sx: 0.08, sy: 0.4, sz: 0.08, ox: 0, oy: 0.14, oz: 0, color: COLORS.tidalPylon },
         { sx: 0.22, sy: 0.12, sz: 0.22, ox: 0, oy: 0.5, oz: 0, color: COLORS.tidalBuoy },
+      ];
+    case PlantType.GeothermalPlant:
+      return [
+        // Turbine hall, a wellhead stub and the cooling tower above it.
+        { sx: 0.6, sy: 0.24, sz: 0.4, ox: -0.08, oy: 0, oz: 0.1, color: COLORS.geoHall },
+        { sx: 0.12, sy: 0.3, sz: 0.12, ox: 0.28, oy: 0, oz: -0.22, color: COLORS.geoWellhead },
+        { sx: 0.3, sy: 0.5, sz: 0.3, ox: 0.2, oy: 0, oz: 0.22, color: COLORS.geoTower },
       ];
     default:
       return [];
