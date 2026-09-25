@@ -41,7 +41,24 @@ export const BALANCE = {
     insulation: 4_000,
     plant: {
       [PlantType.SolarFarm]: 1_200,
-      [PlantType.WindTurbine]: 1_800,
+      /**
+       * Wind is the expensive, more baseload-like investment; solar is
+       * the cheap entry option. Priced from a headless probe
+       * (scripts/probe-generation.mjs, deleted after use) over 3 in-game
+       * years x 10 seeds: a turbine on an average land tile averages
+       * 78.9 EU/tick — mean wind factor 0.574, mean site factor 1.144
+       * (elevation 3.9, windForestFactor 0.97) — against a solar farm's
+       * 23.1 EU/tick, whose mean solar factor of 0.154 is the product of
+       * night, a 0.45 mean cloud cover and a 0.725 mean solarStrength.
+       * At 4_500 that is 17.5 EU per 1_000 invested against solar's 19.2:
+       * wind pays a ~9 % premium per unit of energy for generating at
+       * night (and so needing less storage to be useful), and a
+       * deliberately sited turbine (hilltop, clear of woods — site factor
+       * up to 1.32) earns that premium back. (Was 1_800, i.e. 43.8 EU per
+       * 1_000: wind out-produced solar 3.4:1 at 1.5x the price, so there
+       * was no reason to ever build a solar farm.)
+       */
+      [PlantType.WindTurbine]: 4_500,
       [PlantType.Battery]: 1_500,
       [PlantType.BiogasPlant]: 2_500,
       [PlantType.ChargingHub]: 800,
@@ -105,7 +122,14 @@ export const BALANCE = {
     busStop: 0.004,
     plant: {
       [PlantType.SolarFarm]: 0.05,
-      [PlantType.WindTurbine]: 0.08,
+      /**
+       * 0.0022 per average EU generated (78.9 EU/tick, see the cost
+       * above), the rate solar (0.0022), run-of-river (0.0024) and tidal
+       * (0.0027) already run at. (Was 0.08 = 0.0010 per EU, under half
+       * of every other plant's rate — the running-cost half of the same
+       * wind dominance the cost above fixes.)
+       */
+      [PlantType.WindTurbine]: 0.17,
       [PlantType.Battery]: 0.04,
       [PlantType.BiogasPlant]: 0.1,
       [PlantType.ChargingHub]: 0.02,
