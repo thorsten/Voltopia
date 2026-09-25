@@ -1,6 +1,7 @@
 import { BALANCE, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
 import { PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
+import { FULL_HEAT } from './geothermal.ts';
 import { isSupplySource, recomputeGrid } from './powerGrid.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -189,8 +190,12 @@ export function censusPlants(state: SimState): PlantCensus {
         break;
       case PlantType.GeothermalPlant:
         census.geothermalPlants++;
+        // Reads the quantised reservoirHeat layer, not the field's authoritative
+        // float `heat` — the gap is bounded by one step of 1/FULL_HEAT, and it's
+        // deliberate: energy, inspector, agent API and renderer all then agree on
+        // the same number.
         census.geothermalCapacity +=
-          BALANCE.geothermal.qualityFactor[geothermal[i]] * (reservoirHeat[i] / 255);
+          BALANCE.geothermal.qualityFactor[geothermal[i]] * (reservoirHeat[i] / FULL_HEAT);
         break;
       case PlantType.None:
         break;

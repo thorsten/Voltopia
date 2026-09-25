@@ -20,7 +20,7 @@ import {
   isTileConnected,
   loadProfileFactor,
 } from './energy.ts';
-import { fieldAt } from './geothermal.ts';
+import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -88,9 +88,11 @@ function plantGeneration(
       };
     }
     case PlantType.GeothermalPlant: {
+      // Quantised reservoirHeat, not the field's float `heat` — see energy.ts's
+      // censusPlants for why that's deliberate.
       const factor =
         BALANCE.geothermal.qualityFactor[state.layers.geothermal[index]] *
-        (state.layers.reservoirHeat[index] / 255);
+        (state.layers.reservoirHeat[index] / FULL_HEAT);
       return {
         generation: e.geothermalPeakOutput * factor,
         // A geothermal plant is always at its peak — the peak is what moves.

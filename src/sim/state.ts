@@ -266,7 +266,15 @@ export interface SimState {
   lastTransit: TransitStats;
   /** Achieved goal ids (persisted with the save game). */
   goalsAchieved: Set<string>;
-  /** Goal progress counters; the season streaks are persisted, the rest is transient. */
+  /**
+   * Goal progress counters; the season streaks are persisted, the rest is
+   * transient. The rule: a counter is persisted when losing it costs a whole
+   * season, and left transient when losing it costs at most one in-game day.
+   * `winterTicks`, `summerTicks`, `freeFlowTicks`, `wellStockedTicks` and
+   * `transitTicks` are season-length, so they are persisted. `cleanDayTicks`
+   * and `geothermalTicks` are single-day streaks, so a reload resetting them
+   * is an accepted cost, not an oversight — they stay transient.
+   */
   goalProgress: {
     cleanDayTicks: number;
     exportedTotal: number;
@@ -842,6 +850,11 @@ export function deserializeState(save: SaveGame): SimState {
     // Saves from before geothermal: the generator is a pure function of
     // seed, terrain and elevation, all of which this save carries, so the
     // city gains exactly the hotspots a fresh map of this seed would have.
+    // A save old enough to also lack `terrain`/`elevation` (both optional,
+    // handled above) generates hotspots against a flat, all-land map instead,
+    // which can scatter fields across an already-built city. That's bounded —
+    // occupied tiles stay unbuildable — and is the price of guaranteeing a
+    // given seed always yields the same hotspots.
     generateGeothermal(state);
   }
   discoverGeothermalFields(state);

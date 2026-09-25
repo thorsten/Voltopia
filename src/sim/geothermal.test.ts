@@ -76,6 +76,13 @@ describe('geothermal generation', () => {
         expect(field.length).toBeLessThanOrEqual(cfg.clusterSizeRange[1]);
       }
       // Seeds are minSpotDistance apart, so two fields never touch.
+      //
+      // The generator only guarantees fields don't share a 4-neighbour
+      // (componentsOf floods on neighbors4), which is weaker than the
+      // Chebyshev distance > 1 asserted below — that stronger claim is
+      // empirical for the current constants (measured: zero violations
+      // across seeds 1..400), not true by construction. Shrinking
+      // minSpotDistance or growing clusterSizeRange is what would break it.
       for (let a = 0; a < fields.length; a++) {
         for (let b = a + 1; b < fields.length; b++) {
           const nearest = Math.min(
