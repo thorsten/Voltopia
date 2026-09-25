@@ -20,6 +20,20 @@ const NIGHT_DIM = 0.55;
  * shore reads as a shore, not as a flood.
  */
 const TIDE_AMPLITUDE = 0.05;
+/**
+ * Mean sea level above the seabed. It clears the tidal amplitude, so
+ * even at low water the surface still stands WATER_HEIGHT above the
+ * ground — the sea used to be a thin slab at WATER_HEIGHT that the tide
+ * moved bodily, which sank it into the opaque ground mesh (and out of
+ * sight) for a quarter of every tidal cycle.
+ */
+const SEA_MEAN_HEIGHT = WATER_HEIGHT + TIDE_AMPLITUDE;
+/**
+ * Underside of the sea, just below the seabed: the water is a column
+ * whose surface moves while its bottom stays put, so no gap opens under
+ * it at high water and the ground never z-fights through it at low.
+ */
+const SEA_FLOOR = -0.01;
 
 /**
  * One thin instanced slab per river or lake tile. Water never changes
@@ -76,7 +90,7 @@ export class WaterMesh implements DiffLayer {
     this.seaMesh.frustumCulled = false;
     this.seaMesh.receiveShadow = true;
     this.seaMesh.count = 0;
-    this.seaMesh.position.y = WATER_HEIGHT;
+    this.setSeaSurface(SEA_MEAN_HEIGHT);
     scene.add(this.seaMesh);
   }
 
@@ -107,7 +121,18 @@ export class WaterMesh implements DiffLayer {
     // The sea rises and falls with the tide; the range is deliberately
     // small so the shore reads as a shore, not as a flood.
     const tideOffset = this.reducedMotion ? 0 : this.tideLevel * TIDE_AMPLITUDE;
-    this.seaMesh.position.y = WATER_HEIGHT + tideOffset;
+    this.setSeaSurface(SEA_MEAN_HEIGHT + tideOffset);
+  }
+
+  /**
+   * Stretch the sea column between the fixed floor and the current
+   * surface. Sea tiles all sit at sea level (`carveSea` flattens them to
+   * elevation 0), so one transform on the whole mesh does it — the
+   * per-instance matrices only carry the tile's position.
+   */
+  private setSeaSurface(surfaceY: number): void {
+    this.seaMesh.scale.y = surfaceY - SEA_FLOOR;
+    this.seaMesh.position.y = (surfaceY + SEA_FLOOR) / 2;
   }
 
   private rebuild(): void {
@@ -134,13 +159,13 @@ export class WaterMesh implements DiffLayer {
         continue;
       }
       if (terrain === Terrain.Sea) {
-        // Sea tiles sit at elevation 0; the whole mesh is offset by the
-        // tide in update(), so the per-instance matrix only carries the
-        // slab's own thickness.
+        // Sea tiles sit at elevation 0 (sea level); the mesh transform
+        // carries both the floor and the tide-driven surface, so the
+        // per-instance matrix only places the unit column on its tile.
         const x = (index % this.gridSize) + 0.5;
         const z = Math.floor(index / this.gridSize) + 0.5;
-        this.matrix.makeScale(1, WATER_THICKNESS, 1);
-        this.matrix.setPosition(x, this.elevation.centerY(index) + WATER_THICKNESS / 2, z);
+        this.matrix.identity();
+        this.matrix.setPosition(x, 0, z);
         this.seaMesh.setMatrixAt(seaCount, this.matrix);
         this.seaMesh.setColorAt(seaCount, color.setHex(PALETTE.sea));
         seaCount++;
