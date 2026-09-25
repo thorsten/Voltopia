@@ -15,6 +15,7 @@ describe('TileMirror', () => {
     // at the all-zero default, which is exactly what the sim holds too.
     expect(mirror.updates).toBeGreaterThan(0);
     expect(Array.from(mirror.terrain)).toEqual(Array.from(engine.state.layers.terrain));
+    expect(Array.from(mirror.geothermal)).toEqual(Array.from(engine.state.layers.geothermal));
 
     // Find a land tile, pave it and check the mirror tracks the change.
     const land = Array.from(engine.state.layers.terrain).findIndex((t) => t === Terrain.Land);
