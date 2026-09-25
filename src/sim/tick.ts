@@ -168,6 +168,7 @@ export function buildStats(state: SimState): GlobalStats {
         hydro: e.hydro,
         tidal: e.tidal,
         hydrogen: e.fuelCell,
+        geothermal: 0,
       },
       consumption: {
         buildings: e.buildingConsumption,

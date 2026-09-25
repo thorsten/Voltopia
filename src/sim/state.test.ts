@@ -468,6 +468,18 @@ describe('elevation', () => {
   });
 });
 
+describe('geothermal', () => {
+  it('carries the geothermal layers in tile diffs', () => {
+    const state = createSimState(7, 8);
+    state.layers.geothermal[5] = 2;
+    state.layers.reservoirHeat[5] = 200;
+    markDirty(state, 5);
+    const diff = collectDiffs(state).find((d) => d.index === 5);
+    expect(diff?.geothermal).toBe(2);
+    expect(diff?.reservoirHeat).toBe(200);
+  });
+});
+
 describe('tooSteep', () => {
   function steepState() {
     const state = createSimState(1, 8);

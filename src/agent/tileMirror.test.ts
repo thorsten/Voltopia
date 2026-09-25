@@ -39,6 +39,8 @@ describe('TileMirror', () => {
         roadMask: 0,
         roadClass: 0,
         forest: 0,
+        geothermal: 0,
+        reservoirHeat: 0,
         trafficLoad: 0,
         powerLine: 0,
         zone: Zone.None,

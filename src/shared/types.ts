@@ -52,6 +52,7 @@ export const PlantType = {
   BusDepot: 12,
   HydrogenPlant: 13,
   TidalPlant: 14,
+  GeothermalPlant: 15,
 } as const;
 export type PlantType = (typeof PlantType)[keyof typeof PlantType];
 
@@ -161,6 +162,8 @@ export interface EnergyStats {
     hydrogen: number;
     /** Tidal plant output this tick. */
     tidal: number;
+    /** Geothermal baseload output this tick. */
+    geothermal: number;
   };
   consumption: {
     buildings: number;
@@ -508,6 +511,10 @@ export interface TileDiff {
   elevation: number;
   /** Forest growth stage on this tile: 0 = none, 1..maxStage. */
   forest: number;
+  /** Geothermal hotspot quality on this tile: 0 = none, 1..3. */
+  geothermal: number;
+  /** Quantised reservoir temperature 0..255 of this tile's field (0 off a hotspot). */
+  reservoirHeat: number;
   /** DeliveryState of a retail building (0 elsewhere). */
   deliveryState: number;
   /** 1 when a bus stop is marked on this road tile. */

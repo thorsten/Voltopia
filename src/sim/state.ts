@@ -170,6 +170,10 @@ export interface TileLayers {
   elevation: Uint8Array;
   /** Forest growth stage per tile: 0 = none, 1..BALANCE.forest.maxStage. */
   forest: Uint8Array;
+  /** Geothermal hotspot quality per tile: 0 = none, 1..3. Immutable after generation. */
+  geothermal: Uint8Array;
+  /** Quantised reservoir temperature 0..255 (all tiles of a field share one value). */
+  reservoirHeat: Uint8Array;
   /** Power line mask per tile (0 = none, else LINE_PRESENT | connection bits). */
   powerLine: Uint8Array;
   /** 1 when the tile is within lineSupplyRadius of an energised line or supply plant. Derived, not persisted. */
@@ -331,6 +335,8 @@ export function createTileLayers(size: number): TileLayers {
     terrain: new Uint8Array(tiles),
     elevation: new Uint8Array(tiles),
     forest: new Uint8Array(tiles),
+    geothermal: new Uint8Array(tiles),
+    reservoirHeat: new Uint8Array(tiles),
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
     services: new Uint8Array(tiles),
@@ -504,6 +510,8 @@ export function collectDiffs(state: SimState): TileDiff[] {
       terrain: layers.terrain[index] as TileDiff['terrain'],
       elevation: layers.elevation[index],
       forest: layers.forest[index],
+      geothermal: layers.geothermal[index],
+      reservoirHeat: layers.reservoirHeat[index],
       deliveryState: deliveryStateOfAge(layers.deliveryAge[index]),
       busStop: layers.busStop[index],
       stopState:
