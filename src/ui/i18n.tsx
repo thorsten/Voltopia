@@ -469,7 +469,7 @@ const en = {
   'inspector.terrainBonus': 'Terrain bonus',
   'inspect.hotspot': 'Geothermal hotspot',
   'inspect.hotspotQuality': 'Quality',
-  'inspect.hotspotWells': 'Wells / sustainable',
+  'inspect.hotspotWells': 'Wells / capacity',
   'inspect.hotspotHint': 'Hotspot quality and the reservoir temperature of its field.',
 } as const;
 
@@ -701,7 +701,7 @@ const de: Record<TranslationKey, string> = {
     'Ziehe Straßen und male daneben Wohn-, Gewerbe- und Einzelhandelszonen. Gebäude entstehen von selbst, wenn Nachfrage besteht (siehe die R/C/S-Balken), und verdichten sich mit der Zeit — aber nur, solange sie vollständig mit Energie versorgt sind.',
   'help.energy.title': 'Energie',
   'help.energy.body':
-    'Anlagen versorgen nur, was Stromleitungen mit ihnen verbinden (siehe Netz und Leitungen). Solar liefert mittags am meisten und leidet unter Wolken; Wind folgt dem Wetter, Tag und Nacht. Batterien speichern den Mittagsüberschuss für den Abend; die Biogasanlage ist regelbare Reserve — zuverlässig, aber teuer im Betrieb, und sie springt nur an, wenn Sonne, Wind, Wasser und Speicher die Last nicht decken; meist steht sie in Bereitschaft. Dichte Gebäude bekommen automatisch Dach-PV. Die Wasserstoffanlage elektrolysiert Überschuss, den Batterien, Pumpspeicher und die Netzeinspeisung nicht aufnehmen können: Sie füllt einen großen Tank, verstromt in der Flaute über ihre Brennstoffzelle und verkauft bei vollem Tank Wasserstoff mit Gewinn — abgeregelte Energie wird zu Einnahmen. Die Netzleitung handelt zum Spotpreis, der der Region folgt: sonnige, windige Stunden sind billig, windstille bedeckte Abende teuer — die gestrichelte Linie im Energie-Graphen. Mit aktiviertem Stromhandel verkaufen deine Speicher ihre oberste Ladung zu Knappheitspreisen und kaufen billigen regionalen Überschuss. Ein Gezeitenkraftwerk an der Küste ist vollständig vorhersagbar — vier Erzeugungsspitzen und vier Stillwasserphasen am Tag, die langsam gegen die Uhr wandern — deshalb überbrückt der Speicher die Flaute. Dieselbe Küste trägt auch Offshore-Windräder und steigert die Zufriedenheit von Gebäuden mit Meerblick. Ein Geothermiekraftwerk baut nur auf einem Hotspot und erzeugt Tag und Nacht bei jedem Wetter dieselbe Menge — die einzige echte Grundlast —, aber jeder Hotspot trägt nur eine begrenzte Zahl Bohrungen, bevor sein Reservoir auszukühlen beginnt und jede Bohrung darauf mit sich zieht.',
+    'Anlagen versorgen nur, was Stromleitungen mit ihnen verbinden (siehe Netz und Leitungen). Solar liefert mittags am meisten und leidet unter Wolken; Wind folgt dem Wetter, Tag und Nacht. Batterien speichern den Mittagsüberschuss für den Abend; die Biogasanlage ist regelbare Reserve — zuverlässig, aber teuer im Betrieb, und sie springt nur an, wenn Sonne, Wind, Wasser und Speicher die Last nicht decken; meist steht sie in Bereitschaft. Dichte Gebäude bekommen automatisch Dach-PV. Die Wasserstoffanlage elektrolysiert Überschuss, den Batterien, Pumpspeicher und die Netzeinspeisung nicht aufnehmen können: Sie füllt einen großen Tank, verstromt in der Flaute über ihre Brennstoffzelle und verkauft bei vollem Tank Wasserstoff mit Gewinn — abgeregelte Energie wird zu Einnahmen. Die Netzleitung handelt zum Spotpreis, der der Region folgt: sonnige, windige Stunden sind billig, windstille bedeckte Abende teuer — die gestrichelte Linie im Energie-Graphen. Mit aktiviertem Stromhandel verkaufen deine Speicher ihre oberste Ladung zu Knappheitspreisen und kaufen billigen regionalen Überschuss. Ein Gezeitenkraftwerk an der Küste ist vollständig vorhersagbar — vier Erzeugungsspitzen und vier Stillwasserphasen am Tag, die langsam gegen die Uhr wandern — deshalb überbrückt der Speicher die Flaute. Dieselbe Küste trägt auch Offshore-Windräder und steigert die Zufriedenheit von Gebäuden mit Meerblick. Ein Geothermiekraftwerk baut nur auf einem Hotspot und erzeugt Tag und Nacht bei jedem Wetter dieselbe Menge — die einzige echte Grundlast —, aber jeder Hotspot trägt nur eine begrenzte Zahl Bohrungen, bevor sein Reservoir auszukühlen beginnt und jede Bohrung darauf mit hinunterzieht.',
   'help.grid.title': 'Netz und Leitungen',
   'help.grid.body':
     'Anlagen versorgen nur Gebäude, die mit ihnen verbunden sind. Ziehe Stromleitungen (⚡, Taste L) von einer Anlage entlang deiner Straßen — sie laufen über Straßen und über Wasser. Jedes angeschlossene Leitungsfeld und jede Anlage versorgt Gebäude im Umkreis von drei Feldern. Eine Leitung ohne Anlage führt keinen Strom; das Versorgungs-Overlay zeigt, was angeschlossen ist. Städte aus der Zeit vor den Leitungen haben ihre Leitungen entlang der Straßen geschenkt bekommen.',
@@ -949,7 +949,7 @@ const de: Record<TranslationKey, string> = {
   'inspector.terrainBonus': 'Geländebonus',
   'inspect.hotspot': 'Geothermie-Hotspot',
   'inspect.hotspotQuality': 'Ergiebigkeit',
-  'inspect.hotspotWells': 'Bohrungen / nachhaltig',
+  'inspect.hotspotWells': 'Bohrungen / Kapazität',
   'inspect.hotspotHint': 'Ergiebigkeit des Hotspots und Reservoirtemperatur seines Feldes.',
 };
 
