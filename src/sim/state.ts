@@ -28,6 +28,7 @@ import {
   Zone,
 } from '../shared/types.ts';
 import { emptyPlantMap, type EconomyBreakdown } from './economy.ts';
+import type { GeothermalField } from './geothermal.ts';
 import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
@@ -227,6 +228,8 @@ export interface SimState {
   /** Elevation of the lake surface (derived; recomputed on load). */
   lakeLevel: number;
   layers: TileLayers;
+  /** Hotspot fields, derived from the geothermal layer; never persisted. */
+  geothermalFields: GeothermalField[];
   vehicles: Vehicle[];
   vans: Van[];
   buses: Bus[];
@@ -382,6 +385,7 @@ export function createSimState(
     },
     lakeLevel: 0,
     layers: createTileLayers(size),
+    geothermalFields: [],
     vehicles: [],
     vans: [],
     buses: [],

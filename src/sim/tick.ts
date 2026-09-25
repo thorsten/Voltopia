@@ -4,6 +4,7 @@ import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
+import { reservoirStep } from './geothermal.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -54,6 +55,8 @@ export function stepTick(state: SimState): void {
   transitStep(state, occupancy);
   state.lastTransit = transitStats(state);
   updateTrafficLoad(state, occupancy);
+  // Reservoirs first: this tick's generation reads the heat they leave.
+  reservoirStep(state);
   energyStep(state, { chargingDemand: chargingDemand(state) });
   recomputeServices(state);
   state.lastServices = serviceCoverage(state);

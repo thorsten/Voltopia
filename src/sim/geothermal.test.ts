@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { chebyshevDistance, neighbors4 } from '../shared/grid.ts';
-import { Terrain } from '../shared/types.ts';
-import { generateGeothermal, FULL_HEAT } from './geothermal.ts';
+import { PlantType, Terrain, TileType } from '../shared/types.ts';
+import {
+  discoverGeothermalFields,
+  fieldAt,
+  generateGeothermal,
+  reservoirStep,
+  FULL_HEAT,
+} from './geothermal.ts';
 import { createSimState, slopeAt, type SimState } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
@@ -124,3 +130,83 @@ function componentsOf(state: SimState): number[][] {
   }
   return out;
 }
+
+/** A 16×16 flat map with one 4-tile field and nothing else. */
+function fieldMap(): SimState {
+  const state = createSimState(3, 16);
+  for (const index of [34, 35, 50, 51]) {
+    state.layers.geothermal[index] = 2;
+    state.layers.reservoirHeat[index] = FULL_HEAT;
+  }
+  discoverGeothermalFields(state);
+  return state;
+}
+
+function drill(state: SimState, index: number): void {
+  state.layers.tileType[index] = TileType.Plant;
+  state.layers.plantType[index] = PlantType.GeothermalPlant;
+}
+
+describe('geothermal fields', () => {
+  it('finds one field per connected hotspot cluster', () => {
+    const state = fieldMap();
+    expect(state.geothermalFields).toHaveLength(1);
+    expect(state.geothermalFields[0].tiles.sort((a, b) => a - b)).toEqual([34, 35, 50, 51]);
+    expect(state.geothermalFields[0].quality).toBe(2);
+    // 4 tiles × sustainablePerTile 0.5 × qualityFactor 1.0 = 2 wells.
+    expect(state.geothermalFields[0].capacity).toBe(2);
+    expect(fieldAt(state, 35)).toBe(state.geothermalFields[0]);
+    expect(fieldAt(state, 0)).toBeUndefined();
+  });
+
+  it('holds a full reservoir at or below capacity', () => {
+    const state = fieldMap();
+    drill(state, 34);
+    drill(state, 35);
+    for (let i = 0; i < 5000; i++) reservoirStep(state);
+    expect(state.geothermalFields[0].heat).toBeCloseTo(1, 6);
+    expect(state.layers.reservoirHeat[34]).toBe(FULL_HEAT);
+  });
+
+  it('cools toward the predicted equilibrium when overdrilled', () => {
+    const state = fieldMap();
+    for (const index of [34, 35, 50]) drill(state, index); // one well over capacity
+    const { recharge, drain } = BALANCE.geothermal;
+    const expected = recharge / (recharge + drain);
+    for (let i = 0; i < 20_000; i++) reservoirStep(state);
+    expect(state.geothermalFields[0].heat).toBeCloseTo(expected, 3);
+    // Every tile of the field carries the same quantised value.
+    expect(state.layers.reservoirHeat[51]).toBe(state.layers.reservoirHeat[34]);
+    expect(state.layers.reservoirHeat[34]).toBe(Math.round(expected * FULL_HEAT));
+  });
+
+  it('recovers once the excess wells are gone', () => {
+    const state = fieldMap();
+    for (const index of [34, 35, 50]) drill(state, index);
+    for (let i = 0; i < 20_000; i++) reservoirStep(state);
+    expect(state.geothermalFields[0].heat).toBeLessThan(0.9);
+    state.layers.tileType[50] = TileType.Empty;
+    state.layers.plantType[50] = PlantType.None;
+    for (let i = 0; i < 20_000; i++) reservoirStep(state);
+    expect(state.geothermalFields[0].heat).toBeCloseTo(1, 3);
+  });
+
+  it('stays within 0..1 under the heaviest possible load', () => {
+    const state = fieldMap();
+    for (const index of [34, 35, 50, 51]) drill(state, index);
+    for (let i = 0; i < 100_000; i++) reservoirStep(state);
+    expect(state.geothermalFields[0].heat).toBeGreaterThan(0);
+    expect(state.geothermalFields[0].heat).toBeLessThanOrEqual(1);
+  });
+
+  it('marks tiles dirty only when the quantised value changes', () => {
+    const state = fieldMap();
+    for (const index of [34, 35, 50]) drill(state, index);
+    state.dirty.clear();
+    reservoirStep(state);
+    // One tick of drift is far below one 1/255 step.
+    expect(state.dirty.size).toBe(0);
+    for (let i = 0; i < 200; i++) reservoirStep(state);
+    expect(state.dirty.size).toBeGreaterThan(0);
+  });
+});

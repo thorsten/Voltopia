@@ -1,7 +1,7 @@
 import { BALANCE } from '../shared/constants.ts';
 import { chebyshevDistance, neighbors4 } from '../shared/grid.ts';
 import { Rng } from '../shared/rng.ts';
-import { Terrain } from '../shared/types.ts';
+import { PlantType, Terrain, TileType } from '../shared/types.ts';
 import { markDirty, slopeAt, type SimState } from './state.ts';
 
 /** Keeps the hotspots independent of terrain, water, forest and gameplay RNG. */
@@ -68,6 +68,101 @@ export function generateGeothermal(state: SimState): void {
       markDirty(state, index);
     }
     seeds.push(seed);
+  }
+}
+
+/**
+ * One hotspot cluster: the wells on its tiles share its heat. Derived
+ * from the `geothermal` layer, never persisted — `heat` is restored from
+ * the quantised `reservoirHeat` layer on load.
+ */
+export interface GeothermalField {
+  tiles: number[];
+  /** Hotspot quality 1..3, shared by every tile of the field. */
+  quality: number;
+  /** Wells the field sustains before its reservoir starts cooling. */
+  capacity: number;
+  /** Reservoir temperature 0..1; the authoritative, unquantised value. */
+  heat: number;
+}
+
+/**
+ * Recompute `state.geothermalFields` as connected components of the
+ * hotspot layer. Call after generating a map and after loading a save.
+ */
+export function discoverGeothermalFields(state: SimState): void {
+  const cfg = BALANCE.geothermal;
+  const { geothermal, reservoirHeat } = state.layers;
+  const seen = new Uint8Array(geothermal.length);
+  const fields: GeothermalField[] = [];
+  for (let start = 0; start < geothermal.length; start++) {
+    if (geothermal[start] === 0 || seen[start] !== 0) continue;
+    const tiles: number[] = [];
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length > 0) {
+      const index = stack.pop()!;
+      tiles.push(index);
+      for (const n of neighbors4(index, state.size)) {
+        if (geothermal[n] !== 0 && seen[n] === 0) {
+          seen[n] = 1;
+          stack.push(n);
+        }
+      }
+    }
+    const quality = geothermal[start];
+    fields.push({
+      tiles,
+      quality,
+      capacity: Math.max(
+        1,
+        Math.round(tiles.length * cfg.sustainablePerTile * cfg.qualityFactor[quality]),
+      ),
+      heat: reservoirHeat[start] / FULL_HEAT,
+    });
+  }
+  state.geothermalFields = fields;
+}
+
+/** The field a tile belongs to, if any. */
+export function fieldAt(state: SimState, index: number): GeothermalField | undefined {
+  return state.geothermalFields.find((field) => field.tiles.includes(index));
+}
+
+/**
+ * Advance every field's reservoir by one tick.
+ *
+ * `heat += recharge * (1 - heat) - drain * excessWells * heat`
+ *
+ * Up to `capacity` wells the field stays at heat 1. Beyond it the
+ * temperature settles at `recharge / (recharge + drain * excess)` — a
+ * lower equilibrium, never zero — and climbs back toward 1 as soon as the
+ * excess wells are removed. Total field output (`wells * heat`) therefore
+ * keeps rising with every well but flattens toward `recharge / drain`
+ * well-equivalents: overdrilling wastes money, it never ruins a field.
+ */
+export function reservoirStep(state: SimState): void {
+  const cfg = BALANCE.geothermal;
+  const { tileType, plantType, reservoirHeat } = state.layers;
+  for (const field of state.geothermalFields) {
+    let wells = 0;
+    for (const index of field.tiles) {
+      if (tileType[index] === TileType.Plant && plantType[index] === PlantType.GeothermalPlant) {
+        wells++;
+      }
+    }
+    const excess = Math.max(0, wells - field.capacity);
+    const next = field.heat + cfg.recharge * (1 - field.heat) - cfg.drain * excess * field.heat;
+    field.heat = Math.min(1, Math.max(0, next));
+
+    // The layer is only a quantised mirror for diffs, save and render; a
+    // slow drift must not flood the diff channel every tick.
+    const quantised = Math.round(field.heat * FULL_HEAT);
+    if (reservoirHeat[field.tiles[0]] === quantised) continue;
+    for (const index of field.tiles) {
+      reservoirHeat[index] = quantised;
+      markDirty(state, index);
+    }
   }
 }
 
