@@ -13,12 +13,22 @@ const STEAM_HEIGHT = 0.45;
 const STEAM_COLOR = new THREE.Color(0xe8eef0);
 const STEAM_RISE_SPEED = 0.35;
 const NIGHT_DIM = 0.45;
+/** Below this delta, a night-factor change is not worth a steam rebuild. */
+const NIGHT_FACTOR_EPSILON = 0.002;
 
 /**
  * Hotspots: a vent cone per hotspot tile with a steam plume that drifts
  * upward. The plume's brightness follows the field's reservoir heat, so a
  * cooled field visibly stops steaming — the mechanic is readable from the
  * map, not only from the inspector.
+ *
+ * The cones never move once placed, so they only rebuild from
+ * `applyDiffs`, like `forestMesh.ts`/`waterMesh.ts`'s static geometry. The
+ * steam plume genuinely animates (its transform and fade depend on time),
+ * so it rebuilds every frame while motion is enabled — but while reduced
+ * motion is on, it rebuilds only when something it depends on (hotspot
+ * set, reservoir heat, night factor) actually changed, so an idle map
+ * does no per-frame GPU buffer uploads.
  */
 export class GeothermalMesh implements DiffLayer {
   private readonly cones: THREE.InstancedMesh;
@@ -28,8 +38,11 @@ export class GeothermalMesh implements DiffLayer {
   private readonly hotspots = new Map<number, number>();
   private readonly gridSize: number;
   private readonly matrix = new THREE.Matrix4();
+  private readonly color = new THREE.Color();
   private nightFactor = 0;
   private reducedMotion = false;
+  /** Set when the steam mesh must rebuild even with motion disabled. */
+  private steamDirty = false;
 
   constructor(
     scene: THREE.Scene,
@@ -67,26 +80,34 @@ export class GeothermalMesh implements DiffLayer {
   }
 
   applyDiffs(diffs: TileDiff[]): void {
-    let changed = false;
+    // Cones only move when a hotspot appears or disappears; heat-only
+    // changes never touch them, so they are tracked separately from the
+    // steam plume's dirtiness.
+    let hotspotsChanged = false;
     for (const diff of diffs) {
       const previous = this.hotspots.get(diff.index);
       if (diff.geothermal === 0) {
         if (previous !== undefined) {
           this.hotspots.delete(diff.index);
-          changed = true;
+          hotspotsChanged = true;
+          this.steamDirty = true;
         }
         continue;
       }
       if (previous !== diff.reservoirHeat) {
         this.hotspots.set(diff.index, diff.reservoirHeat);
-        changed = true;
+        if (previous === undefined) hotspotsChanged = true;
+        this.steamDirty = true;
       }
     }
-    if (changed) this.rebuild(0);
+    if (hotspotsChanged) this.rebuildCones();
   }
 
   setEnvironment(environment: RenderEnvironment): void {
-    this.nightFactor = environment.nightFactor;
+    if (Math.abs(environment.nightFactor - this.nightFactor) > NIGHT_FACTOR_EPSILON) {
+      this.nightFactor = environment.nightFactor;
+      this.steamDirty = true;
+    }
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -94,21 +115,44 @@ export class GeothermalMesh implements DiffLayer {
   }
 
   update(_deltaSeconds: number, nowSeconds: number): void {
-    this.rebuild(this.reducedMotion ? 0 : nowSeconds);
+    if (this.hotspots.size === 0) {
+      if (this.steam.count !== 0) {
+        this.steam.count = 0;
+        this.steam.instanceMatrix.needsUpdate = true;
+      }
+      this.steamDirty = false;
+      return;
+    }
+    // Motion keeps the plume rising every frame; reduced motion freezes
+    // it, so there is nothing to redraw unless something else changed.
+    if (this.reducedMotion && !this.steamDirty) return;
+    this.rebuildSteam(this.reducedMotion ? 0 : nowSeconds);
+    this.steamDirty = false;
   }
 
-  /** Place every vent and its plume; `time` drives the plume's rise. */
-  private rebuild(time: number): void {
-    const color = new THREE.Color();
+  /** Place every vent cone. Static: only called when a hotspot appears or disappears. */
+  private rebuildCones(): void {
+    let count = 0;
+    for (const index of this.hotspots.keys()) {
+      const x = (index % this.gridSize) + 0.5;
+      const z = Math.floor(index / this.gridSize) + 0.5;
+      const groundY = this.elevation.centerY(index);
+      this.matrix.identity();
+      this.matrix.setPosition(x, groundY + CONE_HEIGHT / 2, z);
+      this.cones.setMatrixAt(count, this.matrix);
+      count++;
+    }
+    this.cones.count = count;
+    this.cones.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Place every steam plume; `time` drives its rise. */
+  private rebuildSteam(time: number): void {
     let count = 0;
     for (const [index, heat] of this.hotspots) {
       const x = (index % this.gridSize) + 0.5;
       const z = Math.floor(index / this.gridSize) + 0.5;
       const groundY = this.elevation.centerY(index);
-
-      this.matrix.makeScale(1, 1, 1);
-      this.matrix.setPosition(x, groundY + CONE_HEIGHT / 2, z);
-      this.cones.setMatrixAt(count, this.matrix);
 
       // The plume loops from the vent upward and fades as it climbs.
       const phase = (time * STEAM_RISE_SPEED + index * 0.37) % 1;
@@ -120,11 +164,9 @@ export class GeothermalMesh implements DiffLayer {
       // Brightness carries both the reservoir heat and the plume's fade,
       // dimmed at night like the other environment-driven layers.
       const strength = (heat / 255) * (1 - phase * 0.6) * (1 - NIGHT_DIM * this.nightFactor);
-      this.steam.setColorAt(count, color.copy(STEAM_COLOR).multiplyScalar(strength));
+      this.steam.setColorAt(count, this.color.copy(STEAM_COLOR).multiplyScalar(strength));
       count++;
     }
-    this.cones.count = count;
-    this.cones.instanceMatrix.needsUpdate = true;
     this.steam.count = count;
     this.steam.instanceMatrix.needsUpdate = true;
     if (this.steam.instanceColor) this.steam.instanceColor.needsUpdate = true;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
@@ -55,5 +55,38 @@ describe('geothermal mesh', () => {
     hot.steam.getColorAt(0, hotColor);
     cooled.steam.getColorAt(0, coldColor);
     expect(coldColor.r).toBeLessThan(hotColor.r);
+  });
+
+  it('freezes the plume with reduced motion and skips redundant rebuilds', () => {
+    const scene = new THREE.Scene();
+    const field = new ElevationField(SIZE);
+    const diffs = tiles({ 9: 2 });
+    field.applyDiffs(diffs);
+    const mesh = new GeothermalMesh(scene, SIZE, field);
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs(diffs);
+    mesh.update(0.25, 0);
+    const steam = scene.children.filter(
+      (child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh,
+    )[1];
+    const before = new THREE.Matrix4();
+    steam.getMatrixAt(0, before);
+
+    // Time moves on, but nothing that feeds the plume changed: with
+    // reduced motion the rebuild should be skipped entirely (no per-
+    // instance GPU buffer work), and the frozen transform stays put.
+    const setMatrixAt = vi.spyOn(steam, 'setMatrixAt');
+    mesh.update(0.25, 5);
+    expect(setMatrixAt).not.toHaveBeenCalled();
+    const after = new THREE.Matrix4();
+    steam.getMatrixAt(0, after);
+    expect(after.equals(before)).toBe(true);
+
+    // A real change (the reservoir cooling) still forces a rebuild even
+    // with reduced motion on.
+    const cooled = diffs.map((diff) => (diff.index === 9 ? { ...diff, reservoirHeat: 20 } : diff));
+    mesh.applyDiffs(cooled);
+    mesh.update(0.25, 5);
+    expect(setMatrixAt).toHaveBeenCalled();
   });
 });
