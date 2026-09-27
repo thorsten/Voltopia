@@ -374,6 +374,8 @@ const en = {
   'goal.wellStocked.body': 'A whole day with 95% of shops supplied (20+ shops).',
   'goal.modalShift.title': 'Modal shift',
   'goal.modalShift.body': 'A whole day with 30% of commuters on the bus (300+ residents).',
+  'goal.stormProof.title': 'Storm-proof',
+  'goal.stormProof.body': 'Ride out a whole storm without a single undersupplied tick.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -861,6 +863,8 @@ const de: Record<TranslationKey, string> = {
   'goal.wellStocked.body': 'Einen ganzen Tag lang 95 % der Läden beliefert (ab 20 Läden).',
   'goal.modalShift.title': 'Verkehrswende',
   'goal.modalShift.body': 'Einen ganzen Tag lang 30 % der Pendler im Bus (ab 300 Einwohnern).',
+  'goal.stormProof.title': 'Sturmfest',
+  'goal.stormProof.body': 'Überstehe einen ganzen Sturm ohne einen einzigen unterversorgten Tick.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

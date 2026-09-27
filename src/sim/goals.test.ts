@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, Terrain, Zone } from '../shared/types.ts';
+import { DisasterKind, PlantType, Terrain, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { buildPowerLines } from './powerLines.ts';
@@ -349,6 +349,52 @@ describe('goals', () => {
       small.lastTransit = { ...state.lastTransit };
       goalsStep(small);
       expect(small.goalProgress.transitTicks).toBe(0);
+    });
+  });
+
+  describe('the stormProof goal', () => {
+    it('unlocks after riding out a whole storm without a deficit', () => {
+      const state = createSimState(1, 32);
+      state.disasters.active.push({
+        id: 1,
+        kind: DisasterKind.Storm,
+        severity: 1,
+        startTick: 0,
+        endTick: 10,
+        origin: 0,
+        tiles: [],
+        intensity: [],
+      });
+      state.lastEnergy.deficit = 0;
+      for (let i = 0; i < 10; i++) {
+        state.tick++;
+        goalsStep(state);
+      }
+      state.disasters.active = [];
+      goalsStep(state);
+      expect(state.goalsAchieved.has('stormProof')).toBe(true);
+    });
+
+    it('does not unlock when the storm caused a deficit', () => {
+      const state = createSimState(1, 32);
+      state.disasters.active.push({
+        id: 1,
+        kind: DisasterKind.Storm,
+        severity: 1,
+        startTick: 0,
+        endTick: 10,
+        origin: 0,
+        tiles: [],
+        intensity: [],
+      });
+      for (let i = 0; i < 10; i++) {
+        state.tick++;
+        state.lastEnergy.deficit = i === 5 ? 12 : 0;
+        goalsStep(state);
+      }
+      state.disasters.active = [];
+      goalsStep(state);
+      expect(state.goalsAchieved.has('stormProof')).toBe(false);
     });
   });
 });

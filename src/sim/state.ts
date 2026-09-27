@@ -294,7 +294,9 @@ export interface SimState {
    * `winterTicks`, `summerTicks`, `freeFlowTicks`, `wellStockedTicks` and
    * `transitTicks` are season-length, so they are persisted. `cleanDayTicks`
    * and `geothermalTicks` are single-day streaks, so a reload resetting them
-   * is an accepted cost, not an oversight — they stay transient.
+   * is an accepted cost, not an oversight — they stay transient. `stormTicks`
+   * is shorter still (one storm, not even a full day), so it stays
+   * transient for the same reason.
    */
   goalProgress: {
     cleanDayTicks: number;
@@ -305,6 +307,7 @@ export interface SimState {
     wellStockedTicks: number;
     transitTicks: number;
     geothermalTicks: number;
+    stormTicks: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -449,6 +452,7 @@ export function createSimState(
       wellStockedTicks: 0,
       transitTicks: 0,
       geothermalTicks: 0,
+      stormTicks: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
