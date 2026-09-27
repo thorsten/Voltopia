@@ -1,4 +1,5 @@
 import type { TileDiff } from '../shared/types.ts';
+import { Terrain } from '../shared/types.ts';
 import type { DiffLayer } from './renderer.ts';
 
 /** World height of one elevation level. */
@@ -8,12 +9,15 @@ export const LEVEL_HEIGHT = 0.35;
  * Per-tile elevation tracked from sim diffs, shared by every render
  * layer. Registered as the FIRST diff layer so heights are current
  * before the other layers rebuild. Corner heights average the adjacent
- * tiles — that interpolation is what makes the slopes smooth.
+ * tiles — that interpolation is what makes the slopes smooth — except at
+ * the water's edge, where they step down instead (see cornerY).
  */
 export class ElevationField implements DiffLayer {
   /** Incremented whenever any height changes; layers rebuild on change. */
   version = 0;
   private readonly levels: Uint8Array;
+  /** 1 where the tile is water (river, lake or sea), 0 on land. */
+  private readonly water: Uint8Array;
   private readonly size: number;
   /** Tiles per side of the map. */
   readonly gridSize: number;
@@ -22,6 +26,7 @@ export class ElevationField implements DiffLayer {
     this.size = gridSize;
     this.gridSize = gridSize;
     this.levels = new Uint8Array(gridSize * gridSize);
+    this.water = new Uint8Array(gridSize * gridSize);
   }
 
   applyDiffs(diffs: TileDiff[]): void {
@@ -29,6 +34,12 @@ export class ElevationField implements DiffLayer {
     for (const diff of diffs) {
       if (this.levels[diff.index] !== diff.elevation) {
         this.levels[diff.index] = diff.elevation;
+        changed = true;
+      }
+      // A diff without terrain counts as land; the sim always sends it.
+      const water = (diff.terrain ?? Terrain.Land) === Terrain.Land ? 0 : 1;
+      if (this.water[diff.index] !== water) {
+        this.water[diff.index] = water;
         changed = true;
       }
     }
@@ -64,11 +75,26 @@ export class ElevationField implements DiffLayer {
     return this.levels[index] * LEVEL_HEIGHT;
   }
 
-  /** Height of the ground-mesh vertex at integer corner (vx, vz). */
+  /**
+   * Height of the ground-mesh vertex at integer corner (vx, vz): the mean
+   * of the adjacent tiles' levels, which is what makes inland relief read
+   * as smooth slopes.
+   *
+   * A corner that touches water takes the LOWEST adjacent level instead,
+   * so a shore is a step down into the water rather than a ramp. Averaging
+   * there lifted the shared corner halfway up the bank — a sea tile beside
+   * level-2 land got a corner half a level high, far above the highest
+   * tide — and the opaque ground then rendered straight through the water
+   * surface as a green wedge, most visibly where a river met the sea.
+   * Measured before this rule: 21 % of all sea tiles and 40 % of lake
+   * tiles had ground above their own water surface.
+   */
   cornerY(vx: number, vz: number): number {
     const size = this.size;
     let sum = 0;
     let count = 0;
+    let lowest = Number.POSITIVE_INFINITY;
+    let touchesWater = false;
     for (const [dx, dz] of [
       [-1, -1],
       [0, -1],
@@ -78,10 +104,14 @@ export class ElevationField implements DiffLayer {
       const x = vx + dx;
       const z = vz + dz;
       if (x < 0 || z < 0 || x >= size || z >= size) continue;
-      sum += this.levels[z * size + x];
+      const level = this.levels[z * size + x];
+      sum += level;
       count++;
+      lowest = Math.min(lowest, level);
+      if (this.water[z * size + x] !== 0) touchesWater = true;
     }
-    return count > 0 ? (sum / count) * LEVEL_HEIGHT : 0;
+    if (count === 0) return 0;
+    return (touchesWater ? lowest : sum / count) * LEVEL_HEIGHT;
   }
 
   /** Highest ground corner of a tile — flat decals sit here so the

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { Terrain } from '../shared/types.ts';
-import { ElevationField } from './elevationField.ts';
+import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
+import { createSimState, type SimState } from '../sim/state.ts';
+import { generateTerrain } from '../sim/terrain.ts';
+import { generateWater } from '../sim/water.ts';
 import type { RenderEnvironment } from './renderer.ts';
-import { WaterMesh } from './waterMesh.ts';
+import { WATER_HEIGHT, WaterMesh } from './waterMesh.ts';
 
 const SIZE = 8;
 
@@ -81,5 +84,57 @@ describe('sea surface over the tidal range', () => {
     const still = seaBounds(-1, true);
     expect(still.top).toBeCloseTo(seaBounds(1, true).top, 6);
     expect(still.top).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The contract the ground and the water meshes share on a real generated
+ * map: wherever water is drawn, the opaque ground beneath it must stay
+ * below the water's own surface. Averaged corners used to lift the shore
+ * halfway up the bank, so the ground rendered through the sea and lake
+ * surfaces as green wedges — worst at a river mouth, where the steepest
+ * bank, the river and the sea meet.
+ */
+describe('ground under water on generated maps', () => {
+  const MAP_SIZE = 48;
+
+  function generated(seed: number): { state: SimState; field: ElevationField } {
+    const state = createSimState(seed, MAP_SIZE);
+    generateTerrain(state);
+    generateWater(state);
+    const field = new ElevationField(MAP_SIZE);
+    const diffs: TileDiff[] = [];
+    for (let index = 0; index < MAP_SIZE * MAP_SIZE; index++) {
+      diffs.push({
+        index,
+        elevation: state.layers.elevation[index],
+        terrain: state.layers.terrain[index],
+      } as TileDiff);
+    }
+    field.applyDiffs(diffs);
+    return { state, field };
+  }
+
+  it('never lets the ground rise above a sea tile at any tide', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const { state, field } = generated(seed);
+      for (let index = 0; index < state.layers.terrain.length; index++) {
+        if (state.layers.terrain[index] !== Terrain.Sea) continue;
+        // Lowest the sea surface ever gets: mean level minus the full tide.
+        expect(field.maxCornerY(index)).toBeLessThan(WATER_HEIGHT);
+      }
+    }
+  });
+
+  it('never lets the ground rise above a lake or river surface', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const { state, field } = generated(seed);
+      const { terrain, elevation } = state.layers;
+      for (let index = 0; index < terrain.length; index++) {
+        if (terrain[index] !== Terrain.Lake && terrain[index] !== Terrain.River) continue;
+        const surface = elevation[index] * LEVEL_HEIGHT + WATER_HEIGHT;
+        expect(field.maxCornerY(index)).toBeLessThan(surface);
+      }
+    }
   });
 });

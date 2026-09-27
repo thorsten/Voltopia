@@ -6,8 +6,12 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 
-/** Just above the ground plane, below roads (0.05) and the build grid. */
-const WATER_HEIGHT = 0.015;
+/**
+ * Just above the ground plane, below roads (0.05) and the build grid. The
+ * thinnest film of water any tile ever carries — exported so tests can
+ * assert that the ground stays below it.
+ */
+export const WATER_HEIGHT = 0.015;
 /** Thickness of the water slab (it is a box so it can be sheared onto slopes). */
 const WATER_THICKNESS = 0.01;
 const WOBBLE_AMPLITUDE = 0.06;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileDiff } from '../shared/types.ts';
+import { Terrain } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
 
 const SIZE = 6;
@@ -11,6 +12,26 @@ function field(levelOf: (x: number, z: number) => number): ElevationField {
   for (let z = 0; z < SIZE; z++) {
     for (let x = 0; x < SIZE; x++) {
       diffs.push({ index: z * SIZE + x, elevation: levelOf(x, z) } as TileDiff);
+    }
+  }
+  f.applyDiffs(diffs);
+  return f;
+}
+
+/** A field where levels and terrain both come from callbacks. */
+function shoreField(
+  levelOf: (x: number, z: number) => number,
+  terrainOf: (x: number, z: number) => Terrain,
+): ElevationField {
+  const f = new ElevationField(SIZE);
+  const diffs: TileDiff[] = [];
+  for (let z = 0; z < SIZE; z++) {
+    for (let x = 0; x < SIZE; x++) {
+      diffs.push({
+        index: z * SIZE + x,
+        elevation: levelOf(x, z),
+        terrain: terrainOf(x, z),
+      } as TileDiff);
     }
   }
   f.applyDiffs(diffs);
@@ -147,5 +168,53 @@ describe('ElevationField smooth normals', () => {
     expect(n.x).toBeCloseTo(sx / l, 9);
     expect(n.y).toBeCloseTo(sy / l, 9);
     expect(n.z).toBeCloseTo(sz / l, 9);
+  });
+});
+
+describe('ElevationField shorelines', () => {
+  /** Sea at level 0 on the left half, land at level 2 on the right. */
+  const coast = () =>
+    shoreField(
+      (x) => (x < 3 ? 0 : 2),
+      (x) => (x < 3 ? Terrain.Sea : Terrain.Land),
+    );
+
+  it('sinks a ground corner that touches water to the water level', () => {
+    // Corner (3, z) is shared by two sea tiles at 0 and two land tiles at
+    // 2. Averaging lifts it to 0.5 levels — above every possible tide —
+    // so the ground would render through the sea surface. The shore steps
+    // down into the water instead.
+    expect(coast().cornerY(3, 2)).toBeCloseTo(0, 9);
+  });
+
+  it('keeps the whole ground of a water tile at or below its own level', () => {
+    // What the water slab has to cover: no corner of a sea tile may rise
+    // above the tile's own level, or the ground pokes through the surface.
+    const f = coast();
+    for (let z = 0; z < SIZE; z++) {
+      for (let x = 0; x < 3; x++) {
+        expect(f.maxCornerY(at(x, z))).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
+  it('still averages corners that touch no water at all', () => {
+    // The smooth relief inland must not change: a corner between land
+    // tiles of level 1 and 3 stays at their mean.
+    const f = shoreField(
+      (x) => (x < 3 ? 1 : 3),
+      () => Terrain.Land,
+    );
+    expect(f.cornerY(3, 2)).toBeCloseTo(2 * LEVEL_HEIGHT, 9);
+  });
+
+  it('treats river and lake tiles as water too', () => {
+    for (const water of [Terrain.River, Terrain.Lake]) {
+      const f = shoreField(
+        (x, z) => (x === 3 && z === 3 ? 1 : 3),
+        (x, z) => (x === 3 && z === 3 ? water : Terrain.Land),
+      );
+      expect(f.cornerY(3, 3)).toBeCloseTo(1 * LEVEL_HEIGHT, 9);
+    }
   });
 });
