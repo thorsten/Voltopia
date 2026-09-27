@@ -51,7 +51,7 @@ export function recomputeGrid(state: SimState): void {
   if (state.gridComputedVersion === state.gridVersion) return;
   const { layers } = state;
   const size = state.size;
-  const { powerLine, energized, tileType, plantType } = layers;
+  const { powerLine, energized, tileType, plantType, damage } = layers;
   const radius = BALANCE.energy.lineSupplyRadius;
 
   const reached = new Uint8Array(size * size);
@@ -59,9 +59,10 @@ export function recomputeGrid(state: SimState): void {
   const sources: number[] = [];
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant || !isSupplySource(plantType[i] as PlantType)) continue;
+    if (damage[i] !== 0) continue; // a damaged plant feeds nothing
     sources.push(i);
     for (const n of neighbors4(i, size)) {
-      if (powerLine[n] !== 0 && reached[n] === 0) {
+      if (powerLine[n] !== 0 && damage[n] === 0 && reached[n] === 0) {
         reached[n] = 1;
         queue.push(n);
       }
@@ -70,7 +71,7 @@ export function recomputeGrid(state: SimState): void {
   while (queue.length > 0) {
     const index = queue.pop()!;
     for (const n of neighbors4(index, size)) {
-      if (powerLine[n] !== 0 && reached[n] === 0) {
+      if (powerLine[n] !== 0 && damage[n] === 0 && reached[n] === 0) {
         reached[n] = 1;
         queue.push(n);
       }

@@ -700,6 +700,9 @@ export function buildRejection(
   plant: PlantType = PlantType.None,
 ): string | null {
   const { layers } = state;
+  // A damaged tile is a building site only after the repair crews are
+  // done; the bulldozer may still clear it.
+  if (layers.damage[index] !== 0) return 'damaged';
   if (intent === BuildIntent.PowerLine) {
     // Lines share tiles with roads and water but never with buildings or plants.
     if (layers.density[index] !== 0 || layers.tileType[index] === TileType.Plant) {

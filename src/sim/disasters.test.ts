@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { tileIndex } from '../shared/grid.ts';
 import { createSimState, deserializeState, serializeState } from './state.ts';
+import { BALANCE } from '../shared/constants.ts';
+import { PlantType, SupplyStatus, TileType, Zone } from '../shared/types.ts';
+import { censusPlants, placePlant } from './energy.ts';
+import { recomputeGrid } from './powerGrid.ts';
+import { buildPowerLines } from './powerLines.ts';
+import { bulldozeTiles, buildRoads } from './roads.ts';
+import { recomputeServices, SERVICE_FIRE } from './services.ts';
+import { buildRejection, BuildIntent, bumpGridVersion } from './state.ts';
+import { stepTick } from './tick.ts';
 
 const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -47,4 +56,78 @@ describe('disaster intensity', () => {
     state.disasterScale = 1.6;
     expect(deserializeState(serializeState(state)).disasterScale).toBe(1.6);
   });
+});
+
+describe('damage takes a tile out of service', () => {
+  it('drops a damaged turbine out of the plant census', () => {
+    const state = createSimState(1, SIZE);
+    placePlant(state, at(5, 5), PlantType.WindTurbine);
+    expect(censusPlants(state).windTurbines).toBe(1);
+    state.layers.damage[at(5, 5)] = 50;
+    expect(censusPlants(state).windTurbines).toBe(0);
+    expect(censusPlants(state).windCapacity).toBe(0);
+  });
+
+  it('stops a damaged line from conducting', () => {
+    const state = createSimState(1, SIZE);
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    // The far tile must sit beyond lineSupplyRadius of the last surviving
+    // line tile (3,2), or its own coverage stamp would still light it up.
+    buildPowerLines(state, [at(3, 2), at(4, 2), at(5, 2), at(6, 2), at(7, 2)]);
+    recomputeGrid(state);
+    expect(state.layers.energized[at(7, 2)]).toBe(1);
+    state.layers.damage[at(4, 2)] = 90;
+    bumpGridVersion(state);
+    recomputeGrid(state);
+    expect(state.layers.energized[at(7, 2)]).toBe(0);
+  });
+
+  it('marks a damaged building as not connected and drops its consumption', () => {
+    const state = createSimState(1, SIZE);
+    placePlant(state, at(5, 5), PlantType.WindTurbine);
+    state.layers.zone[at(5, 6)] = Zone.Residential;
+    state.layers.density[at(5, 6)] = 2;
+    stepTick(state);
+    const withBuilding = state.lastEnergy.buildingConsumption;
+    expect(withBuilding).toBeGreaterThan(0);
+    state.layers.damage[at(5, 6)] = 30;
+    stepTick(state);
+    expect(state.lastEnergy.buildingConsumption).toBeLessThan(withBuilding);
+    expect(state.layers.supplied[at(5, 6)]).toBe(SupplyStatus.NotConnected);
+  });
+
+  it('stops a damaged fire station from covering its ring', () => {
+    const state = createSimState(1, SIZE);
+    buildRoads(state, [at(4, 5)]);
+    placePlant(state, at(4, 4), PlantType.FireStation);
+    placePlant(state, at(5, 4), PlantType.WindTurbine);
+    recomputeServices(state);
+    expect(state.layers.services[at(4, 4)] & SERVICE_FIRE).toBe(SERVICE_FIRE);
+    state.layers.damage[at(4, 4)] = 60;
+    recomputeServices(state);
+    expect(state.layers.services[at(4, 4)] & SERVICE_FIRE).toBe(0);
+  });
+
+  it('refuses to build on a damaged tile and clears damage when bulldozing', () => {
+    const state = createSimState(1, SIZE);
+    placePlant(state, at(7, 7), PlantType.WindTurbine);
+    state.layers.damage[at(7, 7)] = 40;
+    expect(buildRejection(state, at(7, 7), BuildIntent.Road)).toBe('damaged');
+    bulldozeTiles(state, [at(7, 7)]);
+    expect(state.layers.damage[at(7, 7)]).toBe(0);
+    expect(buildRejection(state, at(7, 7), BuildIntent.Road)).toBe(null);
+  });
+
+  it('never damages the road under a damaged power line', () => {
+    const state = createSimState(1, SIZE);
+    buildRoads(state, [at(3, 3), at(4, 3)]);
+    buildPowerLines(state, [at(3, 3)]);
+    state.layers.damage[at(3, 3)] = 90;
+    // The road is still a road: routing and vehicles ignore damage entirely.
+    expect(state.layers.tileType[at(3, 3)]).toBe(TileType.Road);
+  });
+});
+
+it('keeps the wind cut-out constant above the cut-in speed', () => {
+  expect(BALANCE.energy.windCutOutSpeed).toBeGreaterThan(BALANCE.energy.windCutInSpeed);
 });

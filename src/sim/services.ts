@@ -40,6 +40,9 @@ export function recomputeServices(state: SimState): void {
   const next = new Uint8Array(layers.services.length);
   for (let i = 0; i < layers.tileType.length; i++) {
     if (layers.tileType[i] !== TileType.Plant || layers.energized[i] !== 1) continue;
+    // A damaged station stamps nothing: a fire that reaches the fire
+    // station widens its own path.
+    if (layers.damage[i] !== 0) continue;
     const plant = layers.plantType[i] as PlantType;
     if (plant === PlantType.FireStation) {
       stampBit(next, i, size, BALANCE.services.fire.radius, SERVICE_FIRE);
