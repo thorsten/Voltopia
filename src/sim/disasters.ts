@@ -18,11 +18,19 @@ export const MAX_DAMAGE = 255;
  * Add damage points to a tile. The grid is only re-derived on the
  * transition from intact to damaged — that is when a line stops
  * conducting or a plant stops feeding.
+ *
+ * An increment that rounds to nothing is nothing: this used to floor at
+ * one point per call, which silently made every slow effect a fast one —
+ * a flood running longer than MAX_DAMAGE ticks wrote off every tile it
+ * covered whatever its own rate said. Callers that want a sub-point rate
+ * accumulate it themselves (see floodSpec.apply) and pass whole points.
  */
 export function addDamage(state: SimState, index: number, points: number): void {
+  const added = Math.round(points);
+  if (added <= 0) return;
   const { damage } = state.layers;
   const before = damage[index];
-  const next = Math.min(MAX_DAMAGE, before + Math.max(1, Math.round(points)));
+  const next = Math.min(MAX_DAMAGE, before + added);
   if (next === before) return;
   damage[index] = next;
   if (before === 0) bumpGridVersion(state);

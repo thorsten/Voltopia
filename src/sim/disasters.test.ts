@@ -162,6 +162,24 @@ describe('addDamage / clearDamage', () => {
     clearDamage(state, at(1, 1));
     expect(state.gridVersion).toBe(before + 2);
   });
+
+  it('ignores an increment that rounds to nothing', () => {
+    // This used to floor at one point per call, which turned every slow
+    // effect into a fast one — a flood soaking at a third of a point per
+    // tick still wrote off everything it covered. Callers that want a
+    // sub-point rate accumulate it and pass whole points; a genuine zero
+    // must not damage the tile, dirty it, or re-derive the grid.
+    const state = createSimState(1, SIZE);
+    const version = state.gridVersion;
+    addDamage(state, at(2, 3), 0.4);
+    addDamage(state, at(2, 3), 0);
+    expect(state.layers.damage[at(2, 3)]).toBe(0);
+    expect(state.dirty.has(at(2, 3))).toBe(false);
+    expect(state.gridVersion).toBe(version);
+    // Half a point still rounds up, so nothing that used to land is lost.
+    addDamage(state, at(2, 3), 0.5);
+    expect(state.layers.damage[at(2, 3)]).toBe(1);
+  });
 });
 
 describe('repairStep', () => {

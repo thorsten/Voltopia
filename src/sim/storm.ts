@@ -1,5 +1,5 @@
 import { BALANCE } from '../shared/constants.ts';
-import { DisasterKind, PlantType, TileType } from '../shared/types.ts';
+import { DisasterKind, PlantType, TileType, type DisasterEvent } from '../shared/types.ts';
 import { addDamage, type DisasterSpec } from './disasters.ts';
 import type { SimState } from './state.ts';
 import { frontMeans } from './weather.ts';
@@ -70,6 +70,26 @@ function targets(state: SimState): number[] {
   return pool;
 }
 
+/**
+ * Tiles this tick strikes, from a rate that may be well below one per
+ * tick: the running total `floor(rate * elapsed)` is differenced across
+ * the tick, so a rate of 0.7 strikes on seven ticks out of ten instead of
+ * rounding up to one every tick. That rounding-up used to make the strike
+ * count equal `durationTicks` for any rate at or below 1 — every storm
+ * damaged exactly as many tiles as it lasted ticks, whatever its severity
+ * and however small the city, since `targets` never offers a tile twice.
+ * Severity now scales how *wide* a storm is as well as how hard it hits.
+ *
+ * Derived from the tick, so it needs no counter on the event and survives
+ * a save/load in the middle of a storm unchanged.
+ */
+export function strikesThisTick(state: SimState, event: DisasterEvent): number {
+  const rate = BALANCE.disasters.storm.hitsPerTick * event.severity;
+  const elapsed = state.tick - event.startTick;
+  if (elapsed < 0) return 0;
+  return Math.floor(rate * (elapsed + 1)) - Math.floor(rate * elapsed);
+}
+
 export const stormSpec: DisasterSpec = {
   kind: DisasterKind.Storm,
   warnTicks: BALANCE.disasters.storm.warnTicks,
@@ -84,10 +104,9 @@ export const stormSpec: DisasterSpec = {
     return { origin, tiles: [], intensity: [] };
   },
   apply(state, event) {
-    const cfg = BALANCE.disasters.storm;
     const pool = targets(state);
     if (pool.length === 0) return false;
-    const hits = Math.max(1, Math.round(cfg.hitsPerTick * event.severity));
+    const hits = strikesThisTick(state, event);
     for (let n = 0; n < hits; n++) {
       const index = pool[state.rng.nextInt(pool.length)];
       addDamage(state, index, strikeDamage(state, index) * event.severity);

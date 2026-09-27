@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { DisasterKind, PlantType, Terrain, TileType, Zone } from '../shared/types.ts';
+import {
+  DisasterKind,
+  PlantType,
+  Terrain,
+  TileType,
+  Zone,
+  type DisasterEvent,
+} from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { floodArea, floodRisk, floodSpec } from './flood.ts';
 import { buildPowerLines } from './powerLines.ts';
@@ -12,6 +19,19 @@ import { generateWater } from './water.ts';
 
 const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+/**
+ * Let a flood soak for `ticks` ticks. The tick has to advance: the
+ * per-tile damage is a sub-point-per-tick rate accumulated from
+ * `state.tick - event.startTick`, so applying the same tick over and over
+ * (as these fixtures used to) is a flood standing still.
+ */
+function soak(state: SimState, event: DisasterEvent, ticks: number): void {
+  for (let i = 0; i < ticks; i++) {
+    floodSpec.apply(state, event);
+    state.tick++;
+  }
+}
 
 /** A map with a real river carved into real relief. */
 function river(seed = 1): SimState {
@@ -65,16 +85,19 @@ describe('floodArea', () => {
     expect(depth).toHaveLength(tiles.length);
   });
 
-  it('stops a fixed number of tiles from the bank, however low the land is', () => {
-    // A dead-flat valley: without the lateral reach the water line would
-    // walk across the whole map, which is what it did on half the maps the
-    // balancing probe measured. Flat ground is the case relief cannot bound.
+  it('loses one level of head per tile of land, so flat ground bounds it', () => {
+    // Dead-flat ground is the case relief cannot bound: carrying the water
+    // line inland unchanged walked it across the whole map (the balancing
+    // probe measured the mildest flood covering every land tile on three of
+    // six seeds). Here the only thing stopping the water is the decay, so
+    // the reach is exactly `rise` tiles and the depth steps down by one.
     const state = createSimState(3, SIZE);
     for (let y = 0; y < SIZE; y++) state.layers.terrain[at(0, y)] = Terrain.River;
-    const reach = BALANCE.disasters.flood.reachTiles;
-    const tiles = new Set(floodArea(state, 1).tiles);
-    for (let x = 1; x <= reach; x++) expect(tiles.has(at(x, 5))).toBe(true);
-    expect(tiles.has(at(reach + 1, 5))).toBe(false);
+    const rise = BALANCE.disasters.flood.maxRise;
+    const { tiles, depth } = floodArea(state, 1);
+    const depthAt = new Map(tiles.map((index, i) => [index, depth[i]]));
+    for (let x = 1; x <= rise; x++) expect(depthAt.get(at(x, 5))).toBe(rise - x);
+    expect(depthAt.has(at(rise + 1, 5))).toBe(false);
   });
 
   it('is deterministic for the same map and severity', () => {
@@ -90,6 +113,33 @@ describe('floodArea', () => {
     expect(large).toBeGreaterThanOrEqual(small);
   });
 
+  it('never drops a tile as severity rises, on real generated terrain', () => {
+    // The assertion the old hop-count bound failed. A bigger flood must be
+    // a superset of every smaller one — otherwise a lot that drowned last
+    // spring stays dry in a worse flood, and "building in the floodplain is
+    // an informed choice" stops being true. Counting tiles is not enough:
+    // the bound that broke this swapped one tile for another at the step
+    // where it tightened, so compare the sets themselves. Real relief, not
+    // the flat fixture, because a synthetic map is exactly where a
+    // path-order bug hides.
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const state = river(seed);
+      let previous = new Set<number>();
+      let grew = false;
+      for (let severity = 0.05; severity <= 1.0001; severity += 0.05) {
+        const tiles = new Set(floodArea(state, severity).tiles);
+        for (const index of previous) {
+          expect(tiles.has(index)).toBe(true);
+        }
+        if (tiles.size > previous.size) grew = true;
+        previous = tiles;
+      }
+      // A sweep over a map the water never reaches would pass vacuously.
+      expect(previous.size).toBeGreaterThan(0);
+      expect(grew).toBe(true);
+    }
+  });
+
   it('leaves the terrain layer untouched', () => {
     const state = river(5);
     const before = Uint8Array.from(state.layers.terrain);
@@ -103,7 +153,7 @@ describe('floodArea', () => {
       endTick: 100,
       ...plan!,
     };
-    for (let i = 0; i < 20; i++) floodSpec.apply(state, event);
+    soak(state, event, 20);
     expect(state.layers.terrain).toEqual(before);
   });
 });
@@ -123,7 +173,7 @@ describe('a flood in progress', () => {
       endTick: 100,
       ...plan,
     };
-    floodSpec.apply(state, event);
+    soak(state, event, 10);
     expect(state.layers.damage[at(1, 5)]).toBeGreaterThan(0);
     expect(state.layers.damage[at(1, 7)]).toBeGreaterThan(0);
     expect(state.layers.damage[at(1, 9)]).toBe(0); // bare land just gets wet
@@ -165,7 +215,7 @@ describe('a flood in progress', () => {
       endTick: 100,
       ...plan,
     };
-    for (let i = 0; i < 5; i++) floodSpec.apply(state, event);
+    soak(state, event, 10);
     expect(state.layers.damage[bareRoad]).toBe(0);
     expect(state.layers.tileType[bareRoad]).toBe(TileType.Road);
     expect(state.layers.damage[roadWithLine]).toBeGreaterThan(0);

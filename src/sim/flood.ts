@@ -19,19 +19,27 @@ export function floodRisk(state: SimState): number {
 }
 
 /**
- * The floodplain at this severity: a height-ordered fill outward from
- * every river and lake tile. Each water tile floods the land around it up
- * to its own bed elevation plus `rise`, and carries that water line
- * inland as far as the ground stays below it — but never further than
- * `reach` tiles from the water's edge.
+ * The floodplain at this severity: a fill outward from every river and
+ * lake tile that loses one elevation level per tile of land it crosses.
+ * Each water tile starts at its own bed elevation plus `rise`; every land
+ * neighbour is offered that water line minus one, floods if its ground
+ * lies at or below the offer, and passes on one level less again. So the
+ * water climbs a bank until it runs out of head, and on dead-flat ground
+ * a rise of `r` reaches `r` tiles inland.
  *
- * That lateral limit is what makes the floodplain a floodplain. Relief
- * alone does not bound the fill: this game's maps are broad and low
- * (elevation 0..7, most tiles at 1..3), so a water line two levels above
- * a low river bed finds a contiguous path across the whole map, and the
- * unbounded fill inundated every land tile on half of the seeds the
- * balancing probe measured. The reach turns it back into a band along the
- * river, which is what the flood is meant to be.
+ * The decay is what makes the floodplain a floodplain, and it has to be
+ * in here rather than in the water line: relief alone does not bound the
+ * fill, because this game's maps are broad and low (elevation 0..7, most
+ * tiles at 1..3), so carrying the line inland unchanged found a
+ * contiguous path across the whole map — the balancing probe measured the
+ * *mildest* flood covering every land tile on three of six seeds.
+ *
+ * Each tile keeps the highest water line any path can offer it, so the
+ * fill is a max-relaxation: raising `rise` can only raise a tile's line,
+ * never lower it, which makes the flooded set grow monotonically with
+ * severity. (A lateral hop-count limit does not have that property — the
+ * hop count of the path that *raised* a tile's line is not its shortest,
+ * so a stricter limit could cut off a tile a milder flood had reached.)
  *
  * Purely a function of the map and the severity — the same city floods
  * the same ground every time, so building in the floodplain is an
@@ -41,12 +49,9 @@ export function floodRisk(state: SimState): number {
 export function floodArea(state: SimState, severity: number): { tiles: number[]; depth: number[] } {
   const cfg = BALANCE.disasters.flood;
   const rise = Math.max(1, Math.round(cfg.maxRise * severity));
-  const reach = Math.max(1, Math.round(cfg.reachTiles * severity));
   const { terrain, elevation } = state.layers;
   // Water line each tile is reached with; -1 = dry.
   const level = new Int16Array(terrain.length).fill(-1);
-  // Tiles of land between this tile and the water's edge (0 = water).
-  const distance = new Int16Array(terrain.length);
   const queue: number[] = [];
   for (let i = 0; i < terrain.length; i++) {
     if (terrain[i] !== Terrain.River && terrain[i] !== Terrain.Lake) continue;
@@ -55,14 +60,13 @@ export function floodArea(state: SimState, severity: number): { tiles: number[];
   }
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
-    const next = distance[index] + 1;
-    if (next > reach) continue;
+    // One level of head is spent crossing to the next tile of land.
+    const offer = level[index] - 1;
     for (const neighbor of neighbors4(index, state.size)) {
       if (terrain[neighbor] !== Terrain.Land) continue;
-      if (elevation[neighbor] > level[index]) continue;
-      if (level[neighbor] >= level[index]) continue;
-      level[neighbor] = level[index];
-      distance[neighbor] = next;
+      if (elevation[neighbor] > offer) continue;
+      if (level[neighbor] >= offer) continue;
+      level[neighbor] = offer;
       queue.push(neighbor);
     }
   }
@@ -106,11 +110,20 @@ export const floodSpec: DisasterSpec = {
   },
   apply(state, event) {
     const cfg = BALANCE.disasters.flood;
+    const elapsed = state.tick - event.startTick;
+    if (elapsed < 0) return false;
     for (let i = 0; i < event.tiles.length; i++) {
       const index = event.tiles[i];
       if (!isVulnerable(state, index)) continue;
       const deeper = 1 + event.intensity[i] * cfg.depthFactor;
-      addDamage(state, index, cfg.damagePerTick * event.severity * deeper);
+      // Standing water is a slow soak, not a strike: the per-tile rate is
+      // well under one damage point per tick, so accumulate it the same way
+      // the storm accumulates its strikes (a running total differenced
+      // across the tick) instead of letting addDamage round it up to one.
+      // Shallow ground is then still repairable when the water recedes
+      // while the deep middle of the plain is written off.
+      const rate = cfg.damagePerTick * event.severity * deeper;
+      addDamage(state, index, Math.floor(rate * (elapsed + 1)) - Math.floor(rate * elapsed));
     }
     return false; // the water recedes on schedule
   },

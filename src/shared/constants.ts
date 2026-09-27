@@ -691,18 +691,26 @@ export const BALANCE = {
    * What the numbers below buy at intensity 1 (per 20 in-game days, mean
    * over the eight seeds):
    *
-   *   storms  4.4 (one every 4.6 days), 80 damaged tiles and 2_180 money
-   *           each, 23 of 35 ridden out with no deficit tick at all
-   *   fires   3.1 (one every 6.4 days), 5 of 6 fires that started on
-   *           covered ground stayed a single tile
-   *   floods  1.1, seven of nine of them on the first two days of spring
-   *           (the melt peak), ~35 damaged tiles and 4_010 money each
-   *   repairs 14_470 against 220_440 of tax income = 6.6 %, with the
-   *           treasury still gaining 2_675/day
+   *   storms  4.3 (one every 4.7 days), 58 damaged tiles and 2_390 money
+   *           each, 17 of 34 ridden out with no deficit tick at all and
+   *           the stormProof goal reached by all eight cities
+   *   fires   4.1 (one every 4.9 days), 4 of 5 fires that started on
+   *           covered ground stayed a single tile, against uncovered ones
+   *           spreading over 18 tiles
+   *   floods  1.3, seven of ten of them in the first three days of spring
+   *           (the melt peak), ~14 damaged tiles and 1_810 money each
+   *   repairs 13_110 against 207_750 of tax income = 6.3 %, with the
+   *           treasury still gaining 3_410/day
    *
-   * The intensity scale is monotone across all three kinds: storms
-   * 2.5 / 4.4 / 5.4 and floods 0.6 / 1.1 / 1.5 per 20 days at 0.5 / 1 /
-   * 1.6, and the repair bill 3.9 % / 6.6 % / 8.8 % of tax income.
+   * Per 20 days at intensity 0.5 / 1 / 1.6 the counts came out as storms
+   * 2.5 / 4.3 / 4.6, fires 2.9 / 4.1 / 5.9, floods 0.6 / 1.3 / 1.4, and
+   * the repair bill as 5.3 % / 6.3 % / 7.4 % of tax income: rising at
+   * every step, but the storm's 1 → 1.6 step is nearly flat, because the
+   * kinds are rolled in order with a shared `cooldownTicks` and once
+   * events are frequent the cooldown, not the risk, is the limit. Read
+   * these counts as Poisson samples: eight seeds is 34 storms, so ±6 is
+   * noise, and the per-season split is noisier still (see
+   * `storm.winterFactor` for the noise-free answer on seasonality).
    */
   disasters: {
     /**
@@ -720,14 +728,16 @@ export const BALANCE = {
       /** Damage points a tile heals per tick (1 point = 1 tick of work). */
       pointsPerTick: 1,
       /**
-       * Money per healed damage point. Confirmed (not changed) by the
-       * probe: at 0.5 the whole repair bill is 6.6 % of tax income over 20
-       * days, while a single storm costs ~2_180 and a flood ~4_010 — one
-       * to two days of a healthy city's net income, paid in one go. That
-       * is the "hurts, spikes, never ruinous" band the brief asks for;
-       * doubling it put a city that had over-built into the red.
+       * Money per healed damage point. Was 0.5. The storm's strike count
+       * came down when `hitsPerTick` became a real rate (80 tiles a storm
+       * to 58) and the flood stopped writing off everything it touched, so
+       * the whole bill fell to 4.5 % of tax income; 0.7 puts it back at
+       * 6.3 % over 20 days with one storm costing ~2_390 and one flood
+       * ~1_810 — a day or two of a healthy city's net income, paid in one
+       * go. Measured at 5.3 % / 6.3 % / 7.4 % across the three intensity
+       * levels, with the treasury still gaining ~3_400/day.
        */
-      costPerPoint: 0.5,
+      costPerPoint: 0.7,
     },
     /** Happiness: standing penalty weight on the damaged-building share. */
     damagedPenaltyWeight: 0.35,
@@ -739,8 +749,9 @@ export const BALANCE = {
        * scale. Was 0.0008, which gave one storm every 10 in-game days —
        * too rare to be the headline event. The probe integrates
        * `sum(stormRisk / baseRisk)` to ~2_950 per 20 days, so 0.002 lands
-       * a storm every 4.6 days measured (every 8.0 at intensity 0.5,
-       * every 3.7 at 1.6).
+       * a storm every 4.7 days measured (every 8.0 at intensity 0.5,
+       * every 4.3 at 1.6 — see the block comment on why that last step is
+       * nearly flat).
        */
       baseRisk: 0.002,
       /** Front wind mean from which a storm becomes possible at all. */
@@ -755,34 +766,46 @@ export const BALANCE = {
        */
       winterFactor: 1.5,
       /**
-       * Warning lead and duration in ticks (4 h / 2 h). The duration was
-       * 120 (3 h), and it is the real lever on how much a storm wrecks:
-       * `apply` strikes `max(1, round(hitsPerTick * severity))` tiles per
-       * tick, so the floor of 1 makes the strike count equal to the
-       * duration, whatever the severity. At 3 hits x 120 ticks a storm
-       * damaged all ~250 damageable tiles of this city — every pylon,
-       * plant and building at once, measured 206-218 per storm — which
-       * ground the population down from ~690 to ~500 over 20 days.
+       * Warning lead and duration in ticks (4 h / 3 h), both as the spec
+       * asks. An earlier pass shortened the storm to 2 h to cut how much
+       * it wrecked, because `hitsPerTick` was inert: it rounded up to one
+       * strike per tick, `targets` never offers the same tile twice, and
+       * so a storm damaged exactly `durationTicks` tiles whatever its
+       * severity or the city's size. The rate is a real rate now (see
+       * `hitsPerTick`), so the duration is free to be the storm's length
+       * again rather than its blast radius.
        */
       warnTicks: 160,
-      durationTicks: 80,
+      durationTicks: 120,
       severityRange: [0.4, 1] as const,
       /**
        * Added to the wind speed while the storm blows (× severity). Was
        * 0.6: since a storm only rolls above `windThreshold`, that pushed
        * even the mildest storm past `energy.windCutOutSpeed` and the whole
        * fleet feathered every time. At 0.35 severity decides — measured
-       * 16.9 % of storm ticks in deficit and 23 of 35 storms ridden out
-       * with none at all, so `stormProof` was reached by all eight probe
-       * cities (and by 7 of 8 at intensity 1.6).
+       * 27 % of storm ticks in deficit and 17 of 34 storms ridden out with
+       * none at all, so `stormProof` was reached by all eight probe cities
+       * at every intensity level. (Half the storms costing a deficit tick
+       * is the price of the 3 h duration: a longer cut-out drains more
+       * storage than the 2 h version this was first measured at, where 23
+       * of 35 came through clean.)
        */
       gust: 0.35,
       /**
-       * Tiles struck per tick at severity 1. Was 3; see `durationTicks`
-       * for why this is 1 and why severity scales the damage per strike
-       * rather than the number of tiles.
+       * Tiles struck per tick at severity 1 — a rate, and deliberately
+       * below one: `strikesThisTick` differences a running total, so 0.7
+       * strikes on seven ticks in ten instead of rounding up to every
+       * tick. Was 3, with a `max(1, …)` floor that made severity irrelevant
+       * to a storm's breadth; at 3 hits over 120 ticks a storm damaged all
+       * ~250 damageable tiles of this city at once (measured 206-218) and
+       * ground the population from ~690 to ~500 over 20 days.
+       *
+       * At 0.7 over 120 ticks severity decides the footprint: 33 tiles at
+       * the mildest severity, 84 at the worst, measured mean 58 — about a
+       * quarter of this city's damageable tiles, repaired in ~90 ticks
+       * (2 in-game hours) of parallel work for ~2_390 money.
        */
-      hitsPerTick: 1,
+      hitsPerTick: 0.7,
       /**
        * Draw weights of the target pool. Unchanged, but worth knowing what
        * they mean once a city is wired: line tiles outnumber everything
@@ -803,9 +826,16 @@ export const BALANCE = {
     fire: {
       /**
        * Confirmed (not changed): the probe integrates
-       * `sum(fireRisk / baseRisk)` to ~2_520 per 20 days, and 0.0022
-       * lands 3.1 fires per 20 days measured — one every 6.4 in-game days
-       * — rising to 4.8 at intensity 1.6.
+       * `sum(fireRisk / baseRisk)` to ~2_500 per 20 days, and 0.0022
+       * lands 4.1 fires per 20 days measured — one every 4.9 in-game days
+       * — against 2.9 at intensity 0.5 and 5.9 at 1.6.
+       *
+       * Fires are rolled after storms, and one event per tick claims the
+       * shared `cooldownTicks`, so raising the storm risk measurably
+       * crowds fires out: an earlier pass that tripled `storm.baseRisk`
+       * alone left the fire count flat at 3.1 between intensity 0.5 and 1
+       * even though the fire risk itself had doubled. Budget the two
+       * together rather than one at a time.
        */
       baseRisk: 0.0022,
       /** Fires strike without warning — that is why fire stations pay off. */
@@ -862,9 +892,9 @@ export const BALANCE = {
        * its risk: the risk lives in two short flow peaks a year, and
        * within a peak the 480-tick cooldown lets at most one or two
        * through, so raising this mostly makes the spring flood *certain*
-       * rather than frequent. Measured 1.1 floods per 20 days at 0.0016 —
-       * seven of nine of them on spring days 1-2 — against 0.6 at
-       * intensity 0.5 and 1.5 at 1.6.
+       * rather than frequent. Measured 1.3 floods per 20 days at 0.0016 —
+       * seven of ten of them in the first three days of spring — against
+       * 0.6 at intensity 0.5 and 1.4 at 1.6.
        */
       baseRisk: 0.0016,
       /** River flow from which a flood becomes possible. */
@@ -872,46 +902,49 @@ export const BALANCE = {
       /**
        * Risk factor while a snowpack is melting. Was 2, which left only
        * 69 % of the year's flood risk in the melt and sprinkled the rest
-       * over the autumn rains. At 4 the melt carries 78 % of it (probe:
-       * 1_444 of a 1_843 risk integral), which is what "roughly once per
+       * over the autumn rains. At 4 the melt carries 73 % of it (probe:
+       * 937 of a 1_290 risk integral), which is what "roughly once per
        * spring melt" means; the autumn peak survives as the rarer second
        * chance, not as a second season of floods.
        */
       meltFactor: 4,
       /**
-       * Warning lead and duration in ticks (6 h / 4.5 h). The duration was
-       * 320 (8 h), and it is the flood's damage dial: `addDamage` rounds up
-       * to at least 1 point per call, so every vulnerable tile under water
-       * takes at least one point per tick and a flood longer than 255
-       * ticks writes off everything it covers, whatever `damagePerTick`
-       * says. At 180 a shallow tile ends around 180 points while a deep one
-       * still saturates — the depth gradient is visible, and the bill came
-       * to ~4_010 money for ~35 tiles.
+       * Warning lead and duration in ticks (6 h / 8 h), both as the spec
+       * asks. An earlier pass cut the flood to 4.5 h because `addDamage`
+       * floored every call at one point, so anything under water for more
+       * than MAX_DAMAGE ticks was written off whatever `damagePerTick`
+       * said. `floodSpec.apply` accumulates a sub-point rate itself now,
+       * so the duration is the flood's length again.
        */
       warnTicks: 240,
-      durationTicks: 180,
+      durationTicks: 320,
       severityRange: [0.4, 1] as const,
-      /** Elevation levels the water rises above its bed at severity 1. */
-      maxRise: 2,
       /**
-       * Tiles of land the water reaches from the bank at severity 1
-       * (`max(1, round(reachTiles * severity))`, so 1 tile at the mildest
-       * flood and 3 at the worst).
+       * Elevation levels the water rises above its bed at severity 1
+       * (`max(1, round(maxRise * severity))`, so 1 at the mildest flood and
+       * 2 at the worst) — and, because `floodArea` spends one level of head
+       * per tile of land it crosses, also how many tiles it reaches over
+       * dead-flat ground. The single dial on the floodplain: there is no
+       * separate lateral limit, which is what keeps the area monotone in
+       * severity (verified over 16 seeds x severity 0.01..1.00 in 0.01
+       * steps, no step losing a tile).
        *
-       * New in this pass, because relief alone does not bound the fill —
-       * see floodArea. Without it the probe measured the *mildest* flood
-       * covering every land tile on three of six seeds (and 50-70 % on two
-       * more); with it the floodplain is 46-125 tiles at severity 0.4 and
-       * 228-374 at severity 1, i.e. 1-10 % of the land, in a band along
+       * Measured floodplain at 2: 32 tiles at the mildest severity up to
+       * 235 at the worst, i.e. 0.9-6.5 % of a map's land, in a band along
        * the river and the lake.
        */
-      reachTiles: 3,
+      maxRise: 2,
       /**
        * Damage points per tick (× severity), plus this much per level of
-       * depth. Both unchanged — see `durationTicks` for why the duration,
-       * not these, is the dial that works.
+       * depth. Was 2, which said "a flood is a strike every tick" and, with
+       * addDamage's old one-point floor, could not say anything else — each
+       * flood saturated every tile it covered at MAX_DAMAGE (measured
+       * exactly: 255 x 41 tiles). At 0.8 standing water is a soak: a tile
+       * at the edge of the plain ends around 180 points after 8 hours and
+       * is repairable, while the deep middle still saturates. Measured
+       * ~186 points over ~14 damaged tiles = ~1_810 money a flood.
        */
-      damagePerTick: 2,
+      damagePerTick: 0.8,
       depthFactor: 0.5,
     },
   },
