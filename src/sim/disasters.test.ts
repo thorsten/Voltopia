@@ -20,6 +20,7 @@ import { bulldozeTiles, buildRoads } from './roads.ts';
 import { recomputeServices, SERVICE_FIRE } from './services.ts';
 import { buildRejection, BuildIntent, bumpGridVersion } from './state.ts';
 import { stepTick } from './tick.ts';
+import { SimEngine } from './engine.ts';
 
 const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -357,6 +358,84 @@ describe('disastersStep', () => {
     expect(stats.pending[0].ticks).toBe(10);
     expect(stats.pending[0].kind).toBe(DisasterKind.Storm);
     expect(stats.damagedTiles).toBe(1);
+  });
+});
+
+/** A scripted city that reliably faces events: dry, dense, unprotected. */
+function scriptedCity(seed: number): SimEngine {
+  const engine = new SimEngine(seed, 32);
+  engine.applyCommand({ type: 'init', seed, size: 32 });
+  const state = engine.state;
+  state.disasterScale = 1.6;
+  for (let y = 4; y < 14; y++) {
+    for (let x = 4; x < 14; x++) {
+      if (state.layers.terrain[tileIndex(x, y, 32)] !== 0) continue;
+      state.layers.zone[tileIndex(x, y, 32)] = Zone.Residential;
+      state.layers.density[tileIndex(x, y, 32)] = 3;
+    }
+  }
+  return engine;
+}
+
+describe('determinism', () => {
+  it('produces the same events twice for the same seed', () => {
+    // 1200 ticks, not more: CI runners are 2-3× slower than a dev
+    // machine, and two full runs of a scripted city have to fit inside
+    // vitest's 30 s timeout with room to spare.
+    const run = (): string => {
+      const engine = scriptedCity(42);
+      const log: string[] = [];
+      for (let i = 0; i < 1200; i++) {
+        engine.tick();
+        for (const event of engine.state.disasters.active) {
+          log.push(`${engine.state.tick}:${event.kind}:${event.id}`);
+        }
+      }
+      return log.join(',');
+    };
+    expect(run()).toBe(run());
+  });
+
+  it('restores a warning and a running fire across a save/load', () => {
+    const engine = scriptedCity(7);
+    engine.state.disasters.pending.push({
+      id: 100,
+      kind: DisasterKind.Flood,
+      severity: 0.8,
+      startTick: engine.state.tick + 200,
+      endTick: engine.state.tick + 500,
+      origin: at(5, 5),
+      tiles: [at(5, 5)],
+      intensity: [2],
+    });
+    engine.state.disasters.active.push({
+      id: 101,
+      kind: DisasterKind.Fire,
+      severity: 1,
+      startTick: engine.state.tick,
+      endTick: engine.state.tick + 40,
+      origin: at(6, 6),
+      tiles: [at(6, 6), at(6, 7)],
+      intensity: [20, 12],
+    });
+    addDamage(engine.state, at(6, 6), 30);
+
+    const loaded = deserializeState(serializeState(engine.state));
+    expect(loaded.disasters.pending[0].id).toBe(100);
+    expect(loaded.disasters.pending[0].startTick).toBe(engine.state.disasters.pending[0].startTick);
+    expect(loaded.disasters.active[0].tiles).toEqual([at(6, 6), at(6, 7)]);
+    expect(loaded.disasters.active[0].intensity).toEqual([20, 12]);
+    expect(loaded.layers.damage[at(6, 6)]).toBe(30);
+    expect(loaded.disasterScale).toBe(1.6);
+  });
+
+  it('keeps a loaded city running without throwing', () => {
+    const engine = scriptedCity(9);
+    for (let i = 0; i < 500; i++) engine.tick();
+    const loaded = new SimEngine(9, 32);
+    loaded.applyCommand({ type: 'init', seed: 9, size: 32, save: serializeState(engine.state) });
+    for (let i = 0; i < 500; i++) loaded.tick();
+    expect(loaded.state.tick).toBeGreaterThan(engine.state.tick);
   });
 });
 

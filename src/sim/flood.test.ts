@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { DisasterKind, PlantType, Terrain, Zone } from '../shared/types.ts';
+import { DisasterKind, PlantType, Terrain, TileType, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { floodArea, floodRisk, floodSpec } from './flood.ts';
+import { buildPowerLines } from './powerLines.ts';
+import { buildRoads } from './roads.ts';
 import { createSimState, type SimState } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
@@ -132,5 +134,29 @@ describe('a flood in progress', () => {
 
   it('finds no site on a map without a river', () => {
     expect(floodSpec.plan(createSimState(1, SIZE), 1)).toBe(null);
+  });
+
+  it('never damages a bare road, but does damage the road under a power line', () => {
+    const state = valley();
+    const bareRoad = at(1, 10);
+    const roadWithLine = at(1, 12);
+    buildRoads(state, [bareRoad, roadWithLine]);
+    buildPowerLines(state, [roadWithLine]);
+    const plan = floodSpec.plan(state, 1)!;
+    expect(plan.tiles).toContain(bareRoad);
+    expect(plan.tiles).toContain(roadWithLine);
+    const event = {
+      id: 1,
+      kind: DisasterKind.Flood,
+      severity: 1,
+      startTick: 0,
+      endTick: 100,
+      ...plan,
+    };
+    for (let i = 0; i < 5; i++) floodSpec.apply(state, event);
+    expect(state.layers.damage[bareRoad]).toBe(0);
+    expect(state.layers.tileType[bareRoad]).toBe(TileType.Road);
+    expect(state.layers.damage[roadWithLine]).toBeGreaterThan(0);
+    expect(state.layers.tileType[roadWithLine]).toBe(TileType.Road);
   });
 });
