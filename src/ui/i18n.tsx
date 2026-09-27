@@ -203,6 +203,8 @@ const en = {
     'Shops by delivery state: green = supplied, orange = due, red = unsupplied; depots blue',
   'overlay.transit': 'Transit',
   'overlay.transit.title': 'Bus coverage: green = covered, stops by service state',
+  'overlay.damage': 'Damage',
+  'overlay.damage.title': 'Damage: intact / damaged / wrecked, and what is out of service',
 
   'rejection.notEnoughMoney': 'Not enough money',
   'rejection.tileOccupied': 'This tile is already occupied',
@@ -698,6 +700,8 @@ const de: Record<TranslationKey, string> = {
     'Läden nach Lieferstatus: grün = beliefert, orange = fällig, rot = unversorgt; Depots blau',
   'overlay.transit': 'ÖPNV',
   'overlay.transit.title': 'Busabdeckung: grün = abgedeckt, Haltestellen nach Bedienung',
+  'overlay.damage': 'Schäden',
+  'overlay.damage.title': 'Schäden: heil / beschädigt / zerstört, und was außer Betrieb ist',
 
   'rejection.notEnoughMoney': 'Nicht genug Geld',
   'rejection.tileOccupied': 'Dieses Feld ist bereits belegt',
