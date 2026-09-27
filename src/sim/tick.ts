@@ -2,7 +2,7 @@ import { TICKS_PER_DAY } from '../shared/constants.ts';
 import { PlantType, RoadClass } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
-import { repairStep } from './disasters.ts';
+import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
@@ -50,6 +50,9 @@ export function stepTick(state: SimState): void {
     cloudCover: state.weather.cloudCover,
   });
   updateWeather(state);
+  // Before generation and connectivity: this tick's damage must already
+  // be in effect when the energy balance is computed.
+  disastersStep(state);
   const occupancy = vehiclesStep(state);
   deliveriesStep(state, occupancy);
   state.lastDeliveries = deliveryStats(state);
@@ -207,14 +210,7 @@ export function buildStats(state: SimState): GlobalStats {
     marketTrading: state.marketTrading,
     insulation: state.insulation,
     services: { ...state.lastServices },
-    // Task 4 replaces this with disasterStats(state).
-    disasters: {
-      scale: state.disasterScale,
-      pending: [],
-      active: [],
-      damagedTiles: 0,
-      repairPerTick: 0,
-    },
+    disasters: disasterStats(state),
     forestShare: forestShare(state),
     tide: tideState(state.tick),
     traffic: {

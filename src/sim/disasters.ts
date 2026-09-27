@@ -1,5 +1,11 @@
 import { BALANCE } from '../shared/constants.ts';
-import { DisasterKind, TileType } from '../shared/types.ts';
+import {
+  DisasterKind,
+  TileType,
+  type DisasterEvent,
+  type DisasterInfo,
+  type DisasterStats,
+} from '../shared/types.ts';
 import { bumpGridVersion, markDirty, type SimState } from './state.ts';
 
 /** Highest value the quantised damage layer can hold. */
@@ -99,4 +105,131 @@ export function damagedBuildingShare(state: SimState): number {
     if (damage[i] !== 0) damaged++;
   }
   return buildings > 0 ? damaged / buildings : 0;
+}
+
+/**
+ * What one kind of disaster contributes to the shared lifecycle. The
+ * framework owns warnings, damage bookkeeping, repair and stats; a kind
+ * only answers three questions: how likely is it right now, where does it
+ * strike, and what does one tick of it do.
+ */
+export interface DisasterSpec {
+  kind: DisasterKind;
+  /** Ticks of warning before it becomes active (0 = no warning). */
+  warnTicks: number;
+  /** Ticks it stays active at most. */
+  durationTicks: number;
+  /** Severity is drawn uniformly from this range. */
+  severityRange: readonly [number, number];
+  /** Probability per tick that it starts, before the intensity scale. */
+  risk(state: SimState): number;
+  /** Where it strikes, or null when the city offers no site. */
+  plan(
+    state: SimState,
+    severity: number,
+  ): { origin: number; tiles: number[]; intensity: number[] } | null;
+  /** One tick of the active event. Returns true when it is over. */
+  apply(state: SimState, event: DisasterEvent): boolean;
+}
+
+/** Every kind the game rolls for. Filled in by storm.ts, fire.ts, flood.ts. */
+export const DISASTER_SPECS: readonly DisasterSpec[] = [];
+
+/**
+ * One tick of the disaster lifecycle: retire what is over, activate what
+ * was announced, let active events work, then roll for a new one.
+ *
+ * Runs after `updateWeather` (the weather of this tick sets the risk) and
+ * before generation and grid connectivity, so this tick's damage is
+ * already in effect when the energy balance is computed.
+ */
+export function disastersStep(
+  state: SimState,
+  specs: readonly DisasterSpec[] = DISASTER_SPECS,
+): void {
+  const d = state.disasters;
+  if (d.cooldownTicks > 0) d.cooldownTicks--;
+
+  activateDue(state);
+
+  if (d.active.length > 0) {
+    const running: DisasterEvent[] = [];
+    for (const event of d.active) {
+      const spec = specs.find((candidate) => candidate.kind === event.kind);
+      // A kind that is not in the list (a save from a later version, a
+      // test with a narrower list) simply runs out its duration.
+      const done = spec ? spec.apply(state, event) : false;
+      if (done || state.tick >= event.endTick) state.statsDirty = true;
+      else running.push(event);
+    }
+    d.active = running;
+  }
+
+  if (d.cooldownTicks > 0 || state.disasterScale <= 0) return;
+  for (const spec of specs) {
+    const risk = spec.risk(state) * state.disasterScale;
+    if (risk <= 0 || !state.rng.chance(risk)) continue;
+    if (!schedule(state, spec)) continue;
+    // A zero-warning kind (warnTicks: 0) schedules itself due this very
+    // tick; without this it would sit in `pending` for one extra tick
+    // before `activateDue` next runs, which breaks "0 = no warning".
+    activateDue(state);
+    // One event per roll: the cooldown spaces the next one out.
+    d.cooldownTicks = BALANCE.disasters.cooldownTicks;
+    return;
+  }
+}
+
+/** Move any pending event whose warning has run out into `active`. */
+function activateDue(state: SimState): void {
+  const d = state.disasters;
+  if (d.pending.length === 0) return;
+  const due = d.pending.filter((event) => state.tick >= event.startTick);
+  if (due.length === 0) return;
+  d.pending = d.pending.filter((event) => state.tick < event.startTick);
+  d.active.push(...due);
+  state.statsDirty = true;
+}
+
+/** Put one event of this kind on the calendar. False when there is no site. */
+function schedule(state: SimState, spec: DisasterSpec): boolean {
+  const [min, max] = spec.severityRange;
+  const severity = state.rng.nextRange(min, max);
+  const plan = spec.plan(state, severity);
+  if (plan === null) return false;
+  state.disasters.pending.push({
+    id: state.disasters.nextId++,
+    kind: spec.kind,
+    severity,
+    startTick: state.tick + spec.warnTicks,
+    endTick: state.tick + spec.warnTicks + spec.durationTicks,
+    origin: plan.origin,
+    tiles: plan.tiles,
+    intensity: plan.intensity,
+  });
+  state.statsDirty = true;
+  return true;
+}
+
+/** Everything the HUD and the agent tools need to know about disasters. */
+export function disasterStats(state: SimState): DisasterStats {
+  const d = state.disasters;
+  return {
+    scale: state.disasterScale,
+    pending: d.pending.map((event) => info(event, event.startTick - state.tick)),
+    active: d.active.map((event) => info(event, event.endTick - state.tick)),
+    damagedTiles: damagedTileCount(state),
+    repairPerTick: state.lastRepairCost,
+  };
+}
+
+function info(event: DisasterEvent, ticks: number): DisasterInfo {
+  return {
+    id: event.id,
+    kind: event.kind,
+    severity: event.severity,
+    ticks: Math.max(0, ticks),
+    origin: event.origin,
+    tiles: [...event.tiles],
+  };
 }

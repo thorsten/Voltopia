@@ -3,7 +3,15 @@ import { tileIndex } from '../shared/grid.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
 import { BALANCE } from '../shared/constants.ts';
 import { DisasterKind, PlantType, SupplyStatus, TileType, Zone } from '../shared/types.ts';
-import { addDamage, clearDamage, damagedTileCount, repairStep } from './disasters.ts';
+import {
+  addDamage,
+  clearDamage,
+  damagedTileCount,
+  disasterStats,
+  disastersStep,
+  repairStep,
+  type DisasterSpec,
+} from './disasters.ts';
 import { censusPlants, placePlant } from './energy.ts';
 import { happinessStep } from './happiness.ts';
 import { recomputeGrid } from './powerGrid.ts';
@@ -199,6 +207,123 @@ describe('repairStep', () => {
     });
     repairStep(state);
     expect(state.layers.damage[at(2, 2)]).toBe(10);
+  });
+});
+
+/** A spec that always fires, hits one tile and never ends early. */
+function alwaysSpec(overrides: Partial<DisasterSpec> = {}): DisasterSpec {
+  return {
+    kind: DisasterKind.Storm,
+    warnTicks: 10,
+    durationTicks: 5,
+    severityRange: [1, 1],
+    risk: () => 1,
+    plan: () => ({ origin: 0, tiles: [0], intensity: [0] }),
+    apply: () => false,
+    ...overrides,
+  };
+}
+
+describe('disastersStep', () => {
+  it('schedules a warning, activates it, then retires it', () => {
+    const state = createSimState(1, SIZE);
+    const specs = [alwaysSpec()];
+    disastersStep(state, specs);
+    expect(state.disasters.pending).toHaveLength(1);
+    expect(state.disasters.active).toHaveLength(0);
+
+    const event = state.disasters.pending[0];
+    while (state.tick < event.startTick) {
+      state.tick++;
+      disastersStep(state, specs);
+    }
+    expect(state.disasters.active).toHaveLength(1);
+    expect(state.disasters.pending).toHaveLength(0);
+
+    while (state.tick < event.endTick) {
+      state.tick++;
+      disastersStep(state, specs);
+    }
+    expect(state.disasters.active).toHaveLength(0);
+  });
+
+  it('respects the cooldown between two events', () => {
+    const state = createSimState(1, SIZE);
+    const specs = [alwaysSpec()];
+    disastersStep(state, specs);
+    expect(state.disasters.nextId).toBe(2);
+    for (let i = 0; i < BALANCE.disasters.cooldownTicks - 1; i++) {
+      state.tick++;
+      disastersStep(state, specs);
+    }
+    // The first event (10 warn + 5 duration ticks) is long since retired
+    // by now; the cooldown itself is what keeps a second one from
+    // appearing until it fully expires one tick from here.
+    const scheduled = state.disasters.pending.length + state.disasters.active.length;
+    expect(scheduled).toBe(0);
+    state.tick++;
+    disastersStep(state, specs);
+    expect(state.disasters.nextId).toBe(3);
+  });
+
+  it('never schedules anything with the intensity off', () => {
+    const state = createSimState(1, SIZE);
+    state.disasterScale = 0;
+    for (let i = 0; i < 1000; i++) {
+      state.tick++;
+      disastersStep(state, [alwaysSpec()]);
+    }
+    expect(state.disasters.pending).toHaveLength(0);
+    expect(state.disasters.active).toHaveLength(0);
+  });
+
+  it('scales the risk with the intensity', () => {
+    // The cooldown is zeroed after every step so this measures the roll
+    // alone; with it in place both intensities would simply fire on
+    // almost every cooldown expiry and the counts would be too close.
+    const rolls = (scale: number): number => {
+      const state = createSimState(7, SIZE);
+      state.disasterScale = scale;
+      let count = 0;
+      const specs = [alwaysSpec({ risk: () => 0.02, warnTicks: 0, durationTicks: 1 })];
+      for (let i = 0; i < 4000; i++) {
+        state.tick++;
+        const before = state.disasters.nextId;
+        disastersStep(state, specs);
+        if (state.disasters.nextId > before) count++;
+        state.disasters.cooldownTicks = 0;
+      }
+      return count;
+    };
+    expect(rolls(1.6)).toBeGreaterThan(rolls(0.5) * 2);
+  });
+
+  it('retires an event early when its kind reports it is over', () => {
+    const state = createSimState(1, SIZE);
+    const specs = [alwaysSpec({ warnTicks: 0, durationTicks: 500, apply: () => true })];
+    disastersStep(state, specs);
+    expect(state.disasters.active).toHaveLength(1);
+    state.tick++;
+    disastersStep(state, specs);
+    expect(state.disasters.active).toHaveLength(0);
+  });
+
+  it('skips a kind that finds no site', () => {
+    const state = createSimState(1, SIZE);
+    disastersStep(state, [alwaysSpec({ plan: () => null })]);
+    expect(state.disasters.pending).toHaveLength(0);
+    expect(state.disasters.nextId).toBe(1);
+  });
+
+  it('reports pending and active events in the stats', () => {
+    const state = createSimState(1, SIZE);
+    disastersStep(state, [alwaysSpec()]);
+    addDamage(state, at(3, 3), 20);
+    const stats = disasterStats(state);
+    expect(stats.scale).toBe(1);
+    expect(stats.pending[0].ticks).toBe(10);
+    expect(stats.pending[0].kind).toBe(DisasterKind.Storm);
+    expect(stats.damagedTiles).toBe(1);
   });
 });
 
