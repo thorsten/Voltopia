@@ -84,7 +84,7 @@ export const fireSpec: DisasterSpec = {
   },
   apply(state, event) {
     const cfg = BALANCE.disasters.fire;
-    const { services, forest } = state.layers;
+    const { services, forest, density } = state.layers;
     // Snapshot the length: tiles that catch this tick only act from the
     // next one, so a fire cannot race across the map in a single tick.
     const burning = event.tiles.length;
@@ -94,9 +94,13 @@ export const fireSpec: DisasterSpec = {
       const covered = (services[index] & SERVICE_FIRE) !== 0;
 
       if (forest[index] !== 0) {
-        // Woods burn away rather than break: nothing here to repair.
+        // Woods burn away rather than break: nothing here to repair. This
+        // clears on the first tick only — the tile keeps "burning" (and
+        // can still ignite neighbours) for the rest of its window, so
+        // gate the damage branch below on density, not on forest being
+        // zero, or a cleared tile would start taking building damage.
         clearForest(state, index);
-      } else {
+      } else if (density[index] > 0) {
         addDamage(state, index, cfg.damagePerTick * event.severity);
       }
 

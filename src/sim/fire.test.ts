@@ -90,10 +90,14 @@ describe('a burning city', () => {
   it('spreads along a row of buildings', () => {
     const state = dryCity(19);
     block(state, 4, 14, 4);
-    const event = fire(state, at(4, 4));
+    // Ignite in the middle of the row, not at an end: the origin then
+    // has two flammable neighbours instead of one, so the spread
+    // assertion rests on two independent per-tick rolls rather than a
+    // single Bernoulli(0.06) trial.
+    const event = fire(state, at(9, 4));
     for (let i = 0; i < fireSpec.durationTicks; i++) fireSpec.apply(state, event);
     expect(event.tiles.length).toBeGreaterThan(1);
-    expect(state.layers.damage[at(4, 4)]).toBeGreaterThan(0);
+    expect(state.layers.damage[at(9, 4)]).toBeGreaterThan(0);
   });
 
   it('stops at a road — roads are firebreaks', () => {
@@ -126,7 +130,12 @@ describe('a burning city', () => {
     const state = dryCity(14);
     state.layers.forest[at(5, 5)] = BALANCE.forest.maxStage;
     const event = fire(state, at(5, 5));
-    fireSpec.apply(state, event);
+    // Run several ticks — well inside burnTicks (24) — so the tile keeps
+    // "burning" after forest[index] is already cleared. A regression
+    // that gates on forest being non-zero instead of on density would
+    // start writing building damage onto this bare tile from the second
+    // tick on; it must stay at 0 for the whole window.
+    for (let i = 0; i < 5; i++) fireSpec.apply(state, event);
     expect(state.layers.forest[at(5, 5)]).toBe(0);
     expect(state.layers.damage[at(5, 5)]).toBe(0);
   });
