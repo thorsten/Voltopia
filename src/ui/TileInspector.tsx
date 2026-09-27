@@ -175,8 +175,15 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
         <div className="inspector-row inspector-damage" data-testid="inspector-damage">
           <span>{t('inspector.damage')}</span>
           <span>
-            {t('inspector.damage.value', { points: info.damage })}
-            {info.disaster !== null && ` · ${t(disasterLabelKey(info.disaster))}`}
+            {/* repairStep skips tiles inside an active event, so while the
+                disaster still covers this tile "repair under way" would be
+                a lie — repairs are frozen exactly then, not progressing. */}
+            {info.disaster !== null
+              ? t('inspector.damage.frozen', {
+                  points: info.damage,
+                  event: t(disasterLabelKey(info.disaster)),
+                })
+              : t('inspector.damage.value', { points: info.damage })}
           </span>
         </div>
       )}

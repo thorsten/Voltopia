@@ -485,8 +485,13 @@ const en = {
   'disaster.storm': 'Storm',
   'disaster.fire': 'Fire',
   'disaster.flood': 'Flood',
+  'disaster.warning': 'warning · strikes in {hours} h {minutes} min',
+  'disaster.active': 'under way · {hours} h {minutes} min left',
+  'disaster.toast': '{kind} is hitting the city',
   'inspector.damage': 'damage',
   'inspector.damage.value': '{points} points · out of service, repair under way',
+  'inspector.damage.frozen':
+    '{points} points · out of service, repairs waiting until the {event} passes',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -980,8 +985,13 @@ const de: Record<TranslationKey, string> = {
   'disaster.storm': 'Sturm',
   'disaster.fire': 'Brand',
   'disaster.flood': 'Hochwasser',
+  'disaster.warning': 'Warnung · trifft in {hours} h {minutes} min ein',
+  'disaster.active': 'läuft · noch {hours} h {minutes} min',
+  'disaster.toast': '{kind} trifft die Stadt',
   'inspector.damage': 'Schaden',
   'inspector.damage.value': '{points} Punkte · außer Betrieb, Reparatur läuft',
+  'inspector.damage.frozen':
+    '{points} Punkte · außer Betrieb, Reparatur wartet, bis {event} vorüber ist',
 };
 
 const translations: Record<Locale, Record<TranslationKey, string>> = { en, de };

@@ -1407,6 +1407,61 @@ body,
   }
 }
 
+/* Docked under the console (which sits centred at the very top), so a
+   warning never covers the energy strip. Purely informational — like
+   .cost-preview below, it must not steal clicks from the map underneath. */
+.disaster-banners {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.disaster-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #fff;
+  box-shadow: var(--hud-shadow);
+}
+
+.disaster-banner.warning {
+  background: rgba(163, 116, 22, 0.92);
+  border: 1px solid rgba(255, 200, 87, 0.5);
+}
+
+.disaster-banner.active {
+  background: rgba(160, 42, 42, 0.92);
+  border: 1px solid rgba(255, 120, 120, 0.5);
+}
+
+/* Below the banner stack, not on top of it: the toast and the banner it
+   confirms both appear the instant an event turns active. */
+.disaster-toast {
+  position: absolute;
+  top: 132px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  background: rgba(160, 42, 42, 0.92);
+  border: 1px solid rgba(255, 120, 120, 0.5);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  pointer-events: none;
+  animation: toast-in 0.3s ease-out;
+}
+
 .cost-preview {
   position: absolute;
   bottom: 104px;
@@ -1574,6 +1629,15 @@ body,
   background: var(--accent);
   border-color: var(--accent);
   color: var(--hud-on-accent);
+}
+
+/* Plain text, no card: same convention as .controls-hint — a static hint
+   under a control row doesn't need to look like a panel. */
+.option-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--hud-muted);
 }
 
 .seed-input {
@@ -1878,6 +1942,21 @@ body,
 }
 .inspect-row.muted {
   color: var(--hud-muted);
+}
+
+/* The damage line is bespoke markup (plain spans, not the Row component),
+   so it gets its own pair of classes rather than reusing .inspect-row. */
+.inspector-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 1px 0;
+}
+
+.inspector-damage {
+  color: var(--hud-negative);
+  font-variant-numeric: tabular-nums;
 }
 
 .inspect-meter {

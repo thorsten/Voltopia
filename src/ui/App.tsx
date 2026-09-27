@@ -3,6 +3,7 @@ import { OverlayMode, type SaveGame } from '../shared/types.ts';
 import { IndexedDbStorage } from '../storage/indexeddb.ts';
 import type { GameRenderer, RendererCallbacks } from '../render/renderer.ts';
 import { CityVitals } from './CityVitals.tsx';
+import { DisasterBanner } from './DisasterBanner.tsx';
 import { HudConsole } from './HudConsole.tsx';
 import { TimeControls } from './TimeControls.tsx';
 import { TileInspector } from './TileInspector.tsx';
@@ -266,6 +267,13 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               stats={stats}
               onSetSpeed={(speed) => bridge.send({ type: 'setSpeed', speed })}
               onNewGame={() => setPage('newGame')}
+            />
+          )}
+          {stats && (
+            <DisasterBanner
+              disasters={stats.disasters}
+              onWarning={() => sound.play('alarm')}
+              onStrike={() => sound.play('alarm')}
             />
           )}
         </div>
