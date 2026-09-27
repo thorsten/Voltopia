@@ -104,6 +104,11 @@ export interface Weather {
   riverFlow: number;
   /** 0 = bare ground, 1 = full snow cover. Fed by sub-zero precipitation, melts into the river. */
   snowpack: number;
+  /**
+   * Storm gust on top of the random walk, 0..1. Derived from the active
+   * storms each tick, never persisted: a reloaded city recomputes it.
+   */
+  gust: number;
 }
 
 /** Tide at this tick: water level, current strength and direction. */

@@ -77,7 +77,10 @@ describe('windFactor', () => {
   it('rises with the cube of wind speed and caps at 1', () => {
     expect(windFactor(0.3)).toBeGreaterThan(0);
     expect(windFactor(0.3)).toBeLessThan(windFactor(0.5));
-    expect(windFactor(1)).toBe(1);
+    // 1 is now above the cut-out speed and legitimately reads 0 (see the
+    // "zero at and above the cut-out speed" case in storm.test.ts) — 0.7
+    // is comfortably below the cut-out and still shows the cap.
+    expect(windFactor(0.7)).toBe(1);
   });
 });
 

@@ -1,4 +1,5 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
+import type { Weather } from '../shared/types.ts';
 import { timeOfDay } from './tick.ts';
 import type { SimState } from './state.ts';
 
@@ -32,12 +33,24 @@ export function solarFactor(
 }
 
 /**
+ * Wind speed the turbines actually see: the random walk plus the gust an
+ * active storm adds, clamped to 1.
+ */
+export function effectiveWind(weather: Weather): number {
+  return Math.min(1, weather.windSpeed + weather.gust);
+}
+
+/**
  * Wind turbine output factor 0..1. Below the cut-in speed the rotor
- * stands still; above it output rises with the cube of wind speed,
- * as with real turbines.
+ * stands still; above it output rises with the cube of wind speed, as
+ * with real turbines — until the cut-out speed, where the blades feather
+ * and output drops to nothing. A storm is therefore not a windfall but a
+ * blackout risk.
  */
 export function windFactor(windSpeed: number): number {
-  if (windSpeed < BALANCE.energy.windCutInSpeed) return 0;
+  const { windCutInSpeed, windCutOutSpeed } = BALANCE.energy;
+  if (windSpeed < windCutInSpeed) return 0;
+  if (windSpeed >= windCutOutSpeed) return 0;
   return Math.min(1, windSpeed ** 3 / 0.6 ** 3);
 }
 
@@ -166,5 +179,5 @@ export function currentSolarFactor(state: SimState): number {
 
 /** Convenience: current wind factor of the simulation state. */
 export function currentWindFactor(state: SimState): number {
-  return windFactor(state.weather.windSpeed);
+  return windFactor(effectiveWind(state.weather));
 }

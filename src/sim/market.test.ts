@@ -28,7 +28,8 @@ describe('spotPriceFactor', () => {
     const state = makeState();
     setHour(state, 12);
     state.weather.cloudCover = 0;
-    state.weather.windSpeed = 1;
+    // Below the cut-out speed: the turbines still run flat out.
+    state.weather.windSpeed = 0.9;
     expect(spotPriceFactor(state)).toBeLessThan(0.6);
   });
 
@@ -38,7 +39,7 @@ describe('spotPriceFactor', () => {
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
     const scarce = spotPriceFactor(state);
-    state.weather.windSpeed = 1;
+    state.weather.windSpeed = 0.9; // below the cut-out: full wind output
     expect(spotPriceFactor(state)).toBeLessThan(scarce);
   });
 

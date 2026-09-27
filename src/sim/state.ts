@@ -419,6 +419,7 @@ export function createSimState(
       windSpeed: 0.5,
       riverFlow: BALANCE.water.initialFlow,
       snowpack: 0,
+      gust: 0,
     },
     lakeLevel: 0,
     layers: createTileLayers(size),

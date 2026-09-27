@@ -46,7 +46,7 @@ describe('inspectTile', () => {
   it('reports plant upkeep and generation', () => {
     const state = createSimState(1, SIZE);
     placePlant(state, at(10, 10), PlantType.WindTurbine);
-    state.weather.windSpeed = 1;
+    state.weather.windSpeed = 0.9; // below the cut-out: full peak output
     const info = inspectTile(state, at(10, 10))!;
     expect(info.upkeepPerTick).toBeCloseTo(BALANCE.upkeepPerTick.plant[PlantType.WindTurbine], 9);
     expect(info.generation).toBeGreaterThan(0);

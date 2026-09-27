@@ -7,6 +7,7 @@ import {
   type DisasterStats,
 } from '../shared/types.ts';
 import { bumpGridVersion, markDirty, type SimState } from './state.ts';
+import { stormGust, stormSpec } from './storm.ts';
 
 /** Highest value the quantised damage layer can hold. */
 export const MAX_DAMAGE = 255;
@@ -133,7 +134,7 @@ export interface DisasterSpec {
 }
 
 /** Every kind the game rolls for. Filled in by storm.ts, fire.ts, flood.ts. */
-export const DISASTER_SPECS: readonly DisasterSpec[] = [];
+export const DISASTER_SPECS: readonly DisasterSpec[] = [stormSpec];
 
 /**
  * One tick of the disaster lifecycle: roll for a new event, activate
@@ -186,6 +187,12 @@ export function disastersStep(
     }
     d.active = running;
   }
+
+  // The gust is derived state, recomputed every tick from what is active
+  // right now. This must run last and unconditionally — after activation,
+  // apply and retirement above — or a stale gust would leave the whole
+  // wind fleet cut out after a storm has already passed.
+  state.weather.gust = stormGust(state);
 }
 
 /** Move any pending event whose warning has run out into `active`. */
