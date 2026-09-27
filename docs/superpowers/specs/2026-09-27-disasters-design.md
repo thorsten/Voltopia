@@ -119,15 +119,20 @@ founded after the feature ships.
 ```ts
 GlobalStats.disasters: {
   scale: number;
-  pending: DisasterInfo[];   // kind, severity, ticksUntil, origin, id
-  active: DisasterInfo[];    // kind, severity, ticksLeft, origin, id, tileCount
+  pending: DisasterInfo[];   // id, kind, severity, ticks, origin, tiles
+  active: DisasterInfo[];    // the same, ticks counting down to the end
   damagedTiles: number;
   repairPerTick: number;
 }
 ```
 
-Never the layer and never the tile lists — the HUD, minimap markers and
-agent tools work off this summary, the renderer off tile diffs.
+Never the layer — the HUD, the minimap markers and the agent tools work
+off this summary, the renderer off tile diffs. The one exception is each
+event's tile list: the renderer has to know which tiles carry embers and
+which lie under the flood film, and the diff channel carries only the
+damage. A fire covers a handful of tiles and a flood a few hundred, so
+this stays well below a single tile diff burst, and it only moves while an
+event runs.
 
 ### Balance
 
@@ -180,15 +185,22 @@ One in-game day is 960 ticks, one in-game hour 40 ticks.
   A building wind high is therefore the warning behind the warning,
   readable in the existing wind display.
 - **Lead time** ~4 in-game hours (160 ticks), duration ~3 hours.
-- **Effect.** The storm contributes a `windBias` to the front means, so
-  `windSpeed` genuinely rises and the wind readout, the energy graph and
-  the balance see the storm with no special path. `windFactor` gains a
+- **Effect.** The storm adds a **gust** on top of the weather's random
+  walk (`Weather.gust`, derived every tick from the active storms), so the
+  wind the turbines see genuinely rises and the wind readout, the energy
+  graph and the balance follow with no special path. A bias on the front
+  _mean_ would not do: the walk reverts toward its mean far too slowly to
+  move inside a three-hour storm, and would then stay high for hours
+  afterwards. `windFactor` gains a
   **cut-out branch** at `BALANCE.energy.windCutOutSpeed`: above it the
   rotors feather and produce **nothing** — physically correct, and the
   heart of the mechanic, because the city loses its wind fleet exactly
-  when the wind is strongest. On top of that, each tick a few tiles in a
-  rolled band across the map take damage: pylons and wind turbines
-  heavily, buildings lightly.
+  when the wind is strongest. On top of that, each tick a few tiles take
+  damage, drawn from a weighted pool across the whole city: pylons and
+  wind turbines heavily, other plants less, buildings lightly. (An earlier
+  draft confined the strikes to a rolled band. A band needs its axis
+  persisted on the event for no gameplay gain — the cut-out hits every
+  turbine on the map anyway — so the storm simply strikes city-wide.)
 
 ### Fire — local, no warning
 
