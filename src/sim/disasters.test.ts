@@ -420,11 +420,21 @@ describe('determinism', () => {
     });
     addDamage(engine.state, at(6, 6), 30);
 
+    const [originalPending] = engine.state.disasters.pending;
+    const [originalActive] = engine.state.disasters.active;
+
     const loaded = deserializeState(serializeState(engine.state));
     expect(loaded.disasters.pending[0].id).toBe(100);
-    expect(loaded.disasters.pending[0].startTick).toBe(engine.state.disasters.pending[0].startTick);
+    expect(loaded.disasters.pending[0].startTick).toBe(originalPending.startTick);
     expect(loaded.disasters.active[0].tiles).toEqual([at(6, 6), at(6, 7)]);
     expect(loaded.disasters.active[0].intensity).toEqual([20, 12]);
+    // The active fire's identity and timing must survive the round trip
+    // too, not just its tiles/intensity — a bug that scrambled which kind
+    // or id attaches to a restored event would otherwise slip through.
+    expect(loaded.disasters.active[0].kind).toBe(originalActive.kind);
+    expect(loaded.disasters.active[0].severity).toBe(originalActive.severity);
+    expect(loaded.disasters.active[0].id).toBe(originalActive.id);
+    expect(loaded.disasters.active[0].endTick).toBe(originalActive.endTick);
     expect(loaded.layers.damage[at(6, 6)]).toBe(30);
     expect(loaded.disasterScale).toBe(1.6);
   });

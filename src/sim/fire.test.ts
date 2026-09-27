@@ -156,3 +156,39 @@ describe('a burning city', () => {
     expect(fireSpec.plan(state, 1)).toBe(null);
   });
 });
+
+describe('determinism', () => {
+  // The engine-level determinism test in disasters.test.ts scripts a city
+  // that only ever draws storms (the season stays too cold and dry for a
+  // fire or flood to roll), so it says nothing about the fire's own
+  // per-tick spread loop — an array-push over neighbors4 gated by
+  // rng.chance, exactly the kind of code where a regression would silently
+  // break save-game reproducibility without anyone noticing. Pin it here
+  // at the spec level instead, on a fixture wide enough that two runs of
+  // the same seed cannot coincidentally agree, and two different seeds
+  // cannot coincidentally disagree.
+  //
+  // (River-flood fill order is already pinned separately: flood.test.ts's
+  // "is deterministic for the same map and severity" runs floodArea twice
+  // on the same map and severity and asserts identical tiles.)
+  function burnRow(seed: number): { tiles: number[]; intensity: number[] } {
+    const state = dryCity(seed);
+    block(state, 2, 21, 10);
+    const event = fire(state, at(11, 10));
+    for (let i = 0; i < fireSpec.durationTicks; i++) fireSpec.apply(state, event);
+    return { tiles: [...event.tiles], intensity: [...event.intensity] };
+  }
+
+  it('spreads identically for two runs of the same seed', () => {
+    const a = burnRow(42);
+    const b = burnRow(42);
+    expect(a.tiles).toEqual(b.tiles);
+    expect(a.intensity).toEqual(b.intensity);
+  });
+
+  it('spreads differently for a different seed (so the test above can fail)', () => {
+    const a = burnRow(42);
+    const c = burnRow(43);
+    expect(c.tiles).not.toEqual(a.tiles);
+  });
+});
