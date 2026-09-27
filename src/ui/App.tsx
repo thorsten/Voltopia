@@ -176,9 +176,9 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   };
 
   // Agent tools (WebMCP + window.voltopia); a new city from a tool goes
-  // through the same pending-options reload as the new-game dialog. No
-  // tool exposes disaster intensity yet (Task 15), so fill the default
-  // when the tool didn't supply one — NewCityOptions leaves it optional.
+  // through the same pending-options reload as the new-game dialog.
+  // start_new_city always supplies disasterScale, but NewCityOptions
+  // leaves it optional (other callers may not), so fill the default here too.
   const startNewCityFromTool = useCallback((options: NewCityOptions) => {
     storePendingNewGame({
       ...options,

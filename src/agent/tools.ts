@@ -10,18 +10,25 @@ import { BALANCE, GRID_SIZE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { lShapedPath, neighbors4, rectTiles, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { SimCommand } from '../shared/messages.ts';
 import {
+  DisasterKind,
   PlantType,
   StopState,
   SupplyStatus,
   Terrain,
   TileType,
   Zone,
+  type DisasterInfo,
   type GlobalStats,
   type LifetimeSample,
   type Speed,
   type TileInfo,
 } from '../shared/types.ts';
 import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
+// Pure data (no localStorage call at import time, no React) — same kind of
+// cross-layer import as ../ui/i18n.tsx above. Reusing it keeps an agent's
+// disaster levels identical to the new-game dialog's, on purpose: a
+// "harsh" city should mean the same intensity whoever founds it.
+import { DISASTER_LEVELS } from '../ui/newGame.ts';
 import type { TileMirror } from './tileMirror.ts';
 
 /** Outcome of a command once the worker has applied it. */
@@ -35,8 +42,9 @@ export interface NewCityOptions {
   startingMoney: number;
   seed: number | null;
   /**
-   * Disaster intensity: 0 = off .. 1.6 = harsh. Optional because no tool
-   * exposes this yet (Task 15 adds one) — the app fills in the default.
+   * Disaster intensity: 0 = off .. 1.6 = harsh (see DISASTER_LEVEL_SCALE
+   * in tools.ts). Optional so a caller other than start_new_city (or an
+   * older save-format path) can omit it; the app fills in the default.
    */
   disasterScale?: number;
 }
@@ -130,6 +138,21 @@ const STOP_STATE_NAME: Record<StopState, string> = {
   [StopState.Due]: 'due',
   [StopState.Unserved]: 'unserved',
 };
+const DISASTER_NAME: Record<DisasterKind, string> = {
+  [DisasterKind.Storm]: 'storm',
+  [DisasterKind.Fire]: 'fire',
+  [DisasterKind.Flood]: 'flood',
+};
+
+// Same dial as the new-game dialog (src/ui/newGame.ts), exposed to agents
+// by name so `start_new_city` can set a disaster intensity without an
+// agent needing to know the raw scale numbers.
+const DISASTER_LEVEL_SCALE = Object.fromEntries(
+  DISASTER_LEVELS.map((level) => [level.id, level.scale]),
+) as Record<(typeof DISASTER_LEVELS)[number]['id'], number>;
+const DISASTER_LEVEL_NAMES = DISASTER_LEVELS.map((level) => level.id) as ReadonlyArray<
+  (typeof DISASTER_LEVELS)[number]['id']
+>;
 
 const PLANT_TOOL_KEY: Record<PlantName, TranslationKey> = {
   solar: 'tool.plant-solar',
@@ -185,6 +208,7 @@ export const FIND_KINDS = [
   'not_connected_building',
   'undersupplied_building',
   'bus_stop',
+  'damaged',
 ] as const;
 export type FindKind = (typeof FIND_KINDS)[number];
 
@@ -332,6 +356,7 @@ function describeTile(ctx: AgentContext, index: number): Record<string, unknown>
     hasRoad: t.tileType === TileType.Road,
     hasPowerLine: t.powerLine !== 0,
     supply: SUPPLY_NAME[t.supplied],
+    damage: t.damage,
   };
 }
 
@@ -477,7 +502,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Current state of the city: funds, population, jobs, happiness, zone demand, clock and ' +
         'season, weather, energy balance summary, budget per tick, tax rate, upgrades, goals, ' +
-        'tile counts and grid size. Call this first and after every advance_time.',
+        'tile counts, grid size and a disasters summary (intensity, warning/active counts, ' +
+        'damaged tiles, repair cost — see get_disasters for the detail). Call this first and ' +
+        'after every advance_time.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -574,6 +601,13 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             stops: s.transit.stops,
             stopsServed: s.transit.stopsServed,
             depots: s.transit.depots,
+          },
+          disasters: {
+            intensity: s.disasters.scale,
+            warnings: s.disasters.pending.length,
+            active: s.disasters.active.length,
+            damagedTiles: s.disasters.damagedTiles,
+            repairPerTick: round(s.disasters.repairPerTick, 3),
           },
           taxRate: s.taxRate,
           maxTaxRate: BALANCE.tax.maxRate,
@@ -718,11 +752,12 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'inspect_tile',
       description:
         'Everything about one tile: terrain, road, power line, zone, building density, plant, ' +
-        'supply status, bus stop and coverage, plus live figures (upkeep, tax, consumption, ' +
-        'generation, storage, residents, jobs, demand) and the reasons the tile is not growing. ' +
-        'On a geothermal hotspot or a geothermal plant, a "hotspot" field reports the field\'s ' +
-        'quality, reservoir heat (0..1) and how many of its wells its capacity sustains — heat ' +
-        "and every well's output fall once wells drilled exceed that capacity.",
+        'supply status, bus stop and coverage, damage (0 = intact), plus live figures (upkeep, ' +
+        'tax, consumption, generation, storage, residents, jobs, demand) and the reasons the ' +
+        'tile is not growing. On a geothermal hotspot or a geothermal plant, a "hotspot" field ' +
+        "reports the field's quality, reservoir heat (0..1) and how many of its wells its " +
+        "capacity sustains — heat and every well's output fall once wells drilled exceed that " +
+        'capacity. See get_disasters for the events causing any damage.',
       inputSchema: {
         type: 'object',
         properties: { x: { type: 'integer' }, y: { type: 'integer' } },
@@ -754,7 +789,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'lake, for pumped storage), coastal_sea (empty sea tile touching land, for tidal plants), ' +
         'geothermal_hotspot (empty land tile carrying a hotspot, for geothermal plants), ' +
         'road, power_line, plant, zoned_empty, building, not_connected_building, ' +
-        'undersupplied_building, bus_stop. Optionally nearest to a point first.',
+        'undersupplied_building, bus_stop, damaged (out of service from a storm, fire or flood; ' +
+        'see get_disasters). Optionally nearest to a point first.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -805,6 +841,38 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             ...(sample.temperature !== undefined ? { temperature: round(sample.temperature) } : {}),
             ...(sample.heating !== undefined ? { heating: round(sample.heating) } : {}),
           })),
+        };
+      },
+    },
+    {
+      name: 'get_disasters',
+      description:
+        "Disasters: this city's intensity setting, the warnings currently counting down " +
+        '(storms and floods announce themselves hours ahead, fires never do), the events ' +
+        'striking right now with the tiles they cover, how many tiles are damaged, and what ' +
+        'repairs cost per tick. A damaged tile is out of service until it is repaired: plants ' +
+        'stop generating, power lines stop conducting, buildings go dark. Use a warning to ' +
+        'prepare — fill storage, charge the hydrogen tanks, or buy over the link.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const s = requireStats(ctx);
+        const d = s.disasters;
+        const describe = (event: DisasterInfo) => ({
+          id: event.id,
+          kind: DISASTER_NAME[event.kind],
+          severity: round(event.severity, 2),
+          ticksAway: event.ticks,
+          origin: { x: tileX(event.origin, size), y: tileY(event.origin, size) },
+          tiles: event.tiles.length,
+        });
+        return {
+          intensity: d.scale,
+          ticksPerDay: TICKS_PER_DAY,
+          warnings: d.pending.map(describe),
+          active: d.active.map((event) => ({ ...describe(event), ticksLeft: event.ticks })),
+          damagedTiles: d.damagedTiles,
+          repairPerTick: round(d.repairPerTick, 3),
         };
       },
     },
@@ -1081,13 +1149,16 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'start_new_city',
       description:
         'Abandon the current city and start a new one (the page reloads; the old autosave is ' +
-        'replaced). Optional map size (48, 64 or 96), difficulty (easy, normal, hard) and seed.',
+        'replaced). Optional map size (48, 64 or 96), difficulty (easy, normal, hard), seed and ' +
+        'disasters (off, mild, normal, harsh; default normal) — the same intensity dial as the ' +
+        'new-game dialog; "off" founds a city with no storms, fires or floods.',
       inputSchema: {
         type: 'object',
         properties: {
           size: { type: 'integer', enum: [48, 64, 96] },
           difficulty: { type: 'string', enum: ['easy', 'normal', 'hard'] },
           seed: { type: 'integer', description: 'Fixed world seed; omit for a random map.' },
+          disasters: { type: 'string', enum: [...DISASTER_LEVEL_NAMES] },
         },
       },
       annotations: { consequentialHint: true },
@@ -1105,12 +1176,19 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           difficulty
         ];
         const seed = 'seed' in input ? readInt(input, 'seed') : null;
-        ctx.startNewCity({ size: mapSize, startingMoney, seed });
+        const disasters = readEnum(input, 'disasters', DISASTER_LEVEL_NAMES, 'normal');
+        ctx.startNewCity({
+          size: mapSize,
+          startingMoney,
+          seed,
+          disasterScale: DISASTER_LEVEL_SCALE[disasters],
+        });
         return {
           ok: true,
           size: mapSize,
           difficulty,
           seed,
+          disasters,
           note: 'The page is reloading with the new city.',
         };
       },
@@ -1192,6 +1270,7 @@ function liveFigures(info: TileInfo): Record<string, unknown> {
     stopAgeHours: info.busStop ? round((info.stopAgeTicks / TICKS_PER_DAY) * 24, 1) : null,
     transitCovered: info.transitCovered,
     busDepot: info.busDepot,
+    damage: info.damage,
   };
 }
 
@@ -1225,6 +1304,8 @@ function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
       return tiles.density[i] > 0 && tiles.supplied[i] === SupplyStatus.Undersupplied;
     case 'bus_stop':
       return tiles.busStop[i] !== 0;
+    case 'damaged':
+      return tiles.damage[i] !== 0;
   }
 }
 
