@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DisasterKind, type TileDiff } from '../shared/types.ts';
 import { DisasterMesh } from './disasterMesh.ts';
 import { ElevationField } from './elevationField.ts';
@@ -39,9 +39,26 @@ describe('DisasterMesh', () => {
     const scene = new THREE.Scene();
     const mesh = new DisasterMesh(scene, SIZE, new ElevationField(SIZE));
     mesh.applyDiffs([baseDiff(3, 40), baseDiff(4, 90)]);
-    expect(mesh.decalCount).toBe(2);
+    // decalCount is the mesh's raw instance count: two prisms (low + high
+    // ground triangle, see decal.ts) per damaged tile, so 2 tiles -> 4.
+    expect(mesh.decalCount).toBe(4);
+    expect(mesh.damagedTileCount).toBe(2);
     mesh.applyDiffs([baseDiff(3, 0)]);
-    expect(mesh.decalCount).toBe(1);
+    expect(mesh.decalCount).toBe(2);
+    expect(mesh.damagedTileCount).toBe(1);
+  });
+
+  it('allocates exactly two decal instances per damaged tile at full-grid capacity', () => {
+    const scene = new THREE.Scene();
+    const mesh = new DisasterMesh(scene, SIZE, new ElevationField(SIZE));
+    const tiles = SIZE * SIZE;
+    // Damage every tile on the grid: the worst case for the decal mesh's
+    // preallocated instance buffer (sized tiles * 2 in the constructor).
+    // Nothing should be silently dropped even at full capacity.
+    const diffs = Array.from({ length: tiles }, (_, index) => baseDiff(index, 40));
+    mesh.applyDiffs(diffs);
+    expect(mesh.decalCount).toBe(tiles * 2);
+    expect(mesh.damagedTileCount).toBe(tiles);
   });
 
   it('draws embers only on tiles that are actually on fire', () => {
@@ -82,9 +99,42 @@ describe('DisasterMesh', () => {
         [6, DisasterKind.Flood],
       ]),
     );
-    expect(mesh.floodCount).toBe(2);
+    // Like the decals, floodCount is the raw instance count: two prisms
+    // per flooded tile, so 2 tiles -> 4.
+    expect(mesh.floodCount).toBe(4);
     mesh.setActiveKinds(new Map());
     expect(mesh.floodCount).toBe(0);
+  });
+
+  it('does not re-upload the fire buffers under reduced motion when the burning set is unchanged', () => {
+    const scene = new THREE.Scene();
+    const mesh = new DisasterMesh(scene, SIZE, new ElevationField(SIZE));
+    // Construction order in disasterMesh.ts: decals, embers, smoke, flood.
+    const embers = scene.children[1] as THREE.InstancedMesh;
+
+    mesh.setReducedMotion(true);
+    mesh.setActiveKinds(new Map([[3, DisasterKind.Fire]]));
+    mesh.update(0.016, 1);
+    expect(mesh.fireCount).toBe(1);
+
+    // setStats calls setActiveKinds every sim tick even when nothing about
+    // the fire changed; with reduced motion on, an unchanged tile set must
+    // not force update() to rebuild (and re-upload) the ember/smoke meshes.
+    const setMatrixAt = vi.spyOn(embers, 'setMatrixAt');
+    mesh.setActiveKinds(new Map([[3, DisasterKind.Fire]]));
+    mesh.update(0.016, 5);
+    expect(setMatrixAt).not.toHaveBeenCalled();
+
+    // A real change (a second tile catching) still forces a rebuild.
+    mesh.setActiveKinds(
+      new Map([
+        [3, DisasterKind.Fire],
+        [4, DisasterKind.Fire],
+      ]),
+    );
+    mesh.update(0.016, 5);
+    expect(setMatrixAt).toHaveBeenCalled();
+    expect(mesh.fireCount).toBe(2);
   });
 
   it('draws nothing special for a storm-only tile', () => {

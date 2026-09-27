@@ -196,11 +196,15 @@ export class DisasterMesh implements DiffLayer {
       if (kind === DisasterKind.Fire) fire.push(index);
       else if (kind === DisasterKind.Flood) flood.push(index);
     }
-    this.fireTiles = fire;
-    // The fire set rarely changes tick-to-tick, but the check is cheap and
-    // update() needs to know a real change happened even under reduced
-    // motion, so it is simplest to just always mark it dirty here.
-    this.fireDirty = true;
+    // Compare against the previous set before marking dirty, exactly like
+    // the flood branch below: `setStats` calls this every sim tick, so
+    // under reduced motion an unchanged fire must NOT force `update()` to
+    // re-upload the ember/smoke buffers four times a second — only a tile
+    // catching or burning out should.
+    if (!sameTiles(this.fireTiles, fire)) {
+      this.fireTiles = fire;
+      this.fireDirty = true;
+    }
     if (!sameTiles(this.floodTiles, flood)) {
       this.floodTiles = flood;
       this.rebuildFlood();
@@ -230,19 +234,30 @@ export class DisasterMesh implements DiffLayer {
     this.fireDirty = false;
   }
 
-  /** Damaged tiles currently carrying a wreckage decal. */
+  /**
+   * Raw instance count of the wreckage-decal mesh: two prisms per damaged
+   * tile (see decal.ts), so this is 2x the number of damaged tiles.
+   */
   get decalCount(): number {
-    return this.damaged.size;
+    return this.decals.count;
   }
 
-  /** Tiles a fire is actively burning right now. */
+  /** Raw instance count of the ember mesh: one per tile a fire is actively burning. */
   get fireCount(): number {
     return this.embers.count;
   }
 
-  /** Tiles currently under the flood film. */
+  /**
+   * Raw instance count of the flood-film mesh: two prisms per flooded
+   * tile (see decal.ts), so this is 2x the number of flooded tiles.
+   */
   get floodCount(): number {
-    return this.floodTiles.length;
+    return this.flood.count;
+  }
+
+  /** Number of tiles currently carrying a wreckage decal (not instances). */
+  get damagedTileCount(): number {
+    return this.damaged.size;
   }
 
   /** Place every wreckage decal. Static: only called when damage changes. */
