@@ -380,6 +380,7 @@ const en = {
   'budget.avenues': 'Avenues',
   'budget.busStops': 'Bus stops',
   'budget.biogasFuel': 'Biogas fuel',
+  'budget.repair': 'Repairs',
   'budget.import': 'Grid import',
   'budget.note': 'Upkeep is a money cost only — it does not consume energy.',
 
@@ -859,6 +860,7 @@ const de: Record<TranslationKey, string> = {
   'budget.avenues': 'Alleen',
   'budget.busStops': 'Haltestellen',
   'budget.biogasFuel': 'Biogas-Brennstoff',
+  'budget.repair': 'Reparaturen',
   'budget.import': 'Netzbezug',
   'budget.note': 'Unterhalt kostet nur Geld – er verbraucht keine Energie.',
 

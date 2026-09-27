@@ -2,6 +2,7 @@ import { TICKS_PER_DAY } from '../shared/constants.ts';
 import { PlantType, RoadClass } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
+import { repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
@@ -66,6 +67,8 @@ export function stepTick(state: SimState): void {
   forestStep(state);
   const { population, jobs } = countPopulationAndJobs(state);
   economyStep(state, population, jobs);
+  // After the income of this tick has landed: repairs are paid out of it.
+  repairStep(state);
   happinessStep(state, population);
   goalsStep(state);
   recordLifetime(state, population, jobs);
@@ -264,7 +267,6 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     busStops: b.busStops,
     busStopUpkeep: b.busStopUpkeep,
     biogasFuelCost: b.biogasFuelCost,
-    // Task 4 wires up real repair spend; nothing damages tiles yet.
     repair: state.lastRepairCost,
     gridImportCost: b.gridImportCost,
     net:
@@ -274,6 +276,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       b.gridUpkeep -
       b.plantUpkeep -
       b.biogasFuelCost -
-      b.gridImportCost,
+      b.gridImportCost -
+      state.lastRepairCost,
   };
 }

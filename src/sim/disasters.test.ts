@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { tileIndex } from '../shared/grid.ts';
-import { createSimState, deserializeState, serializeState } from './state.ts';
+import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
 import { BALANCE } from '../shared/constants.ts';
-import { PlantType, SupplyStatus, TileType, Zone } from '../shared/types.ts';
+import { DisasterKind, PlantType, SupplyStatus, TileType, Zone } from '../shared/types.ts';
+import { addDamage, clearDamage, damagedTileCount, repairStep } from './disasters.ts';
 import { censusPlants, placePlant } from './energy.ts';
+import { happinessStep } from './happiness.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { bulldozeTiles, buildRoads } from './roads.ts';
@@ -130,4 +132,93 @@ describe('damage takes a tile out of service', () => {
 
 it('keeps the wind cut-out constant above the cut-in speed', () => {
   expect(BALANCE.energy.windCutOutSpeed).toBeGreaterThan(BALANCE.energy.windCutInSpeed);
+});
+
+describe('addDamage / clearDamage', () => {
+  it('accumulates, saturates at 255 and marks the tile dirty', () => {
+    const state = createSimState(1, SIZE);
+    addDamage(state, at(1, 1), 200);
+    addDamage(state, at(1, 1), 200);
+    expect(state.layers.damage[at(1, 1)]).toBe(255);
+    expect(state.dirty.has(at(1, 1))).toBe(true);
+  });
+
+  it('bumps the grid version only on the transitions that matter', () => {
+    const state = createSimState(1, SIZE);
+    const before = state.gridVersion;
+    addDamage(state, at(1, 1), 10);
+    expect(state.gridVersion).toBe(before + 1);
+    addDamage(state, at(1, 1), 10);
+    expect(state.gridVersion).toBe(before + 1); // still damaged: nothing changed
+    clearDamage(state, at(1, 1));
+    expect(state.gridVersion).toBe(before + 2);
+  });
+});
+
+describe('repairStep', () => {
+  it('heals damage over time and bills it', () => {
+    const state = createSimState(1, SIZE);
+    const { pointsPerTick, costPerPoint } = BALANCE.disasters.repair;
+    addDamage(state, at(2, 2), 10);
+    const money = state.money;
+    const spent = repairStep(state);
+    expect(state.layers.damage[at(2, 2)]).toBe(10 - pointsPerTick);
+    expect(spent).toBeCloseTo(pointsPerTick * costPerPoint);
+    expect(state.money).toBeCloseTo(money - spent);
+    expect(state.lastRepairCost).toBeCloseTo(spent);
+  });
+
+  it('heals a tile all the way to intact', () => {
+    const state = createSimState(1, SIZE);
+    addDamage(state, at(2, 2), 3);
+    for (let i = 0; i < 10; i++) repairStep(state);
+    expect(damagedTileCount(state)).toBe(0);
+  });
+
+  it('freezes damage when the treasury is empty', () => {
+    const state = createSimState(1, SIZE);
+    addDamage(state, at(2, 2), 10);
+    state.money = 0;
+    expect(repairStep(state)).toBe(0);
+    expect(state.layers.damage[at(2, 2)]).toBe(10);
+    expect(state.money).toBe(0);
+  });
+
+  it('leaves tiles inside an active event alone', () => {
+    const state = createSimState(1, SIZE);
+    addDamage(state, at(2, 2), 10);
+    state.disasters.active.push({
+      id: 1,
+      kind: DisasterKind.Flood,
+      severity: 1,
+      startTick: 0,
+      endTick: state.tick + 100,
+      origin: at(2, 2),
+      tiles: [at(2, 2)],
+      intensity: [1],
+    });
+    repairStep(state);
+    expect(state.layers.damage[at(2, 2)]).toBe(10);
+  });
+});
+
+describe('happiness', () => {
+  it('drops while buildings are damaged', () => {
+    const build = (): SimState => {
+      const state = createSimState(1, SIZE);
+      for (let x = 2; x < 10; x++) {
+        state.layers.zone[at(x, 2)] = Zone.Residential;
+        state.layers.density[at(x, 2)] = 2;
+      }
+      return state;
+    };
+    const calm = build();
+    const hit = build();
+    for (let x = 2; x < 10; x++) addDamage(hit, at(x, 2), 40);
+    for (let i = 0; i < 20; i++) {
+      happinessStep(calm, 100);
+      happinessStep(hit, 100);
+    }
+    expect(hit.happiness).toBeLessThan(calm.happiness);
+  });
 });
