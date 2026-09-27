@@ -34,6 +34,11 @@ export interface NewCityOptions {
   size: number;
   startingMoney: number;
   seed: number | null;
+  /**
+   * Disaster intensity: 0 = off .. 1.6 = harsh. Optional because no tool
+   * exposes this yet (Task 15 adds one) — the app fills in the default.
+   */
+  disasterScale?: number;
 }
 
 /** What the tools need from the host (bridge in the app, engine in tests). */

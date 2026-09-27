@@ -46,6 +46,9 @@ export class SimEngine {
           this.state = deserializeState(command.save);
         } else {
           this.state = createSimState(command.seed, command.size, command.startingMoney);
+          if (command.disasterScale !== undefined) {
+            this.state.disasterScale = command.disasterScale;
+          }
           generateTerrain(this.state);
           generateWater(this.state);
           generateGeothermal(this.state);

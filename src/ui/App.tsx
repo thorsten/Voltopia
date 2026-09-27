@@ -14,7 +14,13 @@ import { GoalsPanel } from './GoalsPanel.tsx';
 import { Minimap } from './Minimap.tsx';
 import { OverlayToggle } from './OverlayToggle.tsx';
 import { BuildBar } from './BuildBar.tsx';
-import { consumePendingNewGame, storePendingNewGame, type NewGameOptions } from './newGame.ts';
+import type { NewCityOptions } from '../agent/tools.ts';
+import {
+  consumePendingNewGame,
+  DEFAULT_NEW_GAME,
+  storePendingNewGame,
+  type NewGameOptions,
+} from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
 import { StatsPage } from './StatsPage.tsx';
@@ -95,6 +101,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     seed: save?.seed ?? options.seed ?? Date.now() % 2147483647,
     size: gridSize,
     startingMoney: options.startingMoney,
+    disasterScale: options.disasterScale,
     ...(save ? { save } : {}),
   });
   const callbacksRef = useRef<RendererCallbacks>({});
@@ -168,9 +175,14 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   };
 
   // Agent tools (WebMCP + window.voltopia); a new city from a tool goes
-  // through the same pending-options reload as the new-game dialog.
-  const startNewCityFromTool = useCallback((options: NewGameOptions) => {
-    storePendingNewGame(options);
+  // through the same pending-options reload as the new-game dialog. No
+  // tool exposes disaster intensity yet (Task 15), so fill the default
+  // when the tool didn't supply one — NewCityOptions leaves it optional.
+  const startNewCityFromTool = useCallback((options: NewCityOptions) => {
+    storePendingNewGame({
+      ...options,
+      disasterScale: options.disasterScale ?? DEFAULT_NEW_GAME.disasterScale,
+    });
     void storage.clear().then(() => window.location.reload());
   }, []);
   useAgentTools(bridge, gridSize, startNewCityFromTool);

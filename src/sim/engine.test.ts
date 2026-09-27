@@ -370,6 +370,12 @@ describe('SimEngine basics', () => {
       { type: 'rejected', reason: 'needsRoadTile' },
     ]);
   });
+
+  it('applies the chosen disaster intensity to a new city', () => {
+    const engine = new SimEngine(1, 32);
+    engine.applyCommand({ type: 'init', seed: 1, size: 32, disasterScale: 0 });
+    expect(engine.state.disasterScale).toBe(0);
+  });
 });
 
 describe('time helpers', () => {
