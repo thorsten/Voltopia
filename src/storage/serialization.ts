@@ -88,10 +88,42 @@ export function saveToJson(save: SaveGame): string {
 }
 
 /** Shallow shape check: a hand-edited export must not break the loader. */
+function isSavedDisasterEvent(value: unknown): value is SavedDisasters['events'][number] {
+  if (typeof value !== 'object' || value === null) return false;
+  const e = value as Partial<SavedDisasters['events'][number]>;
+  return (
+    typeof e.id === 'number' &&
+    typeof e.kind === 'number' &&
+    typeof e.severity === 'number' &&
+    typeof e.startTick === 'number' &&
+    typeof e.endTick === 'number' &&
+    typeof e.origin === 'number' &&
+    Array.isArray(e.tiles) &&
+    e.tiles.every((t) => typeof t === 'number') &&
+    Array.isArray(e.intensity) &&
+    e.intensity.every((n) => typeof n === 'number') &&
+    typeof e.active === 'boolean'
+  );
+}
+
+/**
+ * Shallow shape check: a hand-edited export must not break the loader.
+ * A missing/malformed cooldownTicks would become undefined or NaN, where
+ * both `> 0` and `=== 0` are false — the city would never roll another
+ * disaster again. So validate every field the loader actually reads, not
+ * just nextId/events, and let the caller drop the whole block on failure:
+ * a city with no events in flight is a safe fallback, one that can never
+ * face another disaster is not.
+ */
 function isSavedDisasters(value: unknown): value is SavedDisasters {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Partial<SavedDisasters>;
-  return typeof candidate.nextId === 'number' && Array.isArray(candidate.events);
+  return (
+    typeof candidate.nextId === 'number' &&
+    typeof candidate.cooldownTicks === 'number' &&
+    Array.isArray(candidate.events) &&
+    candidate.events.every(isSavedDisasterEvent)
+  );
 }
 
 /**

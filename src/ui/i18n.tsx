@@ -496,7 +496,7 @@ const en = {
   'disaster.active': 'under way · {hours} h {minutes} min left',
   'disaster.toast': '{kind} is hitting the city',
   'inspector.damage': 'damage',
-  'inspector.damage.value': '{points} points · out of service, repair under way',
+  'inspector.damage.value': '{points} points · out of service, repairs cost money over time',
   'inspector.damage.frozen':
     '{points} points · out of service, repairs waiting until the {event} passes',
 } as const;
@@ -1003,7 +1003,7 @@ const de: Record<TranslationKey, string> = {
   'disaster.active': 'läuft · noch {hours} h {minutes} min',
   'disaster.toast': '{kind} trifft die Stadt',
   'inspector.damage': 'Schaden',
-  'inspector.damage.value': '{points} Punkte · außer Betrieb, Reparatur läuft',
+  'inspector.damage.value': '{points} Punkte · außer Betrieb, Reparaturen kosten mit der Zeit Geld',
   'inspector.damage.frozen':
     '{points} Punkte · außer Betrieb, Reparatur wartet, bis {event} vorüber ist',
 };

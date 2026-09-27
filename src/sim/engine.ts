@@ -46,9 +46,10 @@ export class SimEngine {
           this.state = deserializeState(command.save);
         } else {
           this.state = createSimState(command.seed, command.size, command.startingMoney);
-          if (command.disasterScale !== undefined) {
-            this.state.disasterScale = command.disasterScale;
-          }
+          // createSimState defaults to 0 (disasters off) so tests never run
+          // with them on by accident; a real new city gets normal intensity
+          // unless the caller (the new-game dialog, or an agent) chose one.
+          this.state.disasterScale = command.disasterScale ?? 1;
           generateTerrain(this.state);
           generateWater(this.state);
           generateGeothermal(this.state);

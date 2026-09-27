@@ -191,5 +191,10 @@ export function goalsStep(state: SimState): void {
 }
 
 export function goalStates(state: SimState): GoalState[] {
-  return GOAL_IDS.map((id) => ({ id, achieved: state.goalsAchieved.has(id) }));
+  // stormProof can only ever unlock while disasters can happen. With the
+  // intensity off (an old save, or a city founded with disasters off) it
+  // would sit forever as one goal nobody can complete — omit it instead so
+  // the achieved/total count reflects what this city can actually reach.
+  const ids = state.disasterScale === 0 ? GOAL_IDS.filter((id) => id !== 'stormProof') : GOAL_IDS;
+  return ids.map((id) => ({ id, achieved: state.goalsAchieved.has(id) }));
 }

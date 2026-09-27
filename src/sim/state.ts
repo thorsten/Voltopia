@@ -428,7 +428,11 @@ export function createSimState(
     layers: createTileLayers(size),
     geothermalFields: [],
     disasters: { pending: [], active: [], nextId: 1, cooldownTicks: 0 },
-    disasterScale: 1,
+    // Off by default so a bare createSimState() — every unrelated sim test,
+    // every headless SimEngine — never silently runs with disasters on.
+    // A real new city gets normal intensity from the engine's fresh-city
+    // branch instead (see applyCommand('init') in engine.ts).
+    disasterScale: 0,
     lastRepairCost: 0,
     vehicles: [],
     vans: [],

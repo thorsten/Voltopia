@@ -353,6 +353,18 @@ describe('goals', () => {
   });
 
   describe('the stormProof goal', () => {
+    it('is omitted from goalStates when disasters are off', () => {
+      const state = createSimState(1, SIZE);
+      state.disasterScale = 0;
+      expect(goalStates(state).some((g) => g.id === 'stormProof')).toBe(false);
+    });
+
+    it('is included in goalStates at normal intensity', () => {
+      const state = createSimState(1, SIZE);
+      state.disasterScale = 1;
+      expect(goalStates(state).some((g) => g.id === 'stormProof')).toBe(true);
+    });
+
     it('unlocks after riding out a whole storm without a deficit', () => {
       const state = createSimState(1, 32);
       state.disasters.active.push({

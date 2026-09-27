@@ -52,8 +52,11 @@ describe('the damage layer', () => {
 });
 
 describe('disaster intensity', () => {
-  it('defaults to normal for a new city', () => {
-    expect(createSimState(1, SIZE).disasterScale).toBe(1);
+  // "A new city defaults to normal" now belongs to the engine (see
+  // engine.test.ts) — createSimState itself must stay off so a test that
+  // forgets to opt in never silently runs with disasters on.
+  it('createSimState defaults to off, not normal', () => {
+    expect(createSimState(1, SIZE).disasterScale).toBe(0);
   });
 
   it('is zero for a save from before disasters', () => {
@@ -246,6 +249,7 @@ function alwaysSpec(overrides: Partial<DisasterSpec> = {}): DisasterSpec {
 describe('disastersStep', () => {
   it('schedules a warning, activates it, then retires it', () => {
     const state = createSimState(1, SIZE);
+    state.disasterScale = 1; // createSimState defaults off; opt in explicitly.
     const specs = [alwaysSpec()];
     disastersStep(state, specs);
     expect(state.disasters.pending).toHaveLength(1);
@@ -268,6 +272,7 @@ describe('disastersStep', () => {
 
   it('respects the cooldown between two events', () => {
     const state = createSimState(1, SIZE);
+    state.disasterScale = 1; // createSimState defaults off; opt in explicitly.
     const specs = [alwaysSpec()];
     disastersStep(state, specs);
     expect(state.disasters.nextId).toBe(2);
@@ -319,6 +324,7 @@ describe('disastersStep', () => {
 
   it('retires an event early when its kind reports it is over', () => {
     const state = createSimState(1, SIZE);
+    state.disasterScale = 1; // createSimState defaults off; opt in explicitly.
     // Activation now happens right before the active loop runs, in the
     // same disastersStep call — for an unwarned event that is the same
     // call it was rolled in. So a kind that reports itself over on the
@@ -338,6 +344,7 @@ describe('disastersStep', () => {
     // number of apply calls — durationTicks, no more, no less.
     const run = (warnTicks: number): number => {
       const state = createSimState(1, SIZE);
+      state.disasterScale = 1; // createSimState defaults off; opt in explicitly.
       let calls = 0;
       const specs = [
         alwaysSpec({
@@ -362,6 +369,7 @@ describe('disastersStep', () => {
 
   it('skips a kind that finds no site', () => {
     const state = createSimState(1, SIZE);
+    state.disasterScale = 1; // createSimState defaults off; opt in explicitly.
     disastersStep(state, [alwaysSpec({ plan: () => null })]);
     expect(state.disasters.pending).toHaveLength(0);
     expect(state.disasters.nextId).toBe(1);
@@ -369,6 +377,7 @@ describe('disastersStep', () => {
 
   it('reports pending and active events in the stats', () => {
     const state = createSimState(1, SIZE);
+    state.disasterScale = 1; // createSimState defaults off; opt in explicitly.
     disastersStep(state, [alwaysSpec()]);
     addDamage(state, at(3, 3), 20);
     const stats = disasterStats(state);

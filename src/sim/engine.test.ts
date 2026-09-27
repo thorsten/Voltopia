@@ -376,6 +376,16 @@ describe('SimEngine basics', () => {
     engine.applyCommand({ type: 'init', seed: 1, size: 32, disasterScale: 0 });
     expect(engine.state.disasterScale).toBe(0);
   });
+
+  // createSimState itself defaults to off (see state.test assertions in
+  // disasters.test.ts) so tests never run with disasters on by accident;
+  // a real new city still needs normal intensity when a caller (the
+  // new-game dialog, or an agent) omits the field entirely.
+  it('defaults a new city to normal disaster intensity when the caller omits it', () => {
+    const engine = new SimEngine(1, 32);
+    engine.applyCommand({ type: 'init', seed: 1, size: 32 });
+    expect(engine.state.disasterScale).toBe(1);
+  });
 });
 
 describe('time helpers', () => {

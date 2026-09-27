@@ -250,4 +250,18 @@ describe('save game JSON export/import', () => {
     expect(restored.disasters?.events[0].intensity).toEqual([24, 12]);
     expect(new Uint8Array(restored.layers.damage!)[0]).toBe(9);
   });
+
+  it('drops a malformed disasters block instead of loading a broken cooldown', () => {
+    // A missing cooldownTicks would become undefined, where both `> 0` and
+    // `=== 0` are false: the loaded city would never roll another disaster
+    // again. Dropping the whole block is the safe fallback — no events in
+    // flight, but future ones can still be scheduled.
+    const save = makeSave();
+    save.disasterScale = 1;
+    const json = JSON.parse(saveToJson(save));
+    json.disasters = { nextId: 7, events: [] }; // cooldownTicks missing
+    const restored = saveFromJson(JSON.stringify(json));
+    expect(restored.disasters).toBeUndefined();
+    expect(restored.disasterScale).toBe(1);
+  });
 });

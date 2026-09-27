@@ -30,8 +30,11 @@ renderer as a tile diff, and is saved as an optional layer.
   damage, no events and `disasterScale = 0`.
 - Every user-visible string goes through `src/ui/i18n.tsx` in **both**
   English and German.
-- Roads are never damaged. No event writes damage to a road tile, and
-  nothing in routing, vehicles, deliveries or transit reads `damage`.
+- The road itself is never damaged and movement is never affected: a
+  power line running over a road tile can still take damage (deliberately
+  — see `disasters.test.ts`'s "never damages the road under a damaged
+  power line"), but the tile stays a road, and nothing in routing,
+  vehicles, deliveries or transit reads `damage`.
 - Coverage gate ≥ 90 % on `src/sim` (`pnpm coverage`).
 - Every new `InstancedMesh` sets `frustumCulled = false`.
 - Run `pnpm format` (oxfmt) after edits; the pre-commit hook runs

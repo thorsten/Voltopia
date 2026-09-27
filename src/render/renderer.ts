@@ -366,7 +366,11 @@ export class GameRenderer {
     const environment: RenderEnvironment = {
       nightFactor: night,
       sunFactor,
-      windFactor: Math.min(1, stats.weather.windSpeed),
+      // Gust-inclusive, matching effectiveWind() in the sim: turbines cut
+      // out on windSpeed + gust, so the rotors must slow with the same
+      // value or they'd keep spinning flat out through a storm while the
+      // plant generates nothing underneath them.
+      windFactor: Math.min(1, stats.weather.windSpeed + stats.weather.gust),
       stateOfCharge:
         stats.energy.storageCapacity > 0
           ? stats.energy.storedEnergy / stats.energy.storageCapacity

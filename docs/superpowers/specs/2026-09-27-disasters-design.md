@@ -321,8 +321,10 @@ One in-game day is 960 ticks, one in-game hour 40 ticks.
 - `flood.test.ts` — the area is deterministic and monotone in severity;
   `terrain` is unchanged afterwards.
 - Determinism — two engines with the same seed produce the same event
-  sequence; a save/load in the middle of a warning and of a fire
-  reproduces both.
+  sequence; a save/load in the middle of a warning and of a fire restores
+  both. (The RNG is deliberately reseeded on load, so a loaded city is not
+  expected to reproduce the unsaved future — only what was already in
+  flight at save time.)
 - Coverage gate ≥ 90 % on `src/sim` covers the new modules too.
 
 ## Balancing
