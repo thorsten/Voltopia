@@ -862,14 +862,13 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           id: event.id,
           kind: DISASTER_NAME[event.kind],
           severity: round(event.severity, 2),
-          ticksAway: event.ticks,
           origin: { x: tileX(event.origin, size), y: tileY(event.origin, size) },
           tiles: event.tiles.length,
         });
         return {
           intensity: d.scale,
           ticksPerDay: TICKS_PER_DAY,
-          warnings: d.pending.map(describe),
+          warnings: d.pending.map((event) => ({ ...describe(event), ticksAway: event.ticks })),
           active: d.active.map((event) => ({ ...describe(event), ticksLeft: event.ticks })),
           damagedTiles: d.damagedTiles,
           repairPerTick: round(d.repairPerTick, 3),

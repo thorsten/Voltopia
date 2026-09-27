@@ -201,8 +201,16 @@ Collected 2026-09-24; roughly in the order we want to build them.
 - **Smart-meter rollout**: turn the smart-charging toggle into a
   mechanic — per-household rollout costs, load shifting for heat
   pumps/households, richer live graphs.
-- **Disasters/events**: storms stopping turbines or cutting lines,
-  fires (finally giving fire stations an active role), river floods.
+- **Disasters/events** (done): storms (warned hours ahead) feather the
+  wind fleet past cut-out speed and strike pylons, turbines, plants and
+  buildings; fires (no warning, finally giving fire stations an active
+  role) ignite from drought and uncovered density and spread through
+  neighbours and woods, checked by roads, water and coverage; river
+  floods (also warned ahead) fill the same low ground from the river and
+  lake every time. Damage is never destruction — a tile goes out of
+  service and heals against its own budget line, freezing when the
+  treasury is empty — and the intensity is chosen when a city is
+  founded, so existing saves keep playing without any of it.
 - **Heat sector**: heat pumps as seasonal winter load, district
   heating/power-to-heat as a consumer and storage.
 - **Geothermal plants** (done): seed-generated hotspot fields in the

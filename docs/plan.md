@@ -57,6 +57,10 @@ src/
     deliveries.ts  # logistics depot, van tours, shop supply
     services.ts    # fire/police coverage
     happiness.ts   # happiness from supply/taxes/services/parks
+    disasters.ts   # lifecycle: risk, warning, damage, repair
+    storm.ts       # storm risk, gust, city-wide strikes
+    fire.ts        # ignition, spread, extinguishing
+    flood.ts       # flood risk and the computed floodplain
     goals.ts       # staged city goals
     inspect.ts     # per-tile inspector data
     tick.ts        # orchestrates one tick, produces diffs
@@ -73,6 +77,7 @@ src/
     buildingsMesh.ts # instanced procedural low-poly buildings
     plantsMesh.ts  # plant meshes (wind rotors spin), storage, hubs
     powerLinesMesh.ts # pylons + catenary wires
+    disasterMesh.ts # storm/fire/flood fx: decals, embers, smoke, flood water
     vehiclesMesh.ts# instanced cars/vans/buses + headlights, slope pitch
     zoneTilesMesh.ts # zone paint decals
     iconsMesh.ts   # floating status icons

@@ -204,7 +204,8 @@ const en = {
   'overlay.transit': 'Transit',
   'overlay.transit.title': 'Bus coverage: green = covered, stops by service state',
   'overlay.damage': 'Damage',
-  'overlay.damage.title': 'Damage: intact / damaged / wrecked, and what is out of service',
+  'overlay.damage.title':
+    'Damage: buildings and plants always shown intact / damaged / wrecked; any other tile only lights up once it is hit',
 
   'rejection.notEnoughMoney': 'Not enough money',
   'rejection.tileOccupied': 'This tile is already occupied',
@@ -221,6 +222,7 @@ const en = {
   'rejection.needsRoadTile': 'Bus stops go on road tiles',
   'rejection.alreadyInsulated': 'Building insulation is already installed',
   'rejection.tooSteep': 'Too steep to build on',
+  'rejection.damaged': 'This tile is damaged; repair it or bulldoze it first',
 
   'footer.hint': 'right mouse/WASD: pan · wheel: zoom · Q/E: rotate',
   'footer.help': 'Help',
@@ -272,6 +274,9 @@ const en = {
   'help.terrain.title': 'Hills and slopes',
   'help.terrain.body':
     'Every map has hills. Steep slopes cannot be built on, and building on a gentle slope costs extra. Wind turbines generate more on high ground, run-of-river plants gain from a drop in the river, and pumped storage stores more the higher it sits above the lake.',
+  'help.disasters.title': 'Disasters',
+  'help.disasters.body':
+    'Storms warn you a few hours ahead, then feather every wind turbine past its cut-out speed and strike pylons, turbines, plants and buildings across the city. Fires give no warning: the chance grows with drought and with dense buildings a fire station cannot reach, then spreads to neighbouring buildings and mature woods — roads and water stop it, and coverage both slows the spread and puts it out faster. River floods warn you further ahead and cover the same low ground by the river and the lake every time, so building on the floodplain is a choice. A damaged tile is out of service — plants stop generating, lines stop conducting, buildings go dark, stations stop covering — until it is repaired, which costs money over time and stalls once the treasury is empty; the bulldozer clears a wrecked tile instead. Pick the intensity when you found a city; existing cities keep playing without disasters.',
 
   'imprint.title': 'Imprint',
   'imprint.according': 'Information in accordance with § 5 DDG',
@@ -701,7 +706,8 @@ const de: Record<TranslationKey, string> = {
   'overlay.transit': 'ÖPNV',
   'overlay.transit.title': 'Busabdeckung: grün = abgedeckt, Haltestellen nach Bedienung',
   'overlay.damage': 'Schäden',
-  'overlay.damage.title': 'Schäden: heil / beschädigt / zerstört, und was außer Betrieb ist',
+  'overlay.damage.title':
+    'Schäden: Gebäude und Anlagen sind immer heil / beschädigt / zerstört eingefärbt; andere Felder leuchten erst auf, wenn sie getroffen wurden',
 
   'rejection.notEnoughMoney': 'Nicht genug Geld',
   'rejection.tileOccupied': 'Dieses Feld ist bereits belegt',
@@ -719,6 +725,7 @@ const de: Record<TranslationKey, string> = {
   'rejection.needsRoadTile': 'Haltestellen gehören auf Straßenkacheln',
   'rejection.alreadyInsulated': 'Die Gebäudedämmung ist bereits installiert',
   'rejection.tooSteep': 'Zu steil zum Bebauen',
+  'rejection.damaged': 'Dieses Feld ist beschädigt; erst reparieren oder abreißen',
 
   'footer.hint': 'rechte Maustaste/WASD: bewegen · Mausrad: zoomen · Q/E: drehen',
   'footer.help': 'Hilfe',
@@ -770,6 +777,9 @@ const de: Record<TranslationKey, string> = {
   'help.terrain.title': 'Hügel und Hänge',
   'help.terrain.body':
     'Jede Karte hat Hügel. Steilhänge sind nicht bebaubar, Bauen am Hang kostet einen Aufschlag. Windräder erzeugen auf Anhöhen mehr, Laufwasserkraft profitiert vom Gefälle des Flusses, und Pumpspeicher speichern umso mehr, je höher sie über dem See liegen.',
+  'help.disasters.title': 'Katastrophen',
+  'help.disasters.body':
+    'Stürme kündigen sich einige Stunden vorher an, fahnen dann jede Windkraftanlage oberhalb ihrer Abschaltgeschwindigkeit und schlagen quer durch die Stadt in Masten, Turbinen, Anlagen und Gebäude ein. Brände kommen ohne Vorwarnung: Die Gefahr wächst mit Trockenheit und mit dichten Gebäuden, die keine Feuerwache erreicht, und breitet sich dann auf Nachbargebäude und reifen Wald aus — Straßen und Wasser stoppen sie, und Feuerwehrabdeckung bremst die Ausbreitung und löscht schneller. Hochwasser kündigt sich noch früher an und überflutet jedes Mal dasselbe tiefe Land am Fluss und am See, sodass Bauen im Überschwemmungsgebiet eine bewusste Wahl ist. Ein beschädigtes Feld ist außer Betrieb — Anlagen erzeugen nicht mehr, Leitungen leiten nicht mehr, Gebäude bleiben dunkel, Wachen decken nicht mehr ab —, bis es repariert ist; das kostet über die Zeit Geld und stockt, sobald die Kasse leer ist, aber die Planierraupe räumt ein zerstörtes Feld auch so. Die Stärke wählst du beim Gründen einer Stadt; bestehende Städte spielen ohne Katastrophen weiter.',
 
   'imprint.title': 'Impressum',
   'imprint.according': 'Angaben gemäß § 5 DDG',
