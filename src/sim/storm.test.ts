@@ -48,11 +48,27 @@ describe('the storm gust', () => {
   it('drives the effective wind over the cut-out speed at full severity', () => {
     const state = createSimState(1, SIZE);
     placePlant(state, at(5, 5), PlantType.WindTurbine);
-    state.weather.windSpeed = 0.5;
+    // A storm only rolls above BALANCE.disasters.storm.windThreshold, so
+    // that is the wind the gust adds to — testing it at half wind would
+    // measure a weather situation no storm ever blows in.
+    state.weather.windSpeed = BALANCE.disasters.storm.windThreshold + 0.05;
     state.disasters.active.push(storm(state, 1));
     state.weather.gust = stormGust(state);
     expect(effectiveWind(state.weather)).toBeGreaterThanOrEqual(BALANCE.energy.windCutOutSpeed);
     expect(windFactor(effectiveWind(state.weather))).toBe(0);
+  });
+
+  it('only runs the fleet flat out at the mildest severity', () => {
+    // The other half of the gust's job, and the reason it is not larger:
+    // a moderate storm must leave the turbines turning, or storage alone
+    // would have to carry every storm and stormProof would be unwinnable.
+    const state = createSimState(1, SIZE);
+    placePlant(state, at(5, 5), PlantType.WindTurbine);
+    state.weather.windSpeed = BALANCE.disasters.storm.windThreshold + 0.05;
+    state.disasters.active.push(storm(state, BALANCE.disasters.storm.severityRange[0]));
+    state.weather.gust = stormGust(state);
+    expect(effectiveWind(state.weather)).toBeLessThan(BALANCE.energy.windCutOutSpeed);
+    expect(windFactor(effectiveWind(state.weather))).toBeGreaterThan(0.9);
   });
 });
 

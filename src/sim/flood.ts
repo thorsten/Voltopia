@@ -22,7 +22,16 @@ export function floodRisk(state: SimState): number {
  * The floodplain at this severity: a height-ordered fill outward from
  * every river and lake tile. Each water tile floods the land around it up
  * to its own bed elevation plus `rise`, and carries that water line
- * inland as far as the ground stays below it.
+ * inland as far as the ground stays below it — but never further than
+ * `reach` tiles from the water's edge.
+ *
+ * That lateral limit is what makes the floodplain a floodplain. Relief
+ * alone does not bound the fill: this game's maps are broad and low
+ * (elevation 0..7, most tiles at 1..3), so a water line two levels above
+ * a low river bed finds a contiguous path across the whole map, and the
+ * unbounded fill inundated every land tile on half of the seeds the
+ * balancing probe measured. The reach turns it back into a band along the
+ * river, which is what the flood is meant to be.
  *
  * Purely a function of the map and the severity — the same city floods
  * the same ground every time, so building in the floodplain is an
@@ -32,9 +41,12 @@ export function floodRisk(state: SimState): number {
 export function floodArea(state: SimState, severity: number): { tiles: number[]; depth: number[] } {
   const cfg = BALANCE.disasters.flood;
   const rise = Math.max(1, Math.round(cfg.maxRise * severity));
+  const reach = Math.max(1, Math.round(cfg.reachTiles * severity));
   const { terrain, elevation } = state.layers;
   // Water line each tile is reached with; -1 = dry.
   const level = new Int16Array(terrain.length).fill(-1);
+  // Tiles of land between this tile and the water's edge (0 = water).
+  const distance = new Int16Array(terrain.length);
   const queue: number[] = [];
   for (let i = 0; i < terrain.length; i++) {
     if (terrain[i] !== Terrain.River && terrain[i] !== Terrain.Lake) continue;
@@ -43,11 +55,14 @@ export function floodArea(state: SimState, severity: number): { tiles: number[];
   }
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
+    const next = distance[index] + 1;
+    if (next > reach) continue;
     for (const neighbor of neighbors4(index, state.size)) {
       if (terrain[neighbor] !== Terrain.Land) continue;
       if (elevation[neighbor] > level[index]) continue;
       if (level[neighbor] >= level[index]) continue;
       level[neighbor] = level[index];
+      distance[neighbor] = next;
       queue.push(neighbor);
     }
   }

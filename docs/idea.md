@@ -204,10 +204,10 @@ Collected 2026-09-24; roughly in the order we want to build them.
 - **Disasters/events** (done): storms (warned hours ahead) feather the
   wind fleet past cut-out speed and strike pylons, turbines, plants and
   buildings; fires (no warning, finally giving fire stations an active
-  role) ignite from drought and uncovered density and spread through
-  neighbours and woods, checked by roads, water and coverage; river
-  floods (also warned ahead) fill the same low ground from the river and
-  lake every time. Damage is never destruction — a tile goes out of
+  role) ignite from drought and uncovered density — or in a mature wood
+  itself — and spread through neighbours and woods, checked by roads,
+  water and coverage; river floods (also warned ahead) fill the same low
+  ground from the river and lake every time. Damage is never destruction — a tile goes out of
   service and heals against its own budget line, freezing when the
   treasury is empty — and the intensity is chosen when a city is
   founded, so existing saves keep playing without any of it.

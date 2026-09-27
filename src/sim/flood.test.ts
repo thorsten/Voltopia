@@ -65,6 +65,18 @@ describe('floodArea', () => {
     expect(depth).toHaveLength(tiles.length);
   });
 
+  it('stops a fixed number of tiles from the bank, however low the land is', () => {
+    // A dead-flat valley: without the lateral reach the water line would
+    // walk across the whole map, which is what it did on half the maps the
+    // balancing probe measured. Flat ground is the case relief cannot bound.
+    const state = createSimState(3, SIZE);
+    for (let y = 0; y < SIZE; y++) state.layers.terrain[at(0, y)] = Terrain.River;
+    const reach = BALANCE.disasters.flood.reachTiles;
+    const tiles = new Set(floodArea(state, 1).tiles);
+    for (let x = 1; x <= reach; x++) expect(tiles.has(at(x, 5))).toBe(true);
+    expect(tiles.has(at(reach + 1, 5))).toBe(false);
+  });
+
   it('is deterministic for the same map and severity', () => {
     const a = floodArea(valley(), 0.7).tiles;
     const b = floodArea(valley(), 0.7).tiles;
