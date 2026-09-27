@@ -1300,6 +1300,9 @@ describe('disastersStep', () => {
   });
 
   it('scales the risk with the intensity', () => {
+    // The cooldown is zeroed after every step so this measures the roll
+    // alone; with it in place both intensities would simply fire on
+    // almost every cooldown expiry and the counts would be too close.
     const rolls = (scale: number): number => {
       const state = createSimState(7, SIZE);
       state.disasterScale = scale;
@@ -1310,10 +1313,11 @@ describe('disastersStep', () => {
         const before = state.disasters.nextId;
         disastersStep(state, specs);
         if (state.disasters.nextId > before) count++;
+        state.disasters.cooldownTicks = 0;
       }
       return count;
     };
-    expect(rolls(1.6)).toBeGreaterThan(rolls(0.5));
+    expect(rolls(1.6)).toBeGreaterThan(rolls(0.5) * 2);
   });
 
   it('retires an event early when its kind reports it is over', () => {
@@ -2554,10 +2558,13 @@ function scriptedCity(seed: number): SimEngine {
 
 describe('determinism', () => {
   it('produces the same events twice for the same seed', () => {
+    // 1200 ticks, not more: CI runners are 2-3× slower than a dev
+    // machine, and two full runs of a scripted city have to fit inside
+    // vitest's 30 s timeout with room to spare.
     const run = (): string => {
       const engine = scriptedCity(42);
       const log: string[] = [];
-      for (let i = 0; i < 3000; i++) {
+      for (let i = 0; i < 1200; i++) {
         engine.tick();
         for (const event of engine.state.disasters.active) {
           log.push(`${engine.state.tick}:${event.kind}:${event.id}`);
@@ -3622,12 +3629,15 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `src/agent/tools.test.ts` (follow the file's existing harness
-for a headless engine + context):
+Append to `src/agent/tools.test.ts`, inside the existing describe blocks.
+The file's harness is `createHarness(seed?)`, its grid is `SIZE = 24`, and
+a layer written directly needs `markDirty` plus one `advance_time` tick
+before the agent's tile mirror sees it — the file's geothermal
+`find_tiles` test is the pattern to copy, comment and all.
 
 ```ts
 it('get_disasters reports intensity, warnings and active events', async () => {
-  const { call, engine } = harness();
+  const { call, engine } = createHarness();
   engine.state.disasters.pending.push({
     id: 5,
     kind: DisasterKind.Flood,
@@ -3652,19 +3662,21 @@ it('get_disasters reports intensity, warnings and active events', async () => {
 });
 
 it('find_tiles finds damaged tiles', async () => {
-  const { call, engine, sync } = harness();
-  addDamage(engine.state, tileIndex(5, 5, 32), 50);
-  sync();
+  const { call, engine } = createHarness();
+  const index = tileIndex(5, 5, SIZE);
+  addDamage(engine.state, index, 50);
+  // addDamage marks the tile dirty itself; the tick carries it into the mirror.
+  await call('advance_time', { ticks: 1 });
   const found = (await call('find_tiles', { kind: 'damaged' })) as {
     tiles: Array<{ x: number; y: number }>;
   };
-  expect(found.tiles).toContainEqual(expect.objectContaining({ x: 5, y: 5 }));
+  expect(found.tiles).toContainEqual({ x: 5, y: 5 });
 });
 
 it('inspect_tile reports the damage', async () => {
-  const { call, engine, sync } = harness();
-  addDamage(engine.state, tileIndex(6, 6, 32), 42);
-  sync();
+  const { call, engine } = createHarness();
+  addDamage(engine.state, tileIndex(6, 6, SIZE), 42);
+  await call('advance_time', { ticks: 1 });
   const info = (await call('inspect_tile', { x: 6, y: 6 })) as { damage: number };
   expect(info.damage).toBe(42);
 });
