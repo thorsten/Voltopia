@@ -136,8 +136,14 @@ export interface DisasterSpec {
 export const DISASTER_SPECS: readonly DisasterSpec[] = [];
 
 /**
- * One tick of the disaster lifecycle: retire what is over, activate what
- * was announced, let active events work, then roll for a new one.
+ * One tick of the disaster lifecycle: roll for a new event, activate
+ * whatever is now due, then let every active event work — retiring it
+ * once its duration runs out, without one more apply.
+ *
+ * Activation happens in a single place, right before the active events
+ * run, so a warned event (activated on a later tick, before its loop)
+ * and an unwarned one (activated this same tick, also before its loop)
+ * get exactly the same number of `apply` calls: `durationTicks`.
  *
  * Runs after `updateWeather` (the weather of this tick sets the risk) and
  * before generation and grid connectivity, so this tick's damage is
@@ -150,33 +156,35 @@ export function disastersStep(
   const d = state.disasters;
   if (d.cooldownTicks > 0) d.cooldownTicks--;
 
+  if (d.cooldownTicks === 0 && state.disasterScale > 0) {
+    for (const spec of specs) {
+      const risk = spec.risk(state) * state.disasterScale;
+      if (risk <= 0 || !state.rng.chance(risk)) continue;
+      if (!schedule(state, spec)) continue;
+      // One event per roll: the cooldown spaces the next one out.
+      d.cooldownTicks = BALANCE.disasters.cooldownTicks;
+      break;
+    }
+  }
+
   activateDue(state);
 
   if (d.active.length > 0) {
     const running: DisasterEvent[] = [];
     for (const event of d.active) {
+      if (state.tick >= event.endTick) {
+        // Duration's hard end: retire it without one more apply.
+        state.statsDirty = true;
+        continue;
+      }
       const spec = specs.find((candidate) => candidate.kind === event.kind);
       // A kind that is not in the list (a save from a later version, a
       // test with a narrower list) simply runs out its duration.
       const done = spec ? spec.apply(state, event) : false;
-      if (done || state.tick >= event.endTick) state.statsDirty = true;
+      if (done) state.statsDirty = true;
       else running.push(event);
     }
     d.active = running;
-  }
-
-  if (d.cooldownTicks > 0 || state.disasterScale <= 0) return;
-  for (const spec of specs) {
-    const risk = spec.risk(state) * state.disasterScale;
-    if (risk <= 0 || !state.rng.chance(risk)) continue;
-    if (!schedule(state, spec)) continue;
-    // A zero-warning kind (warnTicks: 0) schedules itself due this very
-    // tick; without this it would sit in `pending` for one extra tick
-    // before `activateDue` next runs, which breaks "0 = no warning".
-    activateDue(state);
-    // One event per roll: the cooldown spaces the next one out.
-    d.cooldownTicks = BALANCE.disasters.cooldownTicks;
-    return;
   }
 }
 

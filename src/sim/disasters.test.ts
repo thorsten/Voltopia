@@ -300,12 +300,45 @@ describe('disastersStep', () => {
 
   it('retires an event early when its kind reports it is over', () => {
     const state = createSimState(1, SIZE);
+    // Activation now happens right before the active loop runs, in the
+    // same disastersStep call — for an unwarned event that is the same
+    // call it was rolled in. So a kind that reports itself over on the
+    // very first apply retires immediately: there is no tick where it
+    // sits observably active, unlike a naive "activate, then check next
+    // step" reading of "early".
     const specs = [alwaysSpec({ warnTicks: 0, durationTicks: 500, apply: () => true })];
     disastersStep(state, specs);
-    expect(state.disasters.active).toHaveLength(1);
-    state.tick++;
-    disastersStep(state, specs);
+    expect(state.disasters.pending).toHaveLength(0);
     expect(state.disasters.active).toHaveLength(0);
+  });
+
+  it('applies a spec exactly durationTicks times, warned or not', () => {
+    // Regression guard: activation must happen in one place, right before
+    // the active loop, so a warned event (activated on a later tick) and
+    // an unwarned one (activated the tick it is rolled) get the same
+    // number of apply calls — durationTicks, no more, no less.
+    const run = (warnTicks: number): number => {
+      const state = createSimState(1, SIZE);
+      let calls = 0;
+      const specs = [
+        alwaysSpec({
+          warnTicks,
+          durationTicks: 5,
+          apply: () => {
+            calls++;
+            return false;
+          },
+        }),
+      ];
+      disastersStep(state, specs);
+      while (state.disasters.pending.length > 0 || state.disasters.active.length > 0) {
+        state.tick++;
+        disastersStep(state, specs);
+      }
+      return calls;
+    };
+    expect(run(10)).toBe(5);
+    expect(run(0)).toBe(5);
   });
 
   it('skips a kind that finds no site', () => {
