@@ -90,10 +90,15 @@ export interface DisasterEvent {
   startTick: number;
   /** Hard end of the event; a fire may end earlier once extinguished. */
   endTick: number;
-  /** Affected tiles: rolled for a storm, grown for a fire, computed for a flood. */
+  /** Affected tiles: struck for a storm, grown for a fire, computed for a flood. */
   tiles: number[];
   /** Tile for the minimap marker and camera jump. */
   origin: number;
+  /**
+   * Per-tile intensity, parallel to `tiles`: burn ticks left for a fire,
+   * water depth in elevation levels for a flood, unused for a storm.
+   */
+  intensity: number[];
 }
 ```
 
@@ -102,9 +107,9 @@ nextId: number; cooldownTicks: number }`. The cooldown is what keeps
 three events from starting at once; together with the intensity factor it
 is the only global frequency control.
 
-Fires need one extra per-tile number: how long a tile still burns. It
-lives in a `burnTicks` map on the fire event (`Map<number, number>`),
-serialised as parallel arrays in the save.
+The per-tile numbers two kinds need — how long a tile still burns, how
+deep the water stands — share the one `intensity` array above, so a save
+holds nothing but plain number lists.
 
 ### Intensity
 
@@ -159,7 +164,7 @@ Four phases:
 2. **Activate** — events in `pending` whose `startTick` has come become
    active and write their first damage.
 3. **Apply** — every active event runs its kind's apply function: the
-   storm rolls fresh hits inside its band, the fire spreads to
+   storm rolls fresh strikes across the city, the fire spreads to
    neighbours and burns down its timers, the flood damages its area by
    depth.
 4. **Roll** — when `cooldownTicks === 0` and `disasterScale > 0`, each
