@@ -204,6 +204,14 @@ export function buildStats(state: SimState): GlobalStats {
     marketTrading: state.marketTrading,
     insulation: state.insulation,
     services: { ...state.lastServices },
+    // Task 4 replaces this with disasterStats(state).
+    disasters: {
+      scale: state.disasterScale,
+      pending: [],
+      active: [],
+      damagedTiles: 0,
+      repairPerTick: 0,
+    },
     forestShare: forestShare(state),
     tide: tideState(state.tick),
     traffic: {
@@ -256,6 +264,8 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     busStops: b.busStops,
     busStopUpkeep: b.busStopUpkeep,
     biogasFuelCost: b.biogasFuelCost,
+    // Task 4 wires up real repair spend; nothing damages tiles yet.
+    repair: state.lastRepairCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +

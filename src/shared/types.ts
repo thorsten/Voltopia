@@ -87,6 +87,7 @@ export const OverlayMode = {
   Traffic: 4,
   Deliveries: 5,
   Transit: 6,
+  Damage: 7,
 } as const;
 export type OverlayMode = (typeof OverlayMode)[keyof typeof OverlayMode];
 
@@ -280,6 +281,8 @@ export interface BudgetStats {
   /** Upkeep of the bus stops (part of gridUpkeep). */
   busStopUpkeep: number;
   biogasFuelCost: number;
+  /** Repair spend on damaged tiles this tick. */
+  repair: number;
   gridImportCost: number;
   /** Income - expenses for this tick. */
   net: number;
@@ -402,6 +405,10 @@ export interface TileInfo {
   buildingAge: number;
   /** Consecutive ticks without full supply (decay counter). */
   troubledTicks: number;
+  /** Damage points 0..255 (0 = intact); a damaged tile is out of service. */
+  damage: number;
+  /** Kind of the active event covering this tile, null when none does. */
+  disaster: DisasterKind | null;
   /** Building inside a powered fire station's ring. */
   fireCovered: boolean;
   /** Building inside a powered police station's ring. */
@@ -470,6 +477,8 @@ export interface GlobalStats {
   insulation: boolean;
   /** Share of buildings with fire / police coverage, 0..1. */
   services: { fire: number; police: number };
+  /** Disasters in flight, damage and the repair bill. */
+  disasters: DisasterStats;
   /** Share of the land that is wooded, weighted by growth stage (0..1). */
   forestShare: number;
   /** Tide at this tick: water level, current strength and direction. */
@@ -490,6 +499,80 @@ export interface GlobalStats {
   budget: BudgetStats;
   /** Details of the inspected tile, null when none selected. */
   inspected: TileInfo | null;
+}
+
+/** The three kinds of disaster the city can face. */
+export const DisasterKind = { Storm: 0, Fire: 1, Flood: 2 } as const;
+export type DisasterKind = (typeof DisasterKind)[keyof typeof DisasterKind];
+
+/**
+ * One disaster in flight: warned about (`startTick` in the future) or
+ * active. Part of the saved state — pending and active events cannot be
+ * re-derived, because the RNG is reseeded as `seed ^ tick` on load.
+ */
+export interface DisasterEvent {
+  /** Monotonic id: stable React keys and agent-tool references. */
+  id: number;
+  kind: DisasterKind;
+  /** 0..1; scales area and damage rate. */
+  severity: number;
+  /** Tick the event turns active; the warning runs until then. */
+  startTick: number;
+  /** Hard end of the event; a fire can end earlier once it is out. */
+  endTick: number;
+  /** Tile for the minimap marker and the camera jump. */
+  origin: number;
+  /** Affected tiles: struck (storm), grown (fire) or computed (flood). */
+  tiles: number[];
+  /**
+   * Per-tile intensity, parallel to `tiles`: burn ticks left for a fire,
+   * water depth in elevation levels for a flood, unused (0) for a storm.
+   */
+  intensity: number[];
+}
+
+/** One event as the HUD, the renderer and the agent tools see it. */
+export interface DisasterInfo {
+  id: number;
+  kind: DisasterKind;
+  severity: number;
+  /** Ticks until it strikes (pending) or until it is over (active). */
+  ticks: number;
+  origin: number;
+  /**
+   * Tiles the event covers. The renderer needs them to draw embers and
+   * the flood film, and the tile diff channel only carries the damage. A
+   * fire is a handful of tiles and a flood a few hundred — far less than
+   * one diff burst, and only while an event runs.
+   */
+  tiles: number[];
+}
+
+export interface DisasterStats {
+  /** Intensity factor of this city: 0 = off, 1 = normal. */
+  scale: number;
+  pending: DisasterInfo[];
+  active: DisasterInfo[];
+  damagedTiles: number;
+  repairPerTick: number;
+}
+
+/** Disasters in flight, as stored in a save game. */
+export interface SavedDisasters {
+  nextId: number;
+  cooldownTicks: number;
+  events: Array<{
+    id: number;
+    kind: number;
+    severity: number;
+    startTick: number;
+    endTick: number;
+    origin: number;
+    tiles: number[];
+    intensity: number[];
+    /** False while the event is still only a warning. */
+    active: boolean;
+  }>;
 }
 
 /** Service coverage bits for `TileDiff.services` / `GlobalStats.services`. */
@@ -526,6 +609,8 @@ export interface TileDiff {
   geothermal: number;
   /** Quantised reservoir temperature 0..255 of this tile's field (0 off a hotspot). */
   reservoirHeat: number;
+  /** Damage points 0..255 of this tile (0 = intact). */
+  damage: number;
   /** DeliveryState of a retail building (0 elsewhere). */
   deliveryState: number;
   /** 1 when a bus stop is marked on this road tile. */
@@ -586,6 +671,10 @@ export interface SaveGame {
   wellStockedTicks?: number;
   /** Consecutive modal-shift ticks so far (absent in older saves → 0). */
   transitTicks?: number;
+  /** Disaster intensity of this city (absent in older saves → 0 = off). */
+  disasterScale?: number;
+  /** Events in flight (absent in older saves → none). */
+  disasters?: SavedDisasters;
   /** Raw copies of the tile layers. */
   layers: {
     tileType: ArrayBuffer;
@@ -611,5 +700,7 @@ export interface SaveGame {
     geothermal?: ArrayBuffer;
     /** Quantised reservoir heat layer; absent in saves from before geothermal power. */
     reservoirHeat?: ArrayBuffer;
+    /** Damage layer; absent in saves from before disasters (all intact). */
+    damage?: ArrayBuffer;
   };
 }

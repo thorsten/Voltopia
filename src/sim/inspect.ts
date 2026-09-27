@@ -314,6 +314,9 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     demand: demandFor(state.lastDemand, zone),
     buildingAge: layers.buildingAge[index],
     troubledTicks: layers.troubledTicks[index],
+    damage: layers.damage[index],
+    // Task 4 looks this tile up in the active event list.
+    disaster: null,
     fireCovered: isBuilding && (layers.services[index] & SERVICE_FIRE) !== 0,
     policeCovered: isBuilding && (layers.services[index] & SERVICE_POLICE) !== 0,
     stationActive: tileType === TileType.Plant && isStation(plant) && connected,

@@ -123,6 +123,13 @@ export const BALANCE = {
     windPeakOutput: 120,
     /** Wind output is proportional to windSpeed^3 (capped), like real turbines. */
     windCutInSpeed: 0.1,
+    /**
+     * Normalised wind speed at which turbines feather their blades and
+     * stop. Real turbines cut out in a storm; only a severe storm's gust
+     * pushes the city's wind this high (see BALANCE.disasters.storm.gust),
+     * so a moderate storm merely runs the fleet flat out.
+     */
+    windCutOutSpeed: 0.92,
     /** Energy a single battery can store. */
     batteryCapacity: 3_000,
     /** Max charge/discharge rate per battery per tick. */
@@ -670,6 +677,87 @@ export const BALANCE = {
     policePenaltyWeight: 0.1,
     /** Coverage share (per service) the safe-city goal requires. */
     goalCoverage: 0.9,
+  },
+
+  disasters: {
+    /**
+     * Ticks after one event is scheduled before another may be rolled
+     * (half an in-game day), so a storm, a fire and a flood never pile
+     * onto the same evening by accident.
+     */
+    cooldownTicks: 480,
+    repair: {
+      /** Damage points a tile heals per tick (1 point = 1 tick of work). */
+      pointsPerTick: 1,
+      /** Money per healed damage point. */
+      costPerPoint: 0.5,
+    },
+    /** Happiness: standing penalty weight on the damaged-building share. */
+    damagedPenaltyWeight: 0.35,
+    /** Happiness: acute penalty while any event is active. */
+    activeEventPenalty: 0.05,
+    storm: {
+      /** Risk per tick at the highest wind mean, before the intensity scale. */
+      baseRisk: 0.0008,
+      /** Front wind mean from which a storm becomes possible at all. */
+      windThreshold: 0.6,
+      /** Risk factor in winter. */
+      winterFactor: 1.5,
+      /** Warning lead and duration in ticks (4 h / 3 h). */
+      warnTicks: 160,
+      durationTicks: 120,
+      severityRange: [0.4, 1] as const,
+      /** Added to the wind speed while the storm blows (× severity). */
+      gust: 0.6,
+      /** Tiles struck per tick at severity 1. */
+      hitsPerTick: 3,
+      /** Draw weights of the target pool. */
+      weights: { line: 4, turbine: 4, plant: 2, building: 1 },
+      /** Damage points per strike, before severity. */
+      damage: { line: 90, turbine: 120, plant: 60, building: 30 },
+    },
+    fire: {
+      baseRisk: 0.0022,
+      /** Fires strike without warning — that is why fire stations pay off. */
+      warnTicks: 0,
+      /** Hard cap (~2 h): nothing burns forever. */
+      durationTicks: 80,
+      severityRange: [0.5, 1] as const,
+      /** Temperature (°C) at which the city starts drying out, and the span to full dryness. */
+      dryTemperature: 8,
+      dryTemperatureSpan: 14,
+      /** Cloud cover from which nothing is dry any more. */
+      dryCloudCeiling: 0.6,
+      /** Ignition draw weight per density level, covered and uncovered. */
+      coveredIgnitionWeight: 1,
+      uncoveredIgnitionWeight: 4,
+      /** Candidate pool size at which the exposure factor saturates at 1. */
+      exposureSaturation: 400,
+      /** Ticks one tile burns; a covered tile loses this many per tick instead of one. */
+      burnTicks: 24,
+      extinguishCovered: 4,
+      /** Per-neighbour ignition chance per tick (× severity). */
+      spreadChance: 0.06,
+      spreadChanceCovered: 0.01,
+      /** Damage points a burning tile takes per tick (× severity). */
+      damagePerTick: 4,
+    },
+    flood: {
+      baseRisk: 0.0018,
+      /** River flow from which a flood becomes possible. */
+      flowThreshold: 0.75,
+      /** Risk factor while a snowpack is melting. */
+      meltFactor: 2,
+      /** Warning lead and duration in ticks (6 h / 8 h). */
+      warnTicks: 240,
+      durationTicks: 320,
+      severityRange: [0.4, 1] as const,
+      /** Elevation levels the water rises above its bed at severity 1. */
+      maxRise: 2,
+      /** Damage points per tick (× severity), plus this much per level of depth. */
+      damagePerTick: 2,
+      depthFactor: 0.5,
+    },
   },
 
   deliveries: {

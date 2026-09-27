@@ -1,5 +1,5 @@
 import { SAVE_VERSION } from '../shared/constants.ts';
-import type { LifetimeSample, SaveGame } from '../shared/types.ts';
+import type { LifetimeSample, SaveGame, SavedDisasters } from '../shared/types.ts';
 
 /** JSON-friendly form of a save game (ArrayBuffers as base64). */
 interface SaveGameJson {
@@ -25,6 +25,8 @@ interface SaveGameJson {
   freeFlowTicks?: number;
   wellStockedTicks?: number;
   transitTicks?: number;
+  disasterScale?: number;
+  disasters?: SavedDisasters;
   layers: Record<string, string>;
 }
 
@@ -78,9 +80,18 @@ export function saveToJson(save: SaveGame): string {
     ...(save.freeFlowTicks !== undefined ? { freeFlowTicks: save.freeFlowTicks } : {}),
     ...(save.wellStockedTicks !== undefined ? { wellStockedTicks: save.wellStockedTicks } : {}),
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
+    ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
+    ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
     layers,
   };
   return JSON.stringify(json, null, 2);
+}
+
+/** Shallow shape check: a hand-edited export must not break the loader. */
+function isSavedDisasters(value: unknown): value is SavedDisasters {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<SavedDisasters>;
+  return typeof candidate.nextId === 'number' && Array.isArray(candidate.events);
 }
 
 /**
@@ -131,6 +142,7 @@ export function saveFromJson(text: string): SaveGame {
     'forest',
     'geothermal',
     'reservoirHeat',
+    'damage',
   ] as const;
   for (const name of optionalLayers) {
     const encoded = parsed.layers[name];
@@ -179,6 +191,8 @@ export function saveFromJson(text: string): SaveGame {
       ? { wellStockedTicks: parsed.wellStockedTicks }
       : {}),
     ...(typeof parsed.transitTicks === 'number' ? { transitTicks: parsed.transitTicks } : {}),
+    ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
+    ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),
     layers,
   };
 }

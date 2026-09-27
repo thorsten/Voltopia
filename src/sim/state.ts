@@ -9,9 +9,11 @@ import { Rng } from '../shared/rng.ts';
 import type {
   DemandStats,
   DeliveryStats,
+  DisasterEvent,
   LifetimeSample,
   EnergyHistoryPoint,
   SaveGame,
+  SavedDisasters,
   SeasonState,
   Speed,
   TileDiff,
@@ -20,6 +22,7 @@ import type {
 } from '../shared/types.ts';
 import {
   DeliveryState,
+  DisasterKind,
   PlantType,
   StopState,
   SupplyStatus,
@@ -157,6 +160,7 @@ export interface UndoEntry {
     plantType: number;
     busStop: number;
     forest: number;
+    damage: number;
   }>;
 }
 
@@ -180,6 +184,8 @@ export interface TileLayers {
   geothermal: Uint8Array;
   /** Quantised reservoir temperature 0..255 (all tiles of a field share one value). */
   reservoirHeat: Uint8Array;
+  /** Damage points per tile: 0 = intact, 1..255 = out of service (persisted). */
+  damage: Uint8Array;
   /** Power line mask per tile (0 = none, else LINE_PRESENT | connection bits). */
   powerLine: Uint8Array;
   /** 1 when the tile is within lineSupplyRadius of an energised line or supply plant. Derived, not persisted. */
@@ -235,6 +241,21 @@ export interface SimState {
   layers: TileLayers;
   /** Hotspot fields, derived from the geothermal layer; never persisted. */
   geothermalFields: GeothermalField[];
+  /**
+   * Disasters in flight. Pending events are warnings with a countdown,
+   * active ones are striking right now. Persisted: the RNG is reseeded on
+   * load, so an event cannot be re-derived from (seed, tick).
+   */
+  disasters: {
+    pending: DisasterEvent[];
+    active: DisasterEvent[];
+    nextId: number;
+    cooldownTicks: number;
+  };
+  /** Disaster intensity: 0 = off, 0.5 mild, 1 normal, 1.6 harsh. */
+  disasterScale: number;
+  /** Money spent on repairs last tick (feeds the budget panel). */
+  lastRepairCost: number;
   vehicles: Vehicle[];
   vans: Van[];
   buses: Bus[];
@@ -355,6 +376,7 @@ export function createTileLayers(size: number): TileLayers {
     forest: new Uint8Array(tiles),
     geothermal: new Uint8Array(tiles),
     reservoirHeat: new Uint8Array(tiles),
+    damage: new Uint8Array(tiles),
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
     services: new Uint8Array(tiles),
@@ -401,6 +423,9 @@ export function createSimState(
     lakeLevel: 0,
     layers: createTileLayers(size),
     geothermalFields: [],
+    disasters: { pending: [], active: [], nextId: 1, cooldownTicks: 0 },
+    disasterScale: 1,
+    lastRepairCost: 0,
     vehicles: [],
     vans: [],
     buses: [],
@@ -497,6 +522,7 @@ export function snapshotTile(state: SimState, index: number): UndoEntry['tiles']
     plantType: layers.plantType[index],
     busStop: layers.busStop[index],
     forest: layers.forest[index],
+    damage: layers.damage[index],
   };
 }
 
@@ -533,6 +559,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       forest: layers.forest[index],
       geothermal: layers.geothermal[index],
       reservoirHeat: layers.reservoirHeat[index],
+      damage: layers.damage[index],
       deliveryState: deliveryStateOfAge(layers.deliveryAge[index]),
       busStop: layers.busStop[index],
       stopState:
@@ -744,6 +771,20 @@ function copyBuffer(view: Uint8Array | Uint32Array): ArrayBuffer {
   return view.slice().buffer as ArrayBuffer;
 }
 
+function savedEvent(event: DisasterEvent, active: boolean): SavedDisasters['events'][number] {
+  return {
+    id: event.id,
+    kind: event.kind,
+    severity: event.severity,
+    startTick: event.startTick,
+    endTick: event.endTick,
+    origin: event.origin,
+    tiles: [...event.tiles],
+    intensity: [...event.intensity],
+    active,
+  };
+}
+
 export function serializeState(state: SimState): SaveGame {
   const { layers } = state;
   return {
@@ -769,6 +810,15 @@ export function serializeState(state: SimState): SaveGame {
     freeFlowTicks: state.goalProgress.freeFlowTicks,
     wellStockedTicks: state.goalProgress.wellStockedTicks,
     transitTicks: state.goalProgress.transitTicks,
+    disasterScale: state.disasterScale,
+    disasters: {
+      nextId: state.disasters.nextId,
+      cooldownTicks: state.disasters.cooldownTicks,
+      events: [
+        ...state.disasters.pending.map((event) => savedEvent(event, false)),
+        ...state.disasters.active.map((event) => savedEvent(event, true)),
+      ],
+    },
     layers: {
       tileType: copyBuffer(layers.tileType),
       roadMask: copyBuffer(layers.roadMask),
@@ -785,6 +835,7 @@ export function serializeState(state: SimState): SaveGame {
       busStop: copyBuffer(layers.busStop),
       geothermal: copyBuffer(layers.geothermal),
       reservoirHeat: copyBuffer(layers.reservoirHeat),
+      damage: copyBuffer(layers.damage),
     },
   };
 }
@@ -836,6 +887,28 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.forest) state.layers.forest.set(new Uint8Array(save.layers.forest));
   if (save.layers.roadClass) state.layers.roadClass.set(new Uint8Array(save.layers.roadClass));
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
+  if (save.layers.damage) state.layers.damage.set(new Uint8Array(save.layers.damage));
+  // A save from before disasters keeps its calm: the city only faces them
+  // when it was founded with an intensity (see NewGameOptions).
+  state.disasterScale = save.disasterScale ?? 0;
+  if (save.disasters) {
+    state.disasters.nextId = save.disasters.nextId;
+    state.disasters.cooldownTicks = save.disasters.cooldownTicks;
+    for (const saved of save.disasters.events) {
+      const event: DisasterEvent = {
+        id: saved.id,
+        kind: saved.kind as DisasterKind,
+        severity: saved.severity,
+        startTick: saved.startTick,
+        endTick: saved.endTick,
+        origin: saved.origin,
+        tiles: [...saved.tiles],
+        intensity: [...saved.intensity],
+      };
+      if (saved.active) state.disasters.active.push(event);
+      else state.disasters.pending.push(event);
+    }
+  }
   if (save.layers.geothermal) {
     state.layers.geothermal.set(new Uint8Array(save.layers.geothermal));
     if (save.layers.reservoirHeat) {

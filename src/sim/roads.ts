@@ -185,6 +185,7 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.variant[tile.index] = tile.variant;
     layers.plantType[tile.index] = tile.plantType;
     layers.forest[tile.index] = tile.forest;
+    layers.damage[tile.index] = tile.damage;
     markDirty(state, tile.index);
   }
   bumpGridVersion(state);
