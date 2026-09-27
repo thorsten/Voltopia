@@ -7,6 +7,7 @@ import {
   type DisasterStats,
 } from '../shared/types.ts';
 import { fireSpec } from './fire.ts';
+import { floodSpec } from './flood.ts';
 import { bumpGridVersion, markDirty, type SimState } from './state.ts';
 import { stormGust, stormSpec } from './storm.ts';
 
@@ -135,7 +136,7 @@ export interface DisasterSpec {
 }
 
 /** Every kind the game rolls for. Filled in by storm.ts, fire.ts, flood.ts. */
-export const DISASTER_SPECS: readonly DisasterSpec[] = [stormSpec, fireSpec];
+export const DISASTER_SPECS: readonly DisasterSpec[] = [stormSpec, fireSpec, floodSpec];
 
 /**
  * One tick of the disaster lifecycle: roll for a new event, activate
