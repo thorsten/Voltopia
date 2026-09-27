@@ -20,7 +20,7 @@ import {
   type GrowthBlocker,
   type TileInfo,
 } from '../shared/types.ts';
-import { useI18n, type TranslationKey } from './i18n.tsx';
+import { disasterLabelKey, useI18n, type TranslationKey } from './i18n.tsx';
 
 /** What felling the woods on a tile of this growth stage costs. */
 function fellingFee(stage: number): number {
@@ -170,6 +170,16 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
           ✕
         </button>
       </header>
+
+      {info.damage > 0 && (
+        <div className="inspector-row inspector-damage" data-testid="inspector-damage">
+          <span>{t('inspector.damage')}</span>
+          <span>
+            {t('inspector.damage.value', { points: info.damage })}
+            {info.disaster !== null && ` · ${t(disasterLabelKey(info.disaster))}`}
+          </span>
+        </div>
+      )}
 
       {(info.terrain === Terrain.Land ||
         (info.terrainBonus > 1 && info.plantType !== PlantType.TidalPlant) ||

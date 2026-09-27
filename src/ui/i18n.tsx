@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { DisasterKind } from '../shared/types.ts';
 
 export type Locale = 'en' | 'de';
 
@@ -481,6 +482,11 @@ const en = {
   'inspect.hotspotQuality': 'Quality',
   'inspect.hotspotWells': 'Wells / capacity',
   'inspect.hotspotHint': 'Hotspot quality and the reservoir temperature of its field.',
+  'disaster.storm': 'Storm',
+  'disaster.fire': 'Fire',
+  'disaster.flood': 'Flood',
+  'inspector.damage': 'damage',
+  'inspector.damage.value': '{points} points · out of service, repair under way',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -971,6 +977,11 @@ const de: Record<TranslationKey, string> = {
   'inspect.hotspotQuality': 'Ergiebigkeit',
   'inspect.hotspotWells': 'Bohrungen / Kapazität',
   'inspect.hotspotHint': 'Ergiebigkeit des Hotspots und Reservoirtemperatur seines Feldes.',
+  'disaster.storm': 'Sturm',
+  'disaster.fire': 'Brand',
+  'disaster.flood': 'Hochwasser',
+  'inspector.damage': 'Schaden',
+  'inspector.damage.value': '{points} Punkte · außer Betrieb, Reparatur läuft',
 };
 
 const translations: Record<Locale, Record<TranslationKey, string>> = { en, de };
@@ -1039,4 +1050,17 @@ export function useI18n(): I18nContextValue {
 export function rejectionKey(code: string): TranslationKey | null {
   const key = `rejection.${code}`;
   return key in en ? (key as TranslationKey) : null;
+}
+
+/**
+ * i18n key for a disaster kind. Lives here (not in a UI component) because
+ * more than one screen needs it — the tile inspector today, a warning
+ * banner later — and the kind-to-key map must exist exactly once.
+ */
+export function disasterLabelKey(kind: DisasterKind): TranslationKey {
+  return kind === DisasterKind.Storm
+    ? 'disaster.storm'
+    : kind === DisasterKind.Fire
+      ? 'disaster.fire'
+      : 'disaster.flood';
 }

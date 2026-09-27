@@ -12,6 +12,7 @@ import { neighbors4, tileX, tileY } from '../shared/grid.ts';
 import type { GrowthBlocker, TileInfo } from '../shared/types.ts';
 import { PlantType, RoadClass, SupplyStatus, Terrain, TileType, Zone } from '../shared/types.ts';
 import { deliveryState, depotInfo, isShopSupplied } from './deliveries.ts';
+import { disasterKindAt } from './disasters.ts';
 import { policeTaxFactor } from './economy.ts';
 import {
   buildingConsumption,
@@ -315,8 +316,7 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     buildingAge: layers.buildingAge[index],
     troubledTicks: layers.troubledTicks[index],
     damage: layers.damage[index],
-    // Task 4 looks this tile up in the active event list.
-    disaster: null,
+    disaster: disasterKindAt(state, index),
     fireCovered: isBuilding && (layers.services[index] & SERVICE_FIRE) !== 0,
     policeCovered: isBuilding && (layers.services[index] & SERVICE_POLICE) !== 0,
     stationActive: tileType === TileType.Plant && isStation(plant) && connected,
