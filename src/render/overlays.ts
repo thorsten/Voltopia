@@ -46,6 +46,14 @@ const TRANSIT_COLORS = {
   depot: 0x5b9bd5,
 } as const;
 
+const DAMAGE_COLORS = { intact: 0x4cd964, light: 0xffb347, heavy: 0xe05263 } as const;
+
+/** Overlay colour of a tile by its damage points. */
+export function damageColor(damage: number): number {
+  if (damage === 0) return DAMAGE_COLORS.intact;
+  return damage < 128 ? DAMAGE_COLORS.light : DAMAGE_COLORS.heavy;
+}
+
 interface OverlayTile {
   zone: Zone;
   density: number;
@@ -58,6 +66,7 @@ interface OverlayTile {
   busStop: number;
   stopState: number;
   transitCover: number;
+  damage: number;
 }
 
 /**
@@ -114,7 +123,8 @@ export class OverlaysMesh implements DiffLayer {
         diff.density > 0 ||
         diff.tileType === TileType.Road ||
         diff.plantType === PlantType.LogisticsDepot ||
-        diff.plantType === PlantType.BusDepot
+        diff.plantType === PlantType.BusDepot ||
+        diff.damage > 0
       ) {
         this.tiles.set(diff.index, {
           zone: diff.zone,
@@ -128,6 +138,7 @@ export class OverlaysMesh implements DiffLayer {
           busStop: diff.busStop,
           stopState: diff.stopState,
           transitCover: diff.transitCover,
+          damage: diff.damage,
         });
       } else {
         this.tiles.delete(diff.index);
@@ -210,6 +221,19 @@ export class OverlaysMesh implements DiffLayer {
                 : tile.transitCover !== 0
                   ? TRANSIT_COLORS.covered
                   : TRANSIT_COLORS.uncovered;
+          }
+        } else if (this.mode === OverlayMode.Damage) {
+          // Every tile that can break shows its state, so the player can
+          // see at a glance what the storm took out. `tile.damage > 0` alone
+          // already reaches a wrecked pylon on otherwise-empty ground: the
+          // damage layer is per-tile, not per-building, and applyDiffs above
+          // tracks any damaged tile regardless of what else is on it.
+          if (
+            tile.damage > 0 ||
+            (tile.tileType === TileType.Empty && tile.density > 0) ||
+            tile.tileType === TileType.Plant
+          ) {
+            colorHex = damageColor(tile.damage);
           }
         }
         if (colorHex === null) continue;

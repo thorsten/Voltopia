@@ -24,6 +24,8 @@ type SimCommandBody =
       save?: SaveGame;
       /** Difficulty: overrides the default starting funds (new games only). */
       startingMoney?: number;
+      /** Disaster intensity: 0 = off .. 1.6 = harsh (new games only). */
+      disasterScale?: number;
     }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'buildRoad'; tiles: number[]; avenue?: boolean }

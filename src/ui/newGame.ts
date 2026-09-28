@@ -6,6 +6,8 @@ export interface NewGameOptions {
   startingMoney: number;
   /** Fixed seed, or null for a random one. */
   seed: number | null;
+  /** Disaster intensity: 0 = off .. 1.6 = harsh, see DISASTER_LEVELS. */
+  disasterScale: number;
 }
 
 export const MAP_SIZES = [48, 64, 96] as const;
@@ -16,10 +18,20 @@ export const DIFFICULTIES = [
   { id: 'hard', startingMoney: 15_000 },
 ] as const;
 
+// Difficulty (starting funds) and disaster intensity are independent
+// dials on purpose — a "hard" city is not forced into harsh disasters.
+export const DISASTER_LEVELS = [
+  { id: 'off', scale: 0 },
+  { id: 'mild', scale: 0.5 },
+  { id: 'normal', scale: 1 },
+  { id: 'harsh', scale: 1.6 },
+] as const;
+
 export const DEFAULT_NEW_GAME: NewGameOptions = {
   size: GRID_SIZE,
   startingMoney: BALANCE.startingMoney,
   seed: null,
+  disasterScale: 1,
 };
 
 const PENDING_KEY = 'voltopia.pendingNewGame';
@@ -61,6 +73,9 @@ function readPendingNewGame(): NewGameOptions {
           ? parsed.startingMoney
           : DEFAULT_NEW_GAME.startingMoney,
       seed: typeof parsed.seed === 'number' ? parsed.seed : null,
+      disasterScale: DISASTER_LEVELS.some((level) => level.scale === parsed.disasterScale)
+        ? (parsed.disasterScale as number)
+        : DEFAULT_NEW_GAME.disasterScale,
     };
   } catch {
     return { ...DEFAULT_NEW_GAME };

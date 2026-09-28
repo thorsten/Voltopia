@@ -147,6 +147,8 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
   for (const index of woodTiles) clearForest(state, index);
 
   if (lineTiles.length > 0) clearPowerLines(state, lineTiles);
+  // Removing the wreck removes the damage with it.
+  for (const index of lineTiles) layers.damage[index] = 0;
   if (stopTiles.length > 0) clearBusStops(state, stopTiles);
   for (const index of clearable) {
     layers.tileType[index] = TileType.Empty;
@@ -157,6 +159,7 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.plantType[index] = 0;
     layers.buildingAge[index] = 0;
     layers.busStop[index] = 0;
+    layers.damage[index] = 0;
     markDirty(state, index);
   }
   for (const index of affected) recomputeRoadMask(state, index);
@@ -185,6 +188,7 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.variant[tile.index] = tile.variant;
     layers.plantType[tile.index] = tile.plantType;
     layers.forest[tile.index] = tile.forest;
+    layers.damage[tile.index] = tile.damage;
     markDirty(state, tile.index);
   }
   bumpGridVersion(state);

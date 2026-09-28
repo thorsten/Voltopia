@@ -35,6 +35,8 @@ export interface SimBridgeOptions {
   save?: SaveGame;
   /** Starting funds for a brand-new city (difficulty setting). */
   startingMoney?: number;
+  /** Disaster intensity for a brand-new city: 0 = off .. 1.6 = harsh. */
+  disasterScale?: number;
 }
 
 const REJECTION_DISPLAY_MS = 2500;
@@ -101,6 +103,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
       seed: options.seed,
       size: options.size ?? GRID_SIZE,
       ...(options.startingMoney !== undefined ? { startingMoney: options.startingMoney } : {}),
+      ...(options.disasterScale !== undefined ? { disasterScale: options.disasterScale } : {}),
       ...(options.save ? { save: options.save } : {}),
     };
     worker.postMessage(init);

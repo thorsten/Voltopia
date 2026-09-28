@@ -30,6 +30,7 @@ export interface MirroredTile {
   stopState: number;
   transitCover: number;
   geothermal: number;
+  damage: number;
 }
 
 export class TileMirror {
@@ -47,6 +48,8 @@ export class TileMirror {
   readonly transitCover: Uint8Array;
   /** Geothermal hotspot quality per tile: 0 = none, 1..3. */
   readonly geothermal: Uint8Array;
+  /** Damage points 0..255 per tile (0 = intact); see disasters.ts. */
+  readonly damage: Uint8Array;
   /** Number of diffs applied so far (0 = nothing received yet). */
   updates = 0;
 
@@ -65,6 +68,7 @@ export class TileMirror {
     this.stopState = new Uint8Array(count);
     this.transitCover = new Uint8Array(count);
     this.geothermal = new Uint8Array(count);
+    this.damage = new Uint8Array(count);
   }
 
   applyDiffs(diffs: TileDiff[]): void {
@@ -83,6 +87,7 @@ export class TileMirror {
       this.stopState[i] = diff.stopState;
       this.transitCover[i] = diff.transitCover;
       this.geothermal[i] = diff.geothermal;
+      this.damage[i] = diff.damage;
     }
     this.updates += diffs.length;
   }
@@ -109,6 +114,7 @@ export class TileMirror {
       stopState: this.stopState[index],
       transitCover: this.transitCover[index],
       geothermal: this.geothermal[index],
+      damage: this.damage[index],
     };
   }
 }

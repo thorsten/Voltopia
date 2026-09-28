@@ -3,6 +3,7 @@ import { OverlayMode, type SaveGame } from '../shared/types.ts';
 import { IndexedDbStorage } from '../storage/indexeddb.ts';
 import type { GameRenderer, RendererCallbacks } from '../render/renderer.ts';
 import { CityVitals } from './CityVitals.tsx';
+import { DisasterBanner } from './DisasterBanner.tsx';
 import { HudConsole } from './HudConsole.tsx';
 import { TimeControls } from './TimeControls.tsx';
 import { TileInspector } from './TileInspector.tsx';
@@ -14,7 +15,13 @@ import { GoalsPanel } from './GoalsPanel.tsx';
 import { Minimap } from './Minimap.tsx';
 import { OverlayToggle } from './OverlayToggle.tsx';
 import { BuildBar } from './BuildBar.tsx';
-import { consumePendingNewGame, storePendingNewGame, type NewGameOptions } from './newGame.ts';
+import type { NewCityOptions } from '../agent/tools.ts';
+import {
+  consumePendingNewGame,
+  DEFAULT_NEW_GAME,
+  storePendingNewGame,
+  type NewGameOptions,
+} from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
 import { StatsPage } from './StatsPage.tsx';
@@ -95,6 +102,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     seed: save?.seed ?? options.seed ?? Date.now() % 2147483647,
     size: gridSize,
     startingMoney: options.startingMoney,
+    disasterScale: options.disasterScale,
     ...(save ? { save } : {}),
   });
   const callbacksRef = useRef<RendererCallbacks>({});
@@ -169,8 +177,13 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
 
   // Agent tools (WebMCP + window.voltopia); a new city from a tool goes
   // through the same pending-options reload as the new-game dialog.
-  const startNewCityFromTool = useCallback((options: NewGameOptions) => {
-    storePendingNewGame(options);
+  // start_new_city always supplies disasterScale, but NewCityOptions
+  // leaves it optional (other callers may not), so fill the default here too.
+  const startNewCityFromTool = useCallback((options: NewCityOptions) => {
+    storePendingNewGame({
+      ...options,
+      disasterScale: options.disasterScale ?? DEFAULT_NEW_GAME.disasterScale,
+    });
     void storage.clear().then(() => window.location.reload());
   }, []);
   useAgentTools(bridge, gridSize, startNewCityFromTool);
@@ -254,6 +267,13 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               stats={stats}
               onSetSpeed={(speed) => bridge.send({ type: 'setSpeed', speed })}
               onNewGame={() => setPage('newGame')}
+            />
+          )}
+          {stats && (
+            <DisasterBanner
+              disasters={stats.disasters}
+              onWarning={() => sound.play('alarm')}
+              onStrike={() => sound.play('alarm')}
             />
           )}
         </div>

@@ -196,7 +196,9 @@ describe('energyStep', () => {
     state.weather.windSpeed = 0;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.wind).toBe(0);
-    state.weather.windSpeed = 1;
+    // Below the turbine cut-out speed, so full peak output — see
+    // storm.test.ts for what happens at and above the cut-out.
+    state.weather.windSpeed = 0.9;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.wind).toBeCloseTo(BALANCE.energy.windPeakOutput, 3);
   });
@@ -370,7 +372,7 @@ describe('energyStep', () => {
   it('serves charging demand and accounts it separately', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.WindTurbine);
-    state.weather.windSpeed = 1;
+    state.weather.windSpeed = 0.9; // below the cut-out: full peak output
     energyStep(state, { chargingDemand: 10 });
     expect(state.lastEnergy.chargingConsumption).toBe(10);
     const surplus = BALANCE.energy.windPeakOutput - 10;
@@ -594,7 +596,7 @@ describe('terrain energy bonuses', () => {
   it('flat maps reproduce the unbonused outputs', () => {
     const state = makeState();
     placePlant(state, at(3, 3), PlantType.WindTurbine);
-    state.weather.windSpeed = 1;
+    state.weather.windSpeed = 0.9; // below the cut-out: full peak output
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.wind).toBeCloseTo(BALANCE.energy.windPeakOutput);
   });
@@ -606,7 +608,7 @@ describe('terrain energy bonuses', () => {
     // Keep the tile buildable for the placement helper: raise neighbours too.
     for (const n of neighbors4(tile, SIZE)) state.layers.elevation[n] = 7;
     placePlant(state, tile, PlantType.WindTurbine);
-    state.weather.windSpeed = 1;
+    state.weather.windSpeed = 0.9; // below the cut-out: full peak output
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.wind).toBeCloseTo(
       BALANCE.energy.windPeakOutput * (1 + BALANCE.terrain.windBonusPerLevel * 7),
@@ -1144,7 +1146,9 @@ describe('market trading', () => {
   function setCheapNoon(state: SimState): void {
     state.tick = TICKS_PER_DAY / 2;
     state.weather.cloudCover = 0;
-    state.weather.windSpeed = 1;
+    // Below the cut-out: the turbines still run flat out, so the market
+    // still reads this as abundant, cheap wind.
+    state.weather.windSpeed = 0.9;
     state.season = { ...state.season, sunrise: SUNRISE, sunset: SUNSET, solarStrength: 1 };
   }
 

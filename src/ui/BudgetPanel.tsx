@@ -51,6 +51,7 @@ const EXPENSE_COLORS: Record<string, string> = {
   [PlantType.LogisticsDepot]: '#8d99a6',
   [PlantType.BusDepot]: '#5b8fc7',
   fuel: '#d98f54',
+  repair: '#c47a9e',
   import: 'var(--hud-negative)',
 };
 
@@ -182,6 +183,12 @@ export function BudgetPanel({ budget }: { budget: BudgetStats }) {
       label: t('budget.biogasFuel'),
       value: perDay(budget.biogasFuelCost),
       color: EXPENSE_COLORS.fuel,
+    },
+    {
+      key: 'repair',
+      label: t('budget.repair'),
+      value: perDay(budget.repair),
+      color: EXPENSE_COLORS.repair,
     },
     {
       key: 'import',

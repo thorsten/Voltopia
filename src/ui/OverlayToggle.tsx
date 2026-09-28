@@ -44,6 +44,12 @@ const MODES: Array<{
     label: 'overlay.transit',
     title: 'overlay.transit.title',
   },
+  {
+    mode: OverlayMode.Damage,
+    id: 'damage',
+    label: 'overlay.damage',
+    title: 'overlay.damage.title',
+  },
 ];
 
 export function OverlayToggle({

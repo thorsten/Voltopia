@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { GlobalStats, TileDiff, VehicleState } from '../shared/types.ts';
-import { PlantType, Terrain, TileType } from '../shared/types.ts';
+import { DisasterKind, PlantType, Terrain, TileType } from '../shared/types.ts';
 import { IsoCamera } from './camera.ts';
 import { groundPointAtNdc, pickTile } from './picking.ts';
 import { nightFactor, sunIntensity } from '../shared/daylight.ts';
@@ -22,6 +22,7 @@ import { ForestMesh } from './forestMesh.ts';
 import { GeothermalMesh } from './geothermalMesh.ts';
 import { ZoneTilesMesh } from './zoneTilesMesh.ts';
 import { WaterMesh } from './waterMesh.ts';
+import { DisasterMesh } from './disasterMesh.ts';
 
 export interface PickedTile {
   index: number;
@@ -148,6 +149,7 @@ export class GameRenderer {
   /** One-pixel-per-tile city image for the UI minimap. */
   minimap!: MinimapLayer;
   private weatherFx!: WeatherFx;
+  private disasters!: DisasterMesh;
   private readonly setGridVisible: (visible: boolean) => void;
   private readonly setTerrainEnvironment: (environment: RenderEnvironment) => void;
   private hoveredIndex: number | null = null;
@@ -195,6 +197,8 @@ export class GameRenderer {
     this.addDiffLayer(new ZoneTilesMesh(scene, gridSize, this.elevation));
     this.addDiffLayer(new BuildingsMesh(scene, gridSize, this.elevation));
     this.addDiffLayer(new PlantsMesh(scene, gridSize, this.elevation));
+    this.disasters = new DisasterMesh(scene, gridSize, this.elevation);
+    this.addDiffLayer(this.disasters);
     this.vehiclesMesh = new VehiclesMesh(scene, this.elevation, (index) => this.terrainAt(index));
     this.overlays = new OverlaysMesh(scene, gridSize, this.elevation);
     this.addDiffLayer(this.overlays);
@@ -362,7 +366,11 @@ export class GameRenderer {
     const environment: RenderEnvironment = {
       nightFactor: night,
       sunFactor,
-      windFactor: Math.min(1, stats.weather.windSpeed),
+      // Gust-inclusive, matching effectiveWind() in the sim: turbines cut
+      // out on windSpeed + gust, so the rotors must slow with the same
+      // value or they'd keep spinning flat out through a storm while the
+      // plant generates nothing underneath them.
+      windFactor: Math.min(1, stats.weather.windSpeed + stats.weather.gust),
       stateOfCharge:
         stats.energy.storageCapacity > 0
           ? stats.energy.storedEnergy / stats.energy.storageCapacity
@@ -410,6 +418,14 @@ export class GameRenderer {
     this.weatherFx.setCloudCover(stats.weather.cloudCover);
     this.setTerrainEnvironment(environment);
     this.vehiclesMesh.setEnvironment(environment);
+
+    // Which tiles are inside which active event: the mesh needs the kind,
+    // the tile diff channel only carries the damage.
+    const kinds = new Map<number, DisasterKind>();
+    for (const event of stats.disasters.active) {
+      for (const index of event.tiles) kinds.set(index, event.kind);
+    }
+    this.disasters.setActiveKinds(kinds);
   }
 
   setVehicles(vehicles: VehicleState[]): void {

@@ -1,6 +1,7 @@
 import { BALANCE } from '../shared/constants.ts';
 import { tileX, tileY } from '../shared/grid.ts';
 import { PlantType, SupplyStatus, TileType } from '../shared/types.ts';
+import { damagedBuildingShare } from './disasters.ts';
 import { seaCoverage } from './sea.ts';
 import { forestCoverage } from './forest.ts';
 import type { SimState } from './state.ts';
@@ -74,6 +75,12 @@ export function happinessStep(state: SimState, population: number): void {
       ? (1 - state.lastServices.police) * services.policePenaltyWeight
       : 0;
 
+  const disasters = BALANCE.disasters;
+  // Wrecked homes weigh permanently; an event in progress frightens the
+  // whole city while it runs.
+  const damagePenalty = damagedBuildingShare(state) * disasters.damagedPenaltyWeight;
+  const eventPenalty = state.disasters.active.length > 0 ? disasters.activeEventPenalty : 0;
+
   const target = Math.min(
     1,
     Math.max(
@@ -85,7 +92,9 @@ export function happinessStep(state: SimState, population: number): void {
         taxPenalty -
         supplyPenalty -
         commutePenalty -
-        policePenalty,
+        policePenalty -
+        damagePenalty -
+        eventPenalty,
     ),
   );
   state.happiness += (target - state.happiness) * config.smoothing;

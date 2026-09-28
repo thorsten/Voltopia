@@ -4,6 +4,7 @@ import { useI18n, type TranslationKey } from './i18n.tsx';
 import {
   DEFAULT_NEW_GAME,
   DIFFICULTIES,
+  DISASTER_LEVELS,
   MAP_SIZES,
   seedFromText,
   storePendingNewGame,
@@ -21,6 +22,7 @@ export function NewGamePage({
   const [size, setSize] = useState<number>(DEFAULT_NEW_GAME.size);
   const [difficulty, setDifficulty] = useState<string>('normal');
   const [seedText, setSeedText] = useState('');
+  const [disasters, setDisasters] = useState<number>(DEFAULT_NEW_GAME.disasterScale);
 
   const start = (): void => {
     const chosen = DIFFICULTIES.find((d) => d.id === difficulty) ?? DIFFICULTIES[1];
@@ -28,6 +30,7 @@ export function NewGamePage({
       size,
       startingMoney: chosen.startingMoney,
       seed: seedFromText(seedText),
+      disasterScale: disasters,
     });
     onStart();
   };
@@ -66,6 +69,23 @@ export function NewGamePage({
             </button>
           ))}
         </div>
+      </section>
+      <section>
+        <h3>{t('newGame.disasters')}</h3>
+        <div className="option-row">
+          {DISASTER_LEVELS.map((level) => (
+            <button
+              key={level.id}
+              type="button"
+              className={disasters === level.scale ? 'active' : ''}
+              data-testid={`disasters-${level.id}`}
+              onClick={() => setDisasters(level.scale)}
+            >
+              {t(`newGame.disasters.${level.id}` as TranslationKey)}
+            </button>
+          ))}
+        </div>
+        <p className="option-hint">{t('newGame.disasters.hint')}</p>
       </section>
       <section>
         <h3>{t('newGame.seed')}</h3>

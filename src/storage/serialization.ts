@@ -1,5 +1,5 @@
 import { SAVE_VERSION } from '../shared/constants.ts';
-import type { LifetimeSample, SaveGame } from '../shared/types.ts';
+import type { LifetimeSample, SaveGame, SavedDisasters } from '../shared/types.ts';
 
 /** JSON-friendly form of a save game (ArrayBuffers as base64). */
 interface SaveGameJson {
@@ -25,6 +25,8 @@ interface SaveGameJson {
   freeFlowTicks?: number;
   wellStockedTicks?: number;
   transitTicks?: number;
+  disasterScale?: number;
+  disasters?: SavedDisasters;
   layers: Record<string, string>;
 }
 
@@ -78,9 +80,50 @@ export function saveToJson(save: SaveGame): string {
     ...(save.freeFlowTicks !== undefined ? { freeFlowTicks: save.freeFlowTicks } : {}),
     ...(save.wellStockedTicks !== undefined ? { wellStockedTicks: save.wellStockedTicks } : {}),
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
+    ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
+    ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
     layers,
   };
   return JSON.stringify(json, null, 2);
+}
+
+/** Shallow shape check: a hand-edited export must not break the loader. */
+function isSavedDisasterEvent(value: unknown): value is SavedDisasters['events'][number] {
+  if (typeof value !== 'object' || value === null) return false;
+  const e = value as Partial<SavedDisasters['events'][number]>;
+  return (
+    typeof e.id === 'number' &&
+    typeof e.kind === 'number' &&
+    typeof e.severity === 'number' &&
+    typeof e.startTick === 'number' &&
+    typeof e.endTick === 'number' &&
+    typeof e.origin === 'number' &&
+    Array.isArray(e.tiles) &&
+    e.tiles.every((t) => typeof t === 'number') &&
+    Array.isArray(e.intensity) &&
+    e.intensity.every((n) => typeof n === 'number') &&
+    typeof e.active === 'boolean'
+  );
+}
+
+/**
+ * Shallow shape check: a hand-edited export must not break the loader.
+ * A missing/malformed cooldownTicks would become undefined or NaN, where
+ * both `> 0` and `=== 0` are false — the city would never roll another
+ * disaster again. So validate every field the loader actually reads, not
+ * just nextId/events, and let the caller drop the whole block on failure:
+ * a city with no events in flight is a safe fallback, one that can never
+ * face another disaster is not.
+ */
+function isSavedDisasters(value: unknown): value is SavedDisasters {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<SavedDisasters>;
+  return (
+    typeof candidate.nextId === 'number' &&
+    typeof candidate.cooldownTicks === 'number' &&
+    Array.isArray(candidate.events) &&
+    candidate.events.every(isSavedDisasterEvent)
+  );
 }
 
 /**
@@ -131,6 +174,7 @@ export function saveFromJson(text: string): SaveGame {
     'forest',
     'geothermal',
     'reservoirHeat',
+    'damage',
   ] as const;
   for (const name of optionalLayers) {
     const encoded = parsed.layers[name];
@@ -179,6 +223,8 @@ export function saveFromJson(text: string): SaveGame {
       ? { wellStockedTicks: parsed.wellStockedTicks }
       : {}),
     ...(typeof parsed.transitTicks === 'number' ? { transitTicks: parsed.transitTicks } : {}),
+    ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
+    ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),
     layers,
   };
 }

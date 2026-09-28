@@ -2,6 +2,7 @@ import { TICKS_PER_DAY } from '../shared/constants.ts';
 import { PlantType, RoadClass } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
+import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
@@ -49,6 +50,9 @@ export function stepTick(state: SimState): void {
     cloudCover: state.weather.cloudCover,
   });
   updateWeather(state);
+  // Before generation and connectivity: this tick's damage must already
+  // be in effect when the energy balance is computed.
+  disastersStep(state);
   const occupancy = vehiclesStep(state);
   deliveriesStep(state, occupancy);
   state.lastDeliveries = deliveryStats(state);
@@ -66,6 +70,8 @@ export function stepTick(state: SimState): void {
   forestStep(state);
   const { population, jobs } = countPopulationAndJobs(state);
   economyStep(state, population, jobs);
+  // After the income of this tick has landed: repairs are paid out of it.
+  repairStep(state);
   happinessStep(state, population);
   goalsStep(state);
   recordLifetime(state, population, jobs);
@@ -204,6 +210,7 @@ export function buildStats(state: SimState): GlobalStats {
     marketTrading: state.marketTrading,
     insulation: state.insulation,
     services: { ...state.lastServices },
+    disasters: disasterStats(state),
     forestShare: forestShare(state),
     tide: tideState(state.tick),
     traffic: {
@@ -256,6 +263,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     busStops: b.busStops,
     busStopUpkeep: b.busStopUpkeep,
     biogasFuelCost: b.biogasFuelCost,
+    repair: state.lastRepairCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +
@@ -264,6 +272,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       b.gridUpkeep -
       b.plantUpkeep -
       b.biogasFuelCost -
-      b.gridImportCost,
+      b.gridImportCost -
+      state.lastRepairCost,
   };
 }

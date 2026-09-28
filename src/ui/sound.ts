@@ -3,7 +3,7 @@
  * The AudioContext is created lazily on the first (user-gesture-driven)
  * play call, satisfying autoplay policies.
  */
-export type SoundKind = 'click' | 'build' | 'reject' | 'achievement';
+export type SoundKind = 'click' | 'build' | 'reject' | 'achievement' | 'alarm';
 
 class SoundManager {
   enabled = true;
@@ -33,6 +33,12 @@ class SoundManager {
         this.tone(now, 523.25, 0.12, 0.25, 'sine');
         this.tone(now + 0.1, 659.25, 0.12, 0.25, 'sine');
         this.tone(now + 0.2, 783.99, 0.22, 0.25, 'sine');
+        break;
+      case 'alarm':
+        // Two-tone descending beep: unmistakably a warning, but short
+        // enough not to grate when a storm's countdown fires it once.
+        this.tone(now, 660, 0.16, 0.28, 'square');
+        this.tone(now + 0.18, 440, 0.22, 0.28, 'square');
         break;
     }
   }

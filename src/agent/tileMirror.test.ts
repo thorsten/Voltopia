@@ -1,7 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { PlantType, SupplyStatus, Terrain, TileType, Zone } from '../shared/types.ts';
+import {
+  PlantType,
+  SupplyStatus,
+  Terrain,
+  TileType,
+  type TileDiff,
+  Zone,
+} from '../shared/types.ts';
 import { SimEngine } from '../sim/engine.ts';
 import { TileMirror } from './tileMirror.ts';
+
+/** An all-zero diff for one tile, so a test only spells out the field it cares about. */
+function emptyDiff(index: number): TileDiff {
+  return {
+    index,
+    tileType: TileType.Empty,
+    roadMask: 0,
+    roadClass: 0,
+    trafficLoad: 0,
+    powerLine: 0,
+    zone: Zone.None,
+    density: 0,
+    variant: 0,
+    supplied: SupplyStatus.NotConnected,
+    services: 0,
+    plantType: PlantType.None,
+    terrain: Terrain.Land,
+    elevation: 0,
+    forest: 0,
+    geothermal: 0,
+    reservoirHeat: 0,
+    damage: 0,
+    deliveryState: 0,
+    busStop: 0,
+    stopState: 0,
+    transitCover: 0,
+  };
+}
 
 describe('TileMirror', () => {
   it('mirrors the full grid from the first tick and follows later diffs', () => {
@@ -31,6 +66,12 @@ describe('TileMirror', () => {
     expect(tile.index).toBe(land);
   });
 
+  it('mirrors the damage layer', () => {
+    const mirror = new TileMirror(4);
+    mirror.applyDiffs([{ ...emptyDiff(2), damage: 77 }]);
+    expect(mirror.damage[2]).toBe(77);
+  });
+
   it('ignores out-of-range diffs and reports bounds', () => {
     const mirror = new TileMirror(4);
     mirror.applyDiffs([
@@ -42,6 +83,7 @@ describe('TileMirror', () => {
         forest: 0,
         geothermal: 0,
         reservoirHeat: 0,
+        damage: 0,
         trafficLoad: 0,
         powerLine: 0,
         zone: Zone.None,

@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex } from '../shared/grid.ts';
-import { DeliveryState, RoadClass, StopState, TileType } from '../shared/types.ts';
+import { DeliveryState, DisasterKind, RoadClass, StopState, TileType } from '../shared/types.ts';
 import { syncFleet } from './deliveries.ts';
+import { addDamage } from './disasters.ts';
 import { economyStep } from './economy.ts';
 import { buildingConsumption, placePlant } from './energy.ts';
 import { discoverGeothermalFields } from './geothermal.ts';
@@ -46,7 +47,7 @@ describe('inspectTile', () => {
   it('reports plant upkeep and generation', () => {
     const state = createSimState(1, SIZE);
     placePlant(state, at(10, 10), PlantType.WindTurbine);
-    state.weather.windSpeed = 1;
+    state.weather.windSpeed = 0.9; // below the cut-out: full peak output
     const info = inspectTile(state, at(10, 10))!;
     expect(info.upkeepPerTick).toBeCloseTo(BALANCE.upkeepPerTick.plant[PlantType.WindTurbine], 9);
     expect(info.generation).toBeGreaterThan(0);
@@ -242,6 +243,32 @@ describe('inspectTile', () => {
     // — both come from the same offshore factor, not two different ones.
     expect(info.terrainBonus).toBeCloseTo(expectedBonus, 5);
     expect(info.peakGeneration).toBeCloseTo(BALANCE.energy.windPeakOutput * expectedBonus, 5);
+  });
+
+  it('reports the damage of a tile and the event covering it', () => {
+    const state = createSimState(1, SIZE);
+    placePlant(state, at(5, 5), PlantType.WindTurbine);
+    addDamage(state, at(5, 5), 60);
+    state.disasters.active.push({
+      id: 1,
+      kind: DisasterKind.Storm,
+      severity: 1,
+      startTick: 0,
+      endTick: 100,
+      origin: at(5, 5),
+      tiles: [at(5, 5)],
+      intensity: [0],
+    });
+    const info = inspectTile(state, at(5, 5))!;
+    expect(info.damage).toBe(60);
+    expect(info.disaster).toBe(DisasterKind.Storm);
+  });
+
+  it('reports an intact tile as undamaged with no event', () => {
+    const state = createSimState(1, SIZE);
+    const info = inspectTile(state, at(9, 9))!;
+    expect(info.damage).toBe(0);
+    expect(info.disaster).toBe(null);
   });
 });
 

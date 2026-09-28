@@ -108,7 +108,7 @@ interface PlantCensus {
 }
 
 export function censusPlants(state: SimState): PlantCensus {
-  const { tileType, plantType, geothermal, reservoirHeat } = state.layers;
+  const { tileType, plantType, geothermal, reservoirHeat, damage } = state.layers;
   const census: PlantCensus = {
     solarFarms: 0,
     windTurbines: 0,
@@ -133,6 +133,9 @@ export function censusPlants(state: SimState): PlantCensus {
   };
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant) continue;
+    // A damaged plant is out of service: no generation, no storage
+    // capacity, no coverage. It heals through repairStep.
+    if (damage[i] !== 0) continue;
     const plant = plantType[i] as PlantType;
     switch (plant) {
       case PlantType.SolarFarm:
@@ -331,6 +334,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   // Service stations draw a fixed load while connected to the grid.
   for (let i = 0; i < layers.tileType.length; i++) {
     if (layers.tileType[i] !== TileType.Plant) continue;
+    if (layers.damage[i] !== 0) continue;
     if (!isStation(layers.plantType[i] as PlantType)) continue;
     if (layers.energized[i] === 1) buildingDemand += BALANCE.services.stationConsumption;
   }
@@ -338,6 +342,12 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const connectedBuildings: number[] = [];
   for (let i = 0; i < layers.tileType.length; i++) {
     if (layers.tileType[i] !== TileType.Empty || layers.density[i] === 0) continue;
+    // A damaged building draws nothing and reads as cut off, so the
+    // existing troubled-supply path (happiness, decay) covers it.
+    if (layers.damage[i] !== 0) {
+      setSupplied(state, i, SupplyStatus.NotConnected);
+      continue;
+    }
     const connected = layers.energized[i] === 1;
     if (!connected) {
       setSupplied(state, i, SupplyStatus.NotConnected);

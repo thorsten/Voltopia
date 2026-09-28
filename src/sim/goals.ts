@@ -1,5 +1,5 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import { PlantType } from '../shared/types.ts';
+import { DisasterKind, PlantType } from '../shared/types.ts';
 import { hasPowerInfrastructure } from './energy.ts';
 import { hasPowerLines } from './powerLines.ts';
 import { countPlants, countPopulationAndJobs, type SimState } from './state.ts';
@@ -21,6 +21,7 @@ export const GOAL_IDS = [
   'wellStocked',
   'modalShift',
   'geothermalBaseload',
+  'stormProof',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -109,6 +110,24 @@ export function goalsStep(state: SimState): void {
   }
 
   const achieved = state.goalsAchieved;
+
+  // Riding out a storm: count the ticks a storm blows while the grid
+  // holds, and bank the goal the moment the storm is over. A deficit sends
+  // the streak negative, and it must stay negative for the rest of this
+  // storm — a later good tick may not erase an earlier one, or a long
+  // enough storm would always climb back into achieving territory.
+  const inStorm = state.disasters.active.some((event) => event.kind === DisasterKind.Storm);
+  if (inStorm) {
+    if (state.lastEnergy.deficit !== 0) {
+      progress.stormTicks = -1;
+    } else if (progress.stormTicks >= 0) {
+      progress.stormTicks++;
+    }
+  } else {
+    if (!achieved.has('stormProof') && progress.stormTicks > 0) achieved.add('stormProof');
+    progress.stormTicks = 0;
+  }
+
   if (!achieved.has('firstPower') && hasPowerInfrastructure(state)) {
     achieved.add('firstPower');
   }
@@ -172,5 +191,10 @@ export function goalsStep(state: SimState): void {
 }
 
 export function goalStates(state: SimState): GoalState[] {
-  return GOAL_IDS.map((id) => ({ id, achieved: state.goalsAchieved.has(id) }));
+  // stormProof can only ever unlock while disasters can happen. With the
+  // intensity off (an old save, or a city founded with disasters off) it
+  // would sit forever as one goal nobody can complete — omit it instead so
+  // the achieved/total count reflects what this city can actually reach.
+  const ids = state.disasterScale === 0 ? GOAL_IDS.filter((id) => id !== 'stormProof') : GOAL_IDS;
+  return ids.map((id) => ({ id, achieved: state.goalsAchieved.has(id) }));
 }

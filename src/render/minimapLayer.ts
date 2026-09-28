@@ -12,6 +12,8 @@ const COLORS = {
   sea: '#2f6ea8',
   powerLine: '#e8d76a',
   busStop: '#f2d16b',
+  /** Same heavy-damage red as the Damage overlay (overlays.ts DAMAGE_COLORS.heavy). */
+  damaged: '#e05263',
   zoned: {
     [Zone.Residential]: '#a9d3ab',
     [Zone.Commercial]: '#a9c3e0',
@@ -79,6 +81,11 @@ export class MinimapLayer implements DiffLayer {
   }
 
   private tileColor(diff: TileDiff): string {
+    // Wrecked tiles read as wrecked from the minimap too, regardless of
+    // what stands on them — matches the Damage overlay's own rule that
+    // `damage > 0` alone is enough to mark a tile, even a bare wrecked
+    // pylon on otherwise-empty ground.
+    if (diff.damage > 0) return COLORS.damaged;
     if (diff.tileType === TileType.Empty && diff.terrain !== Terrain.Land) {
       if (diff.terrain === Terrain.River) return COLORS.river;
       if (diff.terrain === Terrain.Sea) return COLORS.sea;

@@ -3,6 +3,7 @@
  * to a new city. Docked into the top-right corner, opposite the vitals.
  */
 import { BALANCE } from '../shared/constants.ts';
+import { effectiveWind } from '../sim/weather.ts';
 import type { GlobalStats, SeasonId, Speed, TideState } from '../shared/types.ts';
 import { Clock } from './Clock.tsx';
 import { useI18n, type TranslationKey } from './i18n.tsx';
@@ -45,7 +46,10 @@ export function TimeControls({
           })}
         </span>
         <span>☁️ {Math.round(stats.weather.cloudCover * 100)}%</span>
-        <span>💨 {Math.round(stats.weather.windSpeed * 100)}%</span>
+        {/* Gust-inclusive: turbines cut out on effectiveWind(), so the bare
+            windSpeed would under-report during a storm while the fleet
+            correctly stops — reading as a bug. */}
+        <span>💨 {Math.round(effectiveWind(stats.weather) * 100)}%</span>
       </div>
       <div
         className="hud-stat"

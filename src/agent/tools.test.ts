@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
-import { PlantType, Terrain, TileType, Zone, type GlobalStats } from '../shared/types.ts';
+import {
+  DisasterKind,
+  PlantType,
+  Terrain,
+  TileType,
+  Zone,
+  type GlobalStats,
+} from '../shared/types.ts';
+import { addDamage } from '../sim/disasters.ts';
 import { SimEngine } from '../sim/engine.ts';
 import { discoverGeothermalFields } from '../sim/geothermal.ts';
 import { isCoastalSea } from '../sim/sea.ts';
@@ -123,6 +131,7 @@ describe('agent tools: reading', () => {
       'inspect_tile',
       'find_tiles',
       'get_lifetime_stats',
+      'get_disasters',
       'build_road',
       'build_power_line',
       'build_bus_stop',
@@ -145,7 +154,7 @@ describe('agent tools: reading', () => {
       expect(tool.inputSchema.type).toBe('object');
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toHaveLength(7);
+    expect(readOnly).toHaveLength(8);
   });
 
   it('get_game_overview reports funds, clock, goals and counts', async () => {
@@ -275,6 +284,62 @@ describe('agent tools: reading', () => {
     await call('advance_time', { days: 1 });
     const after = await call('get_lifetime_stats');
     expect(after.days).toBe(1);
+  });
+
+  it('get_disasters reports intensity, warnings and active events', async () => {
+    const { call, engine } = createHarness();
+    engine.state.disasters.pending.push({
+      id: 5,
+      kind: DisasterKind.Flood,
+      severity: 0.8,
+      startTick: engine.state.tick + 120,
+      endTick: engine.state.tick + 400,
+      origin: 0,
+      tiles: [0, 1],
+      intensity: [1, 2],
+    });
+    // Pushing straight onto engine.state (bypassing the normal schedule()
+    // path) marks nothing dirty, so the harness's cached GlobalStats would
+    // still show no pending events. inspect_tile is the one tool whose
+    // sendCommand branch forces a fresh, un-ticked snapshot (see the
+    // harness's sendCommand above) — exactly what's needed here, since
+    // advancing a tick would shift ticksAway off the expected 120.
+    await call('inspect_tile', { x: 0, y: 0 });
+    const result = (await call('get_disasters')) as {
+      intensity: number;
+      warnings: Array<{ kind: string; ticksAway: number; tiles: number }>;
+      active: unknown[];
+      damagedTiles: number;
+    };
+    expect(result.intensity).toBeGreaterThan(0);
+    expect(result.warnings[0].kind).toBe('flood');
+    expect(result.warnings[0].ticksAway).toBe(120);
+    expect(result.active).toHaveLength(0);
+    expect(result.damagedTiles).toBe(0);
+  });
+
+  it('find_tiles finds damaged tiles', async () => {
+    const { call, engine } = createHarness();
+    const index = tileIndex(5, 5, SIZE);
+    addDamage(engine.state, index, 50);
+    // addDamage marks the tile dirty itself; the tick carries it into the mirror.
+    await call('advance_time', { ticks: 1 });
+    const found = (await call('find_tiles', { kind: 'damaged' })) as {
+      tiles: Array<{ x: number; y: number }>;
+    };
+    expect(found.tiles).toContainEqual({ x: 5, y: 5 });
+  });
+
+  it('inspect_tile reports the damage', async () => {
+    const { call, engine } = createHarness();
+    addDamage(engine.state, tileIndex(6, 6, SIZE), 42);
+    // No advance_time here: a real tick also runs repairStep, which would
+    // heal a point straight back off before this assertion ever sees it.
+    // inspect_tile's own sendCommand already forces an un-ticked snapshot
+    // (see 'get_disasters' above), which is all the diff needs to reach
+    // both the tile mirror and the inspected-tile figures.
+    const info = (await call('inspect_tile', { x: 6, y: 6 })) as { damage: number };
+    expect(info.damage).toBe(42);
   });
 });
 
@@ -431,9 +496,31 @@ describe('agent tools: building', () => {
     const { call, newCities } = createHarness();
     const result = await call('start_new_city', { size: 48, difficulty: 'hard', seed: 7 });
     expect(result).toMatchObject({ ok: true, size: 48, difficulty: 'hard', seed: 7 });
-    expect(newCities).toEqual([{ size: 48, startingMoney: 15_000, seed: 7 }]);
+    // Disaster intensity defaults to "normal" (scale 1) when the caller
+    // does not choose one, exactly like the new-game dialog.
+    expect(newCities).toEqual([{ size: 48, startingMoney: 15_000, seed: 7, disasterScale: 1 }]);
     await call('start_new_city');
-    expect(newCities[1]).toEqual({ size: 64, startingMoney: BALANCE.startingMoney, seed: null });
+    expect(newCities[1]).toEqual({
+      size: 64,
+      startingMoney: BALANCE.startingMoney,
+      seed: null,
+      disasterScale: 1,
+    });
+  });
+
+  it('start_new_city maps a chosen disaster level to the host options', async () => {
+    const { call, newCities } = createHarness();
+    const result = await call('start_new_city', { disasters: 'harsh' });
+    expect(result).toMatchObject({ ok: true, disasters: 'harsh' });
+    expect(newCities[0]).toMatchObject({ disasterScale: 1.6 });
+
+    await call('start_new_city', { disasters: 'off' });
+    expect(newCities[1]).toMatchObject({ disasterScale: 0 });
+
+    expect(await call('start_new_city', { disasters: 'catastrophic' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
   });
 
   it('places a logistics depot next to a road and reports deliveries', async () => {

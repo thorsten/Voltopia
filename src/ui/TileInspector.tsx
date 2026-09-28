@@ -20,7 +20,7 @@ import {
   type GrowthBlocker,
   type TileInfo,
 } from '../shared/types.ts';
-import { useI18n, type TranslationKey } from './i18n.tsx';
+import { disasterLabelKey, useI18n, type TranslationKey } from './i18n.tsx';
 
 /** What felling the woods on a tile of this growth stage costs. */
 function fellingFee(stage: number): number {
@@ -170,6 +170,23 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
           ✕
         </button>
       </header>
+
+      {info.damage > 0 && (
+        <div className="inspector-row inspector-damage" data-testid="inspector-damage">
+          <span>{t('inspector.damage')}</span>
+          <span>
+            {/* repairStep skips tiles inside an active event, so while the
+                disaster still covers this tile "repair under way" would be
+                a lie — repairs are frozen exactly then, not progressing. */}
+            {info.disaster !== null
+              ? t('inspector.damage.frozen', {
+                  points: info.damage,
+                  event: t(disasterLabelKey(info.disaster)),
+                })
+              : t('inspector.damage.value', { points: info.damage })}
+          </span>
+        </div>
+      )}
 
       {(info.terrain === Terrain.Land ||
         (info.terrainBonus > 1 && info.plantType !== PlantType.TidalPlant) ||

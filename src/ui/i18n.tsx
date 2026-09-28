@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { DisasterKind } from '../shared/types.ts';
 
 export type Locale = 'en' | 'de';
 
@@ -170,6 +171,13 @@ const en = {
   'newGame.difficulty.easy': 'Easy',
   'newGame.difficulty.normal': 'Normal',
   'newGame.difficulty.hard': 'Hard',
+  'newGame.disasters': 'Disasters',
+  'newGame.disasters.off': 'Off',
+  'newGame.disasters.mild': 'Mild',
+  'newGame.disasters.normal': 'Normal',
+  'newGame.disasters.harsh': 'Harsh',
+  'newGame.disasters.hint':
+    'Storms, fires and floods damage your city; repairs cost money over time. Existing cities keep playing without them.',
   'newGame.seed': 'Seed',
   'newGame.seedPlaceholder': 'random',
   'newGame.start': 'Found city',
@@ -195,6 +203,9 @@ const en = {
     'Shops by delivery state: green = supplied, orange = due, red = unsupplied; depots blue',
   'overlay.transit': 'Transit',
   'overlay.transit.title': 'Bus coverage: green = covered, stops by service state',
+  'overlay.damage': 'Damage',
+  'overlay.damage.title':
+    'Damage: buildings and plants always shown intact / damaged / wrecked; any other tile only lights up once it is hit',
 
   'rejection.notEnoughMoney': 'Not enough money',
   'rejection.tileOccupied': 'This tile is already occupied',
@@ -211,6 +222,7 @@ const en = {
   'rejection.needsRoadTile': 'Bus stops go on road tiles',
   'rejection.alreadyInsulated': 'Building insulation is already installed',
   'rejection.tooSteep': 'Too steep to build on',
+  'rejection.damaged': 'This tile is damaged; repair it or bulldoze it first',
 
   'footer.hint': 'right mouse/WASD: pan · wheel: zoom · Q/E: rotate',
   'footer.help': 'Help',
@@ -262,6 +274,9 @@ const en = {
   'help.terrain.title': 'Hills and slopes',
   'help.terrain.body':
     'Every map has hills. Steep slopes cannot be built on, and building on a gentle slope costs extra. Wind turbines generate more on high ground, run-of-river plants gain from a drop in the river, and pumped storage stores more the higher it sits above the lake.',
+  'help.disasters.title': 'Disasters',
+  'help.disasters.body':
+    'Storms warn you a few hours ahead, then feather every wind turbine past its cut-out speed and strike pylons, turbines, plants and buildings across the city. Fires give no warning: the chance grows with drought and with dense buildings a fire station cannot reach, and in a drought a mature wood can catch by itself, then spreads to neighbouring buildings and mature woods — roads and water stop it, and coverage both slows the spread and puts it out faster. River floods warn you further ahead and cover the same low ground by the river and the lake every time, so building on the floodplain is a choice. A damaged tile is out of service — plants stop generating, lines stop conducting, buildings go dark, stations stop covering — until it is repaired, which costs money over time and stalls once the treasury is empty; the bulldozer clears a wrecked tile instead. Pick the intensity when you found a city; existing cities keep playing without disasters.',
 
   'imprint.title': 'Imprint',
   'imprint.according': 'Information in accordance with § 5 DDG',
@@ -367,6 +382,8 @@ const en = {
   'goal.wellStocked.body': 'A whole day with 95% of shops supplied (20+ shops).',
   'goal.modalShift.title': 'Modal shift',
   'goal.modalShift.body': 'A whole day with 30% of commuters on the bus (300+ residents).',
+  'goal.stormProof.title': 'Storm-proof',
+  'goal.stormProof.body': 'Ride out a whole storm without a single undersupplied tick.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -380,6 +397,7 @@ const en = {
   'budget.avenues': 'Avenues',
   'budget.busStops': 'Bus stops',
   'budget.biogasFuel': 'Biogas fuel',
+  'budget.repair': 'Repairs',
   'budget.import': 'Grid import',
   'budget.note': 'Upkeep is a money cost only — it does not consume energy.',
 
@@ -471,6 +489,16 @@ const en = {
   'inspect.hotspotQuality': 'Quality',
   'inspect.hotspotWells': 'Wells / capacity',
   'inspect.hotspotHint': 'Hotspot quality and the reservoir temperature of its field.',
+  'disaster.storm': 'Storm',
+  'disaster.fire': 'Fire',
+  'disaster.flood': 'Flood',
+  'disaster.warning': 'warning · strikes in {hours} h {minutes} min',
+  'disaster.active': 'under way · {hours} h {minutes} min left',
+  'disaster.toast': '{kind} is hitting the city',
+  'inspector.damage': 'damage',
+  'inspector.damage.value': '{points} points · out of service, repairs cost money over time',
+  'inspector.damage.frozen':
+    '{points} points · out of service, repairs waiting until the {event} passes',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -645,6 +673,13 @@ const de: Record<TranslationKey, string> = {
   'newGame.difficulty.easy': 'Leicht',
   'newGame.difficulty.normal': 'Normal',
   'newGame.difficulty.hard': 'Schwer',
+  'newGame.disasters': 'Katastrophen',
+  'newGame.disasters.off': 'Aus',
+  'newGame.disasters.mild': 'Sanft',
+  'newGame.disasters.normal': 'Normal',
+  'newGame.disasters.harsh': 'Hart',
+  'newGame.disasters.hint':
+    'Stürme, Brände und Hochwasser beschädigen deine Stadt; Reparaturen kosten über die Zeit Geld. Bestehende Städte spielen ohne sie weiter.',
   'newGame.seed': 'Startwert (Seed)',
   'newGame.seedPlaceholder': 'zufällig',
   'newGame.start': 'Stadt gründen',
@@ -670,6 +705,9 @@ const de: Record<TranslationKey, string> = {
     'Läden nach Lieferstatus: grün = beliefert, orange = fällig, rot = unversorgt; Depots blau',
   'overlay.transit': 'ÖPNV',
   'overlay.transit.title': 'Busabdeckung: grün = abgedeckt, Haltestellen nach Bedienung',
+  'overlay.damage': 'Schäden',
+  'overlay.damage.title':
+    'Schäden: Gebäude und Anlagen sind immer heil / beschädigt / zerstört eingefärbt; andere Felder leuchten erst auf, wenn sie getroffen wurden',
 
   'rejection.notEnoughMoney': 'Nicht genug Geld',
   'rejection.tileOccupied': 'Dieses Feld ist bereits belegt',
@@ -687,6 +725,7 @@ const de: Record<TranslationKey, string> = {
   'rejection.needsRoadTile': 'Haltestellen gehören auf Straßenkacheln',
   'rejection.alreadyInsulated': 'Die Gebäudedämmung ist bereits installiert',
   'rejection.tooSteep': 'Zu steil zum Bebauen',
+  'rejection.damaged': 'Dieses Feld ist beschädigt; erst reparieren oder abreißen',
 
   'footer.hint': 'rechte Maustaste/WASD: bewegen · Mausrad: zoomen · Q/E: drehen',
   'footer.help': 'Hilfe',
@@ -738,6 +777,9 @@ const de: Record<TranslationKey, string> = {
   'help.terrain.title': 'Hügel und Hänge',
   'help.terrain.body':
     'Jede Karte hat Hügel. Steilhänge sind nicht bebaubar, Bauen am Hang kostet einen Aufschlag. Windräder erzeugen auf Anhöhen mehr, Laufwasserkraft profitiert vom Gefälle des Flusses, und Pumpspeicher speichern umso mehr, je höher sie über dem See liegen.',
+  'help.disasters.title': 'Katastrophen',
+  'help.disasters.body':
+    'Stürme kündigen sich einige Stunden vorher an, fahnen dann jede Windkraftanlage oberhalb ihrer Abschaltgeschwindigkeit und schlagen quer durch die Stadt in Masten, Turbinen, Anlagen und Gebäude ein. Brände kommen ohne Vorwarnung: Die Gefahr wächst mit Trockenheit und mit dichten Gebäuden, die keine Feuerwache erreicht, und bei Trockenheit kann reifer Wald auch von selbst Feuer fangen; das Feuer breitet sich dann auf Nachbargebäude und reifen Wald aus — Straßen und Wasser stoppen sie, und Feuerwehrabdeckung bremst die Ausbreitung und löscht schneller. Hochwasser kündigt sich noch früher an und überflutet jedes Mal dasselbe tiefe Land am Fluss und am See, sodass Bauen im Überschwemmungsgebiet eine bewusste Wahl ist. Ein beschädigtes Feld ist außer Betrieb — Anlagen erzeugen nicht mehr, Leitungen leiten nicht mehr, Gebäude bleiben dunkel, Wachen decken nicht mehr ab —, bis es repariert ist; das kostet über die Zeit Geld und stockt, sobald die Kasse leer ist, aber die Planierraupe räumt ein zerstörtes Feld auch so. Die Stärke wählst du beim Gründen einer Stadt; bestehende Städte spielen ohne Katastrophen weiter.',
 
   'imprint.title': 'Impressum',
   'imprint.according': 'Angaben gemäß § 5 DDG',
@@ -846,6 +888,8 @@ const de: Record<TranslationKey, string> = {
   'goal.wellStocked.body': 'Einen ganzen Tag lang 95 % der Läden beliefert (ab 20 Läden).',
   'goal.modalShift.title': 'Verkehrswende',
   'goal.modalShift.body': 'Einen ganzen Tag lang 30 % der Pendler im Bus (ab 300 Einwohnern).',
+  'goal.stormProof.title': 'Sturmfest',
+  'goal.stormProof.body': 'Überstehe einen ganzen Sturm ohne einen einzigen unterversorgten Tick.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',
@@ -859,6 +903,7 @@ const de: Record<TranslationKey, string> = {
   'budget.avenues': 'Alleen',
   'budget.busStops': 'Haltestellen',
   'budget.biogasFuel': 'Biogas-Brennstoff',
+  'budget.repair': 'Reparaturen',
   'budget.import': 'Netzbezug',
   'budget.note': 'Unterhalt kostet nur Geld – er verbraucht keine Energie.',
 
@@ -951,6 +996,16 @@ const de: Record<TranslationKey, string> = {
   'inspect.hotspotQuality': 'Ergiebigkeit',
   'inspect.hotspotWells': 'Bohrungen / Kapazität',
   'inspect.hotspotHint': 'Ergiebigkeit des Hotspots und Reservoirtemperatur seines Feldes.',
+  'disaster.storm': 'Sturm',
+  'disaster.fire': 'Brand',
+  'disaster.flood': 'Hochwasser',
+  'disaster.warning': 'Warnung · trifft in {hours} h {minutes} min ein',
+  'disaster.active': 'läuft · noch {hours} h {minutes} min',
+  'disaster.toast': '{kind} trifft die Stadt',
+  'inspector.damage': 'Schaden',
+  'inspector.damage.value': '{points} Punkte · außer Betrieb, Reparaturen kosten mit der Zeit Geld',
+  'inspector.damage.frozen':
+    '{points} Punkte · außer Betrieb, Reparatur wartet, bis {event} vorüber ist',
 };
 
 const translations: Record<Locale, Record<TranslationKey, string>> = { en, de };
@@ -1019,4 +1074,17 @@ export function useI18n(): I18nContextValue {
 export function rejectionKey(code: string): TranslationKey | null {
   const key = `rejection.${code}`;
   return key in en ? (key as TranslationKey) : null;
+}
+
+/**
+ * i18n key for a disaster kind. Lives here (not in a UI component) because
+ * more than one screen needs it — the tile inspector today, a warning
+ * banner later — and the kind-to-key map must exist exactly once.
+ */
+export function disasterLabelKey(kind: DisasterKind): TranslationKey {
+  return kind === DisasterKind.Storm
+    ? 'disaster.storm'
+    : kind === DisasterKind.Fire
+      ? 'disaster.fire'
+      : 'disaster.flood';
 }
