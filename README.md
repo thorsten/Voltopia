@@ -107,6 +107,9 @@ pnpm dev        # start the dev server
 pnpm test       # simulation unit tests (Vitest)
 pnpm coverage   # tests with coverage (target: >90% for src/sim)
 pnpm e2e        # end-to-end tests (Playwright)
+pnpm lint       # oxlint
+pnpm format     # oxfmt (format:check only verifies)
+pnpm audit:prod # fail on high/critical advisories in shipped deps
 pnpm build      # production build
 ```
 

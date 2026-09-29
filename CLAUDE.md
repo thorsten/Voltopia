@@ -13,6 +13,7 @@ pnpm e2e          # Playwright end-to-end tests
 pnpm typecheck    # tsc -b
 pnpm lint         # oxlint
 pnpm format       # oxfmt (writes); format:check verifies
+pnpm audit:prod   # fails on high/critical advisories in prod deps only
 pnpm build        # production build (includes typecheck)
 ```
 
@@ -87,4 +88,7 @@ full state (except save snapshots).
 
 Push to `main` → GitHub Actions runs typecheck/tests/build and deploys
 to GitHub Pages (base path `/Voltopia/` via `VOLTOPIA_BASE`). PRs and
-branches run `.github/workflows/ci.yml` (unit + e2e).
+branches run `.github/workflows/ci.yml` in three jobs: `quality`
+(format, lint, prod-dependency audit), `test` (typecheck, coverage,
+build) and `e2e`. The audit gate is CI-only — it is not in the
+pre-commit hook, because it needs the registry.
