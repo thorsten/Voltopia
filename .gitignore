@@ -8,5 +8,11 @@ coverage
 test-results
 playwright-report
 
+# a pnpm store some installs put in the repo root instead of node_modules
+.pnpm-store/
+
+# default screenshot from scripts/smoke.mjs
+/shot.png
+
 # SDD scratch workspace (subagent-driven-development)
 .superpowers/
