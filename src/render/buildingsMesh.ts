@@ -4,7 +4,7 @@ import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
-import { applySupplyTint } from './buildings/palette.ts';
+import { ACCENT, applySupplyTint } from './buildings/palette.ts';
 import {
   DOOR,
   type BuildingPart,
@@ -405,6 +405,21 @@ export class BuildingsMesh implements DiffLayer {
       const cz = Math.floor(index / this.gridSize) + 0.5 + main.oz;
       const lift = this.elevation.centerY(index);
       const shopfront = building.zone === Zone.Retail && building.density < 3;
+      // Only a real door part (residential densities 1-2) ever needs a
+      // window nudge; density 3 (and every non-residential zone) has none,
+      // so `doorLx` stays undefined and the street face keeps its grid as
+      // is. `doorLx` is the door's sideways offset in the body's own
+      // south-facing frame — the inverse of the face rotation `facePart`
+      // applied when placing it (inverting `face` by `(4 - face) % 4` and
+      // re-running `faceOffset` undoes that rotation).
+      const doorPart = building.parts.find(
+        (p) => p.accent && p.color.getHex() === ACCENT.door.getHex(),
+      );
+      let doorLx: number | undefined;
+      if (doorPart) {
+        const inverseFace = ((4 - building.face) % 4) as StreetFace;
+        [doorLx] = faceOffset(doorPart.ox - main.ox, doorPart.oz - main.oz, inverseFace);
+      }
       const budgetEnd = Math.min(slot + WINDOWS_PER_TILE, this.windowsMesh.instanceMatrix.count);
       let windowId = 0;
       for (const [face, isStreet] of [
@@ -440,19 +455,25 @@ export class BuildingsMesh implements DiffLayer {
         }
         const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
         const rows = Math.min(4, Math.max(1, Math.round(main.sy / 0.28)));
+        const colLx = Array.from(
+          { length: cols },
+          (_, c) => ((c + 0.5) / cols - 0.5) * width * 0.8,
+        );
         for (let col = 0; col < cols; col++) {
           for (let row = 0; row < rows; row++) {
             windowId++;
             // Deterministically leave ~1/3 of windows dark.
             if ((index * 7 + windowId * 13 + building.variant) % 3 === 0) continue;
             const localY = main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
-            let lx = ((col + 0.5) / cols - 0.5) * width * 0.8;
-            if (isStreet && building.zone === Zone.Residential) {
-              // Residential is the only zone with a door. A quad that
-              // overlaps its rectangle is nudged sideways, clear of it;
-              // if it no longer fits on the facade, it is dropped instead
-              // of sinking behind the door.
-              const doorHalfWidth = DOOR.width / 2;
+            let lx = colLx[col];
+            if (isStreet && doorLx !== undefined) {
+              // A quad overlapping the real door rectangle is nudged to
+              // whichever side keeps it on the facade and clear of the
+              // other columns; if neither side manages that, the quad is
+              // dropped instead of sinking behind the door or doubling up
+              // on a neighbour.
+              const doorLeft = doorLx - DOOR.width / 2;
+              const doorRight = doorLx + DOOR.width / 2;
               const quadLeft = lx - WINDOW_WIDTH / 2;
               const quadRight = lx + WINDOW_WIDTH / 2;
               const quadBottom = localY - WINDOW_HEIGHT / 2;
@@ -460,13 +481,34 @@ export class BuildingsMesh implements DiffLayer {
               const doorBottom = main.oy;
               const doorTop = main.oy + DOOR.height;
               const intersectsDoor =
-                quadLeft < doorHalfWidth &&
-                quadRight > -doorHalfWidth &&
+                quadLeft < doorRight &&
+                quadRight > doorLeft &&
                 quadBottom < doorTop &&
                 quadTop > doorBottom;
               if (intersectsDoor) {
-                lx = Math.sign(lx || 1) * (doorHalfWidth + WINDOW_WIDTH / 2 + 0.01);
-                if (Math.abs(lx) + WINDOW_WIDTH / 2 >= width / 2) continue;
+                // Nudge to the nearer side of the door that still fits the
+                // facade; drop the quad if neither side fits, or if the
+                // chosen side lands within WINDOW_WIDTH of another column
+                // (which would double it up with a neighbour instead).
+                const nudge = DOOR.width / 2 + WINDOW_WIDTH / 2 + 0.01;
+                const rightLx = doorLx + nudge;
+                const leftLx = doorLx - nudge;
+                const rightFits = Math.abs(rightLx) + WINDOW_WIDTH / 2 < width / 2;
+                const leftFits = Math.abs(leftLx) + WINDOW_WIDTH / 2 < width / 2;
+                let nudgedLx: number | undefined;
+                if (rightFits && leftFits) {
+                  nudgedLx = Math.abs(rightLx - lx) <= Math.abs(leftLx - lx) ? rightLx : leftLx;
+                } else if (rightFits) {
+                  nudgedLx = rightLx;
+                } else if (leftFits) {
+                  nudgedLx = leftLx;
+                }
+                if (nudgedLx === undefined) continue;
+                if (
+                  colLx.some((other, i) => i !== col && Math.abs(nudgedLx! - other) < WINDOW_WIDTH)
+                )
+                  continue;
+                lx = nudgedLx;
               }
             }
             if (slot >= budgetEnd) break;

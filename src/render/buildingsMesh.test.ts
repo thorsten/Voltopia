@@ -6,7 +6,7 @@ import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT } from './buildings/palette.ts';
-import { MAX_PARTS_PER_KIND, StreetFace, faceDepth } from './buildings/recipes.ts';
+import { DOOR, MAX_PARTS_PER_KIND, StreetFace, faceDepth } from './buildings/recipes.ts';
 
 /** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT/WINDOW_WIDTH; not exported for tests. */
 const WINDOW_HEIGHT = 0.11;
@@ -356,6 +356,113 @@ describe('BuildingsMesh', () => {
       windows.getMatrixAt(i, m);
       p.setFromMatrixPosition(m);
       if (p.z > cz) streetWindows++;
+    }
+    expect(streetWindows).toBeGreaterThan(0);
+  });
+
+  it('never doubles up street-face window quads on a residential d2/d3 building', () => {
+    const indices = [10, CENTRE, 40];
+    const variants = [0, 1, 2, 3, 4, 5, 6, 7];
+    for (const density of [2, 3]) {
+      for (const index of indices) {
+        for (const variant of variants) {
+          const { scene, mesh } = setup();
+          mesh.setReducedMotion(true);
+          mesh.applyDiffs([building(index, Zone.Residential, density, variant)]);
+          expect(mesh.streetFaceAt(index)).toBe(StreetFace.South);
+          const main = mesh.partsAt(index)!.find((p) => p.main)!;
+          const windows = scene.children.find(
+            (c): c is THREE.InstancedMesh =>
+              c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+          )!;
+          const cz = Math.floor(index / SIZE) + 0.5 + main.oz;
+          const m = new THREE.Matrix4();
+          const p = new THREE.Vector3();
+          const street: THREE.Vector3[] = [];
+          for (let i = 0; i < windows.count; i++) {
+            windows.getMatrixAt(i, m);
+            p.setFromMatrixPosition(m);
+            if (p.z > cz) street.push(p.clone());
+          }
+          for (let a = 0; a < street.length; a++) {
+            for (let b = a + 1; b < street.length; b++) {
+              if (Math.abs(street[a].z - street[b].z) > 1e-9) continue; // not the same quad plane
+              const dx = Math.abs(street[a].x - street[b].x);
+              const dy = Math.abs(street[a].y - street[b].y);
+              const overlaps = dx < WINDOW_WIDTH && dy < WINDOW_HEIGHT;
+              expect(overlaps, `density ${density}/variant ${variant}/index ${index}`).toBe(false);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('nudges density-2 street-face windows clear of the real (possibly off-centre) door', () => {
+    for (let variant = 0; variant < 8; variant++) {
+      const { scene, mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 2, variant)]);
+      const parts = mesh.partsAt(CENTRE)!;
+      const main = parts.find((p) => p.main)!;
+      const door = parts.find((p) => p.accent && p.color.getHex() === ACCENT.door.getHex())!;
+      expect(door).toBeDefined();
+      const windows = scene.children.find(
+        (c): c is THREE.InstancedMesh =>
+          c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+      )!;
+      const cx = 3 + 0.5 + main.ox;
+      const cz = 3 + 0.5 + main.oz;
+      // South face: the door's local sideways offset is simply ox - main.ox.
+      const doorLx = door.ox - main.ox;
+      const doorLeft = cx + doorLx - DOOR.width / 2;
+      const doorRight = cx + doorLx + DOOR.width / 2;
+      const doorTop = door.oy + DOOR.height;
+      const m = new THREE.Matrix4();
+      const p = new THREE.Vector3();
+      let streetWindows = 0;
+      for (let i = 0; i < windows.count; i++) {
+        windows.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        if (p.z > cz) {
+          streetWindows++;
+          const quadLeft = p.x - WINDOW_WIDTH / 2;
+          const quadRight = p.x + WINDOW_WIDTH / 2;
+          const quadBottom = p.y - WINDOW_HEIGHT / 2;
+          const intersectsDoor =
+            quadLeft < doorRight && quadRight > doorLeft && quadBottom < doorTop;
+          expect(intersectsDoor, `variant ${variant}`).toBe(false);
+        }
+      }
+      expect(streetWindows, `variant ${variant}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('never nudges a density-3 apartment (no door part to clear)', () => {
+    const { scene, mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const windows = scene.children.find(
+      (c): c is THREE.InstancedMesh =>
+        c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+    )!;
+    const cx = 3 + 0.5 + main.ox;
+    const cz = 3 + 0.5 + main.oz;
+    const width = main.sx; // South face: faceWidth === sx
+    const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
+    const colLx = Array.from({ length: cols }, (_, c) => ((c + 0.5) / cols - 0.5) * width * 0.8);
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    let streetWindows = 0;
+    for (let i = 0; i < windows.count; i++) {
+      windows.getMatrixAt(i, m);
+      p.setFromMatrixPosition(m);
+      if (p.z > cz) {
+        streetWindows++;
+        const lx = p.x - cx;
+        expect(colLx.some((c) => Math.abs(c - lx) < 1e-6)).toBe(true);
+      }
     }
     expect(streetWindows).toBeGreaterThan(0);
   });
