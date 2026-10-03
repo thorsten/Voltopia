@@ -102,6 +102,8 @@ export const PLANT_NAMES = {
   geothermal: PlantType.GeothermalPlant,
   logistics_depot: PlantType.LogisticsDepot,
   bus_depot: PlantType.BusDepot,
+  heat_plant: PlantType.HeatPlant,
+  heat_store: PlantType.HeatStore,
 } as const;
 export type PlantName = keyof typeof PLANT_NAMES;
 
@@ -168,6 +170,8 @@ const PLANT_TOOL_KEY: Record<PlantName, TranslationKey> = {
   geothermal: 'tool.plant-geothermal',
   logistics_depot: 'tool.plant-depot',
   bus_depot: 'tool.plant-busdepot',
+  heat_plant: 'tool.plant-heat',
+  heat_store: 'tool.plant-heatstore',
 };
 
 const PLANT_PLACEMENT: Record<PlantName, string> = {
@@ -189,6 +193,11 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
     'an empty land tile with a road as direct (4-)neighbour; vans serve shops within route reach',
   bus_depot:
     'an empty land tile with a road as direct (4-)neighbour; buses serve bus stops within route reach',
+  heat_plant:
+    'any empty land tile; a large heat pump that heats every building beside the roads within ' +
+    'reach of the roads touching it (reach in get_build_catalog) — needs grid power and at least one adjacent road to serve anyone',
+  heat_store:
+    'any empty land tile; a hot-water tank the surplus cascade fills through the heat plants while the nights are cold, drained later for district heat',
 };
 
 export const MAP_LAYERS = ['overview', 'terrain', 'supply', 'density', 'power', 'transit'] as const;
@@ -393,6 +402,8 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
       bus_depot: 'T',
       tidal: 'X',
       geothermal: 'E',
+      heat_plant: 'Q',
+      heat_store: 'K',
     };
     const name = PLANT_NAME_BY_TYPE.get(tiles.plantType[i] as PlantType);
     return name && name !== 'none' ? glyph[name] : '?';
@@ -414,7 +425,8 @@ const OVERVIEW_LEGEND =
   '= power line on empty land, ' +
   'r/c/s zoned but unbuilt (residential/commercial/retail), R/C/S building, ' +
   'plants: V solar, W wind, B battery, G biogas, H charging hub, P park, ' +
-  'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot. ' +
+  'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot, ' +
+  'Q heat plant, K heat store. ' +
   'Roads may also carry a power line (see the power layer).';
 
 function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
@@ -560,6 +572,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
               charging: round(e.consumption.charging),
               heating: round(e.consumption.heating),
               electrolysis: round(e.consumption.electrolysis),
+              heatPumps: round(e.consumption.heatPumps),
             },
             deficit: round(e.deficit),
             curtailment: round(e.curtailment),
@@ -574,6 +587,14 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
               stored: Math.round(e.hydrogenStoredEnergy),
               capacity: e.hydrogenCapacity,
               soldPerTick: round(e.hydrogenSold),
+            },
+            heat: {
+              stored: Math.round(e.heatStored),
+              capacity: e.heatCapacity,
+              networkHeatPerTick: round(e.networkHeat),
+              fallbackPerTick: round(e.heatFallback),
+              storeChargePerTick: round(e.heatStoreCharge),
+              cop: round(e.heatCop, 2),
             },
             biogasCapacity: e.biogasCapacity,
           },
@@ -757,7 +778,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'tile is not growing. On a geothermal hotspot or a geothermal plant, a "hotspot" field ' +
         "reports the field's quality, reservoir heat (0..1) and how many of its wells its " +
         "capacity sustains — heat and every well's output fall once wells drilled exceed that " +
-        'capacity. See get_disasters for the events causing any damage.',
+        'capacity. On a heat plant a "heatPlant" field reports its road reach, buildings ' +
+        'served, COP and whether it is active; a building reports "heated" (true when the ' +
+        'district network heats it). See get_disasters for the events causing any damage.',
       inputSchema: {
         type: 'object',
         properties: { x: { type: 'integer' }, y: { type: 'integer' } },
@@ -949,7 +972,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Place a plant on one tile: solar, wind, battery, biogas, charging_hub, park, ' +
         'run_of_river (river tile), pumped_storage (land tile next to the lake), hydrogen, ' +
-        'tidal (coastal sea tile), geothermal (hotspot tile), logistics_depot, bus_depot. ' +
+        'tidal (coastal sea tile), geothermal (hotspot tile), logistics_depot, bus_depot, ' +
+        'heat_plant, heat_store. ' +
         'See get_build_catalog for costs and roles.',
       inputSchema: {
         type: 'object',
@@ -1235,6 +1259,18 @@ function plantFigures(type: PlantType): Record<string, number> {
         routeReachTiles: BALANCE.transit.maxRouteTiles,
         stopRadius: BALANCE.transit.stopRadius,
       };
+    case PlantType.HeatPlant:
+      return {
+        pumpPowerLimitPerTick: BALANCE.heat.pumpPowerLimit,
+        reachRoadTiles: BALANCE.heat.reachHops,
+        copWarm: BALANCE.heat.copWarm,
+        copCold: BALANCE.heat.copCold,
+      };
+    case PlantType.HeatStore:
+      return {
+        heatCapacity: BALANCE.heat.storeCapacity,
+        dischargeLimitPerTick: BALANCE.heat.storeDischargeLimit,
+      };
     default:
       return {};
   }
@@ -1269,6 +1305,8 @@ function liveFigures(info: TileInfo): Record<string, unknown> {
     stopAgeHours: info.busStop ? round((info.stopAgeTicks / TICKS_PER_DAY) * 24, 1) : null,
     transitCovered: info.transitCovered,
     busDepot: info.busDepot,
+    heated: info.heated,
+    ...(info.heatPlant ? { heatPlant: info.heatPlant } : {}),
     damage: info.damage,
   };
 }
