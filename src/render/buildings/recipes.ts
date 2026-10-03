@@ -348,12 +348,13 @@ function residential(
     );
     if (p.chance(0.5)) {
       // Dormer on the back slope, so it never collides with the PV slab.
+      const dormerX = (p.unit() - 0.5) * 0.2;
       parts.push(
         facePart(
           PartKind.Box,
           body,
           face,
-          { w: 0.14, h: 0.1, d: 0.12, lx: (p.unit() - 0.5) * 0.2, ly: h + 0.02, lz: -roofD / 4 },
+          { w: 0.14, h: 0.1, d: 0.12, lx: dormerX, ly: h + 0.02, lz: -roofD / 4 },
           wall,
         ),
       );
@@ -362,7 +363,7 @@ function residential(
           PartKind.GableRoof,
           body,
           face,
-          { w: 0.16, h: 0.06, d: 0.14, lx: 0, ly: h + 0.12, lz: -roofD / 4 },
+          { w: 0.16, h: 0.06, d: 0.14, lx: dormerX, ly: h + 0.12, lz: -roofD / 4 },
           roof,
         ),
       );

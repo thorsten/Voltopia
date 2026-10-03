@@ -257,6 +257,41 @@ describe('building recipes', () => {
     }
   });
 
+  it('centres the dormer gable on its dormer box (residential density 2)', () => {
+    const violations: string[] = [];
+    for (const face of STREET_FACES) {
+      for (let variant = 0; variant < VARIANTS; variant++) {
+        for (const index of SAMPLE) {
+          const parts = buildingParts(Zone.Residential, 2, variant, index, face);
+          const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
+          if (gables.length < 2) continue; // no dormer on this variant/tile
+          const dormerRoof = gables.reduce((a, b) => (a.sx * a.sz <= b.sx * b.sz ? a : b));
+          const dormerBox = parts.find(
+            (p) =>
+              p.kind === PartKind.Box &&
+              !p.main &&
+              Math.abs(p.oy - (dormerRoof.oy - 0.1)) < 1e-6 &&
+              (Math.abs(p.sx - 0.14) < 1e-9 || Math.abs(p.sz - 0.14) < 1e-9),
+          );
+          if (!dormerBox) {
+            violations.push(`${face}/${variant}/${index}: no dormer box found for dormer roof`);
+            continue;
+          }
+          if (
+            Math.abs(dormerBox.ox - dormerRoof.ox) > 1e-9 ||
+            Math.abs(dormerBox.oz - dormerRoof.oz) > 1e-9
+          ) {
+            violations.push(
+              `${face}/${variant}/${index}: dormer roof (${dormerRoof.ox},${dormerRoof.oz}) ` +
+                `off dormer box (${dormerBox.ox},${dormerBox.oz})`,
+            );
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('hang retail awnings on the street face', () => {
     for (const face of STREET_FACES) {
       for (const density of [1, 2, 3]) {
