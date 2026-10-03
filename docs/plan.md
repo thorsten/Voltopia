@@ -74,7 +74,8 @@ src/
     decal.ts       # boxes/prisms fitted flush onto the sloped ground triangles
     waterMesh.ts   # river/lake surfaces
     roadsMesh.ts   # instanced road pads/arms, avenue centre lines, bridges, lamps
-    buildingsMesh.ts # instanced procedural low-poly buildings
+    buildingsMesh.ts # one InstancedMesh per primitive kind, slot blocks per tile, windows
+    buildings/       # recipes (zone/density/variant/tile → parts), palette, primitives, blocks
     plantsMesh.ts  # plant meshes (wind rotors spin), storage, hubs
     powerLinesMesh.ts # pylons + catenary wires
     disasterMesh.ts # storm/fire/flood fx: decals, embers, smoke, flood water
@@ -174,7 +175,7 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 
 - [x] `sim/zones.ts`: paint residential/commercial/retail on empty tiles (tests)
 - [x] `sim/growth.ts`: demand model (res needs jobs, jobs need residents, retail needs both), building spawn only on zoned + road-adjacent tiles, 3 density levels, seeded variation; population/jobs derived per density (tests: demand math, growth conditions, determinism)
-- [x] `render/buildingsMesh.ts`: procedural low-poly buildings (box compositions per zone/density/variant), scale-in animation
+- [x] `render/buildingsMesh.ts` + `render/buildings/`: procedural low-poly buildings from a primitive kit (boxes, gable and hip roofs, cylinders) with per-zone colour families, street-facing doors and awnings, supply tint, scale-in animation
 - [x] Demand bars + population in HUD. Deliverable: paint zones, city grows. Commit + summary.
 
 ### M4 — Day/night + weather + lighting
