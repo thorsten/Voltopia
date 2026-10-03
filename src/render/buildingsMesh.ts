@@ -8,6 +8,7 @@ import { applySupplyTint } from './buildings/palette.ts';
 import {
   type BuildingPart,
   MAX_PARTS_PER_KIND,
+  STREET_FACE_WINDOW_FLOOR,
   type StreetFace,
   buildingParts,
   faceDepth,
@@ -25,6 +26,15 @@ const WINDOW_COLOR = 0xffc978;
 const WINDOW_WIDTH = 0.09;
 const WINDOW_HEIGHT = 0.11;
 const WINDOW_GAP = 0.012;
+/**
+ * Gap on the street face only: wider than WINDOW_GAP so a window row clears
+ * the street-face accents (door, balconies, awnings, canopies), which
+ * protrude further than the opposite face ever needs to clear.
+ */
+const STREET_WINDOW_GAP = 0.03;
+/** Fraction of body height the retail shopfront quad spans; ends below the 0.6h awning. */
+const SHOPFRONT_HEIGHT_FRACTION = 0.43;
+const SHOPFRONT_CENTER_FRACTION = 0.335;
 const QUARTER_TURN = Math.PI / 2;
 /** Hidden instances: a zero-scale matrix is never rasterised. */
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -380,15 +390,26 @@ export class BuildingsMesh implements DiffLayer {
       ] as const) {
         const width = faceWidth(main, face);
         const depth = faceDepth(main, face);
+        // The street face carries doors, balconies, awnings and canopies
+        // that protrude further than the opposite face ever needs to clear.
+        const gap = isStreet ? STREET_WINDOW_GAP : WINDOW_GAP;
         rotation.makeRotationY(face * QUARTER_TURN);
         if (isStreet && shopfront) {
           if (slot >= budgetEnd) break;
-          const [dx, dz] = faceOffset(0, depth / 2 + WINDOW_GAP, face);
+          const [dx, dz] = faceOffset(0, depth / 2 + gap, face);
           matrix.copy(rotation);
           matrix.scale(
-            new THREE.Vector3((width * 0.8) / WINDOW_WIDTH, (main.sy * 0.5) / WINDOW_HEIGHT, 1),
+            new THREE.Vector3(
+              (width * 0.8) / WINDOW_WIDTH,
+              (main.sy * SHOPFRONT_HEIGHT_FRACTION) / WINDOW_HEIGHT,
+              1,
+            ),
           );
-          matrix.setPosition(cx + dx, lift + main.oy + main.sy * 0.45, cz + dz);
+          matrix.setPosition(
+            cx + dx,
+            lift + main.oy + main.sy * SHOPFRONT_CENTER_FRACTION,
+            cz + dz,
+          );
           this.windowsMesh.setMatrixAt(slot++, matrix);
           continue;
         }
@@ -399,10 +420,15 @@ export class BuildingsMesh implements DiffLayer {
             windowId++;
             // Deterministically leave ~1/3 of windows dark.
             if ((index * 7 + windowId * 13 + building.variant) % 3 === 0) continue;
+            const localY = main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
+            // On the street face only, a row whose bottom would sit behind
+            // the door (or another accent) is dropped; the opposite face,
+            // which has no such accent, keeps every row.
+            if (isStreet && localY - WINDOW_HEIGHT / 2 < STREET_FACE_WINDOW_FLOOR) continue;
             if (slot >= budgetEnd) break;
             const lx = ((col + 0.5) / cols - 0.5) * width * 0.8;
-            const [dx, dz] = faceOffset(lx, depth / 2 + WINDOW_GAP, face);
-            const y = lift + main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
+            const [dx, dz] = faceOffset(lx, depth / 2 + gap, face);
+            const y = lift + localY;
             matrix.copy(rotation);
             matrix.setPosition(cx + dx, y, cz + dz);
             this.windowsMesh.setMatrixAt(slot++, matrix);

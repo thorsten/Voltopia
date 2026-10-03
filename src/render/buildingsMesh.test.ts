@@ -6,7 +6,15 @@ import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT } from './buildings/palette.ts';
-import { MAX_PARTS_PER_KIND, StreetFace } from './buildings/recipes.ts';
+import {
+  MAX_PARTS_PER_KIND,
+  STREET_FACE_WINDOW_FLOOR,
+  StreetFace,
+  faceDepth,
+} from './buildings/recipes.ts';
+
+/** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT; not exported for tests. */
+const WINDOW_HEIGHT = 0.11;
 
 const SIZE = 8;
 
@@ -273,6 +281,66 @@ describe('BuildingsMesh', () => {
     expect(wide).toHaveLength(1);
     // Scaled from the 0.09 × 0.11 quad to ~80 % of the facade width.
     expect(wide[0].x * 0.09).toBeCloseTo(main.sx * 0.8, 6);
+  });
+
+  it('keeps street-face windows above the door on a density-1 house', () => {
+    const { scene, mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    expect(mesh.streetFaceAt(CENTRE)).toBe(StreetFace.South);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const windows = scene.children.find(
+      (c): c is THREE.InstancedMesh =>
+        c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+    )!;
+    const cz = 3 + 0.5 + main.oz;
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    let oppositeWindows = 0;
+    for (let i = 0; i < windows.count; i++) {
+      windows.getMatrixAt(i, m);
+      p.setFromMatrixPosition(m);
+      if (p.z > cz) {
+        // Street (south) face: no window's bottom may sit below the floor.
+        expect(p.y - WINDOW_HEIGHT / 2).toBeGreaterThanOrEqual(STREET_FACE_WINDOW_FLOOR - 1e-9);
+      } else {
+        oppositeWindows++;
+      }
+    }
+    // The opposite face has no accent to clear, so it keeps its window rows.
+    expect(oppositeWindows).toBeGreaterThan(0);
+  });
+
+  it('keeps the retail shopfront quad below the awning', () => {
+    const { scene, mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Retail, 1, 0), road(CENTRE + SIZE)]);
+    const parts = mesh.partsAt(CENTRE)!;
+    const main = parts.find((p) => p.main)!;
+    const awning = parts.find(
+      (p) =>
+        p.accent &&
+        p.kind === PartKind.Box &&
+        p.sy <= 0.05 &&
+        p.oz > main.oz + faceDepth(main, StreetFace.South) / 2,
+    )!;
+    expect(awning).toBeDefined();
+    const windows = scene.children.find(
+      (c): c is THREE.InstancedMesh =>
+        c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+    )!;
+    const cz = 3 + 0.5 + main.oz;
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    let shopfrontTop = -Infinity;
+    for (let i = 0; i < windows.count; i++) {
+      windows.getMatrixAt(i, m);
+      p.setFromMatrixPosition(m);
+      s.setFromMatrixScale(m);
+      if (p.z > cz) shopfrontTop = Math.max(shopfrontTop, p.y + (s.y * WINDOW_HEIGHT) / 2);
+    }
+    expect(shopfrontTop).toBeLessThan(awning.oy);
   });
 
   it('keeps growing a building across a same-batch road re-issue', () => {

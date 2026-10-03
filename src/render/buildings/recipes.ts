@@ -48,6 +48,12 @@ export const FOOTPRINT_HALF = 0.43;
 const ROOF_OVERHANG = 0.04;
 const DOOR = { width: 0.2, height: 0.16, depth: 0.02 };
 const ROOFTOP_PV_THICKNESS = 0.02;
+/**
+ * Lowest allowed window-bottom on a building's street face, in world
+ * units from the body's base. Chosen above the door height (0.16) so a
+ * street-facing window row never sits behind the door or an awning.
+ */
+export const STREET_FACE_WINDOW_FLOOR = 0.2;
 
 export interface Picker {
   /** Stable integer in 0..n-1. */
