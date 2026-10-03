@@ -196,3 +196,83 @@ describe('BuildingFxMesh puffs', () => {
     expect(fx.puffs.count).toBe(fx.puffs.instanceMatrix.count);
   });
 });
+
+function antenna(): AccentAnchor[] {
+  return [{ role: PartRole.Antenna, x: 3.5, y: 1.4, z: 3.5 }];
+}
+
+/** True when the instance at `slot` is drawn (non-zero scale). */
+function lit(mesh: THREE.InstancedMesh, slot: number): boolean {
+  const m = new THREE.Matrix4();
+  const s = new THREE.Vector3();
+  mesh.getMatrixAt(slot, m);
+  s.setFromMatrixScale(m);
+  return s.x > 0;
+}
+
+describe('BuildingFxMesh beacons', () => {
+  it('draws one beacon per powered antenna, hidden by day and shown at night', () => {
+    const { fx } = setup();
+    fx.set(TILE, antenna(), state());
+    fx.setEnvironment(environment(20, 0));
+    fx.update(0.016, 1);
+    expect(fx.beacons.count).toBe(1);
+    expect(fx.beacons.visible).toBe(false);
+    fx.setEnvironment(environment(20, 1));
+    fx.update(0.016, 2);
+    expect(fx.beacons.visible).toBe(true);
+    expect((fx.beacons.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(1, 6);
+    fx.setState(TILE, state({ supplied: SupplyStatus.NotConnected }));
+    fx.update(0.016, 3);
+    expect(fx.beacons.count).toBe(0);
+  });
+
+  it('sits just above the antenna tip', () => {
+    const { fx } = setup();
+    fx.setReducedMotion(true);
+    fx.set(TILE, antenna(), state());
+    fx.setEnvironment(environment(20, 1));
+    fx.update(0.016, 1);
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    fx.beacons.getMatrixAt(0, m);
+    p.setFromMatrixPosition(m);
+    expect(p.x).toBeCloseTo(3.5, 9);
+    expect(p.z).toBeCloseTo(3.5, 9);
+    expect(p.y).toBeGreaterThan(1.4);
+    expect(p.y).toBeLessThan(1.5);
+  });
+
+  it('blinks with motion on and stays lit with reduced motion', () => {
+    const { fx } = setup();
+    fx.set(TILE, antenna(), state());
+    fx.setEnvironment(environment(20, 1));
+    let litFrames = 0;
+    let darkFrames = 0;
+    for (let t = 0; t < 2; t += 0.05) {
+      fx.update(0.05, t);
+      if (lit(fx.beacons, 0)) litFrames++;
+      else darkFrames++;
+    }
+    expect(litFrames).toBeGreaterThan(0);
+    expect(darkFrames).toBeGreaterThan(litFrames); // short flash, long dark
+    fx.setReducedMotion(true);
+    for (let t = 0; t < 2; t += 0.05) {
+      fx.update(0.05, t);
+      expect(lit(fx.beacons, 0)).toBe(true);
+    }
+  });
+
+  it('gives neighbouring towers different blink phases', () => {
+    const { fx } = setup();
+    fx.set(TILE, antenna(), state());
+    fx.set(TILE + 1, antenna(), state());
+    fx.setEnvironment(environment(20, 1));
+    let differ = false;
+    for (let t = 0; t < 2 && !differ; t += 0.05) {
+      fx.update(0.05, t);
+      differ = lit(fx.beacons, 0) !== lit(fx.beacons, 1);
+    }
+    expect(differ).toBe(true);
+  });
+});

@@ -29,6 +29,13 @@ const NIGHT_DIM = 0.45;
 const BEACON_SIZE = 0.04;
 const BEACON_HEIGHT = 0.03;
 const BEACON_COLOR = 0xff3b30;
+/** Lift above the antenna tip so the box does not z-fight the cylinder cap. */
+const BEACON_LIFT = 0.015;
+const BLINK_PERIOD_SECONDS = 2;
+/** Fraction of the period the beacon is lit: a short flash. */
+const BLINK_DUTY = 0.12;
+/** Hidden instances: a zero-scale matrix is never rasterised. */
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 /** Smaller environment moves are not worth a rebuild under reduced motion. */
 const TEMPERATURE_EPSILON = 0.25;
 const NIGHT_FACTOR_EPSILON = 0.002;
@@ -210,7 +217,17 @@ export class BuildingFxMesh implements DiffLayer, AccentSink {
             }
             break;
           case PartRole.Antenna:
-            // Task 5 fills this in.
+            if (powered) {
+              const on =
+                this.reducedMotion || frac(time / BLINK_PERIOD_SECONDS + phase) < BLINK_DUTY;
+              if (on) {
+                this.matrix.makeTranslation(anchor.x, anchor.y + BEACON_LIFT, anchor.z);
+                this.beacons.setMatrixAt(beaconCount, this.matrix);
+              } else {
+                this.beacons.setMatrixAt(beaconCount, HIDDEN);
+              }
+              beaconCount++;
+            }
             break;
         }
       }
