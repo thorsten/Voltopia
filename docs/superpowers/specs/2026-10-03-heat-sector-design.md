@@ -113,7 +113,9 @@ The lifetime `heating` day sum adds `heatPumps`, so the stats page's
 
 ### Balance
 
-A new `BALANCE.heat` block; starting values, to be probe-tuned:
+A new `BALANCE.heat` block. The headless probe (Task 14) confirmed every
+one of these starting values and moved none of them; the measurements
+behind them now sit in `constants.ts` next to each row:
 
 | key                   | value  | meaning                                                                    |
 | --------------------- | ------ | -------------------------------------------------------------------------- |
