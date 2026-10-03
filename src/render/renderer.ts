@@ -10,7 +10,8 @@ import { ElevationField } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
 import { RoadsMesh } from './roadsMesh.ts';
 import { PowerLinesMesh } from './powerLinesMesh.ts';
-import { BuildingsMesh, buildingHeight } from './buildingsMesh.ts';
+import { BuildingsMesh } from './buildingsMesh.ts';
+import { buildingHeight } from './buildings/recipes.ts';
 import { PlantsMesh, plantHeight } from './plantsMesh.ts';
 import { VehiclesMesh } from './vehiclesMesh.ts';
 import { OverlaysMesh } from './overlays.ts';
@@ -100,7 +101,7 @@ function contentHeight(diff: TileDiff): number {
     return plantHeight(diff.plantType);
   }
   if (diff.tileType === TileType.Empty && diff.density > 0) {
-    return buildingHeight(diff.zone, diff.density, diff.variant);
+    return buildingHeight(diff.zone, diff.density, diff.variant, diff.index);
   }
   return 0;
 }
