@@ -121,6 +121,13 @@ const en = {
     'and any season — the only true baseload in the city. Each field sustains a limited number of ' +
     'wells; drill more and its reservoir cools over days, dragging every well on it down until you ' +
     'take the load off again.',
+  'tool.plant-heat.desc':
+    'A large heat pump feeding district heating along the roads touching it, 12 road tiles out. ' +
+    'Buildings beside those roads get their heat from the network at the pump’s COP instead ' +
+    'of heating themselves — the colder it gets, the lower the COP. Needs grid power.',
+  'tool.plant-heatstore.desc':
+    'A hot-water tank. Surplus fills it through the heat plants while the nights are cold, ' +
+    'and it covers the evening heat peak later. Heat never turns back into electricity.',
   'tool.plant-forest.desc':
     'Plant saplings by the patch. They grow over a few days, raise happiness nearby — and slow the wind for turbines standing in them.',
   'tool.bulldoze.desc': 'Clears roads, zones and plants. Drag to clear an area.',
@@ -638,6 +645,13 @@ const de: Record<TranslationKey, string> = {
     'Jahreszeit gleich viel — die einzige echte Grundlast der Stadt. Jedes Feld trägt nur eine ' +
     'begrenzte Zahl Bohrungen; bohrst du mehr hinein, kühlt das Reservoir über Tage aus und zieht ' +
     'alle Anlagen darauf mit, bis du die Last wieder wegnimmst.',
+  'tool.plant-heat.desc':
+    'Eine große Wärmepumpe, die Fernwärme entlang der Straßen am Heizwerk 12 Straßenkacheln weit ' +
+    'einspeist. Gebäude an diesen Straßen beziehen ihre Wärme aus dem Netz mit dem COP der Pumpe, ' +
+    'statt selbst zu heizen — je kälter, desto niedriger der COP. Braucht Netzstrom.',
+  'tool.plant-heatstore.desc':
+    'Ein Warmwasserspeicher. Überschuss füllt ihn über die Heizwerke, solange die Nächte kalt sind, ' +
+    'und er deckt später die abendliche Wärmespitze. Wärme wird nie wieder zu Strom.',
   'tool.plant-forest.desc':
     'Pflanzt Setzlinge flächenweise. Sie wachsen über einige Tage, heben die Zufriedenheit in der Nähe — und bremsen den Wind für Turbinen, die darin stehen.',
   'tool.bulldoze.desc': 'Entfernt Straßen, Gebiete und Anlagen. Ziehen räumt eine Fläche.',

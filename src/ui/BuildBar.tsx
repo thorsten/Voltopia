@@ -70,6 +70,8 @@ const CATEGORIES: Category[] = [
       { id: 'plant-geothermal', icon: '♨️', cost: BALANCE.costs.plant[PlantType.GeothermalPlant] },
       { id: 'plant-pumped', icon: '🏔', cost: BALANCE.costs.plant[PlantType.PumpedStorage] },
       { id: 'plant-hydrogen', icon: '🫧', cost: BALANCE.costs.plant[PlantType.HydrogenPlant] },
+      { id: 'plant-heat', icon: '🔥', cost: BALANCE.costs.plant[PlantType.HeatPlant] },
+      { id: 'plant-heatstore', icon: '🛢', cost: BALANCE.costs.plant[PlantType.HeatStore] },
     ],
   },
   {

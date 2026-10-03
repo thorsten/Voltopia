@@ -27,4 +27,11 @@ describe('tool hotkeys', () => {
     expect(TOOL_HOTKEYS.e).toBe('plant-geothermal');
     expect(PLANT_BY_TOOL['plant-geothermal']).toBe(PlantType.GeothermalPlant);
   });
+
+  it('maps the heat plant and heat store tools and their hotkeys', () => {
+    expect(TOOL_HOTKEYS.r).toBe('plant-heat');
+    expect(TOOL_HOTKEYS.o).toBe('plant-heatstore');
+    expect(PLANT_BY_TOOL['plant-heat']).toBe(PlantType.HeatPlant);
+    expect(PLANT_BY_TOOL['plant-heatstore']).toBe(PlantType.HeatStore);
+  });
 });
