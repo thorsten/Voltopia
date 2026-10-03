@@ -67,6 +67,12 @@ const COLORS = {
   geoHall: 0x6b5f57,
   geoTower: 0xd7d2c8,
   geoWellhead: 0xb5482f,
+  heatHall: 0x7a4a3a,
+  heatStack: 0xd9822b,
+  heatRoof: 0xe4e7ea,
+  storeTank: 0xc9a227,
+  storePlinth: 0x6f7a86,
+  storeCap: 0xe6ebee,
 } as const;
 
 /** Where a plant stands: which neighbours are water (for hydro shapes). */
@@ -266,6 +272,22 @@ function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
         { sx: 0.6, sy: 0.24, sz: 0.4, ox: -0.08, oy: 0, oz: 0.1, color: COLORS.geoHall },
         { sx: 0.12, sy: 0.3, sz: 0.12, ox: 0.28, oy: 0, oz: -0.22, color: COLORS.geoWellhead },
         { sx: 0.3, sy: 0.5, sz: 0.3, ox: 0.2, oy: 0, oz: 0.22, color: COLORS.geoTower },
+      ];
+    case PlantType.HeatPlant:
+      return [
+        // A low pump hall with a flat roof and one tall slim stack.
+        { sx: 0.7, sy: 0.26, sz: 0.46, ox: -0.06, oy: 0, oz: 0.06, color: COLORS.heatHall },
+        { sx: 0.74, sy: 0.04, sz: 0.5, ox: -0.06, oy: 0.26, oz: 0.06, color: COLORS.heatRoof },
+        { sx: 0.1, sy: 0.62, sz: 0.1, ox: 0.3, oy: 0, oz: -0.26, color: COLORS.heatStack },
+      ];
+    case PlantType.HeatStore:
+      return [
+        // A wide cylinder faked by two stepped boxes on a plinth, capped white.
+        { sx: 0.7, sy: 0.06, sz: 0.7, ox: 0, oy: 0, oz: 0, color: COLORS.storePlinth },
+        { sx: 0.56, sy: 0.4, sz: 0.56, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
+        { sx: 0.46, sy: 0.4, sz: 0.64, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
+        { sx: 0.64, sy: 0.4, sz: 0.46, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
+        { sx: 0.5, sy: 0.05, sz: 0.5, ox: 0, oy: 0.46, oz: 0, color: COLORS.storeCap },
       ];
     default:
       return [];
