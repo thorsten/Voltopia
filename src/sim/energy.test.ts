@@ -1330,6 +1330,13 @@ describe('heat plants', () => {
     );
     placePlant(state, at(2, 10), PlantType.HeatPlant);
     placePlant(state, at(2, 12), PlantType.WindTurbine);
+    // Carries the turbine's energisation the length of the village (its
+    // own supply ring alone only reaches the first couple of buildings),
+    // so the road-hop reach, not the ring, decides who is served.
+    buildPowerLines(
+      state,
+      Array.from({ length: 20 }, (_, i) => at(3 + i, 12)),
+    );
     for (let i = 0; i < count; i++) {
       addBuilding(
         state,
@@ -1362,8 +1369,9 @@ describe('heat plants', () => {
   });
 
   it('fallback heat lands back on the heating load', () => {
-    // 24 dense buildings at full cold ≈ 154 heat, beyond one plant's 60 × 1.8.
-    const state = heatedVillageState(24, 3);
+    // 20 dense buildings, all within the one plant's 12-hop trunk reach, at
+    // full cold ≈ 154 heat, beyond its 60 × 1.8 pump capacity.
+    const state = heatedVillageState(20, 3);
     state.season = { ...state.season, temperature: -20 };
     const heat = heatStep(state);
     expect(heat.fallback).toBeGreaterThan(0);

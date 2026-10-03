@@ -12,6 +12,7 @@ import {
   plantReach,
   recomputeHeated,
 } from './heat.ts';
+import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
 import {
   collectDiffs,
@@ -57,11 +58,20 @@ function building(state: SimState, x: number, y: number, density = 1): void {
  * One powered plant (two when `plants` is 2: the second at the east end
  * of the road), a 40-tile road, and `count` served residential buildings
  * of `density` on alternating sides of the road (x = 4 + floor(i / 2)).
+ * A power line strung at y = row + 2 (the turbines' row, clear of both the
+ * road and the buildings either side of it) carries the turbines'
+ * energisation the length of the village, so every building the trunk
+ * reaches is also connected — only the road-hop reach, not the turbines'
+ * own small supply ring, decides who is served.
  */
 function village(state: SimState, count: number, density = 1, plants = 1): void {
   roadEast(state, 3, 10, 40); // x = 3..42
   poweredHeatPlant(state, 2, 10);
   if (plants === 2) poweredHeatPlant(state, 43, 10);
+  buildPowerLines(
+    state,
+    Array.from({ length: 40 }, (_, i) => at(3 + i, 12)),
+  );
   for (let i = 0; i < count; i++) {
     building(state, 4 + Math.floor(i / 2), i % 2 === 0 ? 9 : 11, density);
   }
@@ -182,6 +192,30 @@ describe('recomputeHeated', () => {
     expect(state.dirty.has(at(3, 10))).toBe(true);
     expect(state.layers.heated[at(3, 10)]).toBe(HEATED_NONE);
   });
+
+  it('does not serve a damaged building, and serves it again once repaired', () => {
+    const state = freshState();
+    roadEast(state, 3, 10, 10);
+    poweredHeatPlant(state, 2, 10);
+    building(state, 4, 9);
+    state.layers.damage[at(4, 9)] = 40;
+    recomputeHeated(state);
+    expect(state.layers.heated[at(4, 9)]).toBe(HEATED_NONE);
+    state.layers.damage[at(4, 9)] = 0;
+    recomputeHeated(state);
+    expect(state.layers.heated[at(4, 9)]).toBe(HEATED_SERVED);
+  });
+
+  it('does not serve a building beside the network that no supply ring reaches', () => {
+    const state = freshState();
+    roadEast(state, 3, 10, 12);
+    poweredHeatPlant(state, 2, 10); // turbine ring (radius 3) ends at x = 5
+    building(state, 12, 9); // trunk road at (12,10) is within reach, but no power here
+    recomputeHeated(state);
+    expect(state.layers.heated[at(12, 10)]).toBe(HEATED_TRUNK);
+    expect(state.layers.energized[at(12, 9)]).toBe(0);
+    expect(state.layers.heated[at(12, 9)]).toBe(HEATED_NONE);
+  });
 });
 
 describe('heatStep', () => {
@@ -268,6 +302,30 @@ describe('heatStep', () => {
     const heat = heatStep(state);
     expect(heat).toMatchObject({ demand: 0, pumpPower: 0, fallback: 0, networkHeat: 0 });
   });
+
+  it('a damaged served building leaves the heat demand', () => {
+    const state = freshState();
+    village(state, 2);
+    state.season = { ...state.season, temperature: 0 };
+    const before = heatStep(state).demand;
+    state.layers.damage[at(4, 9)] = 40;
+    const after = heatStep(state).demand;
+    expect(before).toBeGreaterThan(0);
+    expect(after).toBeCloseTo(before / 2, 6);
+  });
+
+  it('a damaged store shrinks the capacity and clamps the pool', () => {
+    const state = freshState();
+    village(state, 0);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    placePlant(state, at(2, 16), PlantType.HeatStore);
+    state.season = { ...state.season, temperature: 20 };
+    state.heatStored = 2 * BALANCE.heat.storeCapacity;
+    state.layers.damage[at(2, 16)] = 40;
+    const heat = heatStep(state);
+    expect(heat.capacity).toBe(BALANCE.heat.storeCapacity);
+    expect(state.heatStored).toBeLessThanOrEqual(BALANCE.heat.storeCapacity);
+  });
 });
 
 describe('nightNeedsHeat', () => {
@@ -349,6 +407,12 @@ function scriptedState(seed: number): SimState {
   roadEast(state, 3, 10, 20);
   poweredHeatPlant(state, 2, 10);
   placePlant(state, at(2, 14), PlantType.HeatStore);
+  // Carries the turbine's energisation the length of the village; see
+  // village()'s comment.
+  buildPowerLines(
+    state,
+    Array.from({ length: 20 }, (_, i) => at(3 + i, 12)),
+  );
   for (let i = 0; i < 6; i++) building(state, 4 + i, 9, 2);
   // SEASON_ORDER is spring, summer, autumn, winter: a year that started
   // three seasons ago puts day 0 on the first winter day.

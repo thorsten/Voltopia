@@ -208,9 +208,11 @@ function heatPlantInfo(state: SimState, index: number, connected: boolean) {
   const served = new Set<number>();
   for (const road of reach) {
     for (const neighbor of neighbors4(road, state.size)) {
-      if (layers.tileType[neighbor] === TileType.Empty && layers.density[neighbor] > 0) {
-        served.add(neighbor);
-      }
+      if (layers.tileType[neighbor] !== TileType.Empty || layers.density[neighbor] === 0) continue;
+      // Agrees with recomputeHeated's gate: a damaged or unconnected
+      // building is dark, so it does not count as served.
+      if (layers.damage[neighbor] !== 0 || layers.energized[neighbor] !== 1) continue;
+      served.add(neighbor);
     }
   }
   return {

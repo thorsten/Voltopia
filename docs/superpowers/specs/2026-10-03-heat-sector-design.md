@@ -183,8 +183,10 @@ charge the tank (night demand covered, then a gust tops it up).
    prices avenues and traffic, and membership must not flicker with the
    rush hour. Several plants simply union their reach.
 4. Every building tile (`TileType.Empty` with `density > 0`) 4-adjacent
-   to a trunk tile is `HEATED_SERVED`. Damaged buildings draw nothing
-   anyway (energy.ts skips them) so they need no special case here.
+   to a trunk tile is `HEATED_SERVED`, unless it is damaged or not
+   energised — the served pass skips those two cases itself, matching
+   the energy loop (`energy.ts`), which also treats such a building as
+   dark and skips it entirely.
 5. Diff `next` against `layers.heated`, copy and `markDirty` changed
    tiles.
 

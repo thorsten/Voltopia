@@ -83,6 +83,9 @@ export function recomputeHeated(state: SimState): void {
     if (next[i] !== HEATED_TRUNK) continue;
     for (const neighbor of neighbors4(i, size)) {
       if (layers.tileType[neighbor] !== TileType.Empty || layers.density[neighbor] === 0) continue;
+      // The energy loop treats a damaged or unconnected building as dark:
+      // it draws nothing, so the network must not heat or bill it either.
+      if (layers.damage[neighbor] !== 0 || layers.energized[neighbor] !== 1) continue;
       next[neighbor] = HEATED_SERVED;
     }
   }
