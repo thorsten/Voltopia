@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { TileDiff, VehicleState } from '../shared/types.ts';
 import { Terrain, VehicleKind } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
-import { VehiclesMesh } from './vehiclesMesh.ts';
+import { LANE_OFFSET, VehiclesMesh } from './vehiclesMesh.ts';
 
 const SIZE = 8;
 
@@ -45,6 +45,46 @@ function carMatrix(
 const position = new THREE.Vector3();
 const quaternion = new THREE.Quaternion();
 const scale = new THREE.Vector3();
+
+describe('right-hand traffic', () => {
+  it('keeps to the right of the street centre line heading +x', () => {
+    const m = carMatrix(
+      field(() => 0),
+      car(3.5, 3.5, 0),
+    );
+    m.decompose(position, quaternion, scale);
+    // World +z is the right-hand side of a car heading +x.
+    expect(position.x).toBeCloseTo(3.5, 6);
+    expect(position.z).toBeCloseTo(3.5 + LANE_OFFSET, 6);
+  });
+
+  it('uses the opposite lane heading -x, so oncoming cars do not meet', () => {
+    const m = carMatrix(
+      field(() => 0),
+      car(3.5, 3.5, Math.PI),
+    );
+    m.decompose(position, quaternion, scale);
+    expect(position.x).toBeCloseTo(3.5, 6);
+    expect(position.z).toBeCloseTo(3.5 - LANE_OFFSET, 6);
+  });
+
+  it('keeps right on a north-south street too', () => {
+    // Heading +z (angle π/2): the right-hand side is world -x.
+    const m = carMatrix(
+      field(() => 0),
+      car(3.5, 3.5, Math.PI / 2),
+    );
+    m.decompose(position, quaternion, scale);
+    expect(position.x).toBeCloseTo(3.5 - LANE_OFFSET, 6);
+    expect(position.z).toBeCloseTo(3.5, 6);
+  });
+
+  it('stays inside the carriageway', () => {
+    // Road pads are 0.62 tiles wide (roadsMesh CENTER_SIZE); the widest
+    // vehicle body is 0.16, so its outer edge must stay within 0.31.
+    expect(LANE_OFFSET + 0.08).toBeLessThan(0.31);
+  });
+});
 
 describe('vehicles on terrain', () => {
   it('sits level on flat ground at the ground height', () => {

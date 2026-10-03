@@ -10,6 +10,12 @@ import type { ElevationField } from './elevationField.ts';
  *  sampled to pitch a vehicle along the slope it drives on. */
 const PITCH_SAMPLE = 0.15;
 
+/** Lateral offset from the street centre line to the lane a vehicle
+ *  drives in, in tiles. Positive = right-hand traffic. The sim routes
+ *  along tile centres; the lane is purely a rendering offset. A road pad
+ *  is 0.62 tiles wide, so 0.14 keeps every vehicle body on the pad. */
+export const LANE_OFFSET = 0.14;
+
 const MAX_VEHICLES = 256;
 const MAX_VANS = 64;
 const MAX_BUSES = 64;
@@ -169,15 +175,18 @@ export class VehiclesMesh {
       const source = this.previous.get(target.id) ?? target;
       // Teleports (respawns) should not slide across the map.
       const jump = Math.hypot(target.x - source.x, target.y - source.y) > 2;
-      const x = jump ? target.x : source.x + (target.x - source.x) * blend;
-      const y = jump ? target.y : source.y + (target.y - source.y) * blend;
       const angle = jump ? target.angle : lerpAngle(source.angle, target.angle, blend);
+      const dirX = Math.cos(angle);
+      const dirY = Math.sin(angle);
+      // Keep right: the sim drives the centre line, so shift the drawn
+      // vehicle sideways into its lane. With the heading (dirX, dirY) in
+      // the ground plane and y up, the right-hand side is (-dirY, dirX).
+      const x = (jump ? target.x : source.x + (target.x - source.x) * blend) - dirY * LANE_OFFSET;
+      const y = (jump ? target.y : source.y + (target.y - source.y) * blend) + dirX * LANE_OFFSET;
       this.position.set(x, 0.03 + this.roadY(x, y), y);
       this.quaternion.setFromAxisAngle(this.up, -angle);
       // Pitch along the heading so the vehicle hugs a sloped carriageway
       // instead of floating at one end and clipping at the other.
-      const dirX = Math.cos(angle);
-      const dirY = Math.sin(angle);
       const ahead = this.roadY(x + dirX * PITCH_SAMPLE, y + dirY * PITCH_SAMPLE);
       const behind = this.roadY(x - dirX * PITCH_SAMPLE, y - dirY * PITCH_SAMPLE);
       const pitch = Math.atan2(ahead - behind, 2 * PITCH_SAMPLE);
