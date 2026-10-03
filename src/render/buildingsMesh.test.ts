@@ -5,6 +5,7 @@ import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
+import { ACCENT } from './buildings/palette.ts';
 import { MAX_PARTS_PER_KIND, StreetFace } from './buildings/recipes.ts';
 
 const SIZE = 8;
@@ -175,6 +176,34 @@ describe('BuildingsMesh', () => {
     const colorAfter = new THREE.Color();
     boxMesh.getColorAt(0, colorAfter);
     expect(colorAfter.getHex()).not.toBe(colorBefore.getHex());
+  });
+
+  it('tints the body on a supply flip but leaves the accent colour alone', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    const parts = mesh.partsAt(CENTRE)!;
+    const main = parts.find((p) => p.main)!;
+    const door = parts.find((p) => p.accent && p.color.getHex() === ACCENT.door.getHex())!;
+    // Parts of a kind are written in recipe order starting at the block's
+    // first slot, so a part's slot is its index among same-kind parts.
+    const boxParts = parts.filter((p) => p.kind === PartKind.Box);
+    const mainSlot = boxParts.indexOf(main);
+    const doorSlot = boxParts.indexOf(door);
+    expect(mainSlot).toBeGreaterThanOrEqual(0);
+    expect(doorSlot).toBeGreaterThanOrEqual(0);
+    const boxMesh = mesh.kindMeshes[PartKind.Box];
+    const bodyBefore = new THREE.Color();
+    const doorBefore = new THREE.Color();
+    boxMesh.getColorAt(mainSlot, bodyBefore);
+    boxMesh.getColorAt(doorSlot, doorBefore);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0, SupplyStatus.NotConnected)]);
+    const bodyAfter = new THREE.Color();
+    const doorAfter = new THREE.Color();
+    boxMesh.getColorAt(mainSlot, bodyAfter);
+    boxMesh.getColorAt(doorSlot, doorAfter);
+    expect(bodyAfter.getHex()).not.toBe(bodyBefore.getHex());
+    expect(doorAfter.getHex()).toBe(doorBefore.getHex());
   });
 
   it('turns a house toward a road laid beside it afterwards', () => {
