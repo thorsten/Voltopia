@@ -21,7 +21,7 @@ import {
 const VARIANTS = 8;
 const GRID = 64;
 /** Zones with recipes so far — later tasks append to this list. */
-const ZONES: Zone[] = [Zone.Residential];
+const ZONES: Zone[] = [Zone.Residential, Zone.Commercial];
 
 /** Every (zone, density, variant, face) over a sample of tile indices. */
 function* allRecipes(indices: Iterable<number>): Generator<{
@@ -120,22 +120,35 @@ describe('street face helpers', () => {
 describe('building recipes', () => {
   it('respect the per-tile and per-kind part budgets over the whole grid', () => {
     // Part counts never depend on the face, so one face over all 4096
-    // tiles is the full proof (and keeps the test well under a second).
+    // tiles is the full proof. Assertions are accumulated and checked once
+    // after the loops (rather than inside the hot loop) to keep this test
+    // fast even with ~500k part lists across all zones.
+    const violations: string[] = [];
     for (const zone of ZONES) {
       for (const density of [1, 2, 3]) {
         for (let variant = 0; variant < VARIANTS; variant++) {
           for (const index of FULL_GRID) {
             const parts = buildingParts(zone, density, variant, index, StreetFace.South);
-            expect(parts.length).toBeLessThanOrEqual(MAX_PARTS_PER_TILE);
+            if (parts.length > MAX_PARTS_PER_TILE) {
+              violations.push(
+                `${zone}/${density}/${variant}/${index}: ${parts.length} parts > ${MAX_PARTS_PER_TILE}`,
+              );
+            }
             for (const kind of PART_KINDS) {
               let n = 0;
               for (const p of parts) if (p.kind === kind) n++;
-              expect(n).toBeLessThanOrEqual(MAX_PARTS_PER_KIND[kind]);
+              const max = MAX_PARTS_PER_KIND[kind];
+              if (n > max) {
+                violations.push(
+                  `${zone}/${density}/${variant}/${index}: ${n} parts of kind ${kind} > ${max}`,
+                );
+              }
             }
           }
         }
       }
     }
+    expect(violations).toEqual([]);
   });
 
   it('stay inside the footprint and above the ground', () => {
@@ -218,6 +231,29 @@ describe('building recipes', () => {
         );
         for (const t of tops) expect(t).toBeCloseTo(tops[0], 9);
       }
+    }
+  });
+
+  it('give every commercial tower an antenna cylinder for the stage 2 light', () => {
+    for (const index of SAMPLE) {
+      for (let variant = 0; variant < VARIANTS; variant++) {
+        const parts = buildingParts(Zone.Commercial, 3, variant, index, StreetFace.South);
+        const antennas = parts.filter(
+          (p) => p.kind === PartKind.Cylinder && p.color.getHex() === ACCENT.antenna.getHex(),
+        );
+        expect(antennas).toHaveLength(1);
+        const main = mainBody(parts)!;
+        // The antenna stands on top of the setback, above the main body.
+        expect(antennas[0].oy).toBeGreaterThan(main.oy + main.sy);
+      }
+    }
+  });
+
+  it('make commercial towers the tallest buildings', () => {
+    for (const index of SAMPLE) {
+      const tower = buildingHeight(Zone.Commercial, 3, index % VARIANTS, index);
+      const flat = buildingHeight(Zone.Residential, 3, index % VARIANTS, index);
+      expect(tower).toBeGreaterThan(flat);
     }
   });
 });

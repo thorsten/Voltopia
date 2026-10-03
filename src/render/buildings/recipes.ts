@@ -295,7 +295,17 @@ function residential(
         accent: true,
       }),
     );
-    parts.push(onStreetFace(body, face, DOOR.width / w, DOOR.height, DOOR.depth, 0, ACCENT.door));
+    parts.push(
+      onStreetFace(
+        body,
+        face,
+        DOOR.width / faceWidth(body, face),
+        DOOR.height,
+        DOOR.depth,
+        0,
+        ACCENT.door,
+      ),
+    );
     if (p.chance(1 / 3)) {
       // Lower wing on the side with room, with its own small gable (ridge along z).
       const side = ox >= 0 ? -1 : 1;
@@ -406,6 +416,96 @@ function residential(
   return parts;
 }
 
+function commercial(
+  density: number,
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+): BuildingPart[] {
+  const wall = p.from(family.walls);
+  const roof = p.from(family.roofs);
+  const trim = p.from(family.trims);
+  const parts: BuildingPart[] = [];
+
+  if (density === 1) {
+    // Low office: cornice band, entrance canopy, one AC unit.
+    const w = 0.62;
+    const h = 0.4 + p.unit() * 0.06;
+    const body = box(w, h, w, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    parts.push(box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true }));
+    parts.push(onStreetFace(body, face, 0.5, 0.03, 0.1, h * 0.55, trim));
+    parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
+  } else if (density === 2) {
+    // Office block: two facade bands, two AC units, antenna, flat PV.
+    const w = 0.62;
+    const h = 1.0 + p.unit() * 0.1;
+    const body = box(w, h, w, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    parts.push(box(w + 0.02, 0.025, w + 0.02, 0, h / 3, 0, trim, { accent: true }));
+    parts.push(box(w + 0.02, 0.025, w + 0.02, 0, (2 * h) / 3, 0, trim, { accent: true }));
+    parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
+    parts.push(box(0.1, 0.08, 0.1, -0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
+    parts.push({
+      kind: PartKind.Cylinder,
+      sx: 0.03,
+      sy: 0.25,
+      sz: 0.03,
+      ox: 0.2,
+      oy: h,
+      oz: 0.2,
+      turn: 0,
+      color: ACCENT.antenna,
+      accent: true,
+    });
+    parts.push(
+      box(0.4, ROOFTOP_PV_THICKNESS, 0.3, -0.1, h, 0.12, ACCENT.rooftopPv, { accent: true }),
+    );
+  } else {
+    // Tower with a setback upper third; a cylindrical core or a plant room; antenna; PV.
+    const w = 0.66;
+    const h = 1.6 + p.unit() * 0.3;
+    const lowerH = h * 0.67;
+    const upperH = h - lowerH;
+    const body = box(w, lowerH, w, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    const setback = -0.08;
+    parts.push(box(0.46, upperH, 0.46, setback, lowerH, setback, wall));
+    parts.push(box(w + 0.04, 0.03, w + 0.04, 0, lowerH - 0.03, 0, trim, { accent: true }));
+    if (p.chance(0.5)) {
+      parts.push({
+        kind: PartKind.Cylinder,
+        sx: 0.16,
+        sy: upperH + 0.1,
+        sz: 0.16,
+        ox: 0.24,
+        oy: lowerH,
+        oz: 0.24,
+        turn: 0,
+        color: roof,
+      });
+    } else {
+      parts.push(box(0.16, 0.1, 0.16, 0.24, lowerH, 0.24, roof));
+    }
+    parts.push({
+      kind: PartKind.Cylinder,
+      sx: 0.03,
+      sy: 0.3,
+      sz: 0.03,
+      ox: -0.25,
+      oy: h,
+      oz: -0.25,
+      turn: 0,
+      color: ACCENT.antenna,
+      accent: true,
+    });
+    parts.push(
+      box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.02, h, -0.02, ACCENT.rooftopPv, { accent: true }),
+    );
+  }
+  return parts;
+}
+
 /**
  * Procedural low-poly building parts for a zone/density/variant/tile
  * triple facing `face`. Deterministic in its inputs so every client
@@ -424,6 +524,8 @@ export function buildingParts(
   switch (zone) {
     case Zone.Residential:
       return residential(density, picker, face, family);
+    case Zone.Commercial:
+      return commercial(density, picker, face, family);
     default:
       return [];
   }
