@@ -262,6 +262,9 @@ const en = {
   'help.seasons.title': 'Seasons, heating and cooling',
   'help.seasons.body':
     'A year has four seasons of five days each. Summer brings long days and strong sun; winter brings short days, weak PV, more cloud and wind, and cold. Every building heats electrically, so the heating load rises with the cold — the winter evening is the hardest hour of the year. In summer every building cools electrically, so the cooling load peaks in the late afternoon as PV fades. Snow that falls in winter melts into the river in spring. Building insulation is a one-off upgrade that halves the heating and cooling load.',
+  'help.heat.title': 'District heating',
+  'help.heat.body':
+    'A heat plant is a large heat pump. It feeds heat into the roads touching it, 12 road tiles out, and every building beside those roads takes its heat from the network instead of heating itself. The pump’s COP — heat units per electricity unit — is about 3.5 in mild weather and falls towards 1.8 in deep cold, so winter stays hard, but a served building costs a fraction of the electricity. A heat store is a hot-water tank: while the nights are cold, surplus that batteries and pumped storage cannot take fills it through the heat plants before anything is exported, and it covers the evening heat peak later. Heat never turns back into electricity. If the plants and the store cannot cover the network, the rest of the heat is made the old way, on site. Both plants need grid power; the Heat overlay shows the network and who is on it.',
   'help.ev.title': 'E-mobility',
   'help.ev.body':
     'Your citizens drive EVs. Home charging peaks in the evening — right when solar is gone. Charging hubs shift the load into the sunny midday, and the smart-charging upgrade follows the surplus automatically.',
@@ -793,6 +796,9 @@ const de: Record<TranslationKey, string> = {
   'help.seasons.title': 'Jahreszeiten, Heizung und Kühlung',
   'help.seasons.body':
     'Ein Jahr hat vier Jahreszeiten zu je fünf Tagen. Der Sommer bringt lange Tage und kräftige Sonne; der Winter kurze Tage, schwache PV, mehr Wolken und Wind — und Kälte. Alle Gebäude heizen elektrisch, die Heizlast steigt mit der Kälte: Der Winterabend ist die schwerste Stunde des Jahres. Im Sommer kühlen alle Gebäude elektrisch: Die Kühllast erreicht ihre Spitze am späten Nachmittag, wenn die PV nachlässt. Schnee aus dem Winter schmilzt im Frühling in den Fluss. Die Gebäudedämmung ist ein einmaliges Upgrade, das die Heiz- und Kühllast halbiert.',
+  'help.heat.title': 'Fernwärme',
+  'help.heat.body':
+    'Ein Heizwerk ist eine große Wärmepumpe. Es speist Wärme in die Straßen ein, die es berühren, 12 Straßenkacheln weit, und jedes Gebäude an diesen Straßen bezieht seine Wärme aus dem Netz, statt selbst zu heizen. Der COP der Pumpe — Wärmeeinheiten je Stromeinheit — liegt bei mildem Wetter um 3,5 und fällt bei strenger Kälte Richtung 1,8; der Winter bleibt also hart, aber ein versorgtes Gebäude kostet nur einen Bruchteil des Stroms. Ein Wärmespeicher ist ein Warmwassertank: Solange die Nächte kalt sind, füllt ihn Überschuss, den Batterien und Pumpspeicher nicht aufnehmen, über die Heizwerke, bevor etwas exportiert wird — und er deckt später die abendliche Wärmespitze. Wärme wird nie wieder zu Strom. Reichen Heizwerke und Speicher nicht, entsteht der Rest der Wärme wie bisher vor Ort. Beide Anlagen brauchen Netzstrom; das Wärme-Overlay zeigt das Netz und wer daran hängt.',
   'help.ev.title': 'E-Mobilität',
   'help.ev.body':
     'Deine Bürger fahren E-Autos. Das Laden zu Hause hat abends seinen Höhepunkt — genau dann, wenn die Sonne weg ist. Ladeparks verschieben die Last in den sonnigen Mittag, und das Smart-Charging-Upgrade folgt dem Überschuss automatisch.',

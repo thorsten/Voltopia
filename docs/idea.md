@@ -213,8 +213,15 @@ Collected 2026-09-24; roughly in the order we want to build them.
   budget line, freezing when the treasury is empty — and the intensity is
   chosen when a city is founded, so existing saves keep playing without
   any of it.
-- **Heat sector**: heat pumps as seasonal winter load, district
-  heating/power-to-heat as a consumer and storage.
+- **Heat sector** (done): seasons already made heating a winter load;
+  district heating turns it into a choice. A heat plant is a large heat
+  pump feeding the roads touching it; every building beside those roads
+  takes its heat from the network at the pump's COP, which falls with
+  the cold. A heat store is a hot-water tank the surplus cascade fills
+  through the pumps — after batteries and pumped storage, before
+  export, and only while the nights are cold — and drains for the
+  evening peak. Heat never turns back into electricity, and whatever the
+  network cannot cover is heated on site as before.
 - **Geothermal plants** (done): seed-generated hotspot fields in the
   highlands carry the game's only true baseload — constant through
   night, storm and Dunkelflaute. Each field has a quality, a sustainable
