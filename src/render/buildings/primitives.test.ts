@@ -30,8 +30,8 @@ describe('building primitives', () => {
     expect(geometry.getAttribute('normal').count).toBe(geometry.getAttribute('position').count);
   });
 
-  it('gives the gable roof outward-facing slopes', () => {
-    const geometry = createPartGeometry(PartKind.GableRoof);
+  it.each([PartKind.GableRoof, PartKind.HipRoof])('kind %i has outward-facing slopes', (kind) => {
+    const geometry = createPartGeometry(kind);
     const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
     const position = geometry.getAttribute('position') as THREE.BufferAttribute;
     // Every face normal must point away from the roof's centre (0, 0.5, 0).

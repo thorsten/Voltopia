@@ -14,6 +14,8 @@ export const PART_KINDS: readonly PartKind[] = [
 const CYLINDER_SEGMENTS = 8;
 const H = 0.5;
 
+type Vec3 = readonly [number, number, number];
+
 /** Non-indexed triangles → computeVertexNormals yields flat per-face normals. */
 function flatGeometry(triangles: number[]): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
@@ -22,121 +24,76 @@ function flatGeometry(triangles: number[]): THREE.BufferGeometry {
   return geometry;
 }
 
-// Corners of the unit footprint at y = 0 (a = NW, b = NE, c = SE, d = SW;
-// +z is south) — shared by both roofs. All faces wind counter-clockwise
-// seen from outside.
-const BOTTOM = [-H, 0, -H, H, 0, -H, H, 0, H, -H, 0, -H, H, 0, H, -H, 0, H];
+// Corners of the unit footprint at y = 0 (+z is south).
+// All faces wind counter-clockwise seen from outside.
+const NW: Vec3 = [-H, 0, -H];
+const NE: Vec3 = [H, 0, -H];
+const SE: Vec3 = [H, 0, H];
+const SW: Vec3 = [-H, 0, H];
+
+const BOTTOM: Vec3[] = [NW, NE, SE, NW, SE, SW];
 
 /** Triangular prism: ridge along x at y = 1, eaves at y = 0 on z = ±0.5. */
 function createGableRoof(): THREE.BufferGeometry {
-  return flatGeometry([
+  const ridgeE: Vec3 = [H, 1, 0];
+  const ridgeW: Vec3 = [-H, 1, 0];
+
+  const faces: Vec3[] = [
     // south slope (+z)
-    -H,
-    0,
-    H,
-    H,
-    0,
-    H,
-    H,
-    1,
-    0,
-    -H,
-    0,
-    H,
-    H,
-    1,
-    0,
-    -H,
-    1,
-    0,
+    SW,
+    SE,
+    ridgeE,
+    SW,
+    ridgeE,
+    ridgeW,
     // north slope (-z)
-    H,
-    0,
-    -H,
-    -H,
-    0,
-    -H,
-    -H,
-    1,
-    0,
-    H,
-    0,
-    -H,
-    -H,
-    1,
-    0,
-    H,
-    1,
-    0,
+    NE,
+    NW,
+    ridgeW,
+    NE,
+    ridgeW,
+    ridgeE,
     // east gable (+x)
-    H,
-    0,
-    H,
-    H,
-    0,
-    -H,
-    H,
-    1,
-    0,
+    SE,
+    NE,
+    ridgeE,
     // west gable (-x)
-    -H,
-    0,
-    -H,
-    -H,
-    0,
-    H,
-    -H,
-    1,
-    0,
+    NW,
+    SW,
+    ridgeW,
+    // bottom
     ...BOTTOM,
-  ]);
+  ];
+
+  return flatGeometry(faces.flat().map(Number));
 }
 
 /** Four-sided pyramid with the apex at (0, 1, 0). */
 function createHipRoof(): THREE.BufferGeometry {
-  return flatGeometry([
+  const apex: Vec3 = [0, 1, 0];
+
+  const faces: Vec3[] = [
     // south
-    -H,
-    0,
-    H,
-    H,
-    0,
-    H,
-    0,
-    1,
-    0,
+    SW,
+    SE,
+    apex,
     // east
-    H,
-    0,
-    H,
-    H,
-    0,
-    -H,
-    0,
-    1,
-    0,
+    SE,
+    NE,
+    apex,
     // north
-    H,
-    0,
-    -H,
-    -H,
-    0,
-    -H,
-    0,
-    1,
-    0,
+    NE,
+    NW,
+    apex,
     // west
-    -H,
-    0,
-    -H,
-    -H,
-    0,
-    H,
-    0,
-    1,
-    0,
+    NW,
+    SW,
+    apex,
+    // bottom
     ...BOTTOM,
-  ]);
+  ];
+
+  return flatGeometry(faces.flat().map(Number));
 }
 
 /**
