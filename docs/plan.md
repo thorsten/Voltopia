@@ -74,8 +74,9 @@ src/
     decal.ts       # boxes/prisms fitted flush onto the sloped ground triangles
     waterMesh.ts   # river/lake surfaces
     roadsMesh.ts   # instanced road pads/arms, avenue centre lines, bridges, lamps
-    buildingsMesh.ts # one InstancedMesh per primitive kind, slot blocks per tile, windows
-    buildings/       # recipes (zone/density/variant/tile → parts), palette, primitives, blocks
+    buildingsMesh.ts # one InstancedMesh per primitive kind, slot blocks per tile, windows, accent anchors
+    buildingFxMesh.ts # chimney smoke, vent puffs, antenna beacons fed by the buildings mesh anchors
+    buildings/       # recipes (zone/density/variant/tile → parts), palette, primitives, blocks, accents
     plantsMesh.ts  # plant meshes (wind rotors spin), storage, hubs
     powerLinesMesh.ts # pylons + catenary wires
     disasterMesh.ts # storm/fire/flood fx: decals, embers, smoke, flood water
