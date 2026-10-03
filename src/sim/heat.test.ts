@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { HEATED_NONE, HEATED_SERVED, HEATED_TRUNK } from '../shared/types.ts';
 import { heatingConsumption, placePlant } from './energy.ts';
@@ -13,7 +13,17 @@ import {
   recomputeHeated,
 } from './heat.ts';
 import { buildRoads } from './roads.ts';
-import { createSimState, PlantType, TileType, Zone, type SimState } from './state.ts';
+import {
+  collectDiffs,
+  createSimState,
+  deserializeState,
+  serializeState,
+  PlantType,
+  TileType,
+  Zone,
+  type SimState,
+} from './state.ts';
+import { stepTick } from './tick.ts';
 
 const SIZE = 48;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -324,5 +334,66 @@ describe('chargeHeatStore', () => {
   it('IDLE_HEAT absorbs nothing', () => {
     const state = freshState();
     expect(chargeHeatStore(state, { ...IDLE_HEAT }, 100)).toBe(0);
+  });
+});
+
+/**
+ * A flat-map winter village built with the same script every time: a
+ * plant, a turbine, a store, six served buildings. `createSimState`
+ * rather than `SimEngine.init` so no generated river or lake can cut
+ * the road.
+ */
+function scriptedState(seed: number): SimState {
+  const state = createSimState(seed, SIZE);
+  state.money = 1e9;
+  roadEast(state, 3, 10, 20);
+  poweredHeatPlant(state, 2, 10);
+  placePlant(state, at(2, 14), PlantType.HeatStore);
+  for (let i = 0; i < 6; i++) building(state, 4 + i, 9, 2);
+  // SEASON_ORDER is spring, summer, autumn, winter: a year that started
+  // three seasons ago puts day 0 on the first winter day.
+  state.seasonOriginDay = -BALANCE.seasons.daysPerSeason * 3;
+  return state;
+}
+
+describe('district heating is deterministic and survives a reload', () => {
+  it('two states with the same seed and script agree on the store and the layer', () => {
+    const a = scriptedState(5);
+    const b = scriptedState(5);
+    for (let i = 0; i < TICKS_PER_DAY; i++) {
+      stepTick(a);
+      stepTick(b);
+    }
+    expect(a.heatStored).toBe(b.heatStored);
+    expect(a.lastEnergy.networkHeat).toBe(b.lastEnergy.networkHeat);
+    expect(Array.from(a.layers.heated)).toEqual(Array.from(b.layers.heated));
+    expect(a.lastEnergy.networkHeat).toBeGreaterThan(0);
+  });
+
+  it('a save in mid-operation reloads with the same store and rebuilds the layer', () => {
+    const live = scriptedState(9);
+    for (let i = 0; i < TICKS_PER_DAY / 2; i++) stepTick(live);
+    const save = serializeState(live);
+    const restored = deserializeState(save);
+    expect(restored.heatStored).toBe(live.heatStored);
+    // Derived, never saved: empty on load, rebuilt by the first tick.
+    expect(restored.layers.heated.every((v) => v === HEATED_NONE)).toBe(true);
+    stepTick(restored);
+    expect(restored.layers.heated.filter((v) => v === HEATED_SERVED).length).toBe(6);
+    expect(restored.layers.heated.filter((v) => v === HEATED_TRUNK).length).toBe(
+      BALANCE.heat.reachHops,
+    );
+  });
+
+  it('the tile diff carries the heated value', () => {
+    const state = freshState();
+    roadEast(state, 3, 10, 10);
+    poweredHeatPlant(state, 2, 10);
+    building(state, 4, 9);
+    collectDiffs(state); // drain the build diffs
+    recomputeHeated(state);
+    const diffs = collectDiffs(state);
+    expect(diffs.find((d) => d.index === at(3, 10))?.heated).toBe(HEATED_TRUNK);
+    expect(diffs.find((d) => d.index === at(4, 9))?.heated).toBe(HEATED_SERVED);
   });
 });
