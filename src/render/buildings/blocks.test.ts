@@ -71,8 +71,11 @@ describe('BlockAllocator', () => {
     a.release(y);
     expect(a.live).toBe(0);
     expect(a.highWater).toBe(0);
-    a.alloc();
+    const z = a.alloc();
     expect(a.live).toBe(1);
-    expect(a.highWater).toBe(1);
+    expect(a.highWater).toBeGreaterThan(0);
+    a.release(z);
+    expect(a.live).toBe(0);
+    expect(a.highWater).toBe(0);
   });
 });

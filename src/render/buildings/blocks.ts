@@ -25,7 +25,7 @@ export class BlockAllocator {
   alloc(): number {
     let block: number;
     if (this.free.length > 0) {
-      block = this.free.shift()!;
+      block = this.free.pop()!;
     } else {
       if (this.next >= this.capacity) {
         throw new Error(`BlockAllocator: capacity ${this.capacity} exhausted`);
