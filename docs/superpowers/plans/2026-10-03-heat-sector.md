@@ -847,13 +847,14 @@ existing `./energy.ts` import):
 
 ```ts
 /**
- * One powered plant, a 40-tile road east of it, and `count` served
- * residential buildings of `density` on alternating sides of the road
- * (x = 4 + floor(i / 2), so 80 fit before the road ends).
+ * One powered plant (two when `plants` is 2: the second at the east end
+ * of the road), a 40-tile road, and `count` served residential buildings
+ * of `density` on alternating sides of the road (x = 4 + floor(i / 2)).
  */
-function village(state: SimState, count: number, density = 1): void {
-  roadEast(state, 3, 10, 40);
+function village(state: SimState, count: number, density = 1, plants = 1): void {
+  roadEast(state, 3, 10, 40); // x = 3..42
   poweredHeatPlant(state, 2, 10);
+  if (plants === 2) poweredHeatPlant(state, 43, 10);
   for (let i = 0; i < count; i++) {
     building(state, 4 + Math.floor(i / 2), i % 2 === 0 ? 9 : 11, density);
   }
@@ -899,25 +900,34 @@ describe('heatStep', () => {
     );
   });
 
-  it('honours the store discharge limit and falls back past the pump limit', () => {
+  it('honours the store discharge limit and lets the pumps cover the rest', () => {
     const state = freshState();
-    // Enough heat demand that one plant plus one store cannot carry it:
-    // 50 dense buildings at full cold (8 × 0.8 = 6.4 heat each ≈ 320)
-    // against storeDischargeLimit 150 + pumpPowerLimit 60 × copCold 1.8.
-    village(state, 50, 3);
+    // Two plants reach 46 of the 80 dense buildings (≈ 294 heat at full
+    // cold), more than one store releases per tick.
+    village(state, 80, 3, 2);
     placePlant(state, at(2, 14), PlantType.HeatStore);
     state.season = { ...state.season, temperature: -20 };
     state.heatStored = BALANCE.heat.storeCapacity;
     const heat = heatStep(state);
-    const cop = heatPumpCop(-20);
-    expect(heat.demand).toBeGreaterThan(
-      BALANCE.heat.storeDischargeLimit + BALANCE.heat.pumpPowerLimit * cop,
-    );
+    expect(heat.demand).toBeGreaterThan(BALANCE.heat.storeDischargeLimit);
     expect(heat.fromStore).toBeCloseTo(BALANCE.heat.storeDischargeLimit, 6);
-    expect(heat.pumpHeat).toBeCloseTo(BALANCE.heat.pumpPowerLimit * cop, 6);
-    expect(heat.pumpPower).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 6);
-    expect(heat.fallback).toBeCloseTo(heat.demand - heat.fromStore - heat.pumpHeat, 6);
-    expect(heat.pumpPowerLeft).toBe(0);
+    expect(heat.pumpHeat).toBeCloseTo(heat.demand - BALANCE.heat.storeDischargeLimit, 6);
+    expect(heat.fallback).toBe(0);
+  });
+
+  it('falls back past the pump limit when there is no store', () => {
+    const state = freshState();
+    village(state, 80, 3, 2);
+    state.season = { ...state.season, temperature: -20 };
+    const heat = heatStep(state);
+    const cop = heatPumpCop(-20);
+    const pumpLimit = 2 * BALANCE.heat.pumpPowerLimit;
+    expect(heat.demand).toBeGreaterThan(pumpLimit * cop);
+    expect(heat.fromStore).toBe(0);
+    expect(heat.pumpHeat).toBeCloseTo(pumpLimit * cop, 6);
+    expect(heat.pumpPower).toBeCloseTo(pumpLimit, 6);
+    expect(heat.fallback).toBeCloseTo(heat.demand - heat.pumpHeat, 6);
+    expect(heat.pumpPowerLeft).toBeCloseTo(0, 6);
   });
 
   it('clamps the store to the installed capacity and reports headroom', () => {
@@ -1142,10 +1152,8 @@ extra guard is needed.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm vitest run src/sim/heat.test.ts`
-Expected: PASS. If "honours the store discharge limit…" fails on the
-first `expect(heat.demand).toBeGreaterThan(…)`, raise the village count
-(50 → 70, the road fits 80) rather than touching BALANCE: the test only
-needs demand to exceed one plant plus one store.
+Expected: PASS. If a plant's measured reach gives less demand than the
+caps, report the measured demand rather than touching BALANCE.
 
 - [ ] **Step 5: Format and commit**
 

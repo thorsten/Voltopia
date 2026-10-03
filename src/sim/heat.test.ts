@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { HEATED_NONE, HEATED_SERVED, HEATED_TRUNK } from '../shared/types.ts';
-import { placePlant } from './energy.ts';
-import { heatPumpCop, plantReach, recomputeHeated } from './heat.ts';
+import { heatingConsumption, placePlant } from './energy.ts';
+import {
+  chargeHeatStore,
+  heatPumpCop,
+  heatStep,
+  IDLE_HEAT,
+  nightNeedsHeat,
+  plantReach,
+  recomputeHeated,
+} from './heat.ts';
 import { buildRoads } from './roads.ts';
 import { createSimState, PlantType, TileType, Zone, type SimState } from './state.ts';
 
@@ -33,6 +41,25 @@ function poweredHeatPlant(state: SimState, x: number, y: number): void {
 function building(state: SimState, x: number, y: number, density = 1): void {
   state.layers.zone[at(x, y)] = Zone.Residential;
   state.layers.density[at(x, y)] = density;
+}
+
+/**
+ * One powered plant (two when `plants` is 2: the second at the east end
+ * of the road), a 40-tile road, and `count` served residential buildings
+ * of `density` on alternating sides of the road (x = 4 + floor(i / 2)).
+ */
+function village(state: SimState, count: number, density = 1, plants = 1): void {
+  roadEast(state, 3, 10, 40); // x = 3..42
+  poweredHeatPlant(state, 2, 10);
+  if (plants === 2) poweredHeatPlant(state, 43, 10);
+  for (let i = 0; i < count; i++) {
+    building(state, 4 + Math.floor(i / 2), i % 2 === 0 ? 9 : 11, density);
+  }
+}
+
+/** Heat demand of `count` residential buildings of `density` at `temperature`. */
+function demandOf(state: SimState, count: number, temperature: number, density = 1): number {
+  return count * heatingConsumption(Zone.Residential, density, temperature, state.insulation);
 }
 
 describe('heatPumpCop', () => {
@@ -144,5 +171,158 @@ describe('recomputeHeated', () => {
     recomputeHeated(state);
     expect(state.dirty.has(at(3, 10))).toBe(true);
     expect(state.layers.heated[at(3, 10)]).toBe(HEATED_NONE);
+  });
+});
+
+describe('heatStep', () => {
+  it('serves demand from the pumps at the COP when the store is empty', () => {
+    const state = freshState();
+    village(state, 4);
+    state.season = { ...state.season, temperature: 0 };
+    const heat = heatStep(state);
+    const demand = demandOf(state, 4, 0);
+    expect(demand).toBeGreaterThan(0);
+    expect(heat.demand).toBeCloseTo(demand, 6);
+    expect(heat.fromStore).toBe(0);
+    expect(heat.pumpHeat).toBeCloseTo(demand, 6);
+    expect(heat.cop).toBeCloseTo(heatPumpCop(0), 6);
+    expect(heat.pumpPower).toBeCloseTo(demand / heatPumpCop(0), 6);
+    expect(heat.fallback).toBe(0);
+    expect(heat.networkHeat).toBeCloseTo(demand, 6);
+    expect(heat.pumpPowerLeft).toBeCloseTo(BALANCE.heat.pumpPowerLimit - heat.pumpPower, 6);
+  });
+
+  it('drains the store before running the pumps', () => {
+    const state = freshState();
+    village(state, 4);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.season = { ...state.season, temperature: 0 };
+    state.heatStored = 1_000;
+    const heat = heatStep(state);
+    expect(heat.fromStore).toBeCloseTo(heat.demand, 6);
+    expect(heat.pumpHeat).toBe(0);
+    expect(heat.pumpPower).toBe(0);
+    // Loss applies after the discharge.
+    expect(state.heatStored).toBeCloseTo(
+      (1_000 - heat.demand) * (1 - BALANCE.heat.storeLossPerTick),
+      6,
+    );
+  });
+
+  it('honours the store discharge limit and lets the pumps cover the rest', () => {
+    const state = freshState();
+    // Two plants reach 46 of the 80 dense buildings (≈ 294 heat at full
+    // cold), more than one store releases per tick.
+    village(state, 80, 3, 2);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.season = { ...state.season, temperature: -20 };
+    state.heatStored = BALANCE.heat.storeCapacity;
+    const heat = heatStep(state);
+    expect(heat.demand).toBeGreaterThan(BALANCE.heat.storeDischargeLimit);
+    expect(heat.fromStore).toBeCloseTo(BALANCE.heat.storeDischargeLimit, 6);
+    expect(heat.pumpHeat).toBeCloseTo(heat.demand - BALANCE.heat.storeDischargeLimit, 6);
+    expect(heat.fallback).toBe(0);
+  });
+
+  it('falls back past the pump limit when there is no store', () => {
+    const state = freshState();
+    village(state, 80, 3, 2);
+    state.season = { ...state.season, temperature: -20 };
+    const heat = heatStep(state);
+    const cop = heatPumpCop(-20);
+    const pumpLimit = 2 * BALANCE.heat.pumpPowerLimit;
+    expect(heat.demand).toBeGreaterThan(pumpLimit * cop);
+    expect(heat.fromStore).toBe(0);
+    expect(heat.pumpHeat).toBeCloseTo(pumpLimit * cop, 6);
+    expect(heat.pumpPower).toBeCloseTo(pumpLimit, 6);
+    expect(heat.fallback).toBeCloseTo(heat.demand - heat.pumpHeat, 6);
+    expect(heat.pumpPowerLeft).toBeCloseTo(0, 6);
+  });
+
+  it('clamps the store to the installed capacity and reports headroom', () => {
+    const state = freshState();
+    village(state, 0);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.season = { ...state.season, temperature: 20 }; // no demand
+    state.heatStored = BALANCE.heat.storeCapacity * 5;
+    const heat = heatStep(state);
+    expect(heat.capacity).toBe(BALANCE.heat.storeCapacity);
+    expect(state.heatStored).toBeLessThanOrEqual(BALANCE.heat.storeCapacity);
+    expect(heat.headroom).toBeCloseTo(BALANCE.heat.storeCapacity - state.heatStored, 6);
+  });
+
+  it('is idle without plants: no demand, full fallback for nobody', () => {
+    const state = freshState();
+    building(state, 5, 5);
+    state.season = { ...state.season, temperature: -5 };
+    const heat = heatStep(state);
+    expect(heat).toMatchObject({ demand: 0, pumpPower: 0, fallback: 0, networkHeat: 0 });
+  });
+});
+
+describe('nightNeedsHeat', () => {
+  const { comfortTemperature } = BALANCE.seasons.heating;
+  const swing = BALANCE.seasons.diurnalAmplitude;
+
+  it('opens when the coming night drops below the comfort temperature', () => {
+    expect(nightNeedsHeat(comfortTemperature + swing - 0.5)).toBe(true);
+    expect(nightNeedsHeat(-5)).toBe(true);
+  });
+
+  it('closes on a warm day', () => {
+    expect(nightNeedsHeat(comfortTemperature + swing)).toBe(false);
+    expect(nightNeedsHeat(30)).toBe(false);
+  });
+});
+
+describe('chargeHeatStore', () => {
+  function storeState(temperature: number): { state: SimState; heat: ReturnType<typeof heatStep> } {
+    const state = freshState();
+    village(state, 0);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.season = { ...state.season, temperature };
+    return { state, heat: heatStep(state) };
+  }
+
+  it('stores cop heat units per electricity unit within pump power and headroom', () => {
+    const { state, heat } = storeState(0);
+    const absorbed = chargeHeatStore(state, heat, 20);
+    expect(absorbed).toBeCloseTo(20, 6);
+    expect(state.heatStored).toBeCloseTo(20 * heatPumpCop(0), 6);
+    expect(heat.pumpPowerLeft).toBeCloseTo(BALANCE.heat.pumpPowerLimit - 20, 6);
+  });
+
+  it('is capped by the pump power left', () => {
+    const { state, heat } = storeState(0);
+    const absorbed = chargeHeatStore(state, heat, 10_000);
+    expect(absorbed).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 6);
+  });
+
+  it('is capped by the headroom', () => {
+    const { state, heat } = storeState(0);
+    state.heatStored = BALANCE.heat.storeCapacity - 7;
+    heat.headroom = 7;
+    const absorbed = chargeHeatStore(state, heat, 10_000);
+    expect(absorbed).toBeCloseTo(7 / heatPumpCop(0), 6);
+    expect(state.heatStored).toBeCloseTo(BALANCE.heat.storeCapacity, 6);
+  });
+
+  it('does nothing while the nights are warm', () => {
+    const { state, heat } = storeState(30);
+    expect(chargeHeatStore(state, heat, 100)).toBe(0);
+    expect(state.heatStored).toBe(0);
+  });
+
+  it('does nothing without a plant to pump with', () => {
+    const state = freshState();
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.season = { ...state.season, temperature: 0 };
+    const heat = heatStep(state);
+    expect(chargeHeatStore(state, heat, 100)).toBe(0);
+  });
+
+  it('IDLE_HEAT absorbs nothing', () => {
+    const state = freshState();
+    expect(chargeHeatStore(state, { ...IDLE_HEAT }, 100)).toBe(0);
   });
 });
