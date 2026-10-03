@@ -82,6 +82,8 @@ export class BuildingsMesh implements DiffLayer {
   private readonly cursor = new Int32Array(PART_KINDS.length);
   /** Reusable set of kinds touched by one writeMatrices/writeColors call. */
   private readonly touchedKinds = new Set<PartKind>();
+  /** Reusable scale vector for the per-shopfront window quad in `rebuildWindows`. */
+  private readonly shopfrontScale = new THREE.Vector3();
 
   constructor(
     scene: THREE.Scene,
@@ -416,11 +418,13 @@ export class BuildingsMesh implements DiffLayer {
         const gap = isStreet ? STREET_WINDOW_GAP : WINDOW_GAP;
         rotation.makeRotationY(face * QUARTER_TURN);
         if (isStreet && shopfront) {
-          if (slot >= budgetEnd) break;
+          // Always within budget here: WINDOWS_PER_TILE is reserved per
+          // tile up front, and at most gridSize² buildings ever run through
+          // this loop, so slot never reaches budgetEnd before this check.
           const [dx, dz] = faceOffset(0, depth / 2 + gap, face);
           matrix.copy(rotation);
           matrix.scale(
-            new THREE.Vector3(
+            this.shopfrontScale.set(
               (width * 0.8) / WINDOW_WIDTH,
               (main.sy * SHOPFRONT_HEIGHT_FRACTION) / WINDOW_HEIGHT,
               1,
