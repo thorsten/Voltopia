@@ -6,9 +6,9 @@ import type { ElevationField } from './elevationField.ts';
 import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
 import { applySupplyTint } from './buildings/palette.ts';
 import {
+  DOOR,
   type BuildingPart,
   MAX_PARTS_PER_KIND,
-  STREET_FACE_WINDOW_FLOOR,
   type StreetFace,
   buildingParts,
   faceDepth,
@@ -446,12 +446,30 @@ export class BuildingsMesh implements DiffLayer {
             // Deterministically leave ~1/3 of windows dark.
             if ((index * 7 + windowId * 13 + building.variant) % 3 === 0) continue;
             const localY = main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
-            // On the street face only, a row whose bottom would sit behind
-            // the door (or another accent) is dropped; the opposite face,
-            // which has no such accent, keeps every row.
-            if (isStreet && localY - WINDOW_HEIGHT / 2 < STREET_FACE_WINDOW_FLOOR) continue;
+            let lx = ((col + 0.5) / cols - 0.5) * width * 0.8;
+            if (isStreet && building.zone === Zone.Residential) {
+              // Residential is the only zone with a door. A quad that
+              // overlaps its rectangle is nudged sideways, clear of it;
+              // if it no longer fits on the facade, it is dropped instead
+              // of sinking behind the door.
+              const doorHalfWidth = DOOR.width / 2;
+              const quadLeft = lx - WINDOW_WIDTH / 2;
+              const quadRight = lx + WINDOW_WIDTH / 2;
+              const quadBottom = localY - WINDOW_HEIGHT / 2;
+              const quadTop = localY + WINDOW_HEIGHT / 2;
+              const doorBottom = main.oy;
+              const doorTop = main.oy + DOOR.height;
+              const intersectsDoor =
+                quadLeft < doorHalfWidth &&
+                quadRight > -doorHalfWidth &&
+                quadBottom < doorTop &&
+                quadTop > doorBottom;
+              if (intersectsDoor) {
+                lx = Math.sign(lx || 1) * (doorHalfWidth + WINDOW_WIDTH / 2 + 0.01);
+                if (Math.abs(lx) + WINDOW_WIDTH / 2 >= width / 2) continue;
+              }
+            }
             if (slot >= budgetEnd) break;
-            const lx = ((col + 0.5) / cols - 0.5) * width * 0.8;
             const [dx, dz] = faceOffset(lx, depth / 2 + gap, face);
             const y = lift + localY;
             matrix.copy(rotation);

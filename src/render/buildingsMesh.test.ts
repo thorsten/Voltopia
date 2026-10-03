@@ -6,15 +6,11 @@ import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT } from './buildings/palette.ts';
-import {
-  MAX_PARTS_PER_KIND,
-  STREET_FACE_WINDOW_FLOOR,
-  StreetFace,
-  faceDepth,
-} from './buildings/recipes.ts';
+import { MAX_PARTS_PER_KIND, StreetFace, faceDepth } from './buildings/recipes.ts';
 
-/** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT; not exported for tests. */
+/** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT/WINDOW_WIDTH; not exported for tests. */
 const WINDOW_HEIGHT = 0.11;
+const WINDOW_WIDTH = 0.09;
 
 const SIZE = 8;
 
@@ -301,7 +297,7 @@ describe('BuildingsMesh', () => {
     expect(wide[0].x * 0.09).toBeCloseTo(main.sx * 0.8, 6);
   });
 
-  it('keeps street-face windows above the door on a density-1 house', () => {
+  it('keeps a density-1 house lit on the street face, clear of the door', () => {
     const { scene, mesh } = setup();
     mesh.setReducedMotion(true);
     mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
@@ -311,22 +307,57 @@ describe('BuildingsMesh', () => {
       (c): c is THREE.InstancedMesh =>
         c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
     )!;
+    const cx = 3 + 0.5 + main.ox;
     const cz = 3 + 0.5 + main.oz;
+    // Door rectangle: ±0.1 (DOOR.width/2) around the body centre x, ground
+    // (y = 0 on this flat field) up to the door height (0.16).
+    const doorLeft = cx - 0.1;
+    const doorRight = cx + 0.1;
+    const doorTop = 0.16;
     const m = new THREE.Matrix4();
     const p = new THREE.Vector3();
+    let streetWindows = 0;
     let oppositeWindows = 0;
     for (let i = 0; i < windows.count; i++) {
       windows.getMatrixAt(i, m);
       p.setFromMatrixPosition(m);
       if (p.z > cz) {
-        // Street (south) face: no window's bottom may sit below the floor.
-        expect(p.y - WINDOW_HEIGHT / 2).toBeGreaterThanOrEqual(STREET_FACE_WINDOW_FLOOR - 1e-9);
+        streetWindows++;
+        const quadLeft = p.x - WINDOW_WIDTH / 2;
+        const quadRight = p.x + WINDOW_WIDTH / 2;
+        const quadBottom = p.y - WINDOW_HEIGHT / 2;
+        const intersectsDoor = quadLeft < doorRight && quadRight > doorLeft && quadBottom < doorTop;
+        expect(intersectsDoor).toBe(false);
       } else {
         oppositeWindows++;
       }
     }
-    // The opposite face has no accent to clear, so it keeps its window rows.
+    // The density-1 house must keep lit street-face windows at night; the
+    // opposite face (no door to clear) keeps its window rows too.
+    expect(streetWindows).toBeGreaterThan(0);
     expect(oppositeWindows).toBeGreaterThan(0);
+  });
+
+  it("still lights a density-3 apartment's street face", () => {
+    const { scene, mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+    expect(mesh.streetFaceAt(CENTRE)).toBe(StreetFace.South);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const windows = scene.children.find(
+      (c): c is THREE.InstancedMesh =>
+        c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+    )!;
+    const cz = 3 + 0.5 + main.oz;
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    let streetWindows = 0;
+    for (let i = 0; i < windows.count; i++) {
+      windows.getMatrixAt(i, m);
+      p.setFromMatrixPosition(m);
+      if (p.z > cz) streetWindows++;
+    }
+    expect(streetWindows).toBeGreaterThan(0);
   });
 
   it('keeps the retail shopfront quad below the awning', () => {
