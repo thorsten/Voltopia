@@ -27,18 +27,6 @@ export function yearPhase(day: number, timeOfDay: number, seasonOriginDay: numbe
   return (((elapsed % total) + total) % total) / total;
 }
 
-/** 0..1 heating demand share: 0 at comfort temperature, 1 heatingRange below it. */
-export function heatingDegree(temperature: number): number {
-  const { comfortTemperature, heatingRange } = BALANCE.seasons.heating;
-  return Math.min(1, Math.max(0, (comfortTemperature - temperature) / heatingRange));
-}
-
-/** 0..1 cooling demand share: 0 at comfort temperature, 1 coolingRange above it. */
-export function coolingDegree(temperature: number): number {
-  const { comfortTemperature, coolingRange } = BALANCE.seasons.cooling;
-  return Math.min(1, Math.max(0, (temperature - comfortTemperature) / coolingRange));
-}
-
 /** Seasonal cosine: 1 at `peakPhase`, -1 half a year later. */
 function yearWave(phase: number, peakPhase: number): number {
   return Math.cos(TWO_PI * (phase - peakPhase));
