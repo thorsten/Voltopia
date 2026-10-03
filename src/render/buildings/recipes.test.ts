@@ -152,26 +152,42 @@ describe('building recipes', () => {
   });
 
   it('stay inside the footprint and above the ground', () => {
+    // Assertions are accumulated as violations and checked once after the
+    // loop (rather than inside it) to keep this test fast even with tens of
+    // thousands of part lists across all zones, densities and faces.
+    const violations: string[] = [];
     for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+      const tag = `${zone}/${density}/${variant}/${face}/${index}`;
       for (const p of parts) {
-        expect(partEdge(p), `${zone}/${density}/${variant}/${face}/${index}`).toBeLessThanOrEqual(
-          FOOTPRINT_HALF + 1e-9,
-        );
-        expect(p.oy).toBeGreaterThanOrEqual(-1e-9);
-        expect(p.sx).toBeGreaterThan(0);
-        expect(p.sy).toBeGreaterThan(0);
-        expect(p.sz).toBeGreaterThan(0);
+        const edge = partEdge(p);
+        if (edge > FOOTPRINT_HALF + 1e-9)
+          violations.push(`${tag}: edge ${edge} > ${FOOTPRINT_HALF}`);
+        if (p.oy < -1e-9) violations.push(`${tag}: oy ${p.oy} < 0`);
+        if (!(p.sx > 0)) violations.push(`${tag}: sx ${p.sx} <= 0`);
+        if (!(p.sy > 0)) violations.push(`${tag}: sy ${p.sy} <= 0`);
+        if (!(p.sz > 0)) violations.push(`${tag}: sz ${p.sz} <= 0`);
       }
     }
+    expect(violations).toEqual([]);
   });
 
   it('have exactly one main body and buildingHeight equals the tallest top', () => {
+    // See the footprint test above for why violations are batched.
+    const violations: string[] = [];
     for (const { parts, zone, density, variant, index } of allRecipes(SAMPLE)) {
-      expect(parts.filter((p) => p.main)).toHaveLength(1);
-      expect(mainBody(parts)).toBe(parts.find((p) => p.main));
+      const tag = `${zone}/${density}/${variant}/${index}`;
+      const mains = parts.filter((p) => p.main);
+      if (mains.length !== 1) violations.push(`${tag}: ${mains.length} main parts, expected 1`);
+      if (mainBody(parts) !== parts.find((p) => p.main)) {
+        violations.push(`${tag}: mainBody() does not match parts.find(main)`);
+      }
       const top = Math.max(...parts.map((p) => p.oy + p.sy));
-      expect(buildingHeight(zone, density, variant, index)).toBeCloseTo(top, 9);
+      const height = buildingHeight(zone, density, variant, index);
+      if (Math.abs(height - top) > 1e-9) {
+        violations.push(`${tag}: buildingHeight ${height} != tallest top ${top}`);
+      }
     }
+    expect(violations).toEqual([]);
   });
 
   it('are deterministic and vary with the tile index for the same variant', () => {
@@ -198,12 +214,16 @@ describe('building recipes', () => {
   });
 
   it('never tilt or rotate the main body', () => {
-    for (const { parts } of allRecipes(SAMPLE)) {
+    // See the footprint test above for why violations are batched.
+    const violations: string[] = [];
+    for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
       const main = mainBody(parts)!;
-      expect(main.turn).toBe(0);
-      expect(main.tilt ?? 0).toBe(0);
-      expect(main.kind).toBe(PartKind.Box);
+      const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+      if (main.turn !== 0) violations.push(`${tag}: main.turn ${main.turn} != 0`);
+      if ((main.tilt ?? 0) !== 0) violations.push(`${tag}: main.tilt ${main.tilt} != 0`);
+      if (main.kind !== PartKind.Box) violations.push(`${tag}: main.kind ${main.kind} != Box`);
     }
+    expect(violations).toEqual([]);
   });
 
   it('give a residential house a door on the street face', () => {
