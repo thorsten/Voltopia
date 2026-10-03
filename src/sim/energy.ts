@@ -105,6 +105,8 @@ interface PlantCensus {
   geothermalPlants: number;
   /** Sum of geothermal plants' quality factor × reservoir heat. */
   geothermalCapacity: number;
+  heatPlants: number;
+  heatStores: number;
 }
 
 export function censusPlants(state: SimState): PlantCensus {
@@ -130,6 +132,8 @@ export function censusPlants(state: SimState): PlantCensus {
     tidalCapacity: 0,
     geothermalPlants: 0,
     geothermalCapacity: 0,
+    heatPlants: 0,
+    heatStores: 0,
   };
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant) continue;
@@ -199,6 +203,12 @@ export function censusPlants(state: SimState): PlantCensus {
         // the same number.
         census.geothermalCapacity +=
           BALANCE.geothermal.qualityFactor[geothermal[i]] * (reservoirHeat[i] / FULL_HEAT);
+        break;
+      case PlantType.HeatPlant:
+        census.heatPlants++;
+        break;
+      case PlantType.HeatStore:
+        census.heatStores++;
         break;
       case PlantType.None:
         break;
@@ -536,6 +546,11 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     electrolysis,
     fuelCell,
     hydrogenSold,
+    heatPumpConsumption: 0,
+    networkHeat: 0,
+    heatFallback: 0,
+    heatStoreCharge: 0,
+    heatCop: 1,
     spotPrice,
     tradeSell,
     tradeBuy,

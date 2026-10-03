@@ -25,6 +25,8 @@ interface SaveGameJson {
   freeFlowTicks?: number;
   wellStockedTicks?: number;
   transitTicks?: number;
+  heatStored?: number;
+  warmWinterTicks?: number;
   disasterScale?: number;
   disasters?: SavedDisasters;
   layers: Record<string, string>;
@@ -80,6 +82,8 @@ export function saveToJson(save: SaveGame): string {
     ...(save.freeFlowTicks !== undefined ? { freeFlowTicks: save.freeFlowTicks } : {}),
     ...(save.wellStockedTicks !== undefined ? { wellStockedTicks: save.wellStockedTicks } : {}),
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
+    ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
+    ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
     ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
     ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
     layers,
@@ -223,6 +227,10 @@ export function saveFromJson(text: string): SaveGame {
       ? { wellStockedTicks: parsed.wellStockedTicks }
       : {}),
     ...(typeof parsed.transitTicks === 'number' ? { transitTicks: parsed.transitTicks } : {}),
+    ...(typeof parsed.heatStored === 'number' ? { heatStored: parsed.heatStored } : {}),
+    ...(typeof parsed.warmWinterTicks === 'number'
+      ? { warmWinterTicks: parsed.warmWinterTicks }
+      : {}),
     ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
     ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),
     layers,

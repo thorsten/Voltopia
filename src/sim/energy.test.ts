@@ -12,6 +12,7 @@ import {
   loadProfileFactor,
   placePlant,
 } from './energy.ts';
+import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
@@ -1278,5 +1279,39 @@ describe('geothermal generation', () => {
     for (const output of outputs) {
       expect(output).toBeCloseTo(BALANCE.energy.geothermalPeakOutput, 6);
     }
+  });
+});
+
+describe('heat plants', () => {
+  it('census counts heat plants and heat stores, and neither feeds the grid', () => {
+    const state = makeState();
+    state.money = 1e9;
+    placePlant(state, at(5, 5), PlantType.HeatPlant);
+    placePlant(state, at(6, 5), PlantType.HeatStore);
+    placePlant(state, at(7, 5), PlantType.HeatStore);
+    const census = censusPlants(state);
+    expect(census.heatPlants).toBe(1);
+    expect(census.heatStores).toBe(2);
+    expect(isSupplySource(PlantType.HeatPlant)).toBe(false);
+    expect(isSupplySource(PlantType.HeatStore)).toBe(false);
+  });
+
+  it('a damaged heat store leaves the census', () => {
+    const state = makeState();
+    state.money = 1e9;
+    placePlant(state, at(5, 5), PlantType.HeatStore);
+    state.layers.damage[at(5, 5)] = 10;
+    expect(censusPlants(state).heatStores).toBe(0);
+  });
+
+  it('charges the listed cost for both heat plants', () => {
+    const state = makeState();
+    const before = state.money;
+    placePlant(state, at(5, 5), PlantType.HeatPlant);
+    expect(state.money).toBe(before - BALANCE.costs.plant[PlantType.HeatPlant]);
+    placePlant(state, at(6, 5), PlantType.HeatStore);
+    expect(state.money).toBe(
+      before - BALANCE.costs.plant[PlantType.HeatPlant] - BALANCE.costs.plant[PlantType.HeatStore],
+    );
   });
 });

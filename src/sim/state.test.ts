@@ -466,6 +466,25 @@ describe('save round trip', () => {
     expect([...restored.layers.terrain]).toEqual([...state.layers.terrain]);
     expect(restored.layers.plantType[tile]).toBe(PlantType.TidalPlant);
   });
+
+  it('persists the heat store and the warm-winter streak', () => {
+    const state = makeState();
+    state.heatStored = 777;
+    state.goalProgress.warmWinterTicks = 42;
+    const restored = deserializeState(serializeState(state));
+    expect(restored.heatStored).toBe(777);
+    expect(restored.goalProgress.warmWinterTicks).toBe(42);
+  });
+
+  it('loads a save without heat fields as an empty tank and a zero streak', () => {
+    const state = makeState();
+    const save = serializeState(state);
+    delete save.heatStored;
+    delete save.warmWinterTicks;
+    const restored = deserializeState(save);
+    expect(restored.heatStored).toBe(0);
+    expect(restored.goalProgress.warmWinterTicks).toBe(0);
+  });
 });
 
 describe('elevation', () => {

@@ -53,6 +53,10 @@ export const PlantType = {
   HydrogenPlant: 13,
   TidalPlant: 14,
   GeothermalPlant: 15,
+  /** District-heating plant: a large heat pump feeding the road network. */
+  HeatPlant: 16,
+  /** Hot-water store charged through the heat plants from surplus. */
+  HeatStore: 17,
 } as const;
 export type PlantType = (typeof PlantType)[keyof typeof PlantType];
 
@@ -178,6 +182,8 @@ export interface EnergyStats {
     cooling: number;
     /** Surplus electricity consumed by electrolysers (stored or sold). */
     electrolysis: number;
+    /** Electricity the district-heating pumps drew (serving plus charging the store). */
+    heatPumps: number;
   };
   /** Absolute stored energy across all batteries. */
   storedEnergy: number;
@@ -193,6 +199,18 @@ export interface EnergyStats {
   hydrogenCapacity: number;
   /** Hydrogen sold this tick because the tanks were full. */
   hydrogenSold: number;
+  /** Heat units delivered to served buildings this tick (store plus pumps). */
+  networkHeat: number;
+  /** Heat units the network could not deliver; those buildings heated themselves. */
+  heatFallback: number;
+  /** Electricity absorbed into the heat store this tick. */
+  heatStoreCharge: number;
+  /** Heat units in the pooled hot-water store. */
+  heatStored: number;
+  /** Installed heat store capacity (heat units). */
+  heatCapacity: number;
+  /** Heat pump coefficient of performance in force this tick. */
+  heatCop: number;
   /** Spot price factor this tick (1 = the base link prices). */
   spotPrice: number;
   /** Stored energy sold into the link by market trading this tick. */
@@ -584,6 +602,13 @@ export interface SavedDisasters {
 export const SERVICE_FIRE = 1;
 export const SERVICE_POLICE = 2;
 
+/** Values of `TileDiff.heated` / `layers.heated`. */
+export const HEATED_NONE = 0;
+/** A road tile the district-heating network reaches. */
+export const HEATED_TRUNK = 1;
+/** A building tile the network heats. */
+export const HEATED_SERVED = 2;
+
 /** Per-tile fields the renderer needs; sent as diffs for changed tiles only. */
 export interface TileDiff {
   index: number;
@@ -604,6 +629,8 @@ export interface TileDiff {
   supplied: SupplyStatus;
   /** Service coverage bitmask: 1 = fire, 2 = police. */
   services: number;
+  /** District heating: 0 = none, 1 = network road (trunk), 2 = served building. */
+  heated: number;
   plantType: PlantType;
   terrain: Terrain;
   /** Elevation level 0..7 (immutable after map generation). */
@@ -676,6 +703,10 @@ export interface SaveGame {
   wellStockedTicks?: number;
   /** Consecutive modal-shift ticks so far (absent in older saves → 0). */
   transitTicks?: number;
+  /** Heat units in the district-heating store (absent in older saves → 0). */
+  heatStored?: number;
+  /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
+  warmWinterTicks?: number;
   /** Disaster intensity of this city (absent in older saves → 0 = off). */
   disasterScale?: number;
   /** Events in flight (absent in older saves → none). */

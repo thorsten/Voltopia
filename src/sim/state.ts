@@ -192,6 +192,8 @@ export interface TileLayers {
   energized: Uint8Array;
   /** Service coverage bitmask (SERVICE_FIRE | SERVICE_POLICE). Derived, not persisted. */
   services: Uint8Array;
+  /** District heating: HEATED_NONE / HEATED_TRUNK / HEATED_SERVED. Derived, not persisted. */
+  heated: Uint8Array;
   /** Ticks since the building on this tile last changed (not persisted). */
   buildingAge: Uint32Array;
   /** Consecutive ticks without full supply (not persisted). */
@@ -231,6 +233,8 @@ export interface SimState {
   pumpedStorageEnergy: number;
   /** Hydrogen stored in hydrogen plants (third pool, filled from surplus). */
   hydrogenEnergy: number;
+  /** Heat units in the pooled district-heating store (fourth pool; never re-electrified). */
+  heatStored: number;
   /** Incremented whenever plants or power lines change; drives recomputeGrid. */
   gridVersion: number;
   /** gridVersion the energized layer was last computed for (-1 = never). */
@@ -308,6 +312,7 @@ export interface SimState {
     transitTicks: number;
     geothermalTicks: number;
     stormTicks: number;
+    warmWinterTicks: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -355,6 +360,16 @@ export interface SimState {
     fuelCell: number;
     /** Hydrogen units sold this tick because the tanks were full. */
     hydrogenSold: number;
+    /** Electricity the heat pumps drew this tick (serving plus charging). */
+    heatPumpConsumption: number;
+    /** Heat units delivered to served buildings this tick. */
+    networkHeat: number;
+    /** Heat units that fell back to the buildings' own electric heating. */
+    heatFallback: number;
+    /** Electricity absorbed into the heat store this tick. */
+    heatStoreCharge: number;
+    /** Heat pump COP in force this tick. */
+    heatCop: number;
     /** Spot price factor applied to this tick's link traffic. */
     spotPrice: number;
     /** Stored energy sold / bought by market trading this tick. */
@@ -383,6 +398,7 @@ export function createTileLayers(size: number): TileLayers {
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
     services: new Uint8Array(tiles),
+    heated: new Uint8Array(tiles),
     buildingAge: new Uint32Array(tiles),
     troubledTicks: new Uint32Array(tiles),
     trafficLoad: new Uint8Array(tiles),
@@ -415,6 +431,7 @@ export function createSimState(
     storedEnergy: 0,
     pumpedStorageEnergy: 0,
     hydrogenEnergy: 0,
+    heatStored: 0,
     gridVersion: 0,
     gridComputedVersion: -1,
     weather: {
@@ -457,6 +474,7 @@ export function createSimState(
       transitTicks: 0,
       geothermalTicks: 0,
       stormTicks: 0,
+      warmWinterTicks: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
@@ -500,6 +518,11 @@ export function createSimState(
       electrolysis: 0,
       fuelCell: 0,
       hydrogenSold: 0,
+      heatPumpConsumption: 0,
+      networkHeat: 0,
+      heatFallback: 0,
+      heatStoreCharge: 0,
+      heatCop: 1,
       spotPrice: 1,
       tradeSell: 0,
       tradeBuy: 0,
@@ -562,6 +585,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       variant: layers.variant[index],
       supplied: layers.supplied[index] as TileDiff['supplied'],
       services: layers.services[index],
+      heated: layers.heated[index],
       plantType: layers.plantType[index] as TileDiff['plantType'],
       terrain: layers.terrain[index] as TileDiff['terrain'],
       elevation: layers.elevation[index],
@@ -822,6 +846,8 @@ export function serializeState(state: SimState): SaveGame {
     freeFlowTicks: state.goalProgress.freeFlowTicks,
     wellStockedTicks: state.goalProgress.wellStockedTicks,
     transitTicks: state.goalProgress.transitTicks,
+    heatStored: state.heatStored,
+    warmWinterTicks: state.goalProgress.warmWinterTicks,
     disasterScale: state.disasterScale,
     disasters: {
       nextId: state.disasters.nextId,
@@ -871,6 +897,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.layers.plantType.set(new Uint8Array(save.layers.plantType));
   state.pumpedStorageEnergy = save.pumpedStorageEnergy ?? 0;
   state.hydrogenEnergy = save.hydrogenEnergy ?? 0;
+  state.heatStored = save.heatStored ?? 0;
   state.weather.riverFlow = save.riverFlow ?? BALANCE.water.dryBaselineFlow;
   // Hand-edited JSON exports may hold out-of-range values; keep the
   // season readable (whole days, snow cover 0..1).
@@ -881,6 +908,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.goalProgress.freeFlowTicks = save.freeFlowTicks ?? 0;
   state.goalProgress.wellStockedTicks = save.wellStockedTicks ?? 0;
   state.goalProgress.transitTicks = save.transitTicks ?? 0;
+  state.goalProgress.warmWinterTicks = save.warmWinterTicks ?? 0;
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.season = seasonState({
@@ -994,6 +1022,17 @@ export function totalBiogasCapacity(state: SimState): number {
 
 export function totalHydrogenCapacity(state: SimState): number {
   return countPlants(state, PlantType.HydrogenPlant) * BALANCE.hydrogen.capacity;
+}
+
+/** Installed heat store capacity (heat units); damaged stores do not count. */
+export function totalHeatCapacity(state: SimState): number {
+  const { tileType, plantType, damage } = state.layers;
+  let stores = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant || damage[i] !== 0) continue;
+    if (plantType[i] === PlantType.HeatStore) stores++;
+  }
+  return stores * BALANCE.heat.storeCapacity;
 }
 
 export function totalPumpedStorageCapacity(state: SimState): number {
