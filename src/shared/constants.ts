@@ -316,8 +316,11 @@ export const BALANCE = {
      * town of 72 dense buildings run through a winter, with and without
      * the network. Two well-placed plants serve 86 % of it and cut the
      * electricity for heat to 0.52 of the individual-heating case
-     * (0.48 over a full year) — close to the served share divided by the
-     * mean winter COP of 2.42.
+     * (0.48 over a full year). That is the expected mix: the unserved
+     * share still heats itself 1:1 and the served share pays 1/COP, so
+     * (1 − 0.86) + 0.86 / 2.42 = 0.50 at the mean winter COP of 2.42,
+     * plus the store's standing loss and the heat the pumps could not
+     * make.
      */
     /**
      * Road tiles (4-neighbour hops) the network extends from a plant.
@@ -355,7 +358,7 @@ export const BALANCE = {
     /**
      * Heat units one store holds. The probe's tank filled to capacity on
      * windy nights, drained to empty on calm ones (~11 cycles per
-     * in-game day) and carried more charge through the evening peak
+     * in-game day with one store) and carried more charge through the evening peak
      * (mean 2 466) than through the morning (1 049).
      */
     storeCapacity: 6_000,
