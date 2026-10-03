@@ -164,14 +164,13 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
           testId="detail-energy-electrolysis"
         />
         <Row
-          label={t('energy.heatPumps', { cop: energy.heatCop.toFixed(1) })}
+          label={
+            energy.heatCapacity > 0 || energy.consumption.heatPumps > 0
+              ? t('energy.heatPumps', { cop: energy.heatCop.toFixed(1) })
+              : t('energy.heatPumpsIdle')
+          }
           value={energy.consumption.heatPumps}
           testId="detail-energy-heat-pumps"
-        />
-        <Row
-          label={t('energy.networkHeat')}
-          value={energy.networkHeat}
-          testId="detail-energy-network-heat"
         />
         <div
           className={`energy-row balance ${balance >= 0 ? 'positive' : 'negative'}`}
@@ -228,6 +227,11 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
         stored={energy.hydrogenStoredEnergy}
         capacity={energy.hydrogenCapacity}
         testId="energy-hydrogen-soc"
+      />
+      <Row
+        label={t('energy.networkHeat')}
+        value={energy.networkHeat}
+        testId="detail-energy-network-heat"
       />
       <SocBlock
         label={t('energy.heatStorage')}

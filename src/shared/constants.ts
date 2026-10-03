@@ -304,24 +304,24 @@ export const BALANCE = {
     saleRevenuePerEnergyUnit: 0.08,
   },
 
+  /**
+   * District heating. A heat plant is a large heat pump that injects
+   * heat into the road network; a heat store is a hot-water tank the
+   * surplus cascade fills through the pumps. Heat never turns back
+   * into electricity, so the store is a one-way flexible load.
+   *
+   * Every value below was confirmed (none changed) by a headless probe
+   * (src/sim/heat.probe.test.ts, deleted after use): one four-street
+   * town of 72 dense buildings run through a winter, with and without
+   * the network. Two well-placed plants serve 86 % of it and cut the
+   * electricity for heat to 0.52 of the individual-heating case
+   * (0.48 over a full year). That is the expected mix: the unserved
+   * share still heats itself 1:1 and the served share pays 1/COP, so
+   * (1 − 0.86) + 0.86 / 2.42 = 0.50 at the mean winter COP of 2.42,
+   * plus the store's standing loss and the heat the pumps could not
+   * make.
+   */
   heat: {
-    /**
-     * District heating. A heat plant is a large heat pump that injects
-     * heat into the road network; a heat store is a hot-water tank the
-     * surplus cascade fills through the pumps. Heat never turns back
-     * into electricity, so the store is a one-way flexible load.
-     *
-     * Every value below was confirmed (none changed) by a headless probe
-     * (src/sim/heat.probe.test.ts, deleted after use): one four-street
-     * town of 72 dense buildings run through a winter, with and without
-     * the network. Two well-placed plants serve 86 % of it and cut the
-     * electricity for heat to 0.52 of the individual-heating case
-     * (0.48 over a full year). That is the expected mix: the unserved
-     * share still heats itself 1:1 and the served share pays 1/COP, so
-     * (1 − 0.86) + 0.86 / 2.42 = 0.50 at the mean winter COP of 2.42,
-     * plus the store's standing loss and the heat the pumps could not
-     * make.
-     */
     /**
      * Road tiles (4-neighbour hops) the network extends from a plant.
      * Probe sweep at 60 pump power, two plants: 8 hops serves 44 % of

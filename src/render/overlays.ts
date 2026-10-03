@@ -145,8 +145,7 @@ export class OverlaysMesh implements DiffLayer {
         diff.tileType === TileType.Road ||
         diff.plantType === PlantType.LogisticsDepot ||
         diff.plantType === PlantType.BusDepot ||
-        diff.damage > 0 ||
-        diff.heated !== 0
+        diff.damage > 0
       ) {
         this.tiles.set(diff.index, {
           zone: diff.zone,

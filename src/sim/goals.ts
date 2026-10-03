@@ -114,8 +114,10 @@ export function goalsStep(state: SimState): void {
 
   // A whole winter day on district heating: the network carries at least
   // half the city's heat, nobody falls back, and there is heat demand at
-  // all (an empty city cannot unlock it).
-  const heatTotal = e.networkHeat + e.heatFallback + e.heatingConsumption;
+  // all (an empty city cannot unlock it). heatingConsumption already
+  // includes the fallback share, so it alone covers every heat unit not
+  // on the network.
+  const heatTotal = e.networkHeat + e.heatingConsumption;
   if (
     state.season.season === 'winter' &&
     heatTotal > 0 &&
