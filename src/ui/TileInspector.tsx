@@ -245,6 +245,33 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               />
             </>
           )}
+          {info.heatPlant && (
+            <>
+              <Row
+                label={t('inspect.heatReach')}
+                value={`${info.heatPlant.reach} · ${info.heatPlant.served}`}
+                hint={t('inspect.heatReachHint')}
+                tone={info.heatPlant.reach === 0 ? 'negative' : 'muted'}
+                testId="inspect-heat-reach"
+              />
+              <Row
+                label={t('inspect.heatCop')}
+                value={`${info.heatPlant.cop.toFixed(1)} · ${
+                  info.heatPlant.active ? t('inspect.heatActive') : t('inspect.heatInactive')
+                }`}
+                tone={info.heatPlant.active ? 'positive' : 'negative'}
+                testId="inspect-heat-cop"
+              />
+              {info.heatPlant.reach === 0 && (
+                <Row
+                  label={t('inspect.heatNoRoad')}
+                  value=""
+                  tone="negative"
+                  testId="inspect-heat-noroad"
+                />
+              )}
+            </>
+          )}
         </section>
       )}
 
@@ -495,6 +522,12 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
                 value={info.policeCovered ? t('inspect.covered') : t('inspect.uncovered')}
                 tone={info.policeCovered ? 'positive' : 'negative'}
                 testId="inspect-police"
+              />
+              <Row
+                label={t('inspect.heating')}
+                value={info.heated ? t('inspect.heatNetwork') : t('inspect.heatOwn')}
+                tone={info.heated ? 'positive' : 'muted'}
+                testId="inspect-heating"
               />
             </>
           )}

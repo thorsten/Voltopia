@@ -436,6 +436,19 @@ export interface TileInfo {
   fireCovered: boolean;
   /** Building inside a powered police station's ring. */
   policeCovered: boolean;
+  /** Building heated by the district network this tick. */
+  heated: boolean;
+  /** Present on a heat plant: its own reach and what it serves. */
+  heatPlant?: {
+    /** Road tiles this plant's network reaches (0 without an adjacent road). */
+    reach: number;
+    /** Buildings beside those roads. */
+    served: number;
+    /** COP in force this tick. */
+    cop: number;
+    /** Connected to the grid and intact, i.e. actually heating. */
+    active: boolean;
+  };
   /** For fire/police stations: connected to the grid and covering its ring. */
   stationActive: boolean;
   /** Road class of a road tile (Street for everything else). */
