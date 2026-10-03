@@ -30,4 +30,10 @@ describe('coolingDegree', () => {
     expect(coolingDegree(comfortTemperature + coolingRange + 10)).toBe(1);
     expect(coolingDegree(comfortTemperature + coolingRange / 2)).toBeCloseTo(0.5, 9);
   });
+
+  it('never overlaps with heating: no temperature has both loads', () => {
+    for (let t = -20; t <= 40; t += 0.5) {
+      expect(heatingDegree(t) * coolingDegree(t)).toBe(0);
+    }
+  });
 });
