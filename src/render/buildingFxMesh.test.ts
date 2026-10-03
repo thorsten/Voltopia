@@ -4,6 +4,7 @@ import { SupplyStatus } from '../shared/types.ts';
 import type { RenderEnvironment } from './renderer.ts';
 import { PartRole } from './buildings/recipes.ts';
 import type { AccentAnchor, AccentState } from './buildings/accents.ts';
+import { MAX_PUFF_ANCHORS_PER_TILE } from './buildings/accents.ts';
 import { BuildingFxMesh, PUFFS_PER_EMITTER } from './buildingFxMesh.ts';
 
 const SIZE = 8;
@@ -52,7 +53,9 @@ describe('BuildingFxMesh puffs', () => {
     const { scene, fx } = setup();
     expect(fx.puffs.frustumCulled).toBe(false);
     expect(fx.beacons.frustumCulled).toBe(false);
-    expect(fx.puffs.instanceMatrix.count).toBe(SIZE * SIZE * PUFFS_PER_EMITTER);
+    expect(fx.puffs.instanceMatrix.count).toBe(
+      SIZE * SIZE * MAX_PUFF_ANCHORS_PER_TILE * PUFFS_PER_EMITTER,
+    );
     expect(fx.beacons.instanceMatrix.count).toBe(SIZE * SIZE);
     expect(scene.children).toContain(fx.puffs);
     expect(scene.children).toContain(fx.beacons);
@@ -177,5 +180,19 @@ describe('BuildingFxMesh puffs', () => {
     fx.remove(TILE + 1);
     fx.update(0.016, 3);
     expect(fx.puffs.count).toBe(0);
+  });
+
+  it('clamps puff writes at capacity instead of overflowing the buffer', () => {
+    const { fx } = setup();
+    // One anchor per tile, but more tiles than the buffer has room for
+    // under MAX_PUFF_ANCHORS_PER_TILE anchors per tile.
+    const overCapacity = SIZE * SIZE * MAX_PUFF_ANCHORS_PER_TILE + 1;
+    for (let i = 0; i < overCapacity; i++) {
+      fx.set(i, chimney(), state());
+    }
+    fx.setEnvironment(environment(0));
+    fx.update(0.016, 1);
+    expect(fx.puffs.count).toBeLessThanOrEqual(fx.puffs.instanceMatrix.count);
+    expect(fx.puffs.count).toBe(fx.puffs.instanceMatrix.count);
   });
 });

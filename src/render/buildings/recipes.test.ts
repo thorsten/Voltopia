@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Zone } from '../../shared/types.ts';
 import { PART_KINDS, PartKind } from './primitives.ts';
 import { ACCENT } from './palette.ts';
+import { MAX_PUFF_ANCHORS_PER_TILE } from './accents.ts';
 import {
   type BuildingPart,
   FOOTPRINT_HALF,
@@ -452,6 +453,15 @@ describe('building recipes', () => {
             expect(roles(parts, PartRole.Vent)).toHaveLength(2);
           }
         }
+      }
+    });
+
+    it('never tags more puff-emitting (chimney or vent) parts than BuildingFxMesh has room for', () => {
+      for (const { parts } of allRecipes(SAMPLE)) {
+        const puffAnchors = parts.filter(
+          (p) => p.role === PartRole.Chimney || p.role === PartRole.Vent,
+        );
+        expect(puffAnchors.length).toBeLessThanOrEqual(MAX_PUFF_ANCHORS_PER_TILE);
       }
     });
 

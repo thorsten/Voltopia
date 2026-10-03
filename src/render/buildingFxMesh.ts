@@ -4,6 +4,7 @@ import { SupplyStatus } from '../shared/types.ts';
 import { heatingDegree } from '../shared/heating.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { AccentAnchor, AccentSink, AccentState } from './buildings/accents.ts';
+import { MAX_PUFF_ANCHORS_PER_TILE } from './buildings/accents.ts';
 import { PartRole } from './buildings/recipes.ts';
 
 /** Puffs per smoking chimney or vent stack. */
@@ -93,7 +94,7 @@ export class BuildingFxMesh implements DiffLayer, AccentSink {
         opacity: PUFF_OPACITY,
         depthWrite: false,
       }),
-      tiles * PUFFS_PER_EMITTER,
+      tiles * MAX_PUFF_ANCHORS_PER_TILE * PUFFS_PER_EMITTER,
     );
     // Instance transforms span the whole grid; the base geometry's bounds
     // would wrongly cull the mesh, so culling is disabled.
@@ -214,9 +215,14 @@ export class BuildingFxMesh implements DiffLayer, AccentSink {
         }
       }
     }
+    // Nothing to upload when there were no puffs before and there are
+    // none now (an idle map with only non-emitting accents attached).
+    const puffsChanged = puffCount > 0 || this.puffs.count > 0;
     this.puffs.count = puffCount;
-    this.puffs.instanceMatrix.needsUpdate = true;
-    if (this.puffs.instanceColor) this.puffs.instanceColor.needsUpdate = true;
+    if (puffsChanged) {
+      this.puffs.instanceMatrix.needsUpdate = true;
+      if (this.puffs.instanceColor) this.puffs.instanceColor.needsUpdate = true;
+    }
     this.beacons.count = beaconCount;
     this.beacons.instanceMatrix.needsUpdate = true;
   }
@@ -231,6 +237,10 @@ export class BuildingFxMesh implements DiffLayer, AccentSink {
     rise: number,
     nightDim: number,
   ): number {
+    // Capacity is sized for MAX_PUFF_ANCHORS_PER_TILE live emitters per
+    // tile; a future recipe with more tagged parts degrades to dropped
+    // puffs here rather than a silent out-of-bounds write.
+    if (slot + PUFFS_PER_EMITTER > this.puffs.instanceMatrix.count) return slot;
     for (let k = 0; k < PUFFS_PER_EMITTER; k++) {
       const u = frac(time / PUFF_CYCLE_SECONDS + k / PUFFS_PER_EMITTER + phase);
       const size = PUFF_MIN + (PUFF_MAX - PUFF_MIN) * u;

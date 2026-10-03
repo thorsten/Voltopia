@@ -1,6 +1,14 @@
 import type { SupplyStatus } from '../../shared/types.ts';
 import type { BuildingPart, PartRole } from './recipes.ts';
 
+/**
+ * Puff-emitting anchors (chimney or vent) a single tile can carry: the
+ * market hall's two vent stacks; the chimney house has one. Sizes
+ * `BuildingFxMesh`'s puff buffer and is pinned on the recipe side by
+ * recipes.test.ts so a future recipe cannot silently outgrow it.
+ */
+export const MAX_PUFF_ANCHORS_PER_TILE = 2;
+
 /** World-space top centre of a role-tagged part. */
 export interface AccentAnchor {
   role: PartRole;
