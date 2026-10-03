@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import {
   DeliveryState,
+  HEATED_SERVED,
+  HEATED_TRUNK,
   OverlayMode,
   PlantType,
   SERVICE_FIRE,
@@ -54,6 +56,23 @@ export function damageColor(damage: number): number {
   return damage < 128 ? DAMAGE_COLORS.light : DAMAGE_COLORS.heavy;
 }
 
+const HEAT_COLORS = { trunk: 0xf4a261, served: 0xe76f51, unserved: 0x5b9bd5 } as const;
+
+/** Overlay colour of a tile in the Heat overlay, null when it shows nothing. */
+export function heatColor(tile: {
+  tileType: TileType;
+  density: number;
+  heated: number;
+}): number | null {
+  if (tile.tileType === TileType.Road) {
+    return tile.heated === HEATED_TRUNK ? HEAT_COLORS.trunk : null;
+  }
+  if (tile.tileType === TileType.Empty && tile.density > 0) {
+    return tile.heated === HEATED_SERVED ? HEAT_COLORS.served : HEAT_COLORS.unserved;
+  }
+  return null;
+}
+
 interface OverlayTile {
   zone: Zone;
   density: number;
@@ -67,13 +86,15 @@ interface OverlayTile {
   stopState: number;
   transitCover: number;
   damage: number;
+  heated: number;
 }
 
 /**
  * Toggleable color maps over the city: supply status of every building,
  * growth demand tinting all zoned tiles, fire/police service coverage of
  * every building, per-tile traffic congestion on roads, delivery status
- * of shops and depots, or bus coverage and stop service.
+ * of shops and depots, bus coverage and stop service, or the reach of
+ * the district-heating network.
  */
 export class OverlaysMesh implements DiffLayer {
   private readonly mesh: THREE.InstancedMesh;
@@ -124,7 +145,8 @@ export class OverlaysMesh implements DiffLayer {
         diff.tileType === TileType.Road ||
         diff.plantType === PlantType.LogisticsDepot ||
         diff.plantType === PlantType.BusDepot ||
-        diff.damage > 0
+        diff.damage > 0 ||
+        diff.heated !== 0
       ) {
         this.tiles.set(diff.index, {
           zone: diff.zone,
@@ -139,6 +161,7 @@ export class OverlaysMesh implements DiffLayer {
           stopState: diff.stopState,
           transitCover: diff.transitCover,
           damage: diff.damage,
+          heated: diff.heated,
         });
       } else {
         this.tiles.delete(diff.index);
@@ -235,6 +258,8 @@ export class OverlaysMesh implements DiffLayer {
           ) {
             colorHex = damageColor(tile.damage);
           }
+        } else if (this.mode === OverlayMode.Heat) {
+          colorHex = heatColor(tile);
         }
         if (colorHex === null) continue;
         this.matrix.setPosition(

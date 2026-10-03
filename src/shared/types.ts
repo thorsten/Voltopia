@@ -92,6 +92,7 @@ export const OverlayMode = {
   Deliveries: 5,
   Transit: 6,
   Damage: 7,
+  Heat: 8,
 } as const;
 export type OverlayMode = (typeof OverlayMode)[keyof typeof OverlayMode];
 

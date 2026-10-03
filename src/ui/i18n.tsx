@@ -218,6 +218,9 @@ const en = {
   'overlay.damage': 'Damage',
   'overlay.damage.title':
     'Damage: buildings and plants always shown intact / damaged / wrecked; any other tile only lights up once it is hit',
+  'overlay.heat': 'Heat',
+  'overlay.heat.title':
+    'District heating: orange roads carry the network, red buildings are served, blue buildings heat themselves',
 
   'rejection.notEnoughMoney': 'Not enough money',
   'rejection.tileOccupied': 'This tile is already occupied',
@@ -745,6 +748,9 @@ const de: Record<TranslationKey, string> = {
   'overlay.damage': 'Schäden',
   'overlay.damage.title':
     'Schäden: Gebäude und Anlagen sind immer heil / beschädigt / zerstört eingefärbt; andere Felder leuchten erst auf, wenn sie getroffen wurden',
+  'overlay.heat': 'Wärme',
+  'overlay.heat.title':
+    'Fernwärme: orange Straßen tragen das Netz, rote Gebäude sind versorgt, blaue Gebäude heizen selbst',
 
   'rejection.notEnoughMoney': 'Nicht genug Geld',
   'rejection.tileOccupied': 'Dieses Feld ist bereits belegt',

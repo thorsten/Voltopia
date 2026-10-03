@@ -50,6 +50,7 @@ const MODES: Array<{
     label: 'overlay.damage',
     title: 'overlay.damage.title',
   },
+  { mode: OverlayMode.Heat, id: 'heat', label: 'overlay.heat', title: 'overlay.heat.title' },
 ];
 
 export function OverlayToggle({
