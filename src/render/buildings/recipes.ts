@@ -506,6 +506,113 @@ function commercial(
   return parts;
 }
 
+function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily): BuildingPart[] {
+  const wall = p.from(family.walls);
+  const roof = p.from(family.roofs);
+  const trim = p.from(family.trims);
+  const sign = family.trims[(family.trims.indexOf(trim) + 1) % family.trims.length];
+  const parts: BuildingPart[] = [];
+
+  if (density === 1) {
+    // Shop: flat roof slab, awning and sign on the street face.
+    const w = 0.7;
+    const d = 0.6;
+    const h = 0.3 + p.unit() * 0.05;
+    const body = box(w, h, d, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    parts.push(box(w + 0.02, 0.03, d + 0.02, 0, h, 0, roof));
+    parts.push(onStreetFace(body, face, 0.9, 0.04, 0.08, h * 0.6, trim));
+    parts.push(onStreetFace(body, face, 0.6, 0.08, 0.03, h * 0.6 + 0.05, sign));
+  } else if (density === 2) {
+    // Wider shop: pitched roof over the back half, flat front with awning, sign and PV.
+    const w = 0.7;
+    const d = 0.66;
+    const h = 0.45 + p.unit() * 0.05;
+    const body = box(w, h, d, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    const fw = faceWidth(body, face);
+    const fd = faceDepth(body, face);
+    const roofKind = p.chance(0.5) ? PartKind.GableRoof : PartKind.HipRoof;
+    parts.push(
+      facePart(
+        roofKind,
+        body,
+        face,
+        { w: fw + ROOF_OVERHANG, h: 0.14, d: fd / 2 + 0.02, lx: 0, ly: h, lz: -fd / 4 },
+        roof,
+      ),
+    );
+    parts.push(
+      facePart(
+        PartKind.Box,
+        body,
+        face,
+        { w: fw + 0.02, h: 0.03, d: fd / 2, lx: 0, ly: h, lz: fd / 4 },
+        roof,
+      ),
+    );
+    parts.push(onStreetFace(body, face, 0.9, 0.04, 0.08, h * 0.6, trim));
+    parts.push(onStreetFace(body, face, 0.6, 0.08, 0.03, h * 0.6 + 0.05, sign));
+    parts.push(
+      facePart(
+        PartKind.Box,
+        body,
+        face,
+        {
+          w: fw * 0.5,
+          h: ROOFTOP_PV_THICKNESS,
+          d: (fd / 2) * 0.6,
+          lx: 0,
+          ly: h + 0.03,
+          lz: fd / 4,
+        },
+        ACCENT.rooftopPv,
+        { accent: true },
+      ),
+    );
+  } else {
+    // Market hall: long gable across the full width, two awnings, two vent stacks, PV on the slope.
+    const w = 0.8;
+    const d = 0.78;
+    const h = 0.8 + p.unit() * 0.08;
+    const body = box(w, h, d, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    const fw = faceWidth(body, face);
+    const fd = faceDepth(body, face);
+    const roofHeight = 0.18;
+    const roofW = fw * 1.04;
+    const roofD = fd * 1.04;
+    parts.push(
+      facePart(
+        PartKind.GableRoof,
+        body,
+        face,
+        { w: roofW, h: roofHeight, d: roofD, lx: 0, ly: h, lz: 0 },
+        roof,
+      ),
+    );
+    parts.push(onStreetFace(body, face, 0.4, 0.04, 0.03, h * 0.6, trim, -1));
+    parts.push(onStreetFace(body, face, 0.4, 0.04, 0.03, h * 0.6, trim, 1));
+    for (const side of [-1, 1]) {
+      const [vx, vz] = faceOffset(side * 0.2, 0, face);
+      parts.push({
+        kind: PartKind.Cylinder,
+        sx: 0.06,
+        sy: 0.1,
+        sz: 0.06,
+        ox: vx,
+        oy: h + roofHeight - 0.04,
+        oz: vz,
+        turn: 0,
+        color: ACCENT.antenna,
+        accent: true,
+      });
+    }
+    parts.push(pvOnSlope(body, face, roofW, roofD, roofHeight, h));
+  }
+  return parts;
+}
+
 /**
  * Procedural low-poly building parts for a zone/density/variant/tile
  * triple facing `face`. Deterministic in its inputs so every client
@@ -526,6 +633,8 @@ export function buildingParts(
       return residential(density, picker, face, family);
     case Zone.Commercial:
       return commercial(density, picker, face, family);
+    case Zone.Retail:
+      return retail(density, picker, face, family);
     default:
       return [];
   }

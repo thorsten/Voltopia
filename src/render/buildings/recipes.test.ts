@@ -21,7 +21,7 @@ import {
 const VARIANTS = 8;
 const GRID = 64;
 /** Zones with recipes so far — later tasks append to this list. */
-const ZONES: Zone[] = [Zone.Residential, Zone.Commercial];
+const ZONES: Zone[] = [Zone.Residential, Zone.Commercial, Zone.Retail];
 
 /** Every (zone, density, variant, face) over a sample of tile indices. */
 function* allRecipes(indices: Iterable<number>): Generator<{
@@ -254,6 +254,26 @@ describe('building recipes', () => {
       const tower = buildingHeight(Zone.Commercial, 3, index % VARIANTS, index);
       const flat = buildingHeight(Zone.Residential, 3, index % VARIANTS, index);
       expect(tower).toBeGreaterThan(flat);
+    }
+  });
+
+  it('hang retail awnings on the street face', () => {
+    for (const face of STREET_FACES) {
+      for (const density of [1, 2, 3]) {
+        const parts = buildingParts(Zone.Retail, density, 1, 2048, face);
+        const main = mainBody(parts)!;
+        const [ex, ez] = faceOffset(0, 1, face);
+        // Thin accent slabs whose offset along the face normal lies beyond
+        // the body: awnings (signs are taller, PV sits on the roof inside it).
+        const awnings = parts.filter(
+          (p) =>
+            p.accent &&
+            p.kind === PartKind.Box &&
+            p.sy <= 0.05 &&
+            (p.ox - main.ox) * ex + (p.oz - main.oz) * ez > faceDepth(main, face) / 2,
+        );
+        expect(awnings.length).toBe(density === 3 ? 2 : 1);
+      }
     }
   });
 });
