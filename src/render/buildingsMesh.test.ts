@@ -103,6 +103,24 @@ describe('BuildingsMesh', () => {
     expect(instanced).toHaveLength(PART_KINDS.length + 1);
   });
 
+  it('uploads only the placed building block, never the whole instance buffer', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    const boxBlockSize = MAX_PARTS_PER_KIND[PartKind.Box];
+    const boxRanges = mesh.kindMeshes[PartKind.Box].instanceMatrix.updateRanges;
+    expect(boxRanges.length).toBeGreaterThan(0);
+    // First building allocated: its Box block starts at slot 0.
+    expect(boxRanges.some((r) => r.start === 0 && r.count === boxBlockSize * 16)).toBe(true);
+    for (const kind of PART_KINDS) {
+      const attr = mesh.kindMeshes[kind].instanceMatrix;
+      const fullBufferLength = attr.count * attr.itemSize;
+      for (const r of attr.updateRanges) {
+        expect(r.count).toBeLessThan(fullBufferLength);
+      }
+    }
+  });
+
   it('draws exactly the recipe parts of a placed building, grouped by kind', () => {
     const { mesh } = setup();
     mesh.setReducedMotion(true);

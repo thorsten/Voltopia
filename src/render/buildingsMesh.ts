@@ -3,7 +3,7 @@ import type { TileDiff } from '../shared/types.ts';
 import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
-import { PART_KINDS, createPartGeometry } from './buildings/primitives.ts';
+import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
 import { applySupplyTint } from './buildings/palette.ts';
 import {
   type BuildingPart,
@@ -80,6 +80,8 @@ export class BuildingsMesh implements DiffLayer {
   private readonly color = new THREE.Color();
   /** Reusable per-kind slot cursor for `writeMatrices`/`writeColors` — avoids a Map per call. */
   private readonly cursor = new Int32Array(PART_KINDS.length);
+  /** Reusable set of kinds touched by one writeMatrices/writeColors call. */
+  private readonly touchedKinds = new Set<PartKind>();
 
   constructor(
     scene: THREE.Scene,
@@ -140,7 +142,6 @@ export class BuildingsMesh implements DiffLayer {
     if (reduced && this.animations.size > 0) {
       for (const index of this.animations.keys()) this.writeMatrices(index, 1);
       this.animations.clear();
-      this.markMatricesDirty();
     }
   }
 
@@ -154,8 +155,6 @@ export class BuildingsMesh implements DiffLayer {
   applyDiffs(diffs: TileDiff[]): void {
     const reissue = new Set<number>();
     let windowsDirty = false;
-    let matricesDirty = false;
-    let colorsDirty = false;
     for (const diff of diffs) {
       const isRoad = diff.tileType === TileType.Road ? 1 : 0;
       if (this.roads[diff.index] !== isRoad) {
@@ -173,28 +172,26 @@ export class BuildingsMesh implements DiffLayer {
         ) {
           this.place(diff.index, diff.zone, diff.density, diff.variant, diff.supplied, true);
           reissue.delete(diff.index);
-          windowsDirty = matricesDirty = colorsDirty = true;
+          windowsDirty = true;
         } else if (existing.supplied !== diff.supplied) {
           // Supply flips tint the body and dim the windows; no grow animation.
           existing.supplied = diff.supplied;
           this.writeColors(diff.index);
-          windowsDirty = colorsDirty = true;
+          windowsDirty = true;
         }
       } else if (existing) {
         this.remove(diff.index);
         reissue.delete(diff.index);
-        windowsDirty = matricesDirty = true;
+        windowsDirty = true;
       }
     }
     for (const index of reissue) {
       const b = this.buildings.get(index)!;
       if (this.streetFace(index) !== b.face) {
         this.place(index, b.zone, b.density, b.variant, b.supplied, false);
-        windowsDirty = matricesDirty = colorsDirty = true;
+        windowsDirty = true;
       }
     }
-    if (matricesDirty) this.markMatricesDirty();
-    if (colorsDirty) this.markColorsDirty();
     if (windowsDirty) this.rebuildWindows();
   }
 
@@ -207,12 +204,15 @@ export class BuildingsMesh implements DiffLayer {
         this.writeMatrices(index, 1);
       } else {
         this.animations.set(index, next);
-        // Ease-out cubic for a satisfying pop-in.
-        const t = next / GROW_ANIMATION_SECONDS;
-        this.writeMatrices(index, 1 - Math.pow(1 - t, 3));
+        this.writeMatrices(index, this.growthAt(next));
       }
     }
-    this.markMatricesDirty();
+  }
+
+  /** Ease-out cubic scale-in, shared by `update()` and `place()`. */
+  private growthAt(elapsedSeconds: number): number {
+    const t = elapsedSeconds / GROW_ANIMATION_SECONDS;
+    return 1 - Math.pow(1 - t, 3);
   }
 
   private *neighbours(index: number): Generator<number> {
@@ -273,8 +273,7 @@ export class BuildingsMesh implements DiffLayer {
       if (elapsed === undefined) {
         this.writeMatrices(index, 1);
       } else {
-        const t = elapsed / GROW_ANIMATION_SECONDS;
-        this.writeMatrices(index, Math.max(0.01, 1 - Math.pow(1 - t, 3)));
+        this.writeMatrices(index, Math.max(0.01, this.growthAt(elapsed)));
       }
     }
     this.writeColors(index);
@@ -287,6 +286,7 @@ export class BuildingsMesh implements DiffLayer {
       const layer = this.layers[kind];
       const start = building.blocks[kind] * layer.blockSize;
       for (let i = 0; i < layer.blockSize; i++) layer.mesh.setMatrixAt(start + i, HIDDEN);
+      this.touchMatrixRange(kind, building.blocks[kind]);
       layer.blocks.release(building.blocks[kind]);
     }
     this.buildings.delete(index);
@@ -299,14 +299,28 @@ export class BuildingsMesh implements DiffLayer {
     for (const layer of this.layers) layer.mesh.count = layer.blocks.highWater * layer.blockSize;
   }
 
-  private markMatricesDirty(): void {
-    for (const layer of this.layers) layer.mesh.instanceMatrix.needsUpdate = true;
+  /**
+   * Flag only `block`'s own slots (not the whole buffer) for re-upload.
+   * three.js clears `updateRanges` once it has uploaded them.
+   */
+  private touchMatrixRange(kind: PartKind, block: number): void {
+    const layer = this.layers[kind];
+    const itemSize = layer.mesh.instanceMatrix.itemSize;
+    layer.mesh.instanceMatrix.addUpdateRange(
+      block * layer.blockSize * itemSize,
+      layer.blockSize * itemSize,
+    );
+    layer.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  private markColorsDirty(): void {
-    for (const layer of this.layers) {
-      if (layer.mesh.instanceColor) layer.mesh.instanceColor.needsUpdate = true;
-    }
+  /** Same as `touchMatrixRange`, for the per-instance colour attribute. */
+  private touchColorRange(kind: PartKind, block: number): void {
+    const layer = this.layers[kind];
+    const colorAttr = layer.mesh.instanceColor;
+    if (!colorAttr) return;
+    const itemSize = colorAttr.itemSize;
+    colorAttr.addUpdateRange(block * layer.blockSize * itemSize, layer.blockSize * itemSize);
+    colorAttr.needsUpdate = true;
   }
 
   /**
@@ -324,6 +338,7 @@ export class BuildingsMesh implements DiffLayer {
       for (let slot = start + this.cursor[kind]; slot < end; slot++) {
         layer.mesh.setMatrixAt(slot, HIDDEN);
       }
+      this.touchMatrixRange(kind, building.blocks[kind]);
     }
   }
 
@@ -341,6 +356,7 @@ export class BuildingsMesh implements DiffLayer {
     const cz = Math.floor(index / this.gridSize) + 0.5;
     const lift = this.elevation.centerY(index);
     this.resetCursor(building);
+    this.touchedKinds.clear();
     for (const p of building.parts) {
       const slot = this.cursor[p.kind]++;
       this.position.set(cx + p.ox * growth, lift + p.oy * growth, cz + p.oz * growth);
@@ -349,18 +365,23 @@ export class BuildingsMesh implements DiffLayer {
       this.scale.set(p.sx * growth, p.sy * growth, p.sz * growth);
       this.matrix.compose(this.position, this.quaternion, this.scale);
       this.layers[p.kind].mesh.setMatrixAt(slot, this.matrix);
+      this.touchedKinds.add(p.kind);
     }
+    for (const kind of this.touchedKinds) this.touchMatrixRange(kind, building.blocks[kind]);
   }
 
   private writeColors(index: number): void {
     const building = this.buildings.get(index);
     if (!building) return;
     this.resetCursor(building);
+    this.touchedKinds.clear();
     for (const p of building.parts) {
       const slot = this.cursor[p.kind]++;
       const color = p.accent ? p.color : applySupplyTint(p.color, building.supplied, this.color);
       this.layers[p.kind].mesh.setColorAt(slot, color);
+      this.touchedKinds.add(p.kind);
     }
+    for (const kind of this.touchedKinds) this.touchColorRange(kind, building.blocks[kind]);
   }
 
   /**
