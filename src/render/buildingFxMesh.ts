@@ -237,11 +237,37 @@ export class BuildingFxMesh implements DiffLayer, AccentSink {
     const puffsChanged = puffCount > 0 || this.puffs.count > 0;
     this.puffs.count = puffCount;
     if (puffsChanged) {
-      this.puffs.instanceMatrix.needsUpdate = true;
-      if (this.puffs.instanceColor) this.puffs.instanceColor.needsUpdate = true;
+      // Bound the upload to the live 0..puffCount range: with motion on
+      // this rebuild runs every frame, and the buffer is sized for the
+      // whole grid, so an unranged upload would ship ~1.8 MB/frame for a
+      // handful of live puffs. clearUpdateRanges() first because three.js
+      // only clears ranges on upload, and nothing uploads in a headless
+      // test, so ranges would otherwise accumulate; clearing is always
+      // safe because every rebuild rewrites 0..count from scratch.
+      const m = this.puffs.instanceMatrix;
+      m.clearUpdateRanges();
+      m.addUpdateRange(0, puffCount * m.itemSize);
+      m.needsUpdate = true;
+      const c = this.puffs.instanceColor;
+      if (c) {
+        c.clearUpdateRanges();
+        c.addUpdateRange(0, puffCount * c.itemSize);
+        c.needsUpdate = true;
+      }
     }
+    // Same guard and bounded-range upload for beacons: the mesh is
+    // `visible = false` all day while motion-on rebuilds still run every
+    // frame, so an unguarded upload would ship a zero-instance buffer
+    // every frame on a night-less map, and an unranged one would ship the
+    // whole grid-sized buffer for a handful of lit antennas.
+    const beaconsChanged = beaconCount > 0 || this.beacons.count > 0;
     this.beacons.count = beaconCount;
-    this.beacons.instanceMatrix.needsUpdate = true;
+    if (beaconsChanged) {
+      const bm = this.beacons.instanceMatrix;
+      bm.clearUpdateRanges();
+      bm.addUpdateRange(0, beaconCount * bm.itemSize);
+      bm.needsUpdate = true;
+    }
   }
 
   /** Three puffs on a repeating rise cycle above `anchor`; returns the next free slot. */

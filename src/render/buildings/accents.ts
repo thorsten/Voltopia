@@ -34,7 +34,11 @@ export interface AccentState {
 export interface AccentSink {
   /** Create or replace the anchors (and state) of the building on `index`. */
   set(index: number, anchors: readonly AccentAnchor[], state: AccentState): void;
-  /** Only the state changed (supply, heat or damage flip). */
+  /**
+   * Only the state changed (supply, heat or damage flip). May arrive for an
+   * index that never received anchors (a role-less recipe after a supply
+   * flip); implementations ignore it in that case.
+   */
   setState(index: number, state: AccentState): void;
   remove(index: number): void;
 }

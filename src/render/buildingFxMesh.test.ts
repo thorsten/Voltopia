@@ -182,6 +182,20 @@ describe('BuildingFxMesh puffs', () => {
     expect(fx.puffs.count).toBe(0);
   });
 
+  it('uploads only the live puff range, and ranges do not accumulate across frames', () => {
+    const { fx } = setup();
+    fx.set(TILE, chimney(), state());
+    fx.setEnvironment(environment(0));
+    fx.update(0.016, 1);
+    const matrixAttr = fx.puffs.instanceMatrix;
+    const colorAttr = fx.puffs.instanceColor!;
+    expect(matrixAttr.updateRanges).toEqual([{ start: 0, count: fx.puffs.count * 16 }]);
+    expect(colorAttr.updateRanges).toEqual([{ start: 0, count: fx.puffs.count * 3 }]);
+    fx.update(0.016, 1.1);
+    expect(matrixAttr.updateRanges).toHaveLength(1);
+    expect(colorAttr.updateRanges).toHaveLength(1);
+  });
+
   it('clamps puff writes at capacity instead of overflowing the buffer', () => {
     const { fx } = setup();
     // One anchor per tile, but more tiles than the buffer has room for
@@ -224,6 +238,28 @@ describe('BuildingFxMesh beacons', () => {
     expect((fx.beacons.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(1, 6);
     fx.setState(TILE, state({ supplied: SupplyStatus.NotConnected }));
     fx.update(0.016, 3);
+    expect(fx.beacons.count).toBe(0);
+  });
+
+  it('uploads only the live beacon range, and ranges do not accumulate across frames', () => {
+    const { fx } = setup();
+    fx.set(TILE, antenna(), state());
+    fx.setEnvironment(environment(20, 1));
+    fx.update(0.016, 1);
+    const matrixAttr = fx.beacons.instanceMatrix;
+    expect(matrixAttr.updateRanges).toEqual([{ start: 0, count: fx.beacons.count * 16 }]);
+    fx.update(0.016, 1.1);
+    expect(matrixAttr.updateRanges).toHaveLength(1);
+  });
+
+  it('frees the beacon slot when its tile is removed', () => {
+    const { fx } = setup();
+    fx.set(TILE, antenna(), state());
+    fx.setEnvironment(environment(20, 1));
+    fx.update(0.016, 1);
+    expect(fx.beacons.count).toBe(1);
+    fx.remove(TILE);
+    fx.update(0.016, 2);
     expect(fx.beacons.count).toBe(0);
   });
 

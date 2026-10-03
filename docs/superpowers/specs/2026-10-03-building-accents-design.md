@@ -145,8 +145,10 @@ One `InstancedMesh` of low-poly spheres (`SphereGeometry(0.5, 8, 6)`,
 scaled per instance) with a `MeshBasicMaterial` that is transparent,
 does not write depth, and has a mid-grey base colour; per-instance
 colour carries the strength and the night dimming. Capacity is
-`gridSize² × PUFFS_PER_EMITTER` with `PUFFS_PER_EMITTER = 3`, so no
-emitter is ever dropped on a 64×64 map; `count` tracks the live puffs.
+`gridSize² × MAX_PUFF_ANCHORS_PER_TILE × PUFFS_PER_EMITTER` with
+`MAX_PUFF_ANCHORS_PER_TILE = 2` and `PUFFS_PER_EMITTER = 3` (the market
+hall has two vent stacks), so no emitter is ever dropped on a 64×64 map;
+`writePuffs` clamps at capacity and `count` tracks the live puffs.
 
 Each active chimney or vent anchor owns three puffs on a repeating
 cycle. For puff `k` of an emitter at time `t` seconds:
