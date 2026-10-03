@@ -12,11 +12,13 @@ import {
   loadProfileFactor,
   placePlant,
 } from './energy.ts';
+import { heatStep } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
 import { pendingHistoryPoint } from './tick.ts';
+import { HEATED_SERVED } from '../shared/types.ts';
 import {
   createSimState,
   PlantType,
@@ -1313,5 +1315,101 @@ describe('heat plants', () => {
     expect(state.money).toBe(
       before - BALANCE.costs.plant[PlantType.HeatPlant] - BALANCE.costs.plant[PlantType.HeatStore],
     );
+  });
+
+  /**
+   * Plant at (2,10) powered by a turbine at (2,12), a 20-tile road east
+   * of the plant, `count` residential buildings of `density` on
+   * alternating sides of the road (x = 4 + floor(i / 2)).
+   */
+  function heatedVillage(state: SimState, count: number, density = 1): void {
+    state.money = 1e9;
+    buildRoads(
+      state,
+      Array.from({ length: 20 }, (_, i) => at(3 + i, 10)),
+    );
+    placePlant(state, at(2, 10), PlantType.HeatPlant);
+    placePlant(state, at(2, 12), PlantType.WindTurbine);
+    for (let i = 0; i < count; i++) {
+      addBuilding(
+        state,
+        at(4 + Math.floor(i / 2), i % 2 === 0 ? 9 : 11),
+        Zone.Residential,
+        density,
+      );
+    }
+  }
+
+  function heatedVillageState(count: number, density = 1): SimState {
+    const state = makeState();
+    heatedVillage(state, count, density);
+    return state;
+  }
+
+  it('served buildings leave the heating load and the pumps draw heat ÷ COP instead', () => {
+    const state = heatedVillageState(4);
+    const cold = { ...state.season, temperature: 0 };
+    state.season = cold;
+    const heat = heatStep(state);
+    expect(state.layers.heated[at(4, 9)]).toBe(HEATED_SERVED);
+    energyStep(state, { chargingDemand: 0, heat });
+    const e = state.lastEnergy;
+    expect(e.heatingConsumption).toBeCloseTo(0, 6);
+    expect(e.heatPumpConsumption).toBeCloseTo(heat.demand / heat.cop, 6);
+    expect(e.networkHeat).toBeCloseTo(heat.demand, 6);
+    expect(e.heatFallback).toBe(0);
+    expect(e.heatCop).toBeCloseTo(heat.cop, 6);
+  });
+
+  it('fallback heat lands back on the heating load', () => {
+    // 24 dense buildings at full cold ≈ 154 heat, beyond one plant's 60 × 1.8.
+    const state = heatedVillageState(24, 3);
+    state.season = { ...state.season, temperature: -20 };
+    const heat = heatStep(state);
+    expect(heat.fallback).toBeGreaterThan(0);
+    energyStep(state, { chargingDemand: 0, heat });
+    expect(state.lastEnergy.heatingConsumption).toBeCloseTo(heat.fallback, 6);
+    expect(state.lastEnergy.heatFallback).toBeCloseTo(heat.fallback, 6);
+  });
+
+  it('charges the heat store after the batteries and before exporting', () => {
+    const state = heatedVillageState(0);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    placePlant(state, at(2, 16), PlantType.Battery);
+    for (let i = 0; i < 3; i++) placePlant(state, at(5 + i, 14), PlantType.SolarFarm);
+    setNoonClearSky(state);
+    state.season = { ...state.season, temperature: 0 }; // cold: the night needs heat
+    const heat = heatStep(state);
+    energyStep(state, { chargingDemand: 0, heat });
+    const e = state.lastEnergy;
+    // Batteries first (their power limit), then the heat store (pump limit), then export.
+    expect(e.heatStoreCharge).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 3);
+    expect(state.heatStored).toBeCloseTo(BALANCE.heat.pumpPowerLimit * heat.cop, 3);
+    expect(state.storedEnergy).toBeGreaterThan(0);
+    const generation = 3 * BALANCE.energy.solarPeakOutput + e.wind;
+    const afterStorage = generation - BALANCE.energy.batteryPowerLimit - e.heatStoreCharge;
+    expect(e.gridExport).toBeCloseTo(Math.min(afterStorage, BALANCE.market.exportCapacity), 3);
+    // Charging counts as pump electricity.
+    expect(e.heatPumpConsumption).toBeCloseTo(e.heatStoreCharge, 6);
+  });
+
+  it('does not charge the store on a warm day', () => {
+    const state = heatedVillageState(0);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    for (let i = 0; i < 3; i++) placePlant(state, at(5 + i, 14), PlantType.SolarFarm);
+    setNoonClearSky(state);
+    state.season = { ...state.season, temperature: 30 };
+    const heat = heatStep(state);
+    energyStep(state, { chargingDemand: 0, heat });
+    expect(state.lastEnergy.heatStoreCharge).toBe(0);
+    expect(state.heatStored).toBe(0);
+  });
+
+  it('runs without a heat input as if there were no district heating', () => {
+    const state = heatedVillageState(2);
+    state.season = { ...state.season, temperature: 0 };
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.heatPumpConsumption).toBe(0);
+    expect(state.lastEnergy.heatingConsumption).toBeGreaterThan(0);
   });
 });

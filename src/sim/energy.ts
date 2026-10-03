@@ -1,7 +1,8 @@
 import { BALANCE, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
-import { PlantType, Terrain, Zone } from '../shared/types.ts';
+import { HEATED_SERVED, PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
+import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
 import { isSupplySource, recomputeGrid } from './powerGrid.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -280,6 +281,8 @@ export function isTileConnected(state: SimState, index: number): boolean {
 export interface EnergyTickInput {
   /** Additional charging consumption (EVs), served after buildings. */
   chargingDemand: number;
+  /** This tick's district-heating balance (IDLE_HEAT when absent). */
+  heat?: HeatTickResult;
 }
 
 /** Absorb surplus into a storage pool within its power limit and headroom. */
@@ -309,10 +312,11 @@ function dischargePool(
  * One tick of the energy balance:
  * 1. renewable generation (solar + wind + rooftop + hydro + tidal + geothermal) covers
  *    consumption (buildings, heating, cooling, charging),
- * 2. surplus charges batteries, then pumped storage, anything beyond is
- *    exported over the transmission link; electrolysers absorb what the
- *    link cannot take (selling hydrogen once the tanks are full) and
- *    only the rest is curtailed,
+ * 2. surplus charges batteries, then pumped storage, then the heat store
+ *    through the heat pumps (only while the nights are cold), anything
+ *    beyond is exported over the transmission link; electrolysers absorb
+ *    what the link cannot take (selling hydrogen once the tanks are
+ *    full) and only the rest is curtailed,
  * 3. deficit discharges batteries, then pumped storage, then the
  *    hydrogen fuel cells, then dispatches biogas, then imports over the
  *    transmission link,
@@ -324,6 +328,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   recomputeGrid(state);
   const census = censusPlants(state);
   const time = timeOfDay(state.tick);
+  const heat = input.heat ?? { ...IDLE_HEAT };
 
   const solar = census.solarFarms * BALANCE.energy.solarPeakOutput * currentSolarFactor(state);
   const wind = census.windCapacity * BALANCE.energy.windPeakOutput * currentWindFactor(state);
@@ -367,13 +372,21 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     const zone = layers.zone[i] as Zone;
     const density = layers.density[i];
     buildingDemand += buildingConsumption(zone, density, time);
-    heatingDemand += heatingConsumption(zone, density, temperature, state.insulation);
+    // A served building gets its heat from the network; its own
+    // electric heating only runs for the fallback share (added below).
+    if (layers.heated[i] !== HEATED_SERVED) {
+      heatingDemand += heatingConsumption(zone, density, temperature, state.insulation);
+    }
     coolingDemand += coolingConsumption(zone, density, temperature, state.insulation);
     rooftop += (BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0) * solarFactorNow;
   }
 
+  // Heat the network could not deliver is heated electrically on site.
+  heatingDemand += heat.fallback;
+
   const chargingDemand = Math.max(0, input.chargingDemand);
-  const totalDemand = buildingDemand + heatingDemand + coolingDemand + chargingDemand;
+  const totalDemand =
+    buildingDemand + heatingDemand + coolingDemand + chargingDemand + heat.pumpPower;
   const generation = solar + wind + rooftop + hydro + tidal + geothermal;
 
   const storageCapacity = census.batteries * BALANCE.energy.batteryCapacity;
@@ -397,6 +410,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   let hydrogenSold = 0;
   let batteryPowerUsed = 0;
   let pumpedPowerUsed = 0;
+  let heatStoreCharge = 0;
 
   const net = generation - totalDemand;
   if (net >= 0) {
@@ -418,7 +432,10 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     );
     state.pumpedStorageEnergy = pumped.stored;
     pumpedPowerUsed = pumped.absorbed;
-    const remaining = net - battery.absorbed - pumped.absorbed;
+    // The heat store drinks after the electric storages and before the
+    // link: a cheap one-way sink that shifts the heating peak.
+    heatStoreCharge = chargeHeatStore(state, heat, net - battery.absorbed - pumped.absorbed);
+    const remaining = net - battery.absorbed - pumped.absorbed - heatStoreCharge;
     // Sell what storage cannot absorb over the link, then electrolyse
     // what the link cannot take; only the rest is curtailed.
     gridExport = Math.min(remaining, BALANCE.market.exportCapacity);
@@ -546,11 +563,11 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     electrolysis,
     fuelCell,
     hydrogenSold,
-    heatPumpConsumption: 0,
-    networkHeat: 0,
-    heatFallback: 0,
-    heatStoreCharge: 0,
-    heatCop: 1,
+    heatPumpConsumption: heat.pumpPower + heatStoreCharge,
+    networkHeat: heat.networkHeat,
+    heatFallback: heat.fallback,
+    heatStoreCharge,
+    heatCop: heat.cop,
     spotPrice,
     tradeSell,
     tradeBuy,
