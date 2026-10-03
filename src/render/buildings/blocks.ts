@@ -23,9 +23,14 @@ export class BlockAllocator {
   }
 
   alloc(): number {
-    const block = this.free.length > 0 ? this.free.pop()! : this.next++;
-    if (block >= this.capacity) {
-      throw new Error(`BlockAllocator: capacity ${this.capacity} exhausted`);
+    let block: number;
+    if (this.free.length > 0) {
+      block = this.free.shift()!;
+    } else {
+      if (this.next >= this.capacity) {
+        throw new Error(`BlockAllocator: capacity ${this.capacity} exhausted`);
+      }
+      block = this.next++;
     }
     this.used[block] = 1;
     if (block + 1 > this.top) this.top = block + 1;

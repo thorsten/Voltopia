@@ -60,4 +60,19 @@ describe('BlockAllocator', () => {
     a.alloc();
     expect(() => a.alloc()).toThrow(/capacity/);
   });
+
+  it('keeps live and highWater exact after a failed allocation', () => {
+    const a = new BlockAllocator(2);
+    const x = a.alloc();
+    const y = a.alloc();
+    expect(() => a.alloc()).toThrow(/capacity/);
+    expect(a.live).toBe(2);
+    a.release(x);
+    a.release(y);
+    expect(a.live).toBe(0);
+    expect(a.highWater).toBe(0);
+    a.alloc();
+    expect(a.live).toBe(1);
+    expect(a.highWater).toBe(1);
+  });
 });
