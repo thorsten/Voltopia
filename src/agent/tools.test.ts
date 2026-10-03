@@ -639,4 +639,51 @@ describe('agent tools: building', () => {
     const found = await call('find_tiles', { kind: 'geothermal_hotspot' });
     expect(found.tiles).toContainEqual({ x, y });
   });
+
+  it('builds a heat plant and a heat store, and reports the heat figures', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    const plant = await call('place_plant', { plant: 'heat_plant', x, y });
+    expect(plant).toMatchObject({ ok: true });
+    expect(engine.state.layers.plantType[tileIndex(x, y, SIZE)]).toBe(PlantType.HeatPlant);
+    let sx = x + 2;
+    const sy = y;
+    expect(engine.state.layers.terrain[tileIndex(sx, sy, SIZE)]).toBe(Terrain.Land);
+    let store = await call('place_plant', { plant: 'heat_store', x: sx, y: sy });
+    if (!store.ok && (store as { error?: string }).error === 'tileOccupied') {
+      sx = x + 3;
+      expect(engine.state.layers.terrain[tileIndex(sx, sy, SIZE)]).toBe(Terrain.Land);
+      store = await call('place_plant', { plant: 'heat_store', x: sx, y: sy });
+    }
+    expect(store).toMatchObject({ ok: true });
+    // get_energy_report spreads EnergyStats as-is, so the new fields are there by name.
+    const report = (await call('get_energy_report')) as Record<string, any>;
+    expect(report.consumption).toHaveProperty('heatPumps');
+    expect(report.heatCapacity).toBe(BALANCE.heat.storeCapacity);
+    expect(report).toHaveProperty('heatCop');
+    // get_game_overview hand-builds energyPerTick and gains a heat block.
+    const overview = (await call('get_game_overview')) as Record<string, any>;
+    expect(overview.energyPerTick.consumption).toHaveProperty('heatPumps');
+    expect(overview.energyPerTick.heat).toMatchObject({ capacity: BALANCE.heat.storeCapacity });
+    expect(overview.energyPerTick.heat).toHaveProperty('cop');
+  });
+
+  it('inspect_tile reports district heating on a plant and on a building', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    await call('place_plant', { plant: 'heat_plant', x, y });
+    const info = (await call('inspect_tile', { x, y })) as Record<string, any>;
+    expect(info.ok).toBe(true);
+    expect(info.heatPlant).toMatchObject({ reach: expect.any(Number), served: expect.any(Number) });
+    expect(info).toHaveProperty('heated');
+  });
+
+  it('the overview map draws heat plants and stores with their own glyphs', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    await call('place_plant', { plant: 'heat_plant', x, y });
+    const map = (await call('get_map', { layer: 'overview' })) as Record<string, any>;
+    expect(map.rows[y][x]).toBe('Q');
+    expect(map.legend).toContain('Q heat plant');
+  });
 });

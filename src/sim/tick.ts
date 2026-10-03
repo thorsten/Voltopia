@@ -6,6 +6,7 @@ import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
+import { heatStep } from './heat.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -23,6 +24,7 @@ import {
   countPopulationAndJobs,
   TileType,
   totalBiogasCapacity,
+  totalHeatCapacity,
   totalHydrogenCapacity,
   totalPumpedStorageCapacity,
   totalStorageCapacity,
@@ -61,7 +63,10 @@ export function stepTick(state: SimState): void {
   updateTrafficLoad(state, occupancy);
   // Reservoirs first: this tick's generation reads the heat they leave.
   reservoirStep(state);
-  energyStep(state, { chargingDemand: chargingDemand(state) });
+  // The heat network before the balance: served buildings leave the
+  // heating load, the pumps join it, and the cascade may fill the store.
+  const heat = heatStep(state);
+  energyStep(state, { chargingDemand: chargingDemand(state), heat });
   recomputeServices(state);
   state.lastServices = serviceCoverage(state);
   state.lastDemand = computeDemand(state);
@@ -86,8 +91,12 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   const sums = state.lifetime.daySums;
   sums.generation += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.biogas;
   sums.consumption +=
-    e.buildingConsumption + e.chargingConsumption + e.heatingConsumption + e.coolingConsumption;
-  sums.heating += e.heatingConsumption;
+    e.buildingConsumption +
+    e.chargingConsumption +
+    e.heatingConsumption +
+    e.coolingConsumption +
+    e.heatPumpConsumption;
+  sums.heating += e.heatingConsumption + e.heatPumpConsumption;
   sums.cooling += e.coolingConsumption;
   sums.temperature += state.season.temperature;
   sums.ticks++;
@@ -185,6 +194,7 @@ export function buildStats(state: SimState): GlobalStats {
         heating: e.heatingConsumption,
         cooling: e.coolingConsumption,
         electrolysis: e.electrolysis,
+        heatPumps: e.heatPumpConsumption,
       },
       storedEnergy: state.storedEnergy,
       storageCapacity: totalStorageCapacity(state),
@@ -193,6 +203,12 @@ export function buildStats(state: SimState): GlobalStats {
       hydrogenStoredEnergy: state.hydrogenEnergy,
       hydrogenCapacity: totalHydrogenCapacity(state),
       hydrogenSold: e.hydrogenSold,
+      networkHeat: e.networkHeat,
+      heatFallback: e.heatFallback,
+      heatStoreCharge: e.heatStoreCharge,
+      heatStored: state.heatStored,
+      heatCapacity: totalHeatCapacity(state),
+      heatCop: e.heatCop,
       spotPrice: e.spotPrice,
       tradeSell: e.tradeSell,
       tradeBuy: e.tradeBuy,

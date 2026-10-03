@@ -22,6 +22,7 @@ export const GOAL_IDS = [
   'modalShift',
   'geothermalBaseload',
   'stormProof',
+  'warmWinter',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -37,6 +38,8 @@ const CLEAN_DAY_MIN_POPULATION = 50;
 const EV_FLEET_TARGET = 30;
 /** Share of generation that must come from geothermal for the goal. */
 const GEOTHERMAL_SHARE = 0.15;
+/** Share of the city's heat the district network must carry for the goal. */
+const WARM_WINTER_SHARE = 0.5;
 
 /**
  * Evaluate all goals for this tick. Achieved goals stay achieved (they
@@ -107,6 +110,23 @@ export function goalsStep(state: SimState): void {
     progress.geothermalTicks++;
   } else {
     progress.geothermalTicks = 0;
+  }
+
+  // A whole winter day on district heating: the network carries at least
+  // half the city's heat, nobody falls back, and there is heat demand at
+  // all (an empty city cannot unlock it). heatingConsumption already
+  // includes the fallback share, so it alone covers every heat unit not
+  // on the network.
+  const heatTotal = e.networkHeat + e.heatingConsumption;
+  if (
+    state.season.season === 'winter' &&
+    heatTotal > 0 &&
+    e.heatFallback === 0 &&
+    e.networkHeat >= WARM_WINTER_SHARE * heatTotal
+  ) {
+    progress.warmWinterTicks++;
+  } else {
+    progress.warmWinterTicks = 0;
   }
 
   const achieved = state.goalsAchieved;
@@ -187,6 +207,9 @@ export function goalsStep(state: SimState): void {
   }
   if (!achieved.has('geothermalBaseload') && progress.geothermalTicks >= TICKS_PER_DAY) {
     achieved.add('geothermalBaseload');
+  }
+  if (!achieved.has('warmWinter') && progress.warmWinterTicks >= TICKS_PER_DAY) {
+    achieved.add('warmWinter');
   }
 }
 

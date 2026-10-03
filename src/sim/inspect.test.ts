@@ -8,6 +8,7 @@ import { addDamage } from './disasters.ts';
 import { economyStep } from './economy.ts';
 import { buildingConsumption, placePlant } from './energy.ts';
 import { discoverGeothermalFields } from './geothermal.ts';
+import { heatPumpCop, recomputeHeated } from './heat.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
@@ -451,5 +452,60 @@ describe('deliveries in the inspector', () => {
       stopsInReach: 1,
     });
     expect(info.upkeepPerTick).toBe(BALANCE.upkeepPerTick.plant[PlantType.BusDepot]);
+  });
+});
+
+describe('district heating', () => {
+  const SIZE = 32;
+  const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+  function heatedTown() {
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    buildRoads(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(3 + i, 10)),
+    );
+    placePlant(state, at(2, 10), PlantType.HeatPlant);
+    placePlant(state, at(2, 12), PlantType.WindTurbine);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.layers.zone[at(4, 9)] = Zone.Residential;
+    state.layers.density[at(4, 9)] = 1;
+    state.layers.zone[at(20, 20)] = Zone.Residential;
+    state.layers.density[at(20, 20)] = 1;
+    state.heatStored = 1_500;
+    recomputeHeated(state);
+    return state;
+  }
+
+  it('flags a served building and not an unserved one', () => {
+    const state = heatedTown();
+    expect(inspectTile(state, at(4, 9))!.heated).toBe(true);
+    expect(inspectTile(state, at(20, 20))!.heated).toBe(false);
+  });
+
+  it('describes a heat plant: reach, served buildings, COP, active', () => {
+    const state = heatedTown();
+    const info = inspectTile(state, at(2, 10))!;
+    expect(info.heatPlant).toEqual({
+      reach: 10,
+      served: 1,
+      cop: heatPumpCop(state.season.temperature),
+      active: true,
+    });
+  });
+
+  it('a plant without a road reaches nothing', () => {
+    const state = heatedTown();
+    placePlant(state, at(25, 25), PlantType.HeatPlant);
+    expect(inspectTile(state, at(25, 25))!.heatPlant?.reach).toBe(0);
+  });
+
+  it('a heat store shows its share of the pool', () => {
+    const state = heatedTown();
+    const info = inspectTile(state, at(2, 14))!;
+    expect(info.storedEnergy).toBeCloseTo(1_500, 6);
+    expect(info.storageCapacity).toBe(BALANCE.heat.storeCapacity);
+    expect(info.heatPlant).toBeUndefined();
   });
 });

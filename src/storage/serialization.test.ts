@@ -76,6 +76,15 @@ describe('save game JSON export/import', () => {
     expect(restored.hydrogenEnergy).toBe(1234);
   });
 
+  it('round-trips the heat store and the warm-winter streak', () => {
+    const save = makeSave();
+    save.heatStored = 321;
+    save.warmWinterTicks = 7;
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.heatStored).toBe(321);
+    expect(restored.warmWinterTicks).toBe(7);
+  });
+
   it('round-trips the market trading toggle', () => {
     const save = makeSave();
     save.marketTrading = true;

@@ -65,6 +65,8 @@ const en = {
   'tool.plant-hydrogen': 'Hydrogen plant',
   'tool.plant-tidal': 'Tidal plant',
   'tool.plant-geothermal': 'Geothermal plant',
+  'tool.plant-heat': 'Heat plant',
+  'tool.plant-heatstore': 'Heat store',
   'tool.plant-forest': 'Plant woods',
   'inspector.forest': 'Woods',
   'inspector.forest.mature': 'mature · felling {fee} ⌁',
@@ -119,6 +121,13 @@ const en = {
     'and any season — the only true baseload in the city. Each field sustains a limited number of ' +
     'wells; drill more and its reservoir cools over days, dragging every well on it down until you ' +
     'take the load off again.',
+  'tool.plant-heat.desc':
+    'A large heat pump feeding district heating along the roads touching it, 12 road tiles out. ' +
+    'Buildings beside those roads get their heat from the network at the pump’s COP instead ' +
+    'of heating themselves — the colder it gets, the lower the COP. Needs grid power.',
+  'tool.plant-heatstore.desc':
+    'A hot-water tank. Surplus fills it through the heat plants while the nights are cold, ' +
+    'and it covers the evening heat peak later. Heat never turns back into electricity.',
   'tool.plant-forest.desc':
     'Plant saplings by the patch. They grow over a few days, raise happiness nearby — and slow the wind for turbines standing in them.',
   'tool.bulldoze.desc': 'Clears roads, zones and plants. Drag to clear an area.',
@@ -146,8 +155,12 @@ const en = {
   'energy.pumpedStorage': 'Pumped storage (SoC)',
   'energy.fuelCell': 'Fuel cell',
   'energy.electrolysis': 'Electrolysis',
+  'energy.heatPumpsIdle': '♨️ Heat pumps',
+  'energy.heatPumps': '♨️ Heat pumps (COP {cop})',
+  'energy.networkHeat': '🏘 District heat (heat units)',
   'energy.hydrogenSold': 'Hydrogen sold',
   'energy.hydrogenStorage': 'Hydrogen tank',
+  'energy.heatStorage': 'Heat store',
   'energy.spot': 'Spot price',
   'energy.legend.price': 'Spot price',
   'energy.graph.label': 'Generation and consumption over the last day',
@@ -206,6 +219,9 @@ const en = {
   'overlay.damage': 'Damage',
   'overlay.damage.title':
     'Damage: buildings and plants always shown intact / damaged / wrecked; any other tile only lights up once it is hit',
+  'overlay.heat': 'Heat',
+  'overlay.heat.title':
+    'District heating: orange roads carry the network, red buildings are served, blue buildings heat themselves',
 
   'rejection.notEnoughMoney': 'Not enough money',
   'rejection.tileOccupied': 'This tile is already occupied',
@@ -247,6 +263,9 @@ const en = {
   'help.seasons.title': 'Seasons, heating and cooling',
   'help.seasons.body':
     'A year has four seasons of five days each. Summer brings long days and strong sun; winter brings short days, weak PV, more cloud and wind, and cold. Every building heats electrically, so the heating load rises with the cold — the winter evening is the hardest hour of the year. In summer every building cools electrically, so the cooling load peaks in the late afternoon as PV fades. Snow that falls in winter melts into the river in spring. Building insulation is a one-off upgrade that halves the heating and cooling load.',
+  'help.heat.title': 'District heating',
+  'help.heat.body':
+    'A heat plant is a large heat pump. It feeds heat into the roads touching it, 12 road tiles out, and every building beside those roads takes its heat from the network instead of heating itself. The pump’s COP — heat units per electricity unit — is about 3.5 in mild weather and falls towards 1.8 in deep cold, so winter stays hard, but a served building costs a fraction of the electricity. A heat store is a hot-water tank: while the nights are cold, surplus that batteries and pumped storage cannot take fills it through the heat plants before anything is exported, and it covers the evening heat peak later. Heat never turns back into electricity. If the plants and the store cannot cover the network, the rest of the heat is made the old way, on site. Both plants need grid power; the Heat overlay shows the network and who is on it.',
   'help.ev.title': 'E-mobility',
   'help.ev.body':
     'Your citizens drive EVs. Home charging peaks in the evening — right when solar is gone. Charging hubs shift the load into the sunny midday, and the smart-charging upgrade follows the surplus automatically.',
@@ -384,6 +403,9 @@ const en = {
   'goal.modalShift.body': 'A whole day with 30% of commuters on the bus (300+ residents).',
   'goal.stormProof.title': 'Storm-proof',
   'goal.stormProof.body': 'Ride out a whole storm without a single undersupplied tick.',
+  'goal.warmWinter.title': 'Warm winter',
+  'goal.warmWinter.body':
+    'Carry at least half of your heat over the district network for a full winter day, with nobody falling back to their own heating.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -489,6 +511,16 @@ const en = {
   'inspect.hotspotQuality': 'Quality',
   'inspect.hotspotWells': 'Wells / capacity',
   'inspect.hotspotHint': 'Hotspot quality and the reservoir temperature of its field.',
+  'inspect.heatReach': 'Heat network',
+  'inspect.heatReachHint':
+    'Road tiles reached · buildings served. The network follows the roads touching the plant.',
+  'inspect.heatCop': 'Heat pump COP',
+  'inspect.heatActive': 'heating',
+  'inspect.heatInactive': 'off — not connected or damaged',
+  'inspect.heatNoRoad': 'No road touches this plant, so it heats nobody',
+  'inspect.heating': 'Heating',
+  'inspect.heatNetwork': 'district heating',
+  'inspect.heatOwn': 'own heating',
   'disaster.storm': 'Storm',
   'disaster.fire': 'Fire',
   'disaster.flood': 'Flood',
@@ -566,6 +598,8 @@ const de: Record<TranslationKey, string> = {
   'tool.plant-hydrogen': 'Wasserstoffanlage',
   'tool.plant-tidal': 'Gezeitenkraftwerk',
   'tool.plant-geothermal': 'Geothermiekraftwerk',
+  'tool.plant-heat': 'Heizwerk',
+  'tool.plant-heatstore': 'Wärmespeicher',
   'tool.plant-forest': 'Wald pflanzen',
   'inspector.forest': 'Wald',
   'inspector.forest.mature': 'ausgewachsen · Rodung {fee} ⌁',
@@ -621,6 +655,13 @@ const de: Record<TranslationKey, string> = {
     'Jahreszeit gleich viel — die einzige echte Grundlast der Stadt. Jedes Feld trägt nur eine ' +
     'begrenzte Zahl Bohrungen; bohrst du mehr hinein, kühlt das Reservoir über Tage aus und zieht ' +
     'alle Anlagen darauf mit, bis du die Last wieder wegnimmst.',
+  'tool.plant-heat.desc':
+    'Eine große Wärmepumpe, die Fernwärme entlang der Straßen am Heizwerk 12 Straßenkacheln weit ' +
+    'einspeist. Gebäude an diesen Straßen beziehen ihre Wärme aus dem Netz mit dem COP der Pumpe, ' +
+    'statt selbst zu heizen — je kälter, desto niedriger der COP. Braucht Netzstrom.',
+  'tool.plant-heatstore.desc':
+    'Ein Warmwasserspeicher. Überschuss füllt ihn über die Heizwerke, solange die Nächte kalt sind, ' +
+    'und er deckt später die abendliche Wärmespitze. Wärme wird nie wieder zu Strom.',
   'tool.plant-forest.desc':
     'Pflanzt Setzlinge flächenweise. Sie wachsen über einige Tage, heben die Zufriedenheit in der Nähe — und bremsen den Wind für Turbinen, die darin stehen.',
   'tool.bulldoze.desc': 'Entfernt Straßen, Gebiete und Anlagen. Ziehen räumt eine Fläche.',
@@ -648,8 +689,12 @@ const de: Record<TranslationKey, string> = {
   'energy.pumpedStorage': 'Pumpspeicher (Ladestand)',
   'energy.fuelCell': 'Brennstoffzelle',
   'energy.electrolysis': 'Elektrolyse',
+  'energy.heatPumpsIdle': '♨️ Wärmepumpen',
+  'energy.heatPumps': '♨️ Wärmepumpen (COP {cop})',
+  'energy.networkHeat': '🏘 Fernwärme (Wärmeeinheiten)',
   'energy.hydrogenSold': 'Wasserstoff verkauft',
   'energy.hydrogenStorage': 'Wasserstofftank',
+  'energy.heatStorage': 'Wärmespeicher',
   'energy.spot': 'Spotpreis',
   'energy.legend.price': 'Spotpreis',
   'energy.graph.label': 'Erzeugung und Verbrauch des letzten Tages',
@@ -708,6 +753,9 @@ const de: Record<TranslationKey, string> = {
   'overlay.damage': 'Schäden',
   'overlay.damage.title':
     'Schäden: Gebäude und Anlagen sind immer heil / beschädigt / zerstört eingefärbt; andere Felder leuchten erst auf, wenn sie getroffen wurden',
+  'overlay.heat': 'Wärme',
+  'overlay.heat.title':
+    'Fernwärme: orange Straßen tragen das Netz, rote Gebäude sind versorgt, blaue Gebäude heizen selbst',
 
   'rejection.notEnoughMoney': 'Nicht genug Geld',
   'rejection.tileOccupied': 'Dieses Feld ist bereits belegt',
@@ -750,6 +798,9 @@ const de: Record<TranslationKey, string> = {
   'help.seasons.title': 'Jahreszeiten, Heizung und Kühlung',
   'help.seasons.body':
     'Ein Jahr hat vier Jahreszeiten zu je fünf Tagen. Der Sommer bringt lange Tage und kräftige Sonne; der Winter kurze Tage, schwache PV, mehr Wolken und Wind — und Kälte. Alle Gebäude heizen elektrisch, die Heizlast steigt mit der Kälte: Der Winterabend ist die schwerste Stunde des Jahres. Im Sommer kühlen alle Gebäude elektrisch: Die Kühllast erreicht ihre Spitze am späten Nachmittag, wenn die PV nachlässt. Schnee aus dem Winter schmilzt im Frühling in den Fluss. Die Gebäudedämmung ist ein einmaliges Upgrade, das die Heiz- und Kühllast halbiert.',
+  'help.heat.title': 'Fernwärme',
+  'help.heat.body':
+    'Ein Heizwerk ist eine große Wärmepumpe. Es speist Wärme in die Straßen ein, die es berühren, 12 Straßenkacheln weit, und jedes Gebäude an diesen Straßen bezieht seine Wärme aus dem Netz, statt selbst zu heizen. Der COP der Pumpe — Wärmeeinheiten je Stromeinheit — liegt bei mildem Wetter um 3,5 und fällt bei strenger Kälte Richtung 1,8; der Winter bleibt also hart, aber ein versorgtes Gebäude kostet nur einen Bruchteil des Stroms. Ein Wärmespeicher ist ein Warmwassertank: Solange die Nächte kalt sind, füllt ihn Überschuss, den Batterien und Pumpspeicher nicht aufnehmen, über die Heizwerke, bevor etwas exportiert wird — und er deckt später die abendliche Wärmespitze. Wärme wird nie wieder zu Strom. Reichen Heizwerke und Speicher nicht, entsteht der Rest der Wärme wie bisher vor Ort. Beide Anlagen brauchen Netzstrom; das Wärme-Overlay zeigt das Netz und wer daran hängt.',
   'help.ev.title': 'E-Mobilität',
   'help.ev.body':
     'Deine Bürger fahren E-Autos. Das Laden zu Hause hat abends seinen Höhepunkt — genau dann, wenn die Sonne weg ist. Ladeparks verschieben die Last in den sonnigen Mittag, und das Smart-Charging-Upgrade folgt dem Überschuss automatisch.',
@@ -890,6 +941,9 @@ const de: Record<TranslationKey, string> = {
   'goal.modalShift.body': 'Einen ganzen Tag lang 30 % der Pendler im Bus (ab 300 Einwohnern).',
   'goal.stormProof.title': 'Sturmfest',
   'goal.stormProof.body': 'Überstehe einen ganzen Sturm ohne einen einzigen unterversorgten Tick.',
+  'goal.warmWinter.title': 'Warmer Winter',
+  'goal.warmWinter.body':
+    'Liefere einen ganzen Wintertag lang mindestens die Hälfte der Wärme über das Fernwärmenetz, ohne dass jemand auf die eigene Heizung zurückfällt.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',
@@ -996,6 +1050,16 @@ const de: Record<TranslationKey, string> = {
   'inspect.hotspotQuality': 'Ergiebigkeit',
   'inspect.hotspotWells': 'Bohrungen / Kapazität',
   'inspect.hotspotHint': 'Ergiebigkeit des Hotspots und Reservoirtemperatur seines Feldes.',
+  'inspect.heatReach': 'Wärmenetz',
+  'inspect.heatReachHint':
+    'Erreichte Straßenkacheln · versorgte Gebäude. Das Netz folgt den Straßen, die das Heizwerk berühren.',
+  'inspect.heatCop': 'Wärmepumpen-COP',
+  'inspect.heatActive': 'heizt',
+  'inspect.heatInactive': 'aus — nicht angeschlossen oder beschädigt',
+  'inspect.heatNoRoad': 'Keine Straße berührt dieses Heizwerk, es versorgt niemanden',
+  'inspect.heating': 'Heizung',
+  'inspect.heatNetwork': 'Fernwärme',
+  'inspect.heatOwn': 'eigene Heizung',
   'disaster.storm': 'Sturm',
   'disaster.fire': 'Brand',
   'disaster.flood': 'Hochwasser',

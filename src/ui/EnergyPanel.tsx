@@ -88,7 +88,8 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
     energy.consumption.charging +
     energy.consumption.heating +
     energy.consumption.cooling +
-    energy.consumption.electrolysis;
+    energy.consumption.electrolysis +
+    energy.consumption.heatPumps;
   const balance = useSmoothedNumber(totalGeneration - totalConsumption);
 
   return (
@@ -162,6 +163,15 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
           value={energy.consumption.electrolysis}
           testId="detail-energy-electrolysis"
         />
+        <Row
+          label={
+            energy.heatCapacity > 0 || energy.consumption.heatPumps > 0
+              ? t('energy.heatPumps', { cop: energy.heatCop.toFixed(1) })
+              : t('energy.heatPumpsIdle')
+          }
+          value={energy.consumption.heatPumps}
+          testId="detail-energy-heat-pumps"
+        />
         <div
           className={`energy-row balance ${balance >= 0 ? 'positive' : 'negative'}`}
           data-testid="detail-energy-balance"
@@ -217,6 +227,17 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
         stored={energy.hydrogenStoredEnergy}
         capacity={energy.hydrogenCapacity}
         testId="energy-hydrogen-soc"
+      />
+      <Row
+        label={t('energy.networkHeat')}
+        value={energy.networkHeat}
+        testId="detail-energy-network-heat"
+      />
+      <SocBlock
+        label={t('energy.heatStorage')}
+        stored={energy.heatStored}
+        capacity={energy.heatCapacity}
+        testId="energy-heat-soc"
       />
     </section>
   );

@@ -9,6 +9,7 @@
  */
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileX, tileY } from '../shared/grid.ts';
+import { HEATED_SERVED } from '../shared/types.ts';
 import type { GrowthBlocker, TileInfo } from '../shared/types.ts';
 import { PlantType, RoadClass, SupplyStatus, Terrain, TileType, Zone } from '../shared/types.ts';
 import { deliveryState, depotInfo, isShopSupplied } from './deliveries.ts';
@@ -23,6 +24,7 @@ import {
 } from './energy.ts';
 import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
+import { heatPumpCop, plantReach } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
@@ -132,6 +134,12 @@ function plantStorage(
         (1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, index)),
     };
   }
+  if (plant === PlantType.HeatStore && census.heatStores > 0) {
+    return {
+      stored: state.heatStored / census.heatStores,
+      capacity: BALANCE.heat.storeCapacity,
+    };
+  }
   return { stored: 0, capacity: 0 };
 }
 
@@ -191,6 +199,28 @@ function ringRadius(state: SimState, index: number, connected: boolean): number 
   // A dead line (not reached from any plant) supplies nothing.
   if (powerLine[index] !== 0 && connected) return BALANCE.energy.lineSupplyRadius;
   return 0;
+}
+
+/** A heat plant's own network: reach and the buildings beside it. */
+function heatPlantInfo(state: SimState, index: number, connected: boolean) {
+  const { layers } = state;
+  const reach = plantReach(state, index);
+  const served = new Set<number>();
+  for (const road of reach) {
+    for (const neighbor of neighbors4(road, state.size)) {
+      if (layers.tileType[neighbor] !== TileType.Empty || layers.density[neighbor] === 0) continue;
+      // Agrees with recomputeHeated's gate: a damaged or unconnected
+      // building is dark, so it does not count as served.
+      if (layers.damage[neighbor] !== 0 || layers.energized[neighbor] !== 1) continue;
+      served.add(neighbor);
+    }
+  }
+  return {
+    reach: reach.length,
+    served: served.size,
+    cop: heatPumpCop(state.season.temperature),
+    active: connected && layers.damage[index] === 0,
+  };
 }
 
 /** Full inspector snapshot for one tile, or null when out of bounds. */
@@ -319,6 +349,10 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     disaster: disasterKindAt(state, index),
     fireCovered: isBuilding && (layers.services[index] & SERVICE_FIRE) !== 0,
     policeCovered: isBuilding && (layers.services[index] & SERVICE_POLICE) !== 0,
+    heated: isBuilding && layers.heated[index] === HEATED_SERVED,
+    ...(tileType === TileType.Plant && plant === PlantType.HeatPlant
+      ? { heatPlant: heatPlantInfo(state, index, connected) }
+      : {}),
     stationActive: tileType === TileType.Plant && isStation(plant) && connected,
     roadClass: (tileType === TileType.Road
       ? layers.roadClass[index]

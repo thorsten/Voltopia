@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { TICKS_PER_DAY } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, SupplyStatus, Zone } from '../shared/types.ts';
+import { HEATED_SERVED, PlantType, SupplyStatus, Zone } from '../shared/types.ts';
 import { SimEngine } from './engine.ts';
+import { placePlant } from './energy.ts';
+import { buildRoads } from './roads.ts';
+import { createSimState } from './state.ts';
+import { buildStats, stepTick } from './tick.ts';
 
 const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -140,5 +144,34 @@ describe('lifetime statistics', () => {
     if (lifetimeEvents[0].type === 'lifetimeData') {
       expect(lifetimeEvents[0].samples.length).toBe(3);
     }
+  });
+});
+
+describe('district heating in the tick loop', () => {
+  it('heats a served building through stepTick and reports it in the stats', () => {
+    const size = 32;
+    const at = (x: number, y: number) => tileIndex(x, y, size);
+    const state = createSimState(7, size);
+    state.money = 1e9;
+    buildRoads(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(3 + i, 10)),
+    );
+    placePlant(state, at(2, 10), PlantType.HeatPlant);
+    placePlant(state, at(2, 12), PlantType.WindTurbine);
+    placePlant(state, at(2, 14), PlantType.HeatStore);
+    state.layers.zone[at(4, 9)] = Zone.Residential;
+    state.layers.density[at(4, 9)] = 2;
+    // Winter: SEASON_ORDER is spring, summer, autumn, winter, so a year
+    // that started three seasons ago puts day 0 on the first winter day.
+    state.seasonOriginDay = -BALANCE.seasons.daysPerSeason * 3;
+    for (let i = 0; i < 20; i++) stepTick(state);
+    expect(state.season.season).toBe('winter');
+    expect(state.layers.heated[at(4, 9)]).toBe(HEATED_SERVED);
+    const stats = buildStats(state);
+    expect(stats.energy.networkHeat).toBeGreaterThan(0);
+    expect(stats.energy.consumption.heatPumps).toBeGreaterThan(0);
+    expect(stats.energy.heatCapacity).toBe(BALANCE.heat.storeCapacity);
+    expect(stats.energy.heatCop).toBeLessThan(BALANCE.heat.copWarm);
   });
 });
