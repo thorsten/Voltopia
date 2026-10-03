@@ -86,6 +86,7 @@ and the inspector follow it with no extra message.
   to the installed capacity every tick, like `storedEnergy`.
 - `SaveGame.heatStored?: number` — optional; absent reads as 0. No
   `SAVE_VERSION` bump.
+- `SaveGame.warmWinterTicks?: number` — optional; the goal's streak counter.
 - `PlantType.HeatPlant = 16`, `PlantType.HeatStore = 17`.
 - `PlantCensus` gains `heatPlants` and `heatStores` (damaged ones are
   skipped, as for every other plant).
@@ -287,5 +288,7 @@ city run through a full year with and without the heat sector. Checks:
 
 ## Save compatibility
 
-Only `heatStored` is added, optional. Old saves load with an empty tank
-and no heat plants, which is the game as it was. No version bump.
+`heatStored` and the goal's `warmWinterTicks` streak are added, both
+optional (every other streak goal persists its counter the same way). Old
+saves load with an empty tank and no heat plants, which is the game as it
+was. No version bump.

@@ -312,6 +312,50 @@ describe('goals', () => {
     });
   });
 
+  describe('warmWinter', () => {
+    function winterCity(): ReturnType<typeof createSimState> {
+      const state = createSimState(3, 16);
+      state.season = { ...state.season, season: 'winter' };
+      state.lastEnergy.networkHeat = 60;
+      state.lastEnergy.heatFallback = 0;
+      state.lastEnergy.heatingConsumption = 40;
+      return state;
+    }
+
+    it('achieves after a full winter day with the network carrying half the heat', () => {
+      const state = winterCity();
+      for (let i = 0; i < TICKS_PER_DAY - 1; i++) goalsStep(state);
+      expect(state.goalsAchieved.has('warmWinter')).toBe(false);
+      goalsStep(state);
+      expect(state.goalsAchieved.has('warmWinter')).toBe(true);
+    });
+
+    it('a fallback tick, a low share, another season or no demand resets the streak', () => {
+      const state = winterCity();
+      for (let i = 0; i < 10; i++) goalsStep(state);
+      expect(state.goalProgress.warmWinterTicks).toBe(10);
+      state.lastEnergy.heatFallback = 1;
+      goalsStep(state);
+      expect(state.goalProgress.warmWinterTicks).toBe(0);
+
+      state.lastEnergy.heatFallback = 0;
+      state.lastEnergy.heatingConsumption = 100; // network share 60/160 < 0.5
+      goalsStep(state);
+      expect(state.goalProgress.warmWinterTicks).toBe(0);
+
+      state.lastEnergy.heatingConsumption = 40;
+      state.season = { ...state.season, season: 'summer' };
+      goalsStep(state);
+      expect(state.goalProgress.warmWinterTicks).toBe(0);
+
+      state.season = { ...state.season, season: 'winter' };
+      state.lastEnergy.networkHeat = 0;
+      state.lastEnergy.heatingConsumption = 0; // no demand at all
+      goalsStep(state);
+      expect(state.goalProgress.warmWinterTicks).toBe(0);
+    });
+  });
+
   describe('modalShift', () => {
     it('needs a big city and a whole day of riders', () => {
       const state = bigCity();

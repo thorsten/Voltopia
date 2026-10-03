@@ -386,6 +386,9 @@ const en = {
   'goal.modalShift.body': 'A whole day with 30% of commuters on the bus (300+ residents).',
   'goal.stormProof.title': 'Storm-proof',
   'goal.stormProof.body': 'Ride out a whole storm without a single undersupplied tick.',
+  'goal.warmWinter.title': 'Warm winter',
+  'goal.warmWinter.body':
+    'Carry at least half of your heat over the district network for a full winter day, with nobody falling back to their own heating.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -894,6 +897,9 @@ const de: Record<TranslationKey, string> = {
   'goal.modalShift.body': 'Einen ganzen Tag lang 30 % der Pendler im Bus (ab 300 Einwohnern).',
   'goal.stormProof.title': 'Sturmfest',
   'goal.stormProof.body': 'Überstehe einen ganzen Sturm ohne einen einzigen unterversorgten Tick.',
+  'goal.warmWinter.title': 'Warmer Winter',
+  'goal.warmWinter.body':
+    'Liefere einen ganzen Wintertag lang mindestens die Hälfte der Wärme über das Fernwärmenetz, ohne dass jemand auf die eigene Heizung zurückfällt.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',
