@@ -196,6 +196,101 @@ describe('BuildingsMesh', () => {
     expect(mesh.streetFaceAt(CENTRE)).toBe(StreetFace.North);
   });
 
+  it('puts windows on the street face and its opposite, never on the side faces', () => {
+    const { scene, mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0), road(CENTRE + 1)]);
+    expect(mesh.streetFaceAt(CENTRE)).toBe(StreetFace.East);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const windows = scene.children.find(
+      (c): c is THREE.InstancedMesh =>
+        c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+    )!;
+    expect(windows.count).toBeGreaterThan(0);
+    expect(windows.count).toBeLessThanOrEqual(24);
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const cx = 3 + 0.5 + main.ox;
+    const cz = 3 + 0.5 + main.oz;
+    for (let i = 0; i < windows.count; i++) {
+      windows.getMatrixAt(i, m);
+      p.setFromMatrixPosition(m);
+      // East/west faces: x is pushed past the body's half width, z stays inside it.
+      expect(Math.abs(p.x - cx)).toBeGreaterThan(main.sx / 2);
+      expect(Math.abs(p.z - cz)).toBeLessThan(main.sz / 2);
+    }
+  });
+
+  it('gives a shop one wide shopfront quad on the street face', () => {
+    const { scene, mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Retail, 1, 0), road(CENTRE + SIZE)]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const windows = scene.children.find(
+      (c): c is THREE.InstancedMesh =>
+        c instanceof THREE.InstancedMesh && !mesh.kindMeshes.includes(c),
+    )!;
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const cz = 3 + 0.5 + main.oz;
+    const wide: THREE.Vector3[] = [];
+    for (let i = 0; i < windows.count; i++) {
+      windows.getMatrixAt(i, m);
+      p.setFromMatrixPosition(m);
+      s.setFromMatrixScale(m);
+      if (p.z > cz) wide.push(s.clone()); // street (south) face
+    }
+    expect(wide).toHaveLength(1);
+    // Scaled from the 0.09 × 0.11 quad to ~80 % of the facade width.
+    expect(wide[0].x * 0.09).toBeCloseTo(main.sx * 0.8, 6);
+  });
+
+  it('keeps growing a building across a same-batch road re-issue', () => {
+    const { mesh } = setup();
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0), road(CENTRE + 1)]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const scaleOfMain = () => {
+      const scale = new THREE.Vector3();
+      let best = 0;
+      for (const m of drawn(mesh.kindMeshes[PartKind.Box])) {
+        scale.setFromMatrixScale(m);
+        best = Math.max(best, scale.y);
+      }
+      return best;
+    };
+    expect(scaleOfMain()).toBeLessThan(main.sy * 0.2);
+    expect(mesh.streetFaceAt(CENTRE)).toBe(StreetFace.East);
+    mesh.update(10);
+    expect(scaleOfMain()).toBeCloseTo(main.sy, 6);
+  });
+
+  it('isolates neighbouring buildings in their own blocks', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    const firstPartsCount = mesh.partsAt(CENTRE)!.length;
+    const firstByKind = (kind: PartKind) =>
+      drawn(mesh.kindMeshes[kind])
+        .map((m) => m.toArray())
+        .slice();
+    const before = PART_KINDS.map((kind) => firstByKind(kind));
+    mesh.applyDiffs([building(CENTRE + 1, Zone.Commercial, 1, 1)]);
+    const secondPartsCount = mesh.partsAt(CENTRE + 1)!.length;
+    expect(firstPartsCount).toBeGreaterThan(0);
+    expect(secondPartsCount).toBeGreaterThan(0);
+    for (const kind of PART_KINDS) {
+      const expectedFirst = mesh.partsAt(CENTRE)!.filter((p) => p.kind === kind).length;
+      const expectedSecond = mesh.partsAt(CENTRE + 1)!.filter((p) => p.kind === kind).length;
+      expect(drawn(mesh.kindMeshes[kind])).toHaveLength(expectedFirst + expectedSecond);
+    }
+    // Placing the second building must not touch the first's slots.
+    const after = PART_KINDS.map((kind) => firstByKind(kind).slice(0, before[kind].length));
+    for (const kind of PART_KINDS) {
+      expect(after[kind]).toEqual(before[kind]);
+    }
+  });
+
   it('keeps the window mesh hidden by day and shows it at night', () => {
     const { scene, mesh } = setup();
     mesh.setReducedMotion(true);

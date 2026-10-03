@@ -1,15 +1,18 @@
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
-import { SupplyStatus, TileType, type Zone } from '../shared/types.ts';
+import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
-import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
+import { PART_KINDS, createPartGeometry } from './buildings/primitives.ts';
 import { applySupplyTint } from './buildings/palette.ts';
 import {
   type BuildingPart,
   MAX_PARTS_PER_KIND,
   type StreetFace,
   buildingParts,
+  faceDepth,
+  faceOffset,
+  faceWidth,
   mainBody,
   streetFaceFor,
 } from './buildings/recipes.ts';
@@ -65,6 +68,8 @@ export class BuildingsMesh implements DiffLayer {
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly scale = new THREE.Vector3();
   private readonly color = new THREE.Color();
+  /** Reusable per-kind slot cursor for `writeMatrices`/`writeColors` — avoids a Map per call. */
+  private readonly cursor = new Int32Array(PART_KINDS.length);
 
   constructor(
     scene: THREE.Scene,
@@ -245,12 +250,22 @@ export class BuildingsMesh implements DiffLayer {
       building.face = face;
       building.parts = parts;
     }
+    this.hideUnusedSlots(building);
     if (animate && !this.reducedMotion) {
       this.animations.set(index, 0);
       this.writeMatrices(index, 0.01);
     } else {
-      this.animations.delete(index);
-      this.writeMatrices(index, 1);
+      // A re-issue (e.g. a road laid beside a still-growing building, or a
+      // road arriving in the same diff batch as the building) must not
+      // snap an in-progress grow animation to full size: keep the existing
+      // animation entry and resume at its current progress.
+      const elapsed = this.animations.get(index);
+      if (elapsed === undefined) {
+        this.writeMatrices(index, 1);
+      } else {
+        const t = elapsed / GROW_ANIMATION_SECONDS;
+        this.writeMatrices(index, Math.max(0.01, 1 - Math.pow(1 - t, 3)));
+      }
     }
     this.writeColors(index);
   }
@@ -284,13 +299,29 @@ export class BuildingsMesh implements DiffLayer {
     }
   }
 
-  /** Slot of the i-th part of `kind` within the tile's block for that kind. */
-  private slotsOf(building: TileBuilding): Map<PartKind, number> {
-    const next = new Map<PartKind, number>();
+  /**
+   * Hide a block's unused tail slots per kind (a re-issued recipe may have
+   * fewer parts than the block holds). Slots are stable across growth, so
+   * this runs once per `place()` rather than on every matrix write.
+   */
+  private hideUnusedSlots(building: TileBuilding): void {
+    this.cursor.fill(0);
+    for (const p of building.parts) this.cursor[p.kind]++;
     for (const kind of PART_KINDS) {
-      next.set(kind, building.blocks[kind] * this.layers[kind].blockSize);
+      const layer = this.layers[kind];
+      const start = building.blocks[kind] * layer.blockSize;
+      const end = start + layer.blockSize;
+      for (let slot = start + this.cursor[kind]; slot < end; slot++) {
+        layer.mesh.setMatrixAt(slot, HIDDEN);
+      }
     }
-    return next;
+  }
+
+  /** Reset the reusable per-kind slot cursor to the start of the tile's blocks. */
+  private resetCursor(building: TileBuilding): void {
+    for (const kind of PART_KINDS) {
+      this.cursor[kind] = building.blocks[kind] * this.layers[kind].blockSize;
+    }
   }
 
   private writeMatrices(index: number, growth: number): void {
@@ -299,10 +330,9 @@ export class BuildingsMesh implements DiffLayer {
     const cx = (index % this.gridSize) + 0.5;
     const cz = Math.floor(index / this.gridSize) + 0.5;
     const lift = this.elevation.centerY(index);
-    const next = this.slotsOf(building);
+    this.resetCursor(building);
     for (const p of building.parts) {
-      const slot = next.get(p.kind)!;
-      next.set(p.kind, slot + 1);
+      const slot = this.cursor[p.kind]++;
       this.position.set(cx + p.ox * growth, lift + p.oy * growth, cz + p.oz * growth);
       this.euler.set(p.tilt ?? 0, p.turn * QUARTER_TURN, 0, 'YXZ');
       this.quaternion.setFromEuler(this.euler);
@@ -310,34 +340,27 @@ export class BuildingsMesh implements DiffLayer {
       this.matrix.compose(this.position, this.quaternion, this.scale);
       this.layers[p.kind].mesh.setMatrixAt(slot, this.matrix);
     }
-    // Hide the block's unused slots (a re-issued recipe may have fewer parts).
-    for (const kind of PART_KINDS) {
-      const layer = this.layers[kind];
-      const end = (building.blocks[kind] + 1) * layer.blockSize;
-      for (let slot = next.get(kind)!; slot < end; slot++) layer.mesh.setMatrixAt(slot, HIDDEN);
-    }
   }
 
   private writeColors(index: number): void {
     const building = this.buildings.get(index);
     if (!building) return;
-    const next = this.slotsOf(building);
+    this.resetCursor(building);
     for (const p of building.parts) {
-      const slot = next.get(p.kind)!;
-      next.set(p.kind, slot + 1);
+      const slot = this.cursor[p.kind]++;
       const color = p.accent ? p.color : applySupplyTint(p.color, building.supplied, this.color);
       this.layers[p.kind].mesh.setColorAt(slot, color);
     }
   }
 
   /**
-   * Lit window quads on the ±z faces of each building's main body. A
-   * deterministic pattern keeps some windows dark for variety. (Task 8
-   * moves these onto the street face and its opposite.)
+   * Lit window quads on the street face and its opposite of each
+   * building's main body. Shops get one wide shopfront on the street
+   * face. A deterministic pattern keeps ~1/3 of the windows dark.
    */
   private rebuildWindows(): void {
     const matrix = new THREE.Matrix4();
-    const rotationBack = new THREE.Matrix4().makeRotationY(Math.PI);
+    const rotation = new THREE.Matrix4();
     let slot = 0;
     for (const [index, building] of this.buildings) {
       // Buildings without (enough) power stay dark — undersupply flips
@@ -348,22 +371,40 @@ export class BuildingsMesh implements DiffLayer {
       const cx = (index % this.gridSize) + 0.5 + main.ox;
       const cz = Math.floor(index / this.gridSize) + 0.5 + main.oz;
       const lift = this.elevation.centerY(index);
-      const cols = Math.min(3, Math.max(1, Math.round(main.sx / 0.24)));
-      const rows = Math.min(4, Math.max(1, Math.round(main.sy / 0.28)));
+      const shopfront = building.zone === Zone.Retail && building.density < 3;
+      const budgetEnd = Math.min(slot + WINDOWS_PER_TILE, this.windowsMesh.instanceMatrix.count);
       let windowId = 0;
-      for (const face of [1, -1]) {
+      for (const [face, isStreet] of [
+        [building.face, true],
+        [((building.face + 2) % 4) as StreetFace, false],
+      ] as const) {
+        const width = faceWidth(main, face);
+        const depth = faceDepth(main, face);
+        rotation.makeRotationY(face * QUARTER_TURN);
+        if (isStreet && shopfront) {
+          if (slot >= budgetEnd) break;
+          const [dx, dz] = faceOffset(0, depth / 2 + WINDOW_GAP, face);
+          matrix.copy(rotation);
+          matrix.scale(
+            new THREE.Vector3((width * 0.8) / WINDOW_WIDTH, (main.sy * 0.5) / WINDOW_HEIGHT, 1),
+          );
+          matrix.setPosition(cx + dx, lift + main.oy + main.sy * 0.45, cz + dz);
+          this.windowsMesh.setMatrixAt(slot++, matrix);
+          continue;
+        }
+        const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
+        const rows = Math.min(4, Math.max(1, Math.round(main.sy / 0.28)));
         for (let col = 0; col < cols; col++) {
           for (let row = 0; row < rows; row++) {
             windowId++;
             // Deterministically leave ~1/3 of windows dark.
             if ((index * 7 + windowId * 13 + building.variant) % 3 === 0) continue;
-            if (slot >= this.windowsMesh.instanceMatrix.count) break;
-            const x = cx + ((col + 0.5) / cols - 0.5) * main.sx * 0.8;
-            const y = main.oy + ((row + 0.55) / rows) * main.sy * 0.82 + lift;
-            const z = cz + face * (main.sz / 2 + WINDOW_GAP);
-            if (face === 1) matrix.identity();
-            else matrix.copy(rotationBack);
-            matrix.setPosition(x, y, z);
+            if (slot >= budgetEnd) break;
+            const lx = ((col + 0.5) / cols - 0.5) * width * 0.8;
+            const [dx, dz] = faceOffset(lx, depth / 2 + WINDOW_GAP, face);
+            const y = lift + main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
+            matrix.copy(rotation);
+            matrix.setPosition(cx + dx, y, cz + dz);
             this.windowsMesh.setMatrixAt(slot++, matrix);
           }
         }
