@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { Zone } from '../../shared/types.ts';
 import { PART_KINDS, PartKind } from './primitives.ts';
 import { ACCENT } from './palette.ts';
@@ -328,6 +329,62 @@ describe('building recipes', () => {
               `${face}/${variant}/${index}: wing lands on the door side ` +
                 `(wing.ox=${wing.ox}, main.ox=${main.ox})`,
             );
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('lies the rooftop PV slab flush on the gable roof slope (residential d2, retail d3)', () => {
+    const violations: string[] = [];
+    const cases: ReadonlyArray<{ zone: Zone; density: number }> = [
+      { zone: Zone.Residential, density: 2 },
+      { zone: Zone.Retail, density: 3 },
+    ];
+    for (const { zone, density } of cases) {
+      for (const face of STREET_FACES) {
+        for (let variant = 0; variant < VARIANTS; variant++) {
+          for (const index of SAMPLE) {
+            const parts = buildingParts(zone, density, variant, index, face);
+            const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+            const pv = parts.find(
+              (p) => p.color.getHex() === ACCENT.rooftopPv.getHex() && p.tilt !== undefined,
+            );
+            if (!pv) {
+              violations.push(`${tag}: no tilted rooftop PV part found`);
+              continue;
+            }
+            const main = mainBody(parts)!;
+            // The PV sits on the main (largest footprint) gable; a density-2
+            // dormer adds a second, much smaller, gable it never sits on.
+            const roofPart = parts
+              .filter((p) => p.kind === PartKind.GableRoof)
+              .reduce((a, b) => (a.sx * a.sz >= b.sx * b.sz ? a : b));
+            const roofHeight = roofPart.sy;
+            const roofDepth = roofPart.sz;
+            const expectedTilt = Math.atan2(roofHeight, roofDepth / 2);
+            if (Math.abs(pv.tilt! - expectedTilt) > 1e-9) {
+              violations.push(`${tag}: tilt ${pv.tilt} != expected ${expectedTilt}`);
+            }
+            const eaveHeight = main.oy + main.sy; // top of the walls
+            const [ex, ez] = faceOffset(0, 1, face); // unit vector toward the street
+            const euler = new THREE.Euler(pv.tilt, pv.turn * (Math.PI / 2), 0, 'YXZ');
+            for (const half of [pv.sz / 2, -pv.sz / 2]) {
+              const corner = new THREE.Vector3(0, 0, half).applyEuler(euler);
+              const worldX = pv.ox + corner.x;
+              const worldY = pv.oy + corner.y;
+              const worldZ = pv.oz + corner.z;
+              const alongStreet = (worldX - main.ox) * ex + (worldZ - main.oz) * ez;
+              const run = roofDepth / 2;
+              const planeHeight = eaveHeight + roofHeight * (1 - alongStreet / run);
+              if (Math.abs(worldY - planeHeight) > 0.02) {
+                violations.push(
+                  `${tag}: base corner y ${worldY} off roof plane ${planeHeight} ` +
+                    `(alongStreet=${alongStreet})`,
+                );
+              }
+            }
           }
         }
       }
