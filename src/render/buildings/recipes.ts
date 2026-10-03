@@ -308,8 +308,20 @@ function residential(
     );
     if (p.chance(1 / 3)) {
       // Lower wing on the side with room, with its own small gable (ridge along z).
-      const side = ox >= 0 ? -1 : 1;
-      const ew = 0.16;
+      // On the east/west faces the door always sits on the face's fixed world
+      // side (independent of ox), so the wing must be pinned to the opposite
+      // side rather than following ox; on north/south the door runs along z,
+      // so the wing keeps defaulting to whichever side ox leaves clearer.
+      let side: number;
+      if (face === StreetFace.East) side = -1;
+      else if (face === StreetFace.West) side = 1;
+      else side = ox >= 0 ? -1 : 1;
+      let ew = 0.16;
+      if ((side < 0 && ox < 0) || (side > 0 && ox > 0)) {
+        // The pinned side matches the body's own jitter: shrink the wing so
+        // its outer edge (|ox| + w/2 + ew) still stays within FOOTPRINT_HALF.
+        ew = Math.min(ew, FOOTPRINT_HALF - Math.abs(ox) - w / 2);
+      }
       const eh = h * 0.7;
       const ed = d * 0.7;
       const ex = ox + side * (w / 2 + ew / 2);

@@ -292,6 +292,29 @@ describe('building recipes', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps the density-1 side wing off the door side on east/west faces', () => {
+    const violations: string[] = [];
+    for (const face of [StreetFace.East, StreetFace.West] as const) {
+      for (let variant = 0; variant < VARIANTS; variant++) {
+        for (const index of SAMPLE) {
+          const parts = buildingParts(Zone.Residential, 1, variant, index, face);
+          const main = mainBody(parts)!;
+          const wing = parts.find((p) => p.kind === PartKind.Box && !p.main && !p.accent);
+          if (!wing) continue; // no side extension on this roll
+          const wingSign = Math.sign(wing.ox - main.ox);
+          const doorSign = face === StreetFace.East ? 1 : -1;
+          if (wingSign === doorSign) {
+            violations.push(
+              `${face}/${variant}/${index}: wing lands on the door side ` +
+                `(wing.ox=${wing.ox}, main.ox=${main.ox})`,
+            );
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('hang retail awnings on the street face', () => {
     for (const face of STREET_FACES) {
       for (const density of [1, 2, 3]) {
