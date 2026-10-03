@@ -1,157 +1,70 @@
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
-import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
+import { SupplyStatus, TileType, type Zone } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
+import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
+import { applySupplyTint } from './buildings/palette.ts';
+import {
+  type BuildingPart,
+  MAX_PARTS_PER_KIND,
+  type StreetFace,
+  buildingParts,
+  mainBody,
+  streetFaceFor,
+} from './buildings/recipes.ts';
+import { BlockAllocator } from './buildings/blocks.ts';
 
-/** Max boxes composing one building. */
-const PARTS_PER_TILE = 3;
 const GROW_ANIMATION_SECONDS = 0.45;
-/** Max lit window quads per building (two faces). */
-const WINDOWS_PER_TILE = 16;
+/** Max lit window quads per building. */
+const WINDOWS_PER_TILE = 24;
 const WINDOW_COLOR = 0xffc978;
-
-interface BuildingPart {
-  /** Footprint size (tile fractions) and height. */
-  sx: number;
-  sy: number;
-  sz: number;
-  /** Offset from tile center (tile fractions) and base height. */
-  ox: number;
-  oy: number;
-  oz: number;
-  color: THREE.Color;
-}
+const WINDOW_WIDTH = 0.09;
+const WINDOW_HEIGHT = 0.11;
+const WINDOW_GAP = 0.012;
+const QUARTER_TURN = Math.PI / 2;
+/** Hidden instances: a zero-scale matrix is never rasterised. */
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 interface TileBuilding {
   zone: Zone;
   density: number;
   variant: number;
   supplied: SupplyStatus;
+  face: StreetFace;
+  parts: BuildingPart[];
+  /** Block per primitive kind (index = PartKind). */
+  blocks: number[];
 }
 
-const ZONE_BASE_COLORS: Record<number, THREE.Color> = {
-  [Zone.Residential]: new THREE.Color(0xe7d7b8),
-  [Zone.Commercial]: new THREE.Color(0x9db4c8),
-  [Zone.Retail]: new THREE.Color(0xd8a09a),
-};
-
-const ROOF_COLORS: Record<number, THREE.Color> = {
-  [Zone.Residential]: new THREE.Color(0xc06a4f),
-  [Zone.Commercial]: new THREE.Color(0x6f8aa0),
-  [Zone.Retail]: new THREE.Color(0xb85f66),
-};
-
-const ROOFTOP_PV_COLOR = new THREE.Color(0x2b3d66);
-
-/**
- * Rooftop PV panel on top of the finished part stack — buildings grow
- * panels automatically from density 2 (mirrors the sim's rooftop
- * feed-in).
- */
-function withRooftopPanel(parts: BuildingPart[], density: number): BuildingPart[] {
-  if (density < 2 || parts.length === 0) return parts;
-  let top = 0;
-  let topPart = parts[0];
-  for (const p of parts) {
-    if (p.oy + p.sy > top) {
-      top = p.oy + p.sy;
-      topPart = p;
-    }
-  }
-  parts.push(
-    part(topPart.sx * 0.7, 0.03, topPart.sz * 0.55, topPart.ox, top, topPart.oz, ROOFTOP_PV_COLOR),
-  );
-  return parts;
+interface KindLayer {
+  mesh: THREE.InstancedMesh;
+  blockSize: number;
+  blocks: BlockAllocator;
 }
 
 /**
- * Procedural low-poly building parts for a zone/density/variant triple.
- * Deterministic in its inputs so every client renders the same city.
- */
-export function buildingParts(zone: Zone, density: number, variant: number): BuildingPart[] {
-  const base = ZONE_BASE_COLORS[zone] ?? new THREE.Color(0xffffff);
-  const roof = ROOF_COLORS[zone] ?? new THREE.Color(0xcccccc);
-  // Small deterministic variation derived from the variant id.
-  const jitter = (variant % 4) * 0.04;
-  const wallColor = base.clone().offsetHSL(0, 0, (variant % 3) * 0.03 - 0.03);
-  const parts: BuildingPart[] = [];
-
-  if (zone === Zone.Residential) {
-    if (density === 1) {
-      const h = 0.32 + jitter;
-      parts.push(part(0.5, h, 0.55, 0, 0, 0, wallColor));
-      parts.push(part(0.56, 0.12, 0.61, 0, h, 0, roof));
-    } else if (density === 2) {
-      const h = 0.55 + jitter;
-      parts.push(part(0.62, h, 0.62, 0, 0, 0, wallColor));
-      parts.push(part(0.68, 0.12, 0.68, 0, h, 0, roof));
-    } else {
-      const h = 1.05 + jitter;
-      parts.push(part(0.72, h, 0.72, 0, 0, 0, wallColor));
-      parts.push(part(0.5, 0.22, 0.5, 0, h, 0, wallColor));
-    }
-  } else if (zone === Zone.Commercial) {
-    if (density === 1) {
-      parts.push(part(0.62, 0.4 + jitter, 0.62, 0, 0, 0, wallColor));
-    } else if (density === 2) {
-      parts.push(part(0.62, 1.0 + jitter, 0.62, 0, 0, 0, wallColor));
-      parts.push(part(0.66, 0.06, 0.66, 0, 1.0 + jitter, 0, roof));
-    } else {
-      const h = 1.7 + jitter * 2;
-      parts.push(part(0.66, h, 0.66, 0, 0, 0, wallColor));
-      parts.push(part(0.46, 0.45, 0.46, 0, h, 0, wallColor));
-    }
-  } else if (zone === Zone.Retail) {
-    if (density === 1) {
-      parts.push(part(0.72, 0.3 + jitter, 0.6, 0, 0, 0, wallColor));
-      parts.push(part(0.76, 0.08, 0.2, 0, 0.3 + jitter, 0.24, roof));
-    } else if (density === 2) {
-      parts.push(part(0.78, 0.45 + jitter, 0.7, 0, 0, 0, wallColor));
-      parts.push(part(0.82, 0.08, 0.2, 0, 0.45 + jitter, 0.28, roof));
-    } else {
-      const h = 0.8 + jitter;
-      parts.push(part(0.8, h, 0.78, 0, 0, 0, wallColor));
-      parts.push(part(0.84, 0.1, 0.84, 0, h, 0, roof));
-    }
-  }
-  return withRooftopPanel(parts, density);
-}
-
-/** Top of the tallest part — how high the building rises above the tile. */
-export function buildingHeight(zone: Zone, density: number, variant: number): number {
-  let top = 0;
-  for (const p of buildingParts(zone, density, variant)) top = Math.max(top, p.oy + p.sy);
-  return top;
-}
-
-function part(
-  sx: number,
-  sy: number,
-  sz: number,
-  ox: number,
-  oy: number,
-  oz: number,
-  color: THREE.Color,
-): BuildingPart {
-  return { sx, sy, sz, ox, oy, oz, color };
-}
-
-/**
- * All zone buildings as one InstancedMesh with per-instance colors.
- * New/densified buildings scale in with a short animation.
+ * All zone buildings as one InstancedMesh per primitive kind with
+ * per-instance colours. Each tile owns one fixed-size block of slots per
+ * kind, so a change touches only that tile. New/densified buildings scale
+ * in with a short animation; doors and awnings face the nearest road.
  */
 export class BuildingsMesh implements DiffLayer {
-  readonly mesh: THREE.InstancedMesh;
+  readonly kindMeshes: readonly THREE.InstancedMesh[];
+  private readonly layers: readonly KindLayer[];
   private readonly windowsMesh: THREE.InstancedMesh;
   private readonly windowsMaterial: THREE.MeshBasicMaterial;
   private readonly gridSize: number;
+  private readonly roads: Uint8Array;
   private readonly buildings = new Map<number, TileBuilding>();
-  private readonly animations = new Map<number, number>(); // tile -> elapsed
-  private tileSlots = new Map<number, { start: number; count: number }>();
-  private windowsDirty = false;
+  private readonly animations = new Map<number, number>(); // tile -> elapsed seconds
   private reducedMotion = false;
   private readonly matrix = new THREE.Matrix4();
+  private readonly position = new THREE.Vector3();
+  private readonly quaternion = new THREE.Quaternion();
+  private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  private readonly scale = new THREE.Vector3();
+  private readonly color = new THREE.Color();
 
   constructor(
     scene: THREE.Scene,
@@ -159,19 +72,26 @@ export class BuildingsMesh implements DiffLayer {
     private readonly elevation: ElevationField,
   ) {
     this.gridSize = gridSize;
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    geometry.translate(0, 0.5, 0); // origin at the base for easy scaling
-    const material = new THREE.MeshLambertMaterial();
-    this.mesh = new THREE.InstancedMesh(geometry, material, gridSize * gridSize * PARTS_PER_TILE);
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.mesh.frustumCulled = false;
-    this.mesh.castShadow = true;
-    this.mesh.receiveShadow = true;
-    this.mesh.count = 0;
-    scene.add(this.mesh);
+    this.roads = new Uint8Array(gridSize * gridSize);
+    this.layers = PART_KINDS.map((kind) => {
+      const blockSize = MAX_PARTS_PER_KIND[kind];
+      const mesh = new THREE.InstancedMesh(
+        createPartGeometry(kind),
+        new THREE.MeshLambertMaterial(),
+        gridSize * gridSize * blockSize,
+      );
+      // Instance transforms live across the whole grid; the base geometry's
+      // bounds would wrongly cull the mesh, so culling is disabled.
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.count = 0;
+      scene.add(mesh);
+      return { mesh, blockSize, blocks: new BlockAllocator(gridSize * gridSize) };
+    });
+    this.kindMeshes = this.layers.map((layer) => layer.mesh);
 
-    const windowGeometry = new THREE.PlaneGeometry(0.09, 0.11);
+    const windowGeometry = new THREE.PlaneGeometry(WINDOW_WIDTH, WINDOW_HEIGHT);
     this.windowsMaterial = new THREE.MeshBasicMaterial({
       color: WINDOW_COLOR,
       transparent: true,
@@ -184,22 +104,28 @@ export class BuildingsMesh implements DiffLayer {
       this.windowsMaterial,
       gridSize * gridSize * WINDOWS_PER_TILE,
     );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
     this.windowsMesh.frustumCulled = false;
     this.windowsMesh.count = 0;
     this.windowsMesh.visible = false;
     scene.add(this.windowsMesh);
   }
 
+  /** Street face of the building on `index`, for tests and debugging. */
+  streetFaceAt(index: number): StreetFace | undefined {
+    return this.buildings.get(index)?.face;
+  }
+
+  /** Recipe parts of the building on `index`, for tests and debugging. */
+  partsAt(index: number): readonly BuildingPart[] | undefined {
+    return this.buildings.get(index)?.parts;
+  }
+
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
     if (reduced && this.animations.size > 0) {
-      for (const index of this.animations.keys()) {
-        this.writeTileMatrices(index, 1);
-      }
+      for (const index of this.animations.keys()) this.writeMatrices(index, 1);
       this.animations.clear();
-      this.mesh.instanceMatrix.needsUpdate = true;
+      this.markMatricesDirty();
     }
   }
 
@@ -211,8 +137,16 @@ export class BuildingsMesh implements DiffLayer {
   }
 
   applyDiffs(diffs: TileDiff[]): void {
-    let changed = false;
+    const reissue = new Set<number>();
+    let windowsDirty = false;
+    let matricesDirty = false;
+    let colorsDirty = false;
     for (const diff of diffs) {
+      const isRoad = diff.tileType === TileType.Road ? 1 : 0;
+      if (this.roads[diff.index] !== isRoad) {
+        this.roads[diff.index] = isRoad;
+        for (const n of this.neighbours(diff.index)) if (this.buildings.has(n)) reissue.add(n);
+      }
       const hasBuilding = diff.tileType === TileType.Empty && diff.density > 0;
       const existing = this.buildings.get(diff.index);
       if (hasBuilding) {
@@ -222,31 +156,31 @@ export class BuildingsMesh implements DiffLayer {
           existing.zone !== diff.zone ||
           existing.variant !== diff.variant
         ) {
-          this.buildings.set(diff.index, {
-            zone: diff.zone,
-            density: diff.density,
-            variant: diff.variant,
-            supplied: diff.supplied,
-          });
-          if (!this.reducedMotion) this.animations.set(diff.index, 0);
-          changed = true;
+          this.place(diff.index, diff.zone, diff.density, diff.variant, diff.supplied, true);
+          reissue.delete(diff.index);
+          windowsDirty = matricesDirty = colorsDirty = true;
         } else if (existing.supplied !== diff.supplied) {
-          // Supply flips only affect the lit windows (flicker/dark), so a
-          // window rebuild is enough — no grow animation.
+          // Supply flips tint the body and dim the windows; no grow animation.
           existing.supplied = diff.supplied;
-          this.windowsDirty = true;
+          this.writeColors(diff.index);
+          windowsDirty = colorsDirty = true;
         }
       } else if (existing) {
-        this.buildings.delete(diff.index);
-        this.animations.delete(diff.index);
-        changed = true;
+        this.remove(diff.index);
+        reissue.delete(diff.index);
+        windowsDirty = matricesDirty = true;
       }
     }
-    if (changed) this.rebuild();
-    else if (this.windowsDirty) {
-      this.windowsDirty = false;
-      this.rebuildWindows();
+    for (const index of reissue) {
+      const b = this.buildings.get(index)!;
+      if (this.streetFace(index) !== b.face) {
+        this.place(index, b.zone, b.density, b.variant, b.supplied, false);
+        windowsDirty = matricesDirty = colorsDirty = true;
+      }
     }
+    if (matricesDirty) this.markMatricesDirty();
+    if (colorsDirty) this.markColorsDirty();
+    if (windowsDirty) this.rebuildWindows();
   }
 
   update(deltaSeconds: number): void {
@@ -255,43 +189,151 @@ export class BuildingsMesh implements DiffLayer {
       const next = elapsed + deltaSeconds;
       if (next >= GROW_ANIMATION_SECONDS) {
         this.animations.delete(index);
-        this.writeTileMatrices(index, 1);
+        this.writeMatrices(index, 1);
       } else {
         this.animations.set(index, next);
         // Ease-out cubic for a satisfying pop-in.
         const t = next / GROW_ANIMATION_SECONDS;
-        this.writeTileMatrices(index, 1 - Math.pow(1 - t, 3));
+        this.writeMatrices(index, 1 - Math.pow(1 - t, 3));
       }
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    this.markMatricesDirty();
   }
 
-  private rebuild(): void {
-    this.tileSlots = new Map();
-    let slot = 0;
-    const color = new THREE.Color();
-    for (const [index, building] of this.buildings) {
-      const parts = buildingParts(building.zone, building.density, building.variant);
-      this.tileSlots.set(index, { start: slot, count: parts.length });
-      for (const p of parts) {
-        color.copy(p.color);
-        this.mesh.setColorAt(slot, color);
-        slot++;
-      }
-      const scale = this.animations.has(index)
-        ? Math.max(0.01, this.animations.get(index)! / GROW_ANIMATION_SECONDS)
-        : 1;
-      this.writeTileMatrices(index, scale);
+  private *neighbours(index: number): Generator<number> {
+    const x = index % this.gridSize;
+    const z = Math.floor(index / this.gridSize);
+    if (z + 1 < this.gridSize) yield index + this.gridSize;
+    if (x + 1 < this.gridSize) yield index + 1;
+    if (x > 0) yield index - 1;
+    if (z > 0) yield index - this.gridSize;
+  }
+
+  private streetFace(index: number): StreetFace {
+    return streetFaceFor(index, this.gridSize, (i) => this.roads[i] === 1);
+  }
+
+  /** Create or re-issue the building on `index`; `animate` starts the grow-in. */
+  private place(
+    index: number,
+    zone: Zone,
+    density: number,
+    variant: number,
+    supplied: SupplyStatus,
+    animate: boolean,
+  ): void {
+    const face = this.streetFace(index);
+    const parts = buildingParts(zone, density, variant, index, face);
+    let building = this.buildings.get(index);
+    if (!building) {
+      building = {
+        zone,
+        density,
+        variant,
+        supplied,
+        face,
+        parts,
+        blocks: this.layers.map((layer) => layer.blocks.alloc()),
+      };
+      this.buildings.set(index, building);
+      this.syncCounts();
+    } else {
+      building.zone = zone;
+      building.density = density;
+      building.variant = variant;
+      building.supplied = supplied;
+      building.face = face;
+      building.parts = parts;
     }
-    this.mesh.count = slot;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-    this.rebuildWindows();
+    if (animate && !this.reducedMotion) {
+      this.animations.set(index, 0);
+      this.writeMatrices(index, 0.01);
+    } else {
+      this.animations.delete(index);
+      this.writeMatrices(index, 1);
+    }
+    this.writeColors(index);
+  }
+
+  private remove(index: number): void {
+    const building = this.buildings.get(index);
+    if (!building) return;
+    for (const kind of PART_KINDS) {
+      const layer = this.layers[kind];
+      const start = building.blocks[kind] * layer.blockSize;
+      for (let i = 0; i < layer.blockSize; i++) layer.mesh.setMatrixAt(start + i, HIDDEN);
+      layer.blocks.release(building.blocks[kind]);
+    }
+    this.buildings.delete(index);
+    this.animations.delete(index);
+    this.syncCounts();
+  }
+
+  /** Draw exactly up to the highest block in use per kind. */
+  private syncCounts(): void {
+    for (const layer of this.layers) layer.mesh.count = layer.blocks.highWater * layer.blockSize;
+  }
+
+  private markMatricesDirty(): void {
+    for (const layer of this.layers) layer.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  private markColorsDirty(): void {
+    for (const layer of this.layers) {
+      if (layer.mesh.instanceColor) layer.mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  /** Slot of the i-th part of `kind` within the tile's block for that kind. */
+  private slotsOf(building: TileBuilding): Map<PartKind, number> {
+    const next = new Map<PartKind, number>();
+    for (const kind of PART_KINDS) {
+      next.set(kind, building.blocks[kind] * this.layers[kind].blockSize);
+    }
+    return next;
+  }
+
+  private writeMatrices(index: number, growth: number): void {
+    const building = this.buildings.get(index);
+    if (!building) return;
+    const cx = (index % this.gridSize) + 0.5;
+    const cz = Math.floor(index / this.gridSize) + 0.5;
+    const lift = this.elevation.centerY(index);
+    const next = this.slotsOf(building);
+    for (const p of building.parts) {
+      const slot = next.get(p.kind)!;
+      next.set(p.kind, slot + 1);
+      this.position.set(cx + p.ox * growth, lift + p.oy * growth, cz + p.oz * growth);
+      this.euler.set(p.tilt ?? 0, p.turn * QUARTER_TURN, 0, 'YXZ');
+      this.quaternion.setFromEuler(this.euler);
+      this.scale.set(p.sx * growth, p.sy * growth, p.sz * growth);
+      this.matrix.compose(this.position, this.quaternion, this.scale);
+      this.layers[p.kind].mesh.setMatrixAt(slot, this.matrix);
+    }
+    // Hide the block's unused slots (a re-issued recipe may have fewer parts).
+    for (const kind of PART_KINDS) {
+      const layer = this.layers[kind];
+      const end = (building.blocks[kind] + 1) * layer.blockSize;
+      for (let slot = next.get(kind)!; slot < end; slot++) layer.mesh.setMatrixAt(slot, HIDDEN);
+    }
+  }
+
+  private writeColors(index: number): void {
+    const building = this.buildings.get(index);
+    if (!building) return;
+    const next = this.slotsOf(building);
+    for (const p of building.parts) {
+      const slot = next.get(p.kind)!;
+      next.set(p.kind, slot + 1);
+      const color = p.accent ? p.color : applySupplyTint(p.color, building.supplied, this.color);
+      this.layers[p.kind].mesh.setColorAt(slot, color);
+    }
   }
 
   /**
-   * Lit window quads on the ±z faces of each building's main box. A
-   * deterministic pattern keeps some windows dark for variety.
+   * Lit window quads on the ±z faces of each building's main body. A
+   * deterministic pattern keeps some windows dark for variety. (Task 8
+   * moves these onto the street face and its opposite.)
    */
   private rebuildWindows(): void {
     const matrix = new THREE.Matrix4();
@@ -301,7 +343,7 @@ export class BuildingsMesh implements DiffLayer {
       // Buildings without (enough) power stay dark — undersupply flips
       // tick to tick, which reads as flickering at night.
       if (building.supplied !== SupplyStatus.Supplied) continue;
-      const main = buildingParts(building.zone, building.density, building.variant)[0];
+      const main = mainBody(building.parts);
       if (!main) continue;
       const cx = (index % this.gridSize) + 0.5 + main.ox;
       const cz = Math.floor(index / this.gridSize) + 0.5 + main.oz;
@@ -318,7 +360,7 @@ export class BuildingsMesh implements DiffLayer {
             if (slot >= this.windowsMesh.instanceMatrix.count) break;
             const x = cx + ((col + 0.5) / cols - 0.5) * main.sx * 0.8;
             const y = main.oy + ((row + 0.55) / rows) * main.sy * 0.82 + lift;
-            const z = cz + face * (main.sz / 2 + 0.012);
+            const z = cz + face * (main.sz / 2 + WINDOW_GAP);
             if (face === 1) matrix.identity();
             else matrix.copy(rotationBack);
             matrix.setPosition(x, y, z);
@@ -329,21 +371,5 @@ export class BuildingsMesh implements DiffLayer {
     }
     this.windowsMesh.count = slot;
     this.windowsMesh.instanceMatrix.needsUpdate = true;
-  }
-
-  private writeTileMatrices(index: number, scale: number): void {
-    const slots = this.tileSlots.get(index);
-    const building = this.buildings.get(index);
-    if (!slots || !building) return;
-    const parts = buildingParts(building.zone, building.density, building.variant);
-    const cx = (index % this.gridSize) + 0.5;
-    const cz = Math.floor(index / this.gridSize) + 0.5;
-    const lift = this.elevation.centerY(index);
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      this.matrix.makeScale(p.sx * scale, p.sy * scale, p.sz * scale);
-      this.matrix.setPosition(cx + p.ox * scale, p.oy * scale + lift, cz + p.oz * scale);
-      this.mesh.setMatrixAt(slots.start + i, this.matrix);
-    }
   }
 }
