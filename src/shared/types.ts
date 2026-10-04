@@ -518,6 +518,14 @@ export interface GlobalStats {
   speed: Speed;
   /** Rollout active (legacy name; see smartMeters in Task 5). */
   smartCharging: boolean;
+  /** Smart-meter rollout: crews active, meters in place, coverage and the price per meter. */
+  smartMeters: {
+    active: boolean;
+    metered: number;
+    buildings: number;
+    coverage: number;
+    costPerMeter: number;
+  };
   /** Whether storage trades on the spot market (sell dear, buy cheap). */
   marketTrading: boolean;
   /** Whether the building insulation upgrade has been bought. */

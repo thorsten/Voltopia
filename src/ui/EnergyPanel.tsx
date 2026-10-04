@@ -172,6 +172,21 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
           value={energy.consumption.heatPumps}
           testId="detail-energy-heat-pumps"
         />
+        {(energy.consumption.flexRecovered > 0 || energy.consumption.flexBacklog > 0) && (
+          <>
+            <Row
+              label={t('energy.flexRecovered')}
+              value={energy.consumption.flexRecovered}
+              testId="detail-energy-flex-recovered"
+              tone="positive"
+            />
+            <Row
+              label={t('energy.flexBacklog')}
+              value={energy.consumption.flexBacklog}
+              testId="detail-energy-flex-backlog"
+            />
+          </>
+        )}
         <div
           className={`energy-row balance ${balance >= 0 ? 'positive' : 'negative'}`}
           data-testid="detail-energy-balance"

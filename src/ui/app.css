@@ -1062,6 +1062,11 @@ body,
   color: var(--hud-negative-strong);
 }
 
+.energy-graph-legend .legend-unshifted {
+  color: var(--hud-muted);
+  border-bottom: 1px dashed var(--hud-muted);
+}
+
 .legend-generation {
   color: var(--hud-positive);
 }
@@ -1103,6 +1108,13 @@ body,
 
 .smart-charging-toggle input {
   accent-color: var(--accent);
+}
+
+.smart-meters-coverage {
+  margin-left: auto;
+  color: var(--hud-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .insulation-buy {

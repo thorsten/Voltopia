@@ -1,4 +1,4 @@
-import { TICKS_PER_DAY } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { PlantType, RoadClass } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
@@ -7,7 +7,7 @@ import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
-import { smartMetersStep } from './smartMeters.ts';
+import { countBuildings, meteredCoverage, smartMetersStep } from './smartMeters.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -228,6 +228,13 @@ export function buildStats(state: SimState): GlobalStats {
     taxRate: state.taxRate,
     speed: state.speed,
     smartCharging: state.smartMeters.active,
+    smartMeters: {
+      active: state.smartMeters.active,
+      metered: state.smartMeters.metered,
+      buildings: countBuildings(state),
+      coverage: meteredCoverage(state),
+      costPerMeter: BALANCE.smartMeters.costPerMeter,
+    },
     marketTrading: state.marketTrading,
     insulation: state.insulation,
     services: { ...state.lastServices },
