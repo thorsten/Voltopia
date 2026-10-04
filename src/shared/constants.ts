@@ -1,4 +1,4 @@
-import { PlantType, Zone } from './types.ts';
+import { PlantType, SEASON_ORDER, Zone } from './types.ts';
 
 /** Structural constants (not balancing). */
 export const GRID_SIZE = 64;
@@ -12,6 +12,9 @@ export const TICKS_PER_DAY = 4 * 60 * TICK_RATE;
 /** Samples kept in the energy history graph (one per in-game half hour). */
 export const ENERGY_HISTORY_SAMPLES = 48;
 export const TICKS_PER_HISTORY_SAMPLE = TICKS_PER_DAY / ENERGY_HISTORY_SAMPLES;
+
+/** In-game days per season; a year is SEASON_ORDER.length seasons. */
+export const DAYS_PER_SEASON = 5;
 
 /**
  * Central balancing configuration. All gameplay tuning values live here —
@@ -610,6 +613,15 @@ export const BALANCE = {
     abandonAfterTicks: TICKS_PER_DAY,
     /** Per-tick chance that an eligible troubled building decays. */
     abandonChancePerTick: 0.01,
+    /**
+     * Visual age stages (render only, no gameplay effect): ticks of
+     * buildingAge at which a building turns lived-in, then weathered.
+     * One season, then one year.
+     */
+    ageStageTicks: [
+      DAYS_PER_SEASON * TICKS_PER_DAY,
+      SEASON_ORDER.length * DAYS_PER_SEASON * TICKS_PER_DAY,
+    ] as [number, number],
   },
 
   happiness: {
@@ -700,7 +712,7 @@ export const BALANCE = {
 
   seasons: {
     /** A year has seasonsPerYear × daysPerSeason in-game days. */
-    daysPerSeason: 5,
+    daysPerSeason: DAYS_PER_SEASON,
     /** Seasonal mean temperature swings between these (°C). */
     winterLow: -4,
     summerHigh: 24,

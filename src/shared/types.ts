@@ -657,6 +657,8 @@ export interface TileDiff {
   reservoirHeat: number;
   /** Damage points 0..255 of this tile (0 = intact). */
   damage: number;
+  /** Visual age stage of a building: 0 = new, 1 = lived-in, 2 = weathered (render only). */
+  ageStage: number;
   /** DeliveryState of a retail building (0 elsewhere). */
   deliveryState: number;
   /** 1 when a bus stop is marked on this road tile. */
