@@ -3,8 +3,8 @@ import type { TileDiff } from '../shared/types.ts';
 import { HEATED_SERVED, SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
-import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
-import { ACCENT, applySupplyTint } from './buildings/palette.ts';
+import { PART_KINDS, PartKind, createPartGeometry } from './buildings/primitives.ts';
+import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
 import {
   DOOR,
   type BuildingPart,
@@ -44,6 +44,11 @@ function accentState(b: TileBuilding): AccentState {
   return { heated: b.heated, supplied: b.supplied, damaged: b.damaged };
 }
 
+/** Pitched roofs take the weathered patina; flat slabs are boxes and do not. */
+function isRoofKind(kind: PartKind): boolean {
+  return kind === PartKind.GableRoof || kind === PartKind.HipRoof;
+}
+
 interface TileBuilding {
   zone: Zone;
   density: number;
@@ -51,6 +56,8 @@ interface TileBuilding {
   supplied: SupplyStatus;
   heated: boolean;
   damaged: boolean;
+  /** TileDiff.ageStage: 0 new, 1 lived-in, 2 weathered. */
+  ageStage: number;
   face: StreetFace;
   parts: BuildingPart[];
   /** Block per primitive kind (index = PartKind). */
@@ -85,6 +92,8 @@ export class BuildingsMesh implements DiffLayer {
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly scale = new THREE.Vector3();
   private readonly color = new THREE.Color();
+  /** Scratch for the age tint, which feeds the supply tint. */
+  private readonly agedColor = new THREE.Color();
   /** Reusable per-kind slot cursor for `writeMatrices`/`writeColors` — avoids a Map per call. */
   private readonly cursor = new Int32Array(PART_KINDS.length);
   /** Reusable set of kinds touched by one writeMatrices/writeColors call. */
@@ -148,6 +157,11 @@ export class BuildingsMesh implements DiffLayer {
     return this.buildings.get(index)?.parts;
   }
 
+  /** Number of lit window quads currently laid out, for tests. */
+  windowCount(): number {
+    return this.windowsMesh.count;
+  }
+
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
     if (reduced && this.animations.size > 0) {
@@ -179,6 +193,7 @@ export class BuildingsMesh implements DiffLayer {
       // shared/types.ts); only a served building counts as heated here.
       const heated = diff.heated === HEATED_SERVED;
       const damaged = (diff.damage ?? 0) > 0;
+      const ageStage = diff.ageStage ?? 0;
       if (hasBuilding) {
         if (
           !existing ||
@@ -194,6 +209,7 @@ export class BuildingsMesh implements DiffLayer {
             diff.supplied,
             heated,
             damaged,
+            ageStage,
             true,
           );
           reissue.delete(diff.index);
@@ -205,6 +221,11 @@ export class BuildingsMesh implements DiffLayer {
             existing.supplied = diff.supplied;
             this.writeColors(diff.index);
             windowsDirty = true;
+          }
+          if (existing.ageStage !== ageStage) {
+            // Age flips are colour-only: no animation, no window or anchor work.
+            existing.ageStage = ageStage;
+            if (!supplyFlip) this.writeColors(diff.index);
           }
           if (supplyFlip || existing.heated !== heated || existing.damaged !== damaged) {
             existing.heated = heated;
@@ -221,7 +242,17 @@ export class BuildingsMesh implements DiffLayer {
     for (const index of reissue) {
       const b = this.buildings.get(index)!;
       if (this.streetFace(index) !== b.face) {
-        this.place(index, b.zone, b.density, b.variant, b.supplied, b.heated, b.damaged, false);
+        this.place(
+          index,
+          b.zone,
+          b.density,
+          b.variant,
+          b.supplied,
+          b.heated,
+          b.damaged,
+          b.ageStage,
+          false,
+        );
         windowsDirty = true;
       }
     }
@@ -270,6 +301,7 @@ export class BuildingsMesh implements DiffLayer {
     supplied: SupplyStatus,
     heated: boolean,
     damaged: boolean,
+    ageStage: number,
     animate: boolean,
   ): void {
     const face = this.streetFace(index);
@@ -283,6 +315,7 @@ export class BuildingsMesh implements DiffLayer {
         supplied,
         heated,
         damaged,
+        ageStage,
         face,
         parts,
         blocks: this.layers.map((layer) => layer.blocks.alloc()),
@@ -296,6 +329,7 @@ export class BuildingsMesh implements DiffLayer {
       building.supplied = supplied;
       building.heated = heated;
       building.damaged = damaged;
+      building.ageStage = ageStage;
       building.face = face;
       building.parts = parts;
     }
@@ -428,7 +462,13 @@ export class BuildingsMesh implements DiffLayer {
     this.touchedKinds.clear();
     for (const p of building.parts) {
       const slot = this.cursor[p.kind]++;
-      const color = p.accent ? p.color : applySupplyTint(p.color, building.supplied, this.color);
+      const color = p.accent
+        ? p.color
+        : applySupplyTint(
+            applyAgeTint(p.color, building.ageStage, isRoofKind(p.kind), this.agedColor),
+            building.supplied,
+            this.color,
+          );
       this.layers[p.kind].mesh.setColorAt(slot, color);
       this.touchedKinds.add(p.kind);
     }
