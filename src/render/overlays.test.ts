@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { HEATED_NONE, HEATED_SERVED, HEATED_TRUNK, TileType } from '../shared/types.ts';
-import { damageColor, heatColor } from './overlays.ts';
+import {
+  HEATED_NONE,
+  HEATED_SERVED,
+  HEATED_TRUNK,
+  PlantType,
+  SupplyStatus,
+  TileType,
+} from '../shared/types.ts';
+import { damageColor, heatColor, supplyColor } from './overlays.ts';
 
 describe('damageColor', () => {
   it('greens an intact tile and reds a wrecked one', () => {
@@ -28,5 +35,43 @@ describe('heatColor', () => {
   it('leaves roads outside the network and empty land alone', () => {
     expect(heatColor({ tileType: TileType.Road, density: 0, heated: HEATED_NONE })).toBeNull();
     expect(heatColor({ tileType: TileType.Empty, density: 0, heated: HEATED_NONE })).toBeNull();
+  });
+});
+
+describe('supplyColor', () => {
+  it('reds an isolated supply plant and leaves a serving one unpainted', () => {
+    const isolated = supplyColor({
+      tileType: TileType.Plant,
+      density: 0,
+      plantType: PlantType.WindTurbine,
+      supplied: SupplyStatus.NotConnected,
+    });
+    const serving = supplyColor({
+      tileType: TileType.Plant,
+      density: 0,
+      plantType: PlantType.WindTurbine,
+      supplied: SupplyStatus.Supplied,
+    });
+    expect(isolated).toBe(0xe05263);
+    expect(serving).toBeNull();
+  });
+
+  it('keeps colouring buildings by status and ignores stations', () => {
+    expect(
+      supplyColor({
+        tileType: TileType.Empty,
+        density: 2,
+        plantType: PlantType.None,
+        supplied: SupplyStatus.Undersupplied,
+      }),
+    ).toBe(0xffb347);
+    expect(
+      supplyColor({
+        tileType: TileType.Plant,
+        density: 0,
+        plantType: PlantType.FireStation,
+        supplied: SupplyStatus.NotConnected,
+      }),
+    ).toBeNull();
   });
 });

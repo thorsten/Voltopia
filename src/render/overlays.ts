@@ -16,6 +16,7 @@ import {
 } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
+import { isSupplySource } from '../shared/plants.ts';
 
 const SUPPLY_COLORS: Record<number, number> = {
   [SupplyStatus.Supplied]: 0x4cd964,
@@ -54,6 +55,29 @@ const DAMAGE_COLORS = { intact: 0x4cd964, light: 0xffb347, heavy: 0xe05263 } as 
 export function damageColor(damage: number): number {
   if (damage === 0) return DAMAGE_COLORS.intact;
   return damage < 128 ? DAMAGE_COLORS.light : DAMAGE_COLORS.heavy;
+}
+
+/**
+ * Supply overlay tint: buildings by status; a supply plant only when it
+ * is isolated (serves nothing), so the overlay stays quiet elsewhere.
+ */
+export function supplyColor(tile: {
+  tileType: TileType;
+  density: number;
+  plantType: PlantType;
+  supplied: SupplyStatus;
+}): number | null {
+  if (tile.tileType === TileType.Empty && tile.density > 0) {
+    return SUPPLY_COLORS[tile.supplied] ?? null;
+  }
+  if (
+    tile.tileType === TileType.Plant &&
+    isSupplySource(tile.plantType) &&
+    tile.supplied === SupplyStatus.NotConnected
+  ) {
+    return SUPPLY_COLORS[SupplyStatus.NotConnected];
+  }
+  return null;
 }
 
 const HEAT_COLORS = { trunk: 0xf4a261, served: 0xe76f51, unserved: 0x5b9bd5 } as const;
@@ -145,7 +169,8 @@ export class OverlaysMesh implements DiffLayer {
         diff.tileType === TileType.Road ||
         diff.plantType === PlantType.LogisticsDepot ||
         diff.plantType === PlantType.BusDepot ||
-        diff.damage > 0
+        diff.damage > 0 ||
+        (diff.tileType === TileType.Plant && isSupplySource(diff.plantType))
       ) {
         this.tiles.set(diff.index, {
           zone: diff.zone,
@@ -188,9 +213,7 @@ export class OverlaysMesh implements DiffLayer {
       for (const [index, tile] of this.tiles) {
         let colorHex: number | null = null;
         if (this.mode === OverlayMode.Supply) {
-          if (tile.tileType === TileType.Empty && tile.density > 0) {
-            colorHex = SUPPLY_COLORS[tile.supplied] ?? null;
-          }
+          colorHex = supplyColor(tile);
         } else if (this.mode === OverlayMode.Demand) {
           if (tile.tileType === TileType.Empty && tile.zone !== Zone.None) {
             const demand = this.demandFor(tile.zone);
