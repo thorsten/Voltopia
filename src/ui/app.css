@@ -1110,6 +1110,14 @@ body,
   accent-color: var(--accent);
 }
 
+/* The rollout label plus coverage text can outrun the narrow HUD column
+   (especially German); let the coverage drop to its own line instead of
+   clipping, rather than loosening the shared toggle layout for every
+   other switch in this section. */
+.smart-charging-toggle.smart-meters {
+  flex-wrap: wrap;
+}
+
 .smart-meters-coverage {
   margin-left: auto;
   color: var(--hud-muted);

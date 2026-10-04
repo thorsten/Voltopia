@@ -173,7 +173,7 @@ const en = {
 
   'tax.label': 'Tax rate',
   'smartMeters.label': 'Smart-meter rollout',
-  'smartMeters.coverage': '{percent} % metered ({metered}/{buildings})',
+  'smartMeters.coverage': '{percent} % · {metered}/{buildings}',
   'smartMeters.title':
     'Crews install {perDay} meters a day at {cost} each. Metered homes charge cars on surplus and shift part of their load and heating into sunny, windy hours.',
   'marketTrading.label': '📈 Market trading',
@@ -722,7 +722,7 @@ const de: Record<TranslationKey, string> = {
 
   'tax.label': 'Steuersatz',
   'smartMeters.label': 'Smart-Meter-Ausbau',
-  'smartMeters.coverage': '{percent} % mit Zähler ({metered}/{buildings})',
+  'smartMeters.coverage': '{percent} % · {metered}/{buildings}',
   'smartMeters.title':
     'Teams installieren {perDay} Zähler pro Tag zu je {cost}. Haushalte mit Zähler laden Autos bei Überschuss und verschieben einen Teil von Last und Heizung in sonnige, windige Stunden.',
   'marketTrading.label': '📈 Stromhandel',

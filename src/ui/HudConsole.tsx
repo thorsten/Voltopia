@@ -51,7 +51,11 @@ export function HudConsole({
       >
         <EnergyGraph energy={stats.energy} timeOfDay={stats.timeOfDay} />
         <div className="hud-drawer">
-          <EnergyPanel energy={stats.energy} riverFlow={stats.weather.riverFlow} />
+          <EnergyPanel
+            energy={stats.energy}
+            riverFlow={stats.weather.riverFlow}
+            smartMeters={stats.smartMeters}
+          />
           <BudgetPanel budget={stats.budget} />
           <section className="hud-section">
             <h2>{t('hud.section.city')}</h2>
