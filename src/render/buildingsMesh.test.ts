@@ -760,4 +760,20 @@ describe('BuildingsMesh age stages', () => {
     mesh.applyDiffs([aged(CENTRE, Zone.Retail, 1, 1)]);
     expect(attr.updateRanges).toEqual([]);
   });
+
+  it('paints the new stage when supply and age flip in the same diff', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 1, 0)]);
+    mesh.applyDiffs([
+      { ...aged(CENTRE, Zone.Residential, 1, 2), supplied: SupplyStatus.Undersupplied } as TileDiff,
+    ]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const expected = applySupplyTint(
+      applyAgeTint(main.color, 2, false, new THREE.Color()),
+      SupplyStatus.Undersupplied,
+      new THREE.Color(),
+    );
+    expect(bodyColor(mesh).getHex()).toBe(expected.getHex());
+  });
 });

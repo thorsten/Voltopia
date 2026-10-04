@@ -216,17 +216,12 @@ export class BuildingsMesh implements DiffLayer {
           windowsDirty = true;
         } else {
           const supplyFlip = existing.supplied !== diff.supplied;
-          if (supplyFlip) {
-            // Supply flips tint the body and dim the windows; no grow animation.
-            existing.supplied = diff.supplied;
-            this.writeColors(diff.index);
-            windowsDirty = true;
-          }
-          if (existing.ageStage !== ageStage) {
-            // Age flips are colour-only: no animation, no window or anchor work.
-            existing.ageStage = ageStage;
-            if (!supplyFlip) this.writeColors(diff.index);
-          }
+          const ageFlip = existing.ageStage !== ageStage;
+          existing.supplied = diff.supplied;
+          existing.ageStage = ageStage;
+          // Supply and age flips are colour-only; a supply flip also dims the windows.
+          if (supplyFlip || ageFlip) this.writeColors(diff.index);
+          if (supplyFlip) windowsDirty = true;
           if (supplyFlip || existing.heated !== heated || existing.damaged !== damaged) {
             existing.heated = heated;
             existing.damaged = damaged;
