@@ -640,6 +640,13 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             buildings: s.smartMeters.buildings,
             coverage: round(s.smartMeters.coverage, 2),
           },
+          demandResponse: {
+            active: s.demandResponse.active,
+            pool: round(s.demandResponse.pool),
+            shed: round(s.demandResponse.shed),
+            callHoursLeft: round(s.demandResponse.callHoursLeft, 2),
+            contractedBuildings: s.demandResponse.contractedBuildings,
+          },
           marketTrading: s.marketTrading,
           forestShare: round(s.forestShare, 3),
           insulation: s.insulation,
@@ -725,7 +732,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Full energy statistics for the current tick: generation per source, consumption per ' +
         'category, storage, curtailment, deficit, grid import/export, flexible-load figures ' +
-        '(flexDeferred, flexRecovered, flexBacklog) and the unshifted curve, and the sampled ' +
+        '(flexDeferred, flexRecovered, flexBacklog), the business load shed under the demand-response contract (shed), the unshifted curve, and the sampled ' +
         'history of the last in-game day (oldest first).',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
@@ -1084,6 +1091,20 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           active: input.active,
         });
         return outcomeResult(outcome, { smartMeters: { active: input.active } });
+      },
+    },
+    {
+      name: 'set_demand_response',
+      description: `Sign or end the demand-response contract with the commercial and retail buildings. Under contract, up to ${Math.round(BALANCE.demandResponse.shedShare * 100)} % of their base load is shed automatically in a deficit — after storage and biogas, before import — whenever a call is cheaper than importing at the spot price or the import link cannot carry the shortfall, for at most ${BALANCE.demandResponse.maxCallHoursPerDay} h a day. Costs ${BALANCE.demandResponse.retainerPerBuildingPerDay} per business and day plus ${BALANCE.demandResponse.activationPricePerEnergyUnit} per energy unit shed. See demandResponse in get_game_overview.`,
+      inputSchema: {
+        type: 'object',
+        properties: { active: { type: 'boolean' } },
+        required: ['active'],
+      },
+      async execute(input) {
+        if (typeof input.active !== 'boolean') throw new ToolInputError('"active" must be boolean');
+        const outcome = await ctx.sendCommand({ type: 'setDemandResponse', active: input.active });
+        return outcomeResult(outcome, { demandResponse: { active: input.active } });
       },
     },
     {
