@@ -1,13 +1,45 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import type { TileDiff } from '../shared/types.ts';
 import {
   HEATED_NONE,
   HEATED_SERVED,
   HEATED_TRUNK,
+  OverlayMode,
   PlantType,
   SupplyStatus,
   TileType,
+  Zone,
 } from '../shared/types.ts';
-import { damageColor, heatColor, supplyColor } from './overlays.ts';
+import { ElevationField } from './elevationField.ts';
+import { damageColor, heatColor, OverlaysMesh, supplyColor } from './overlays.ts';
+
+const SIZE = 8;
+
+function setup(): { mesh: THREE.InstancedMesh; layer: OverlaysMesh } {
+  const scene = new THREE.Scene();
+  const field = new ElevationField(SIZE);
+  field.applyDiffs(
+    Array.from({ length: SIZE * SIZE }, (_, index) => ({ index, elevation: 0 }) as TileDiff),
+  );
+  const layer = new OverlaysMesh(scene, SIZE, field);
+  const mesh = scene.children.find(
+    (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh,
+  )!;
+  return { mesh, layer };
+}
+
+function isolatedWindTurbine(supplied: SupplyStatus): TileDiff {
+  return {
+    index: 10,
+    tileType: TileType.Plant,
+    plantType: PlantType.WindTurbine,
+    supplied,
+    zone: Zone.None,
+    density: 0,
+    damage: 0,
+  } as TileDiff;
+}
 
 describe('damageColor', () => {
   it('greens an intact tile and reds a wrecked one', () => {
@@ -73,5 +105,16 @@ describe('supplyColor', () => {
         supplied: SupplyStatus.NotConnected,
       }),
     ).toBeNull();
+  });
+});
+
+describe('OverlaysMesh supply-plant storage', () => {
+  it('paints an isolated supply plant in Supply mode and stops once it serves again', () => {
+    const { mesh, layer } = setup();
+    layer.setMode(OverlayMode.Supply);
+    layer.applyDiffs([isolatedWindTurbine(SupplyStatus.NotConnected)]);
+    expect(mesh.count).toBe(1);
+    layer.applyDiffs([isolatedWindTurbine(SupplyStatus.Supplied)]);
+    expect(mesh.count).toBe(0);
   });
 });

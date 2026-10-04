@@ -273,6 +273,9 @@ export class OverlaysMesh implements DiffLayer {
           // already reaches a wrecked pylon on otherwise-empty ground: the
           // damage layer is per-tile, not per-building, and applyDiffs above
           // tracks any damaged tile regardless of what else is on it.
+          // Supply plants are stored for the Supply overlay since the
+          // isolated-plant marker, so an intact one now also shows green
+          // here, like depots.
           if (
             tile.damage > 0 ||
             (tile.tileType === TileType.Empty && tile.density > 0) ||
