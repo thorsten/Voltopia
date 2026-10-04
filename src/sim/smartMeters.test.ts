@@ -13,18 +13,51 @@ import { createSimState, deserializeState, serializeState, Zone, type SimState }
 const SIZE = 16;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
 
-/** A town with `n` houses along a road and a full treasury. */
+/**
+ * Houses per band in the layout `town()` lays out below: a band's road
+ * and house rows run x = 1..HOUSES_PER_BAND, which fits inside the
+ * 16-wide grid with room to spare either side.
+ */
+const HOUSES_PER_BAND = 14;
+
+/** Tile index of the i-th house `town()` lays down (0-based). */
+function houseTile(i: number): number {
+  const band = Math.floor(i / HOUSES_PER_BAND);
+  const x = 1 + (i % HOUSES_PER_BAND);
+  return at(x, 2 + 3 * band);
+}
+
+/**
+ * A town with `n` houses along roads and a full treasury. Houses (and
+ * the road serving them) are laid out in bands of up to
+ * HOUSES_PER_BAND: band b uses road row y = 1 + 3b and house row
+ * y = 2 + 3b, so bands never touch and — unlike a single row that
+ * wraps past the grid width once n exceeds it — a road tile never
+ * aliases a house tile. `money` is applied only after the fixture is
+ * built, so the cost of laying the roads never eats into the money a
+ * test asks for.
+ */
 function town(n: number, money = 1e9): SimState {
   const state = createSimState(5, SIZE);
-  state.money = money;
-  buildRoads(
-    state,
-    Array.from({ length: n }, (_, i) => at(i, 5)),
-  );
-  for (let i = 0; i < n; i++) {
-    state.layers.zone[at(i, 6)] = Zone.Residential;
-    state.layers.density[at(i, 6)] = 1;
+  state.money = 1e9;
+  let remaining = n;
+  let band = 0;
+  while (remaining > 0) {
+    const count = Math.min(HOUSES_PER_BAND, remaining);
+    const roadY = 1 + 3 * band;
+    buildRoads(
+      state,
+      Array.from({ length: count }, (_, i) => at(1 + i, roadY)),
+    );
+    for (let i = 0; i < count; i++) {
+      const tile = houseTile(band * HOUSES_PER_BAND + i);
+      state.layers.zone[tile] = Zone.Residential;
+      state.layers.density[tile] = 1;
+    }
+    remaining -= count;
+    band++;
   }
+  state.money = money;
   return state;
 }
 
@@ -34,6 +67,9 @@ describe('smart-meter rollout', () => {
     expect(countBuildings(state)).toBe(10);
     expect(meteredCoverage(state)).toBe(0);
     expect(meteredCoverage(createSimState(1, SIZE))).toBe(0);
+    // town()'s banded layout must not lose houses to road/house aliasing
+    // even once n crosses a single band's width.
+    expect(countBuildings(town(40))).toBe(40);
   });
 
   it('installs installsPerDay meters over one day while active, billing each', () => {
@@ -46,13 +82,7 @@ describe('smart-meter rollout', () => {
     expect(state.smartMeters.metered).toBe(installsPerDay);
     expect(spent).toBe(installsPerDay * costPerMeter);
     expect(before - state.money).toBe(spent);
-    // Not `/ 40`: at SIZE 16, town(40)'s road row (y=5) and building row
-    // (y=6) alias once x wraps past the grid width (tileIndex has no
-    // bounds check), so 24 of the 40 "building" tiles are paved over as
-    // road and excluded by countBuildings's tileType check — only 16
-    // remain actual buildings. Divide by the real count rather than the
-    // nominal `n`.
-    expect(meteredCoverage(state)).toBeCloseTo(installsPerDay / countBuildings(state), 9);
+    expect(meteredCoverage(state)).toBeCloseTo(installsPerDay / 40, 9);
   });
 
   it('does nothing while paused and stops at full coverage', () => {
@@ -79,7 +109,7 @@ describe('smart-meter rollout', () => {
   it('loses meters with demolished buildings', () => {
     const state = town(5);
     state.smartMeters.metered = 5;
-    bulldozeTiles(state, [at(0, 6), at(1, 6)]);
+    bulldozeTiles(state, [houseTile(0), houseTile(1)]);
     smartMetersStep(state);
     expect(state.smartMeters.metered).toBe(3);
     expect(meteredCoverage(state)).toBe(1);
@@ -114,6 +144,18 @@ describe('smart-meter rollout', () => {
     const save = serializeState(state);
     const restored = deserializeState({ ...save, smartMeters: { active: false, metered: 99 } });
     expect(restored.smartMeters.metered).toBe(5);
+  });
+
+  it('clamps a non-finite or negative restored meter count and backlog to zero', () => {
+    const state = town(5);
+    const save = serializeState(state);
+    const restored = deserializeState({
+      ...save,
+      smartMeters: { active: false, metered: -5 },
+      flexBacklog: Number.NaN,
+    });
+    expect(restored.smartMeters.metered).toBe(0);
+    expect(restored.flexBacklog).toBe(0);
   });
 
   it('does not stockpile installs while broke', () => {

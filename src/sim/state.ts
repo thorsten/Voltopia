@@ -932,13 +932,16 @@ export function deserializeState(save: SaveGame): SimState {
   state.weather.snowpack = Math.min(1, Math.max(0, save.snowpack ?? 0));
   state.insulation = save.insulation ?? false;
   // Rollout: new saves carry it; legacy saves with smart charging on get
-  // every building metered so the city keeps the effect it had.
+  // every building metered so the city keeps the effect it had. Clamp
+  // against hand-edited JSON exports holding out-of-range or non-finite
+  // values, the same way the snowpack read above does.
   {
     const buildings = countBuildings(state);
     if (save.smartMeters) {
+      const metered = Number.isFinite(save.smartMeters.metered) ? save.smartMeters.metered : 0;
       state.smartMeters = {
         active: save.smartMeters.active,
-        metered: Math.min(save.smartMeters.metered, buildings),
+        metered: Math.min(buildings, Math.max(0, metered)),
         installCarry: 0,
       };
     } else {
@@ -948,7 +951,10 @@ export function deserializeState(save: SaveGame): SimState {
         installCarry: 0,
       };
     }
-    state.flexBacklog = save.flexBacklog ?? 0;
+    state.flexBacklog =
+      typeof save.flexBacklog === 'number' && Number.isFinite(save.flexBacklog)
+        ? Math.max(0, save.flexBacklog)
+        : 0;
   }
   state.goalProgress.winterTicks = save.winterTicks ?? 0;
   state.goalProgress.summerTicks = save.summerTicks ?? 0;
