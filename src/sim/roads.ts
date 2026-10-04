@@ -83,6 +83,7 @@ export function buildRoads(state: SimState, tiles: number[], avenue = false): Bu
     layers.zone[index] = Zone.None;
     layers.density[index] = 0;
     layers.variant[index] = 0;
+    layers.buildingAge[index] = 0;
     clearForest(state, index);
     markDirty(state, index);
   }

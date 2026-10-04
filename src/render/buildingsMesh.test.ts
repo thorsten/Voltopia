@@ -776,4 +776,15 @@ describe('BuildingsMesh age stages', () => {
     );
     expect(bodyColor(mesh).getHex()).toBe(expected.getHex());
   });
+
+  it('keeps the age tint when a road beside the building re-issues it', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 1, 2)]);
+    mesh.applyDiffs([road(CENTRE + 1)]); // east of the house: face flips South -> East, recipe re-issued
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    expect(bodyColor(mesh).getHex()).toBe(
+      applyAgeTint(main.color, 2, false, new THREE.Color()).getHex(),
+    );
+  });
 });

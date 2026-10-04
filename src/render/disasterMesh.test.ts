@@ -18,6 +18,7 @@ function baseDiff(index: number, damage: number): TileDiff {
     zone: 0,
     density: 0,
     variant: 0,
+    ageStage: 0,
     supplied: 0,
     services: 0,
     plantType: 0,
