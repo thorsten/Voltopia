@@ -148,11 +148,10 @@ the step is numerically identical to today. No randomness is added.
 
 ### Economy (`src/sim/economy.ts`)
 
-`EconomyBreakdown` gains `demandResponse` (the step's return value,
-read from `lastDemandResponseCost`); the step deducts it from the money
-itself, as the smart-meter step does, and `buildBudget` flattens
-`lastDemandResponseCost` into the budget — flattened into
-`GlobalStats.budget` like `smartMeters`.
+`economy.ts` is unchanged: the step deducts the money itself, as the
+smart-meter step does, and records `lastDemandResponseCost`. `buildBudget`
+(`src/sim/tick.ts`) flattens that into `GlobalStats.budget.demandResponse`
+and subtracts it in `net`, the same way `smartMeters` is handled.
 
 ### Stats (`src/shared/types.ts`, `src/sim/tick.ts`)
 
@@ -215,8 +214,9 @@ RNG, no extra grid scan.
   shortfall falls through to import and deficit; the last call before
   exhaustion is partial; `consumption.buildings` drops by exactly the
   shed; shed never exceeds the shortfall.
-- `src/sim/economy.test.ts`: the `demandResponse` line reaches the
-  budget and the money.
+- `src/sim/demandResponse.test.ts`: the `demandResponse` line reaches
+  the stats and the budget line; `src/sim/energy.test.ts`'s `stepTick`
+  integration test guards the wiring into the tick itself.
 - `src/sim/goals.test.ts`: `loadManager` unlocks at the cumulative
   target and survives a save round-trip.
 - `src/sim/engine.test.ts` determinism tests keep passing;

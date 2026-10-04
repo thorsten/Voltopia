@@ -737,7 +737,7 @@ export const BALANCE = {
      * called into, which is why the contract thins blackouts rather than
      * ending them: 8-10 % fewer deficit ticks over a year (790 -> 711 and
      * 1_505 -> 1_382 on the two seeds), 10-15 % less unserved energy and
-     * 9-10 % less import money. 0.6 buys 14-17 % fewer deficit ticks for
+     * 8.7-10.2 % less import money. 0.6 buys 14-17 % fewer deficit ticks for
      * 27-29 % more contract money and sheds 60 % of a shop district's base
      * load, which the design prices at nothing (the daily allowance is
      * the only comfort rule); 0.2 halves the effect to 4-6 % fewer
@@ -746,19 +746,29 @@ export const BALANCE = {
      * reaches the spec's hoped-for halving of blackout ticks, because a
      * dark, calm night takes the whole city off its generation, not a
      * tenth of it.
+     *
+     * The pool itself is shedShare of the businesses' pre-flex base
+     * load (businessDemand, read before smart meters shift anything).
+     * Under full smart-meter coverage the flexible pool defers part of
+     * that same line, so against what the businesses actually draw
+     * after the shift the contract can shed up to ≈47 % rather than
+     * 40 % — a modelling inexactness, not a bug: the adjusted line
+     * stays >= 0.85 x raw while the shed stays <= 0.4 x raw, so nothing
+     * goes negative.
      */
     shedShare: 0.4,
     /**
      * Retainer per contracted business building and in-game day, paid
      * while the contract runs. 96 businesses at 6 is 576 money a day —
      * 2.4 % of the probe city's daily net income, and 11_520 over a year
-     * against a measured gross benefit (import saved plus buildings not
-     * abandoned) of 3_600-5_700. That is the intended shape: the
+     * against a measured import saving of 3_600-5_700 (avoided
+     * abandonment was not measured). That is the intended shape: the
      * contract leaves a well-supplied city 4.8-8.6 % behind on the year's
      * net income, so signing it is a decision about reliability, not a
      * free upgrade. The spec's 20 put the retainer at 38_400 a year and
-     * the city 12.0-21.5 % behind — more than the whole mechanic is
-     * worth, and the retainer alone was 63 % of the bill.
+     * left this city 12.0 % behind (and the stretched one up to 21.5 %)
+     * — more than the whole mechanic is worth, and the retainer alone
+     * was 63 % of the bill.
      */
     retainerPerBuildingPerDay: 6,
     /**
@@ -766,9 +776,10 @@ export const BALANCE = {
      * a call beats importing whenever spot >= activationPrice / importCost
      * (0.5 at these values) — normal and scarce prices, not abundance
      * (market.spotMin clamps the spot at 0.25, though the weather model
-     * never actually gets there: the cheapest hour it can reach is a
-     * sunny, windy 11 am at factor 0.3625, i.e. an import price of
-     * 0.145 — see the abundance-price test in energy.test.ts).
+     * never actually gets there: the cheapest the link gets is a sunny,
+     * windy 11 am, at a factor of ≈0.355-0.3625 depending on the season
+     * (import price ≈0.14-0.145) — still well under the 0.2 premium and
+     * never spotMin; see the abundance-price test in energy.test.ts).
      *
      * In practice this is a cost knob, not a dispatch knob: the import
      * link carries only market.importCapacity = 60 EU/tick, so nearly

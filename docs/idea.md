@@ -242,7 +242,13 @@ Collected 2026-09-24; roughly in the order we want to build them.
   or the link alone cannot carry the shortfall, for a few hours a
   day. Paid as a daily retainer per business plus an activation
   premium per unit shed; the `loadManager` goal rewards a city that
-  has shed its share. (A grid-frequency minigame stays an idea.)
+  has shed its share. A 20-day probe found that a pool a tenth of the
+  city's load (business base load on the office-hours profile, small
+  in the dark, calm nights where deficits sit) structurally cannot
+  halve blackout ticks; it shaves 8-10 % of deficit ticks and 9-10 % of
+  import cost. A bigger pool or an industrial zone is the next lever
+  if demand response should bite harder. (A grid-frequency minigame
+  stays an idea.)
 - **Per-district grids** (deferred earlier): separate grid islands
   with their own balance, coupled by substations.
 
