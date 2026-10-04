@@ -1421,3 +1421,56 @@ describe('heat plants', () => {
     expect(state.lastEnergy.heatingConsumption).toBeGreaterThan(0);
   });
 });
+
+describe('isolated supply plants', () => {
+  /** One energy tick with the same minimal input the rest of this file uses. */
+  function tick(state: SimState): void {
+    energyStep(state, { chargingDemand: 0 });
+  }
+
+  it('placePlant marks a lone turbine isolated at once and a village turbine not', () => {
+    const lone = createSimState(1, SIZE);
+    lone.money = 1e9;
+    placePlant(lone, at(10, 10), PlantType.WindTurbine);
+    expect(lone.layers.supplied[at(10, 10)]).toBe(SupplyStatus.NotConnected);
+
+    const village = createSimState(1, SIZE);
+    village.money = 1e9;
+    village.layers.zone[at(12, 10)] = Zone.Residential;
+    village.layers.density[at(12, 10)] = 1;
+    placePlant(village, at(10, 10), PlantType.WindTurbine);
+    expect(village.layers.supplied[at(10, 10)]).toBe(SupplyStatus.Supplied);
+  });
+
+  it('a house growing into the ring, or a line attached, lifts the isolation on the next tick', () => {
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(10, 10), PlantType.Battery);
+    tick(state);
+    expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.NotConnected);
+
+    state.layers.zone[at(13, 13)] = Zone.Residential;
+    state.layers.density[at(13, 13)] = 1;
+    state.dirty.clear();
+    tick(state);
+    expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.Supplied);
+    expect(state.dirty.has(at(10, 10))).toBe(true);
+
+    state.layers.density[at(13, 13)] = 0;
+    tick(state);
+    expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.NotConnected);
+
+    buildPowerLines(state, [at(11, 10), at(12, 10)]);
+    tick(state);
+    expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.Supplied);
+  });
+
+  it('leaves non-supply plants alone', () => {
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(10, 10), PlantType.FireStation);
+    const before = state.layers.supplied[at(10, 10)];
+    tick(state);
+    expect(state.layers.supplied[at(10, 10)]).toBe(before);
+  });
+});

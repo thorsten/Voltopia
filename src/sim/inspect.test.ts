@@ -70,6 +70,20 @@ describe('inspectTile', () => {
     expect(inspectTile(state, at(10, 10))!.connected).toBe(false);
   });
 
+  it('reports an isolated supply plant as not connected and a village plant as supplied', () => {
+    const lone = createSimState(1, SIZE);
+    lone.money = 1e9;
+    placePlant(lone, at(10, 10), PlantType.WindTurbine);
+    expect(inspectTile(lone, at(10, 10))!.supplied).toBe(SupplyStatus.NotConnected);
+
+    const village = createSimState(1, SIZE);
+    village.money = 1e9;
+    village.layers.zone[at(11, 11)] = Zone.Residential;
+    village.layers.density[at(11, 11)] = 1;
+    placePlant(village, at(10, 10), PlantType.WindTurbine);
+    expect(inspectTile(village, at(10, 10))!.supplied).toBe(SupplyStatus.Supplied);
+  });
+
   it('reports the ring a tile projects: plants, hubs, parks and live lines', () => {
     const state = createSimState(1, SIZE);
     state.money = 1e9;

@@ -3,7 +3,7 @@ import { HEATED_SERVED, PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
-import { isSupplySource, recomputeGrid } from './powerGrid.ts';
+import { isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { coolingDegree, heatingDegree } from '../shared/heating.ts';
@@ -76,6 +76,7 @@ export function placePlant(state: SimState, tile: number, plant: PlantType): Bui
   clearForest(state, tile);
   markDirty(state, tile);
   bumpGridVersion(state);
+  refreshPlantSupply(state, tile);
   state.undoStack.push(undo);
   return {};
 }
@@ -381,6 +382,12 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     rooftop += (BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0) * solarFactorNow;
   }
 
+  // Supply plants: flag the ones that serve nothing (icon + overlay).
+  for (let i = 0; i < layers.tileType.length; i++) {
+    if (layers.tileType[i] !== TileType.Plant) continue;
+    refreshPlantSupply(state, i);
+  }
+
   // Heat the network could not deliver is heated electrically on site.
   heatingDemand += heat.fallback;
 
@@ -615,4 +622,18 @@ function setSupplied(state: SimState, index: number, status: SupplyStatus): void
     state.layers.supplied[index] = status;
     markDirty(state, index);
   }
+}
+
+/**
+ * A supply plant's `supplied` flag means "serves something": NotConnected
+ * when the plant is isolated (no line, no building in its ring), Supplied
+ * otherwise. Buildings keep the usual meaning; other plants are untouched.
+ */
+function refreshPlantSupply(state: SimState, index: number): void {
+  if (!isSupplySource(state.layers.plantType[index] as PlantType)) return;
+  setSupplied(
+    state,
+    index,
+    isIsolatedPlant(state, index) ? SupplyStatus.NotConnected : SupplyStatus.Supplied,
+  );
 }
