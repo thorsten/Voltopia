@@ -399,6 +399,11 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               tone={info.supplied === SupplyStatus.NotConnected ? 'negative' : 'positive'}
               testId="inspect-serves"
             />
+            {info.supplied === SupplyStatus.NotConnected && (
+              <p className="inspect-blockers" data-testid="inspect-serves-hint">
+                {t('inspect.servesNothingHint')}
+              </p>
+            )}
           </>
         )}
       </section>
