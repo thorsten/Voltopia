@@ -9,24 +9,11 @@ import {
   tileY,
 } from '../shared/grid.ts';
 import { PlantType, TileType } from '../shared/types.ts';
+import { isSupplySource } from '../shared/plants.ts';
 import { recomputePowerLineMask } from './powerLines.ts';
 import type { SimState } from './state.ts';
 
-/** Plants that feed the grid and seed the line network (hubs and parks do not). */
-const SUPPLY_SOURCES: ReadonlySet<PlantType> = new Set<PlantType>([
-  PlantType.SolarFarm,
-  PlantType.WindTurbine,
-  PlantType.Battery,
-  PlantType.BiogasPlant,
-  PlantType.RunOfRiver,
-  PlantType.PumpedStorage,
-  PlantType.HydrogenPlant,
-  PlantType.TidalPlant,
-]);
-
-export function isSupplySource(plant: PlantType): boolean {
-  return SUPPLY_SOURCES.has(plant);
-}
+export { isSupplySource };
 
 /** Mark every tile within a Chebyshev radius of `index`, clipped to the map. */
 function stampRadius(target: Uint8Array, index: number, size: number, radius: number): void {
@@ -182,4 +169,40 @@ export function grantLegacyNetwork(state: SimState): void {
   // Inline instead of bumpGridVersion(): keeps this module's import of
   // state.ts type-only (state.ts imports this module for the migration).
   state.gridVersion++;
+}
+
+/** A power line touches one of the tile's four sides. */
+export function hasLineAttached(state: SimState, index: number): boolean {
+  const { powerLine } = state.layers;
+  for (const n of neighbors4(index, state.size)) {
+    if (powerLine[n] !== 0) return true;
+  }
+  return false;
+}
+
+/**
+ * A supply plant that serves nothing: no power line attached and no
+ * building anywhere in its supply ring. Pure geometry — damage has its
+ * own overlay. Never true for empty tiles or non-supply plants.
+ */
+export function isIsolatedPlant(state: SimState, index: number): boolean {
+  const { tileType, plantType, density } = state.layers;
+  if (tileType[index] !== TileType.Plant) return false;
+  if (!isSupplySource(plantType[index] as PlantType)) return false;
+  if (hasLineAttached(state, index)) return false;
+  const size = state.size;
+  const radius = BALANCE.energy.lineSupplyRadius;
+  const cx = tileX(index, size);
+  const cy = tileY(index, size);
+  const x0 = Math.max(0, cx - radius);
+  const x1 = Math.min(size - 1, cx + radius);
+  const y0 = Math.max(0, cy - radius);
+  const y1 = Math.min(size - 1, cy + radius);
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const t = tileIndex(x, y, size);
+      if (tileType[t] === TileType.Empty && density[t] > 0) return false;
+    }
+  }
+  return true;
 }

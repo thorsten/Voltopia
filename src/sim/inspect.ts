@@ -25,7 +25,7 @@ import {
 import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { heatPumpCop, plantReach } from './heat.ts';
-import { isSupplySource } from './powerGrid.ts';
+import { hasLineAttached, isSupplySource } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -172,15 +172,6 @@ function growthBlockers(state: SimState, index: number, connected: boolean): Gro
     }
   }
   return blockers;
-}
-
-/** Does a power line touch this tile on any side? */
-function hasLineAttached(state: SimState, index: number): boolean {
-  const { powerLine } = state.layers;
-  for (const n of neighbors4(index, state.size)) {
-    if (powerLine[n] !== 0) return true;
-  }
-  return false;
 }
 
 /** The ring a tile projects on the map (see TileInfo.ringRadius). */
