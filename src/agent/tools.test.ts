@@ -466,7 +466,7 @@ describe('agent tools: building', () => {
       taxRate: BALANCE.tax.maxRate,
     });
     expect(await call('set_smart_charging', { enabled: true })).toMatchObject({ ok: true });
-    expect(engine.state.smartCharging).toBe(true);
+    expect(engine.state.smartMeters.active).toBe(true);
     expect(await call('set_market_trading', { enabled: true })).toMatchObject({ ok: true });
     expect(engine.state.marketTrading).toBe(true);
     const wood = findLand(engine, 12);

@@ -92,6 +92,21 @@ describe('save game JSON export/import', () => {
     expect(saveFromJson(saveToJson(makeSave())).marketTrading).toBeUndefined();
   });
 
+  it('round-trips the smart-meter rollout and the flexible backlog', () => {
+    const save = makeSave();
+    save.smartMeters = { active: true, metered: 3 };
+    save.flexBacklog = 12.5;
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.smartMeters).toEqual({ active: true, metered: 3 });
+    expect(restored.flexBacklog).toBe(12.5);
+  });
+
+  it('accepts an old save without smartMeters or flexBacklog', () => {
+    const restored = saveFromJson(saveToJson(makeSave()));
+    expect(restored.smartMeters).toBeUndefined();
+    expect(restored.flexBacklog).toBeUndefined();
+  });
+
   it('round-trips the optional forest layer', () => {
     const save = makeSave();
     const forest = new Uint8Array(save.size * save.size).fill(2);

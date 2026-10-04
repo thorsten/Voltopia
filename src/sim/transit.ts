@@ -6,6 +6,7 @@ import { depotRoadTile } from './deliveries.ts';
 import { isTileConnected } from './energy.ts';
 import { findRoadPath, roadDistances } from './routing.ts';
 import type { BuildResult } from './roads.ts';
+import { isSmartVehicle } from './smartMeters.ts';
 import {
   advanceAlongPath,
   isRider,
@@ -279,7 +280,7 @@ function depotPowered(state: SimState, depot: number): boolean {
 
 function decideBusCharging(state: SimState, bus: Bus, surplus: boolean): boolean {
   if (bus.charge >= 1 || !depotPowered(state, bus.depot)) return false;
-  if (!state.smartCharging) return true;
+  if (!isSmartVehicle(state, bus.id)) return true;
   return surplus || bus.charge < BALANCE.vehicles.smartChargeFloor;
 }
 

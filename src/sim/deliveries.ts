@@ -4,6 +4,7 @@ import { DeliveryState, MAX_DELIVERY_AGE, PlantType, Zone } from '../shared/type
 import type { DeliveryStats, DepotInfo } from '../shared/types.ts';
 import { isTileConnected } from './energy.ts';
 import { findRoadPath, roadDistances } from './routing.ts';
+import { isSmartVehicle } from './smartMeters.ts';
 import { advanceAlongPath, surplusAvailable, ticksAtHour, vehicleTile } from './vehicles.ts';
 import {
   deliveryStateOfAge,
@@ -218,7 +219,7 @@ function depotPowered(state: SimState, depot: number): boolean {
  */
 function decideVanCharging(state: SimState, van: Van, surplus: boolean): boolean {
   if (van.charge >= 1 || !depotPowered(state, van.depot)) return false;
-  if (!state.smartCharging) return true;
+  if (!isSmartVehicle(state, van.id)) return true;
   return surplus || van.charge < BALANCE.vehicles.smartChargeFloor;
 }
 

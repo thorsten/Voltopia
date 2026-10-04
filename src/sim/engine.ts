@@ -65,10 +65,6 @@ export class SimEngine {
         state.taxRate = Math.min(Math.max(command.rate, 0), BALANCE.tax.maxRate);
         state.statsDirty = true;
         return [];
-      case 'setSmartCharging':
-        state.smartCharging = command.enabled;
-        state.statsDirty = true;
-        return [];
       case 'setSmartMeterRollout':
         setSmartMeterRollout(state, command.active);
         return [];

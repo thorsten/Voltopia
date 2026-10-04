@@ -224,7 +224,7 @@ export function buildStats(state: SimState): GlobalStats {
     },
     taxRate: state.taxRate,
     speed: state.speed,
-    smartCharging: state.smartCharging,
+    smartCharging: state.smartMeters.active,
     marketTrading: state.marketTrading,
     insulation: state.insulation,
     services: { ...state.lastServices },

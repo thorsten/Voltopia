@@ -4,19 +4,22 @@ import { tileIndex } from '../shared/grid.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import {
   countBuildings,
+  isSmartVehicle,
   meteredCoverage,
   setSmartMeterRollout,
   smartMetersStep,
 } from './smartMeters.ts';
 import { createSimState, deserializeState, serializeState, Zone, type SimState } from './state.ts';
 
-const SIZE = 16;
+// 32 (not 16) so town() can lay out enough bands for the isSmartVehicle
+// coverage tests below (town(100) needs 8 bands, reaching y = 23).
+const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
 
 /**
  * Houses per band in the layout `town()` lays out below: a band's road
  * and house rows run x = 1..HOUSES_PER_BAND, which fits inside the
- * 16-wide grid with room to spare either side.
+ * grid's width with room to spare either side.
  */
 const HOUSES_PER_BAND = 14;
 
@@ -165,5 +168,29 @@ describe('smart-meter rollout', () => {
     state.money = 1e9;
     smartMetersStep(state);
     expect(state.smartMeters.metered).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('isSmartVehicle', () => {
+  it('is false for everyone at zero coverage and true for everyone at full coverage', () => {
+    const none = town(10);
+    const full = town(10);
+    full.smartMeters.metered = 10;
+    for (let id = 0; id < 50; id++) {
+      expect(isSmartVehicle(none, id)).toBe(false);
+      expect(isSmartVehicle(full, id)).toBe(true);
+    }
+  });
+
+  it('picks a stable set that only grows with coverage', () => {
+    const state = town(100);
+    state.smartMeters.metered = 50;
+    const half = Array.from({ length: 200 }, (_, id) => isSmartVehicle(state, id));
+    const count = half.filter(Boolean).length;
+    expect(count).toBeGreaterThan(70);
+    expect(count).toBeLessThan(130);
+    expect(Array.from({ length: 200 }, (_, id) => isSmartVehicle(state, id))).toEqual(half);
+    state.smartMeters.metered = 80;
+    for (let id = 0; id < 200; id++) if (half[id]) expect(isSmartVehicle(state, id)).toBe(true);
   });
 });

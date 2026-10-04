@@ -1073,7 +1073,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       async execute(input) {
         if (typeof input.enabled !== 'boolean')
           throw new ToolInputError('"enabled" must be boolean');
-        const outcome = await ctx.sendCommand({ type: 'setSmartCharging', enabled: input.enabled });
+        const outcome = await ctx.sendCommand({
+          type: 'setSmartMeterRollout',
+          active: input.enabled,
+        });
         return outcomeResult(outcome, { smartCharging: input.enabled });
       },
     },

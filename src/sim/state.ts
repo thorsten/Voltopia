@@ -218,7 +218,6 @@ export interface SimState {
   speed: Speed;
   money: number;
   taxRate: number;
-  smartCharging: boolean;
   /** Storage trades on the spot market: sell at scarcity, buy cheap. */
   marketTrading: boolean;
   /** Building insulation upgrade bought (halves the heating load). */
@@ -432,7 +431,6 @@ export function createSimState(
     speed: 1,
     money: startingMoney,
     taxRate: BALANCE.tax.defaultRate,
-    smartCharging: false,
     marketTrading: false,
     insulation: false,
     smartMeters: { active: false, metered: 0, installCarry: 0 },
@@ -856,7 +854,6 @@ export function serializeState(state: SimState): SaveGame {
     tick: state.tick,
     money: state.money,
     taxRate: state.taxRate,
-    smartCharging: state.smartCharging,
     marketTrading: state.marketTrading,
     storedEnergy: state.storedEnergy,
     goals: [...state.goalsAchieved],
@@ -911,7 +908,6 @@ export function deserializeState(save: SaveGame): SimState {
   state.tick = save.tick;
   state.money = save.money;
   state.taxRate = save.taxRate;
-  state.smartCharging = save.smartCharging;
   state.marketTrading = save.marketTrading ?? false;
   state.storedEnergy = save.storedEnergy;
   state.goalsAchieved = new Set(save.goals ?? []);

@@ -47,12 +47,6 @@ describe('SimEngine basics', () => {
     expect(engine.state.taxRate).toBe(0);
   });
 
-  it('toggles smart charging', () => {
-    const engine = makeEngine();
-    engine.applyCommand({ type: 'setSmartCharging', enabled: true });
-    expect(engine.state.smartCharging).toBe(true);
-  });
-
   it('starts and pauses the smart-meter rollout and flushes stats', () => {
     const engine = makeEngine();
     engine.applyCommand({ type: 'setSmartMeterRollout', active: true });
@@ -352,14 +346,6 @@ describe('SimEngine basics', () => {
     if (flushed?.type !== 'tick') throw new Error('expected a tick event');
     expect(flushed.stats.taxRate).toBeCloseTo(0.2);
     expect(engine.flush()).toBeNull();
-  });
-
-  it('flushes stats after a smart charging change', () => {
-    const engine = makeEngine();
-    engine.applyCommand({ type: 'setSmartCharging', enabled: true });
-    const flushed = engine.flush();
-    if (flushed?.type !== 'tick') throw new Error('expected a tick event');
-    expect(flushed.stats.smartCharging).toBe(true);
   });
 
   it('rejects insulation when the city cannot afford it', () => {

@@ -2,6 +2,7 @@ import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import { PlantType, RoadClass, Zone } from '../shared/types.ts';
 import { findRoadPath } from './routing.ts';
+import { isSmartVehicle } from './smartMeters.ts';
 import {
   BusPhase,
   countPopulationAndJobs,
@@ -389,7 +390,7 @@ function decideCharging(
   if (vehicle.charge >= 1) return false;
 
   if (vehicle.phase === VehiclePhase.ParkedHome) {
-    if (!state.smartCharging) return true;
+    if (!isSmartVehicle(state, vehicle.id)) return true;
     return surplusAvailable || vehicle.charge < BALANCE.vehicles.smartChargeFloor;
   }
 

@@ -9,8 +9,10 @@ interface SaveGameJson {
   tick: number;
   money: number;
   taxRate: number;
-  smartCharging: boolean;
+  smartCharging?: boolean;
   storedEnergy: number;
+  smartMeters?: { active: boolean; metered: number };
+  flexBacklog?: number;
   goals?: string[];
   lifetime?: LifetimeSample[];
   riverFlow?: number;
@@ -64,8 +66,10 @@ export function saveToJson(save: SaveGame): string {
     tick: save.tick,
     money: save.money,
     taxRate: save.taxRate,
-    smartCharging: save.smartCharging,
     storedEnergy: save.storedEnergy,
+    ...(save.smartCharging !== undefined ? { smartCharging: save.smartCharging } : {}),
+    ...(save.smartMeters !== undefined ? { smartMeters: save.smartMeters } : {}),
+    ...(save.flexBacklog !== undefined ? { flexBacklog: save.flexBacklog } : {}),
     ...(save.goals ? { goals: save.goals } : {}),
     ...(save.lifetime ? { lifetime: save.lifetime } : {}),
     ...(save.riverFlow !== undefined ? { riverFlow: save.riverFlow } : {}),
@@ -128,6 +132,13 @@ function isSavedDisasters(value: unknown): value is SavedDisasters {
     Array.isArray(candidate.events) &&
     candidate.events.every(isSavedDisasterEvent)
   );
+}
+
+/** Shallow shape check: a hand-edited export must not break the loader. */
+function isSavedSmartMeters(value: unknown): value is { active: boolean; metered: number } {
+  if (typeof value !== 'object' || value === null) return false;
+  const m = value as Partial<{ active: boolean; metered: number }>;
+  return typeof m.active === 'boolean' && typeof m.metered === 'number';
 }
 
 /**
@@ -196,8 +207,10 @@ export function saveFromJson(text: string): SaveGame {
     tick: parsed.tick,
     money: parsed.money,
     taxRate: typeof parsed.taxRate === 'number' ? parsed.taxRate : 0.1,
-    smartCharging: parsed.smartCharging === true,
     storedEnergy: typeof parsed.storedEnergy === 'number' ? parsed.storedEnergy : 0,
+    ...(typeof parsed.smartCharging === 'boolean' ? { smartCharging: parsed.smartCharging } : {}),
+    ...(isSavedSmartMeters(parsed.smartMeters) ? { smartMeters: parsed.smartMeters } : {}),
+    ...(typeof parsed.flexBacklog === 'number' ? { flexBacklog: parsed.flexBacklog } : {}),
     ...(Array.isArray(parsed.goals)
       ? { goals: parsed.goals.filter((g): g is string => typeof g === 'string') }
       : {}),

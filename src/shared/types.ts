@@ -508,7 +508,7 @@ export interface GlobalStats {
   /** Current tax rate, 0..MAX_TAX_RATE. */
   taxRate: number;
   speed: Speed;
-  /** Whether smart charging (charging follows surplus) is enabled. */
+  /** Rollout active (legacy name; see smartMeters in Task 5). */
   smartCharging: boolean;
   /** Whether storage trades on the spot market (sell dear, buy cheap). */
   marketTrading: boolean;
@@ -691,7 +691,8 @@ export interface SaveGame {
   tick: number;
   money: number;
   taxRate: number;
-  smartCharging: boolean;
+  /** Legacy smart-charging switch; read on load, never written. */
+  smartCharging?: boolean;
   storedEnergy: number;
   /** Achieved goal ids (absent in older saves). */
   goals?: string[];

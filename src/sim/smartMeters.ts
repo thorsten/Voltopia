@@ -50,3 +50,21 @@ export function smartMetersStep(state: SimState): number {
   if (spent > 0) state.statsDirty = true;
   return spent;
 }
+
+/** Deterministic 0..1 per vehicle id (same scheme as the sim's other hashes). */
+function hash01(id: number): number {
+  let h = (id * 2654435761 + 97) >>> 0;
+  h ^= h >>> 13;
+  h = (h * 0x5bd1e995) >>> 0;
+  return (h >>> 8) / 16777216;
+}
+
+/**
+ * Whether a vehicle (car, van or bus) charges "smart" — deferring to
+ * renewable surplus unless its battery is low. The share follows the
+ * rollout: a vehicle is smart when its hash falls under the coverage, so
+ * the smart set only ever grows and never flickers between ticks.
+ */
+export function isSmartVehicle(state: SimState, id: number): boolean {
+  return hash01(id) < meteredCoverage(state);
+}
