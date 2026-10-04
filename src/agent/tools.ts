@@ -782,7 +782,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         "capacity sustains — heat and every well's output fall once wells drilled exceed that " +
         'capacity. On a heat plant a "heatPlant" field reports its road reach, buildings ' +
         'served, COP and whether it is active; a building reports "heated" (true when the ' +
-        'district network heats it). See get_disasters for the events causing any damage.',
+        'district network heats it). On a supply plant, "supply" is not_connected when the ' +
+        'plant is isolated (no power line attached and no building within the supply radius; ' +
+        'its output still counts — see find_tiles isolated_plant) and connected means a power ' +
+        'line is attached. See get_disasters for the events causing any damage.',
       inputSchema: {
         type: 'object',
         properties: { x: { type: 'integer' }, y: { type: 'integer' } },

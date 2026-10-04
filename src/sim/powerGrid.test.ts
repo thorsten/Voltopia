@@ -5,6 +5,7 @@ import { PlantType } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { hasLineAttached, isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { buildRoads } from './roads.ts';
 import { bumpGridVersion, createSimState, Zone, type SimState } from './state.ts';
 
 const SIZE = 24;
@@ -149,6 +150,10 @@ describe('isIsolatedPlant', () => {
     const outside = lonePlant();
     house(outside, at(10 + R + 1, 10));
     expect(isIsolatedPlant(outside, at(10, 10))).toBe(true);
+    // Zoning alone does not lift isolation: a tile needs an actual building.
+    const zonedOnly = lonePlant();
+    zonedOnly.layers.zone[at(11, 10)] = Zone.Residential; // density stays 0
+    expect(isIsolatedPlant(zonedOnly, at(10, 10))).toBe(true);
   });
 
   it('is not isolated once a power line touches one of its sides', () => {
@@ -161,7 +166,8 @@ describe('isIsolatedPlant', () => {
   it('never flags empty tiles or non-supply plants', () => {
     const state = makeState();
     expect(isIsolatedPlant(state, at(3, 3))).toBe(false);
-    placePlant(state, at(3, 3), PlantType.FireStation);
+    buildRoads(state, [at(2, 3)]); // stations need a road 4-neighbour
+    expect(placePlant(state, at(3, 3), PlantType.FireStation)).toEqual({});
     expect(isIsolatedPlant(state, at(3, 3))).toBe(false);
   });
 });

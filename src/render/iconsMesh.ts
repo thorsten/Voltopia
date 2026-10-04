@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { PlantType, TileDiff } from '../shared/types.ts';
+import type { TileDiff } from '../shared/types.ts';
 import { SupplyStatus, TileType } from '../shared/types.ts';
 import { isSupplySource } from '../shared/plants.ts';
 import type { DiffLayer } from './renderer.ts';
@@ -92,8 +92,7 @@ export class IconsMesh implements DiffLayer {
   applyDiffs(diffs: TileDiff[]): void {
     for (const diff of diffs) {
       const isBuilding = diff.tileType === TileType.Empty && diff.density > 0;
-      const isSupplyPlant =
-        diff.tileType === TileType.Plant && isSupplySource(diff.plantType as PlantType);
+      const isSupplyPlant = diff.tileType === TileType.Plant && isSupplySource(diff.plantType);
       if (isSupplyPlant) {
         // A plant that serves nothing (no line, no building in its ring)
         // keeps a permanent marker; it clears the moment it serves again.

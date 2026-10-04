@@ -11,6 +11,7 @@ import {
   markDirty,
   slopeCostMultiplier,
   snapshotTile,
+  SupplyStatus,
   TileType,
   withNeighbors,
   Zone,
@@ -161,6 +162,7 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.buildingAge[index] = 0;
     layers.busStop[index] = 0;
     layers.damage[index] = 0;
+    layers.supplied[index] = SupplyStatus.NotConnected;
     markDirty(state, index);
   }
   for (const index of affected) recomputeRoadMask(state, index);
