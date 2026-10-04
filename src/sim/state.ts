@@ -395,6 +395,8 @@ export interface SimState {
     flexRecovered: number;
     /** Deferred flexible energy still waiting after this tick. */
     flexBacklog: number;
+    /** Backlog served regardless of the weather this tick (comfort bound). */
+    flexOverflow: number;
     /** What consumption would have been without shifting. */
     unshifted: number;
   };
@@ -554,6 +556,7 @@ export function createSimState(
       flexDeferred: 0,
       flexRecovered: 0,
       flexBacklog: 0,
+      flexOverflow: 0,
       unshifted: 0,
     },
   };

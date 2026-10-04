@@ -222,14 +222,22 @@ export function laneOccupancy(state: SimState): Map<number, number> {
 /**
  * Smart charging gate: was there renewable surplus last tick? Compared
  * against buildings plus heating and cooling load (not charging itself,
- * or the gate would feed back on its own dispatch decision).
+ * or the gate would feed back on its own dispatch decision). The three
+ * figures report what was *served*, so the smart meters' shifted load is
+ * added back: otherwise the threshold would fall by exactly the deferred
+ * amount in the ticks that had no surplus, and the gate would read a
+ * shortfall as an invitation to charge.
  */
 export function surplusAvailable(state: SimState): boolean {
   const e = state.lastEnergy;
-  return (
-    e.solar + e.wind + e.rooftop + e.hydro >
-    e.buildingConsumption + e.heatingConsumption + e.coolingConsumption
-  );
+  const unshiftedLoad =
+    e.buildingConsumption +
+    e.heatingConsumption +
+    e.coolingConsumption +
+    e.flexDeferred -
+    e.flexRecovered -
+    e.flexOverflow;
+  return e.solar + e.wind + e.rooftop + e.hydro > unshiftedLoad;
 }
 
 /**

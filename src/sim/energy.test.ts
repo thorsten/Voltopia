@@ -1529,12 +1529,16 @@ describe('flexible load pool (smart meters)', () => {
 
   it('defers the flexible share at night without surplus and bounds the backlog', () => {
     // A battery connects the houses to a grid that generates nothing.
+    // A cold night (full heating load against the load profile's trough)
+    // is where the flexible pool is larger than the household load alone.
     const state = meteredTown(PlantType.Battery);
     state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24
+    state.season = { ...state.season, temperature: -4 };
     // Same town, same tick, no meters: the undeferred demands.
     const bare = meteredTown(PlantType.Battery);
     bare.smartMeters.metered = 0;
     bare.tick = state.tick;
+    bare.season = { ...bare.season, temperature: -4 };
     energyStep(bare, { chargingDemand: 0 });
     energyStep(state, { chargingDemand: 0 });
     const e = state.lastEnergy;
@@ -1543,8 +1547,16 @@ describe('flexible load pool (smart meters)', () => {
       householdFlexShare * bare.lastEnergy.buildingConsumption +
       heatingFlexShare * bare.lastEnergy.heatingConsumption;
     expect(flexible).toBeGreaterThan(0);
+    // The pool is bigger than the household line on its own, so an
+    // unsplit deferral would print a negative household figure.
+    expect(flexible).toBeGreaterThan(bare.lastEnergy.buildingConsumption);
     expect(e.flexDeferred).toBeCloseTo(flexible, 9);
     expect(e.flexRecovered).toBe(0);
+    // Both lines carry their own share, so neither can go negative.
+    expect(e.buildingConsumption).toBeGreaterThanOrEqual(0);
+    expect(e.heatingConsumption).toBeGreaterThanOrEqual(0);
+    expect(e.buildingConsumption).toBeLessThan(bare.lastEnergy.buildingConsumption);
+    expect(e.heatingConsumption).toBeLessThan(bare.lastEnergy.heatingConsumption);
     // Nothing generated: unshifted = demand, served = demand - deferred.
     expect(e.unshifted).toBeCloseTo(bare.lastEnergy.unshifted, 9);
     expect(e.unshifted - served(state)).toBeCloseTo(e.flexDeferred, 9);
@@ -1570,6 +1582,20 @@ describe('flexible load pool (smart meters)', () => {
     expect(state.flexBacklog).toBeGreaterThanOrEqual(0);
   });
 
+  it('serves the overflow and holds the backlog at the comfort bound', () => {
+    const state = meteredTown(PlantType.Battery);
+    state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24, nothing generated
+    energyStep(state, { chargingDemand: 0 });
+    const flexible = state.lastEnergy.flexDeferred; // no surplus: deferred == flexible
+    const capacity = flexible * BALANCE.smartMeters.backlogHours * (TICKS_PER_DAY / 24);
+    // Start above the bound: comfort wins and the excess is served now.
+    const excess = 7;
+    state.flexBacklog = capacity + excess;
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.flexOverflow).toBeCloseTo(excess + flexible, 9);
+    expect(state.flexBacklog).toBeCloseTo(capacity, 9);
+  });
+
   it('keeps the identity unshifted - consumption = deferred - recovered - overflow', () => {
     const state = meteredTown(PlantType.WindTurbine);
     for (let t = 0; t < 200; t++) {
@@ -1577,12 +1603,17 @@ describe('flexible load pool (smart meters)', () => {
       energyStep(state, { chargingDemand: 0 });
       const e = state.lastEnergy;
       // consumption actually served this tick = unshifted - deferred + recovered + overflow
+      // (the field sum carries heatStoreCharge on top of totalDemand once a
+      // heat network exists; this town has none, so the two coincide)
       const overflow = Math.max(0, before + e.flexDeferred - e.flexRecovered - state.flexBacklog);
       expect(e.unshifted - e.flexDeferred + e.flexRecovered + overflow).toBeCloseTo(
         served(state),
         6,
       );
       expect(e.flexBacklog).toBe(state.flexBacklog);
+      expect(e.flexOverflow).toBeCloseTo(overflow, 9);
+      expect(e.buildingConsumption).toBeGreaterThanOrEqual(0);
+      expect(e.heatingConsumption).toBeGreaterThanOrEqual(0);
     }
   });
 });

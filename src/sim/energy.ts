@@ -421,8 +421,16 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const overflow = Math.max(0, state.flexBacklog + deferred - recovered - backlogCapacity);
   state.flexBacklog = Math.max(0, state.flexBacklog + deferred - recovered - overflow);
   const totalDemand = inflexible + servedNow + recovered + overflow;
-  // Report the household line as what was actually served this tick.
-  buildingDemand = buildingDemand - deferred + recovered + overflow;
+  // Report both lines as what was actually served this tick. The shift is
+  // split in proportion to what each line contributed to the pool —
+  // charging all of it to the household line would print a negative
+  // figure on a cold night, where heating alone is the larger share.
+  const householdFlex = householdFlexShare * buildingDemand;
+  const householdShare =
+    flexible > 0 ? householdFlex / (householdFlex + heatingFlexShare * heatingDemand) : 0;
+  const shift = -deferred + recovered + overflow;
+  buildingDemand += householdShare * shift;
+  heatingDemand += (1 - householdShare) * shift;
 
   const storageCapacity = census.batteries * BALANCE.energy.batteryCapacity;
   const powerLimit = census.batteries * BALANCE.energy.batteryPowerLimit;
@@ -609,6 +617,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     flexDeferred: deferred,
     flexRecovered: recovered,
     flexBacklog: state.flexBacklog,
+    flexOverflow: overflow,
     unshifted,
   };
 
