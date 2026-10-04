@@ -516,8 +516,6 @@ export interface GlobalStats {
   /** Current tax rate, 0..MAX_TAX_RATE. */
   taxRate: number;
   speed: Speed;
-  /** Rollout active (legacy name; see smartMeters in Task 5). */
-  smartCharging: boolean;
   /** Smart-meter rollout: crews active, meters in place, coverage and the price per meter. */
   smartMeters: {
     active: boolean;

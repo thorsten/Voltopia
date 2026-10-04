@@ -227,7 +227,6 @@ export function buildStats(state: SimState): GlobalStats {
     },
     taxRate: state.taxRate,
     speed: state.speed,
-    smartCharging: state.smartMeters.active,
     smartMeters: {
       active: state.smartMeters.active,
       metered: state.smartMeters.metered,
