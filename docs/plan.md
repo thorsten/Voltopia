@@ -35,7 +35,7 @@ src/
     rng.ts         # mulberry32 + helpers
     types.ts       # TileType, Zone, Terrain, PlantType, GlobalStats, SaveGame, ...
   sim/           # pure simulation (worker-side), no DOM/three
-    state.ts       # SimState: typed-array layers, placement rules (incl. tooSteep)
+    state.ts       # SimState: typed-array layers, placement rules (incl. tooSteep), diff buckets (delivery, stop, age stage)
     terrain.ts     # seeded relief 0..maxLevel with cliff stretch, buildable guarantee
     water.ts       # river carved downhill, lake, bridges, shore rules
     sea.ts         # sea edge, tide clock, tidal site factor, coast happiness
@@ -43,7 +43,7 @@ src/
     roads.ts       # road placement, street/avenue classes, bitmask auto-tiling
     routing.ts     # BFS/heap pathfinding on the road graph
     zones.ts       # zone painting, road adjacency
-    growth.ts      # demand model, building spawn/densify/decay, abandonment
+    growth.ts      # demand model, building spawn/densify/decay, abandonment, age-stage dirty marks
     economy.ts     # taxes, upkeep, construction costs, slope surcharge
     energy.ts      # plants (PV/wind/biogas/hydro/pumped/hydrogen), storage, balance
     market.ts      # spot price (regional weather + demand), storage trading
