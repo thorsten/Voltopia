@@ -58,6 +58,14 @@ describe('SimEngine basics', () => {
     expect(engine.state.smartMeters.active).toBe(false);
   });
 
+  it('setDemandResponse signs and ends the contract', () => {
+    const engine = makeEngine();
+    engine.applyCommand({ type: 'setDemandResponse', active: true });
+    expect(engine.state.demandResponse.active).toBe(true);
+    engine.applyCommand({ type: 'setDemandResponse', active: false });
+    expect(engine.state.demandResponse.active).toBe(false);
+  });
+
   it('toggles market trading', () => {
     const engine = makeEngine();
     engine.applyCommand({ type: 'setMarketTrading', enabled: true });

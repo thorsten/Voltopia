@@ -260,6 +260,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               onSetSmartMeterRollout={(active) =>
                 bridge.send({ type: 'setSmartMeterRollout', active })
               }
+              onSetDemandResponse={(active) => bridge.send({ type: 'setDemandResponse', active })}
               onSetMarketTrading={(enabled) => bridge.send({ type: 'setMarketTrading', enabled })}
               onBuyInsulation={() => bridge.send({ type: 'buyInsulation' })}
             />

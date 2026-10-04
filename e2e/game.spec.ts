@@ -242,6 +242,10 @@ test('tax slider and smart charging are interactive', async ({ page }) => {
   const smartCharging = page.getByTestId('smart-charging').locator('input');
   await smartCharging.click();
   await expect(smartCharging).toBeChecked({ timeout: 5_000 });
+
+  const demandResponse = page.getByTestId('demand-response').locator('input');
+  await demandResponse.click();
+  await expect(demandResponse).toBeChecked({ timeout: 5_000 });
 });
 
 test('overlay toggle switches modes', async ({ page }) => {

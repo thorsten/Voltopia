@@ -4,6 +4,7 @@ import type { VehicleState } from '../shared/types.ts';
 import { VehicleKind } from '../shared/types.ts';
 import { buildRoads, bulldozeTiles, undoLastAction, type BuildResult } from './roads.ts';
 import { buyInsulation } from './economy.ts';
+import { setDemandResponse } from './demandResponse.ts';
 import { drivingVans } from './deliveries.ts';
 import { placePlant } from './energy.ts';
 import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
@@ -67,6 +68,9 @@ export class SimEngine {
         return [];
       case 'setSmartMeterRollout':
         setSmartMeterRollout(state, command.active);
+        return [];
+      case 'setDemandResponse':
+        setDemandResponse(state, command.active);
         return [];
       case 'setMarketTrading':
         state.marketTrading = command.enabled;
