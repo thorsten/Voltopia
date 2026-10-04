@@ -197,6 +197,9 @@ export function buildStats(state: SimState): GlobalStats {
         cooling: e.coolingConsumption,
         electrolysis: e.electrolysis,
         heatPumps: e.heatPumpConsumption,
+        flexDeferred: e.flexDeferred,
+        flexRecovered: e.flexRecovered,
+        flexBacklog: e.flexBacklog,
       },
       storedEnergy: state.storedEnergy,
       storageCapacity: totalStorageCapacity(state),
@@ -254,11 +257,14 @@ export function pendingHistoryPoint(state: SimState): EnergyHistoryPoint {
   const accum = state.energyHistoryAccum;
   if (accum.ticks === 0) {
     const last = state.energyHistory[state.energyHistory.length - 1];
-    return last ? { ...last } : { generation: 0, consumption: 0, stateOfCharge: 0, price: 1 };
+    return last
+      ? { ...last }
+      : { generation: 0, consumption: 0, unshifted: 0, stateOfCharge: 0, price: 1 };
   }
   return {
     generation: accum.generation / accum.ticks,
     consumption: accum.consumption / accum.ticks,
+    unshifted: accum.unshifted / accum.ticks,
     stateOfCharge: accum.soc / accum.ticks,
     price: accum.price / accum.ticks,
   };

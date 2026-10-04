@@ -406,6 +406,9 @@ const en = {
   'goal.warmWinter.title': 'Warm winter',
   'goal.warmWinter.body':
     'Carry at least half of your heat over the district network for a full winter day, with nobody falling back to their own heating.',
+  'goal.flexibleCity.title': 'Flexible city',
+  'goal.flexibleCity.body':
+    'Shift load for half a day with smart meters on 80% of your buildings (50+ residents).',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -949,6 +952,9 @@ const de: Record<TranslationKey, string> = {
   'goal.warmWinter.title': 'Warmer Winter',
   'goal.warmWinter.body':
     'Liefere einen ganzen Wintertag lang mindestens die Hälfte der Wärme über das Fernwärmenetz, ohne dass jemand auf die eigene Heizung zurückfällt.',
+  'goal.flexibleCity.title': 'Flexible Stadt',
+  'goal.flexibleCity.body':
+    'Verschiebe einen halben Tag lang Last mit Smart Metern auf 80 % deiner Gebäude (ab 50 Einwohnern).',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

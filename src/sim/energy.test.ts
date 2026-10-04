@@ -16,6 +16,7 @@ import { heatStep } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
+import { countBuildings } from './smartMeters.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
 import { pendingHistoryPoint } from './tick.ts';
 import { HEATED_SERVED } from '../shared/types.ts';
@@ -466,6 +467,7 @@ describe('energyStep', () => {
     expect(pendingHistoryPoint(makeState())).toEqual({
       generation: 0,
       consumption: 0,
+      unshifted: 0,
       stateOfCharge: 0,
       price: 1,
     });
@@ -1479,5 +1481,108 @@ describe('isolated supply plants', () => {
     state.layers.supplied[at(10, 10)] = SupplyStatus.Supplied;
     tick(state);
     expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.Supplied);
+  });
+});
+
+describe('flexible load pool (smart meters)', () => {
+  /** Ten houses on a road, fully metered, plus the given plant. */
+  function meteredTown(plant: PlantType | null): SimState {
+    const state = createSimState(9, SIZE);
+    state.money = 1e9;
+    buildRoads(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(i + 2, 5)),
+    );
+    for (let i = 0; i < 10; i++) {
+      state.layers.zone[at(i + 2, 6)] = Zone.Residential;
+      state.layers.density[at(i + 2, 6)] = 2;
+    }
+    if (plant !== null) placePlant(state, at(2, 3), plant);
+    buildPowerLines(state, [at(2, 4)]);
+    state.smartMeters.metered = countBuildings(state);
+    return state;
+  }
+
+  /** Served consumption reported for this tick. */
+  function served(state: SimState): number {
+    const e = state.lastEnergy;
+    return (
+      e.buildingConsumption +
+      e.heatingConsumption +
+      e.coolingConsumption +
+      e.chargingConsumption +
+      e.heatPumpConsumption
+    );
+  }
+
+  it('is a no-op at zero coverage', () => {
+    const state = meteredTown(PlantType.WindTurbine);
+    state.smartMeters.metered = 0;
+    for (let t = 0; t < 50; t++) {
+      energyStep(state, { chargingDemand: 0 });
+      expect(state.lastEnergy.flexDeferred).toBe(0);
+      expect(state.lastEnergy.flexRecovered).toBe(0);
+      expect(state.flexBacklog).toBe(0);
+      expect(state.lastEnergy.unshifted).toBeCloseTo(served(state), 9);
+    }
+  });
+
+  it('defers the flexible share at night without surplus and bounds the backlog', () => {
+    // A battery connects the houses to a grid that generates nothing.
+    const state = meteredTown(PlantType.Battery);
+    state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24
+    // Same town, same tick, no meters: the undeferred demands.
+    const bare = meteredTown(PlantType.Battery);
+    bare.smartMeters.metered = 0;
+    bare.tick = state.tick;
+    energyStep(bare, { chargingDemand: 0 });
+    energyStep(state, { chargingDemand: 0 });
+    const e = state.lastEnergy;
+    const { householdFlexShare, heatingFlexShare, backlogHours } = BALANCE.smartMeters;
+    const flexible =
+      householdFlexShare * bare.lastEnergy.buildingConsumption +
+      heatingFlexShare * bare.lastEnergy.heatingConsumption;
+    expect(flexible).toBeGreaterThan(0);
+    expect(e.flexDeferred).toBeCloseTo(flexible, 9);
+    expect(e.flexRecovered).toBe(0);
+    // Nothing generated: unshifted = demand, served = demand - deferred.
+    expect(e.unshifted).toBeCloseTo(bare.lastEnergy.unshifted, 9);
+    expect(e.unshifted - served(state)).toBeCloseTo(e.flexDeferred, 9);
+    // Keep deferring: the backlog saturates at backlogHours of flexible demand.
+    for (let t = 0; t < TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
+    const capacity = flexible * backlogHours * (TICKS_PER_DAY / 24);
+    expect(state.flexBacklog).toBeLessThanOrEqual(capacity + 1e-6);
+    expect(state.flexBacklog).toBeGreaterThan(capacity * 0.5);
+  });
+
+  it('serves the flexible share and drains the backlog when renewables exceed the inflexible load', () => {
+    const state = meteredTown(PlantType.WindTurbine);
+    placePlant(state, at(3, 3), PlantType.WindTurbine);
+    placePlant(state, at(4, 3), PlantType.WindTurbine);
+    state.weather.windSpeed = 0.9;
+    state.flexBacklog = 5;
+    energyStep(state, { chargingDemand: 0 });
+    const e = state.lastEnergy;
+    expect(e.flexDeferred).toBe(0);
+    expect(e.flexRecovered).toBeGreaterThan(0);
+    expect(e.flexRecovered).toBeLessThanOrEqual(5);
+    expect(state.flexBacklog).toBeCloseTo(5 - e.flexRecovered, 9);
+    expect(state.flexBacklog).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the identity unshifted - consumption = deferred - recovered - overflow', () => {
+    const state = meteredTown(PlantType.WindTurbine);
+    for (let t = 0; t < 200; t++) {
+      const before = state.flexBacklog;
+      energyStep(state, { chargingDemand: 0 });
+      const e = state.lastEnergy;
+      // consumption actually served this tick = unshifted - deferred + recovered + overflow
+      const overflow = Math.max(0, before + e.flexDeferred - e.flexRecovered - state.flexBacklog);
+      expect(e.unshifted - e.flexDeferred + e.flexRecovered + overflow).toBeCloseTo(
+        served(state),
+        6,
+      );
+      expect(e.flexBacklog).toBe(state.flexBacklog);
+    }
   });
 });

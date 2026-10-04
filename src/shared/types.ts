@@ -156,6 +156,8 @@ export interface EnergyHistoryPoint {
   generation: number;
   /** Total consumption in energy units per tick. */
   consumption: number;
+  /** Consumption without load shifting (equals consumption when nothing is metered). */
+  unshifted: number;
   /** Combined state of charge of batteries and pumped storage, 0..1. */
   stateOfCharge: number;
   /** Average spot price factor over the sample window. */
@@ -185,6 +187,12 @@ export interface EnergyStats {
     electrolysis: number;
     /** Electricity the district-heating pumps drew (serving plus charging the store). */
     heatPumps: number;
+    /** Flexible load metered households deferred this tick (smart meters). */
+    flexDeferred: number;
+    /** Deferred load served from renewable surplus this tick ("load shifted"). */
+    flexRecovered: number;
+    /** Deferred flexible energy still waiting for surplus. */
+    flexBacklog: number;
   };
   /** Absolute stored energy across all batteries. */
   storedEnergy: number;
@@ -726,6 +734,7 @@ export interface SaveGame {
   heatStored?: number;
   /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
   warmWinterTicks?: number;
+  flexTicks?: number;
   /** Smart-meter rollout (absent in older saves: migrated from smartCharging). */
   smartMeters?: { active: boolean; metered: number };
   /** Deferred flexible energy waiting for surplus (absent → 0). */
