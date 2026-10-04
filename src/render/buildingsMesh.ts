@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
-import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
+import { HEATED_SERVED, SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { PART_KINDS, type PartKind, createPartGeometry } from './buildings/primitives.ts';
@@ -18,6 +18,7 @@ import {
   streetFaceFor,
 } from './buildings/recipes.ts';
 import { BlockAllocator } from './buildings/blocks.ts';
+import { type AccentSink, type AccentState, accentAnchors } from './buildings/accents.ts';
 
 const GROW_ANIMATION_SECONDS = 0.45;
 /** Max lit window quads per building. */
@@ -39,11 +40,17 @@ const QUARTER_TURN = Math.PI / 2;
 /** Hidden instances: a zero-scale matrix is never rasterised. */
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
+function accentState(b: TileBuilding): AccentState {
+  return { heated: b.heated, supplied: b.supplied, damaged: b.damaged };
+}
+
 interface TileBuilding {
   zone: Zone;
   density: number;
   variant: number;
   supplied: SupplyStatus;
+  heated: boolean;
+  damaged: boolean;
   face: StreetFace;
   parts: BuildingPart[];
   /** Block per primitive kind (index = PartKind). */
@@ -89,6 +96,8 @@ export class BuildingsMesh implements DiffLayer {
     scene: THREE.Scene,
     gridSize: number,
     private readonly elevation: ElevationField,
+    /** Optional receiver of effect anchors (stage 2 accents). */
+    private readonly accents?: AccentSink,
   ) {
     this.gridSize = gridSize;
     this.roads = new Uint8Array(gridSize * gridSize);
@@ -165,6 +174,11 @@ export class BuildingsMesh implements DiffLayer {
       }
       const hasBuilding = diff.tileType === TileType.Empty && diff.density > 0;
       const existing = this.buildings.get(diff.index);
+      // Diffs built in tests may omit these fields; normalise to booleans.
+      // `diff.heated` is HEATED_NONE/HEATED_TRUNK/HEATED_SERVED (see
+      // shared/types.ts); only a served building counts as heated here.
+      const heated = diff.heated === HEATED_SERVED;
+      const damaged = (diff.damage ?? 0) > 0;
       if (hasBuilding) {
         if (
           !existing ||
@@ -172,14 +186,31 @@ export class BuildingsMesh implements DiffLayer {
           existing.zone !== diff.zone ||
           existing.variant !== diff.variant
         ) {
-          this.place(diff.index, diff.zone, diff.density, diff.variant, diff.supplied, true);
+          this.place(
+            diff.index,
+            diff.zone,
+            diff.density,
+            diff.variant,
+            diff.supplied,
+            heated,
+            damaged,
+            true,
+          );
           reissue.delete(diff.index);
           windowsDirty = true;
-        } else if (existing.supplied !== diff.supplied) {
-          // Supply flips tint the body and dim the windows; no grow animation.
-          existing.supplied = diff.supplied;
-          this.writeColors(diff.index);
-          windowsDirty = true;
+        } else {
+          const supplyFlip = existing.supplied !== diff.supplied;
+          if (supplyFlip) {
+            // Supply flips tint the body and dim the windows; no grow animation.
+            existing.supplied = diff.supplied;
+            this.writeColors(diff.index);
+            windowsDirty = true;
+          }
+          if (supplyFlip || existing.heated !== heated || existing.damaged !== damaged) {
+            existing.heated = heated;
+            existing.damaged = damaged;
+            this.accents?.setState(diff.index, accentState(existing));
+          }
         }
       } else if (existing) {
         this.remove(diff.index);
@@ -190,7 +221,7 @@ export class BuildingsMesh implements DiffLayer {
     for (const index of reissue) {
       const b = this.buildings.get(index)!;
       if (this.streetFace(index) !== b.face) {
-        this.place(index, b.zone, b.density, b.variant, b.supplied, false);
+        this.place(index, b.zone, b.density, b.variant, b.supplied, b.heated, b.damaged, false);
         windowsDirty = true;
       }
     }
@@ -237,6 +268,8 @@ export class BuildingsMesh implements DiffLayer {
     density: number,
     variant: number,
     supplied: SupplyStatus,
+    heated: boolean,
+    damaged: boolean,
     animate: boolean,
   ): void {
     const face = this.streetFace(index);
@@ -248,6 +281,8 @@ export class BuildingsMesh implements DiffLayer {
         density,
         variant,
         supplied,
+        heated,
+        damaged,
         face,
         parts,
         blocks: this.layers.map((layer) => layer.blocks.alloc()),
@@ -259,6 +294,8 @@ export class BuildingsMesh implements DiffLayer {
       building.density = density;
       building.variant = variant;
       building.supplied = supplied;
+      building.heated = heated;
+      building.damaged = damaged;
       building.face = face;
       building.parts = parts;
     }
@@ -279,6 +316,17 @@ export class BuildingsMesh implements DiffLayer {
       }
     }
     this.writeColors(index);
+    this.publishAnchors(index, building);
+  }
+
+  /** Hand the role-tagged parts' world anchors to the effects sink. */
+  private publishAnchors(index: number, building: TileBuilding): void {
+    if (!this.accents) return;
+    const cx = (index % this.gridSize) + 0.5;
+    const cz = Math.floor(index / this.gridSize) + 0.5;
+    const anchors = accentAnchors(building.parts, cx, cz, this.elevation.centerY(index));
+    if (anchors.length > 0) this.accents.set(index, anchors, accentState(building));
+    else this.accents.remove(index);
   }
 
   private remove(index: number): void {
@@ -293,6 +341,7 @@ export class BuildingsMesh implements DiffLayer {
     }
     this.buildings.delete(index);
     this.animations.delete(index);
+    this.accents?.remove(index);
     this.syncCounts();
   }
 

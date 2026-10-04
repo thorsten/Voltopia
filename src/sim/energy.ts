@@ -6,7 +6,7 @@ import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
 import { isSupplySource, recomputeGrid } from './powerGrid.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
-import { coolingDegree, heatingDegree } from './seasons.ts';
+import { coolingDegree, heatingDegree } from '../shared/heating.ts';
 import {
   BuildIntent,
   buildRejection,

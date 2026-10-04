@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
-import { SupplyStatus, TileType, Zone } from '../shared/types.ts';
+import { HEATED_SERVED, SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT } from './buildings/palette.ts';
-import { DOOR, MAX_PARTS_PER_KIND, StreetFace, faceDepth } from './buildings/recipes.ts';
+import { DOOR, MAX_PARTS_PER_KIND, PartRole, StreetFace, faceDepth } from './buildings/recipes.ts';
+import { type AccentAnchor, type AccentSink, type AccentState } from './buildings/accents.ts';
 
 /** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT/WINDOW_WIDTH; not exported for tests. */
 const WINDOW_HEIGHT = 0.11;
@@ -571,5 +572,102 @@ describe('BuildingsMesh', () => {
     mesh.setEnvironment(env(1));
     expect(windows.visible).toBe(true);
     expect(windows.count).toBeGreaterThan(0);
+  });
+});
+
+/** Records every sink call so tests can assert what the mesh forwarded. */
+class RecordingSink implements AccentSink {
+  calls: Array<
+    | { op: 'set'; index: number; anchors: readonly AccentAnchor[]; state: AccentState }
+    | { op: 'setState'; index: number; state: AccentState }
+    | { op: 'remove'; index: number }
+  > = [];
+  set(index: number, anchors: readonly AccentAnchor[], state: AccentState): void {
+    this.calls.push({ op: 'set', index, anchors, state });
+  }
+  setState(index: number, state: AccentState): void {
+    this.calls.push({ op: 'setState', index, state });
+  }
+  remove(index: number): void {
+    this.calls.push({ op: 'remove', index });
+  }
+}
+
+function setupWithSink(): { mesh: BuildingsMesh; sink: RecordingSink } {
+  const sink = new RecordingSink();
+  const mesh = new BuildingsMesh(new THREE.Scene(), SIZE, flatField(), sink);
+  mesh.setReducedMotion(true);
+  return { mesh, sink };
+}
+
+describe('BuildingsMesh accent sink', () => {
+  it('forwards one chimney anchor at the chimney top when a house is placed', () => {
+    const { mesh, sink } = setupWithSink();
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 3)]);
+    const chimney = mesh.partsAt(CENTRE)!.find((p) => p.role === PartRole.Chimney)!;
+    expect(sink.calls).toHaveLength(1);
+    const call = sink.calls[0];
+    expect(call.op).toBe('set');
+    if (call.op !== 'set') return;
+    expect(call.index).toBe(CENTRE);
+    expect(call.anchors).toHaveLength(1);
+    expect(call.anchors[0].role).toBe(PartRole.Chimney);
+    expect(call.anchors[0].x).toBeCloseTo(3.5 + chimney.ox, 9);
+    expect(call.anchors[0].z).toBeCloseTo(3.5 + chimney.oz, 9);
+    expect(call.anchors[0].y).toBeCloseTo(chimney.oy + chimney.sy, 9);
+    expect(call.state).toEqual({ heated: false, supplied: SupplyStatus.Supplied, damaged: false });
+  });
+
+  it('forwards two vent anchors for a market hall and nothing for a shop', () => {
+    const { mesh, sink } = setupWithSink();
+    mesh.applyDiffs([building(CENTRE, Zone.Retail, 3, 0), building(CENTRE + 1, Zone.Retail, 1, 0)]);
+    const sets = sink.calls.filter((c) => c.op === 'set');
+    expect(sets).toHaveLength(1);
+    const first = sets[0];
+    expect(first.index).toBe(CENTRE);
+    if (first.op !== 'set') return;
+    expect(first.anchors.map((a) => a.role)).toEqual([PartRole.Vent, PartRole.Vent]);
+  });
+
+  it('sends only a state update on a supply, heat or damage flip', () => {
+    const { mesh, sink } = setupWithSink();
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    sink.calls = [];
+    mesh.applyDiffs([
+      { ...building(CENTRE, Zone.Residential, 1, 0), heated: HEATED_SERVED } as TileDiff,
+    ]);
+    mesh.applyDiffs([
+      {
+        ...building(CENTRE, Zone.Residential, 1, 0),
+        heated: HEATED_SERVED,
+        damage: 40,
+      } as TileDiff,
+    ]);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0, SupplyStatus.NotConnected)]);
+    expect(sink.calls.map((c) => c.op)).toEqual(['setState', 'setState', 'setState']);
+    expect(sink.calls[0]).toMatchObject({ state: { heated: true, damaged: false } });
+    expect(sink.calls[1]).toMatchObject({ state: { heated: true, damaged: true } });
+    expect(sink.calls[2]).toMatchObject({
+      state: { heated: false, damaged: false, supplied: SupplyStatus.NotConnected },
+    });
+    // An unchanged re-send is not a flip.
+    sink.calls = [];
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0, SupplyStatus.NotConnected)]);
+    expect(sink.calls).toEqual([]);
+  });
+
+  it('re-issues anchors when a road beside the house turns it, and removes them with the building', () => {
+    const { mesh, sink } = setupWithSink();
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    sink.calls = [];
+    mesh.applyDiffs([road(CENTRE + 1)]); // east of the house → face flips from South to East
+    expect(sink.calls.map((c) => c.op)).toEqual(['set']);
+    sink.calls = [];
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 2, 0)]); // densify: town house has no roles
+    expect(sink.calls.map((c) => c.op)).toEqual(['remove']);
+    sink.calls = [];
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    mesh.applyDiffs([empty(CENTRE)]);
+    expect(sink.calls.map((c) => c.op)).toEqual(['set', 'remove']);
   });
 });

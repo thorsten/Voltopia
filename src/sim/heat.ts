@@ -16,7 +16,7 @@ import { neighbors4 } from '../shared/grid.ts';
 import { HEATED_SERVED, HEATED_TRUNK, PlantType, Zone } from '../shared/types.ts';
 import { censusPlants, heatingConsumption } from './energy.ts';
 import { recomputeGrid } from './powerGrid.ts';
-import { heatingDegree } from './seasons.ts';
+import { heatingDegree } from '../shared/heating.ts';
 import { markDirty, TileType, type SimState } from './state.ts';
 
 /**

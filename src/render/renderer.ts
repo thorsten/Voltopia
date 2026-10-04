@@ -11,6 +11,7 @@ import { BALANCE } from '../shared/constants.ts';
 import { RoadsMesh } from './roadsMesh.ts';
 import { PowerLinesMesh } from './powerLinesMesh.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
+import { BuildingFxMesh } from './buildingFxMesh.ts';
 import { buildingHeight } from './buildings/recipes.ts';
 import { PlantsMesh, plantHeight } from './plantsMesh.ts';
 import { VehiclesMesh } from './vehiclesMesh.ts';
@@ -196,7 +197,9 @@ export class GameRenderer {
     this.addDiffLayer(this.roadsMesh);
     this.addDiffLayer(new PowerLinesMesh(scene, gridSize, this.elevation));
     this.addDiffLayer(new ZoneTilesMesh(scene, gridSize, this.elevation));
-    this.addDiffLayer(new BuildingsMesh(scene, gridSize, this.elevation));
+    const buildingFx = new BuildingFxMesh(scene, gridSize);
+    this.addDiffLayer(new BuildingsMesh(scene, gridSize, this.elevation, buildingFx));
+    this.addDiffLayer(buildingFx);
     this.addDiffLayer(new PlantsMesh(scene, gridSize, this.elevation));
     this.disasters = new DisasterMesh(scene, gridSize, this.elevation);
     this.addDiffLayer(this.disasters);

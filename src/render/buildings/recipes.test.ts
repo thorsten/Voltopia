@@ -3,11 +3,13 @@ import * as THREE from 'three';
 import { Zone } from '../../shared/types.ts';
 import { PART_KINDS, PartKind } from './primitives.ts';
 import { ACCENT } from './palette.ts';
+import { MAX_PUFF_ANCHORS_PER_TILE } from './accents.ts';
 import {
   type BuildingPart,
   FOOTPRINT_HALF,
   MAX_PARTS_PER_KIND,
   MAX_PARTS_PER_TILE,
+  PartRole,
   STREET_FACES,
   StreetFace,
   buildingHeight,
@@ -410,5 +412,72 @@ describe('building recipes', () => {
         expect(awnings.length).toBe(density === 3 ? 2 : 1);
       }
     }
+  });
+
+  describe('part roles (stage 2 accents)', () => {
+    function roles(parts: readonly BuildingPart[], role: PartRole): BuildingPart[] {
+      return parts.filter((p) => p.role === role);
+    }
+
+    it('tags exactly one chimney on every detached house', () => {
+      for (const index of SAMPLE) {
+        for (let variant = 0; variant < VARIANTS; variant++) {
+          for (const face of STREET_FACES) {
+            const parts = buildingParts(Zone.Residential, 1, variant, index, face);
+            const chimneys = roles(parts, PartRole.Chimney);
+            expect(chimneys).toHaveLength(1);
+            expect(chimneys[0].color.getHex()).toBe(ACCENT.chimney.getHex());
+          }
+        }
+      }
+    });
+
+    it('tags one antenna on the office block and the tower', () => {
+      for (const index of SAMPLE) {
+        for (let variant = 0; variant < VARIANTS; variant++) {
+          for (const density of [2, 3]) {
+            const parts = buildingParts(Zone.Commercial, density, variant, index, StreetFace.South);
+            const antennas = roles(parts, PartRole.Antenna);
+            expect(antennas).toHaveLength(1);
+            expect(antennas[0].kind).toBe(PartKind.Cylinder);
+          }
+        }
+      }
+    });
+
+    it('tags two vents on the market hall', () => {
+      for (const index of SAMPLE) {
+        for (let variant = 0; variant < VARIANTS; variant++) {
+          for (const face of STREET_FACES) {
+            const parts = buildingParts(Zone.Retail, 3, variant, index, face);
+            expect(roles(parts, PartRole.Vent)).toHaveLength(2);
+          }
+        }
+      }
+    });
+
+    it('never tags more puff-emitting (chimney or vent) parts than BuildingFxMesh has room for', () => {
+      for (const { parts } of allRecipes(SAMPLE)) {
+        const puffAnchors = parts.filter(
+          (p) => p.role === PartRole.Chimney || p.role === PartRole.Vent,
+        );
+        expect(puffAnchors.length).toBeLessThanOrEqual(MAX_PUFF_ANCHORS_PER_TILE);
+      }
+    });
+
+    it('tags nothing on any other recipe and never rotates a tagged part', () => {
+      for (const { zone, density, parts } of allRecipes(SAMPLE)) {
+        const tagged = parts.filter((p) => p.role !== undefined);
+        const expected =
+          (zone === Zone.Residential && density === 1) ||
+          (zone === Zone.Commercial && density >= 2) ||
+          (zone === Zone.Retail && density === 3);
+        if (!expected) expect(tagged).toHaveLength(0);
+        for (const p of tagged) {
+          expect(p.turn).toBe(0);
+          expect(p.tilt).toBeUndefined();
+        }
+      }
+    });
   });
 });

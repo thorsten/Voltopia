@@ -13,6 +13,10 @@ export const STREET_FACES: readonly StreetFace[] = [
   StreetFace.West,
 ];
 
+/** Parts the stage 2 effects layer attaches to (smoke, puffs, beacon). */
+export const PartRole = { Chimney: 0, Vent: 1, Antenna: 2 } as const;
+export type PartRole = (typeof PartRole)[keyof typeof PartRole];
+
 export interface BuildingPart {
   kind: PartKind;
   /** Footprint (tile fractions) and height, before rotation. */
@@ -32,6 +36,8 @@ export interface BuildingPart {
   main?: boolean;
   /** Accents keep their colour under the supply tint. */
   accent?: boolean;
+  /** Effect anchor for buildingFxMesh.ts; the anchor is the part's top centre. */
+  role?: PartRole;
 }
 
 export const MAX_PARTS_PER_TILE = 8;
@@ -142,7 +148,7 @@ function box(
   oy: number,
   oz: number,
   color: THREE.Color,
-  flags: { main?: boolean; accent?: boolean } = {},
+  flags: { main?: boolean; accent?: boolean; role?: PartRole } = {},
 ): BuildingPart {
   return { kind: PartKind.Box, sx, sy, sz, ox, oy, oz, turn: 0, color, ...flags };
 }
@@ -294,6 +300,7 @@ function residential(
     parts.push(
       box(0.06, 0.18, 0.06, ox + sideX * w * 0.3, h, oz + sideZ * d * 0.25, ACCENT.chimney, {
         accent: true,
+        role: PartRole.Chimney,
       }),
     );
     parts.push(
@@ -471,6 +478,7 @@ function commercial(
       turn: 0,
       color: ACCENT.antenna,
       accent: true,
+      role: PartRole.Antenna,
     });
     parts.push(
       box(0.4, ROOFTOP_PV_THICKNESS, 0.3, -0.1, h, 0.12, ACCENT.rooftopPv, { accent: true }),
@@ -512,6 +520,7 @@ function commercial(
       turn: 0,
       color: ACCENT.antenna,
       accent: true,
+      role: PartRole.Antenna,
     });
     parts.push(
       box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.02, h, -0.02, ACCENT.rooftopPv, { accent: true }),
@@ -620,6 +629,7 @@ function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily
         turn: 0,
         color: ACCENT.antenna,
         accent: true,
+        role: PartRole.Vent,
       });
     }
     parts.push(pvOnSlope(body, face, roofW, roofD, roofHeight, h));
