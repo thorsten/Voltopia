@@ -378,9 +378,10 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     connectedBuildings.push(i);
     const zone = layers.zone[i] as Zone;
     const density = layers.density[i];
-    buildingDemand += buildingConsumption(zone, density, time);
+    const base = buildingConsumption(zone, density, time);
+    buildingDemand += base;
     if (zone === Zone.Commercial || zone === Zone.Retail) {
-      businessDemand += buildingConsumption(zone, density, time);
+      businessDemand += base;
       contractedBuildings++;
     }
     // A served building gets its heat from the network; its own

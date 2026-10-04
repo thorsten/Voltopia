@@ -20,7 +20,7 @@ import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
 import { spotPriceFactor } from './market.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
-import { pendingHistoryPoint } from './tick.ts';
+import { buildStats, pendingHistoryPoint, stepTick, timeOfDay } from './tick.ts';
 import { HEATED_SERVED } from '../shared/types.ts';
 import {
   createSimState,
@@ -35,7 +35,6 @@ import {
 } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
-import { timeOfDay } from './tick.ts';
 import { SUNRISE, SUNSET } from './weather.ts';
 
 const SIZE = 32;
@@ -1754,11 +1753,14 @@ describe('demand response in the cascade', () => {
     const state = makeState();
     // A battery (empty) connects the building, and the city has no
     // generation of its own beyond the building's roof. 11 am on a
-    // sunny, windy day is the cheapest the regional link ever gets in
-    // this model: regional demand sits in its daylight trough (the
-    // residential profile's 0.45) while supply is all but complete
+    // sunny, windy day is close to the cheapest the regional link ever
+    // gets in this model: regional demand sits in its daylight trough
+    // (the residential profile's 0.45) while supply is all but complete
     // (0.55 x 0.966 solar + 0.45 x 1 wind = 0.981), so the spot factor
-    // is 1 + 1.2 x (0.45 - 0.981) = 0.3625 and the import price 0.145 —
+    // is 1 + 1.2 x (0.45 - 0.981) = 0.3625 and the import price 0.145 on
+    // this test's fixed 12-hour day. Season moves the floor a little:
+    // under the longest summer day it is ≈0.355 (price ≈0.142), and the
+    // structural floor this same reasoning gives is ≈0.34 — all well
     // under the 0.2 activation premium, which is what this test needs.
     // Note it never reaches market.spotMin (0.25): that would want
     // demand - supply <= -0.625, and supply caps at 1.0 while the
@@ -1812,5 +1814,22 @@ describe('demand response in the cascade', () => {
     const on = scarceBusinessTown();
     energyStep(on, { chargingDemand: 0 });
     expect(count(on)).toBeLessThan(count(off));
+  });
+
+  it('bills the contract when stepTick runs the whole cascade', () => {
+    // Guards the wiring in tick.ts: energyStep alone never calls
+    // demandResponseStep, so only a real stepTick can exercise it.
+    // stepTick increments the tick before anything else runs, so the
+    // fixture's tick lands one past noon — still a scarce daytime tick.
+    const state = scarceBusinessTown();
+    stepTick(state);
+    const { contractedBuildings, shed } = state.lastEnergy;
+    expect(shed).toBeGreaterThan(0); // precondition: the premium term is exercised
+    expect(state.lastDemandResponseCost).toBeGreaterThan(0);
+    const expectedCost =
+      (contractedBuildings * BALANCE.demandResponse.retainerPerBuildingPerDay) / TICKS_PER_DAY +
+      shed * activationPricePerEnergyUnit;
+    expect(state.lastDemandResponseCost).toBeCloseTo(expectedCost, 6);
+    expect(buildStats(state).budget.demandResponse).toBeGreaterThan(0);
   });
 });
