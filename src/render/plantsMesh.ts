@@ -498,9 +498,23 @@ export class PlantsMesh implements DiffLayer {
         // Trees stand on the ground where they are; everything else keeps
         // the tile-centre lift its recipe was tuned for.
         const partLift = isPark ? this.elevation.surfaceY(cx + part.ox, cz + part.oz) : lift;
-        this.position.set(cx + part.ox, part.oy + partLift, cz + part.oz);
+        let baseY = part.oy + partLift;
+        let sizeY = part.sy;
+        if (part.oy === 0 && part.rotX === undefined && !isPark) {
+          // Foundation: a box that stands on the ground keeps its top but
+          // drops its bottom to the lowest ground under its footprint, so
+          // nothing floats on the downhill side of a sloped tile (the
+          // uphill side simply sinks in).
+          const bottom = Math.min(
+            partLift,
+            this.lowestGroundUnder(cx + part.ox, cz + part.oz, part.sx, part.sz),
+          );
+          sizeY = partLift + part.sy - bottom;
+          baseY = bottom;
+        }
+        this.position.set(cx + part.ox, baseY, cz + part.oz);
         this.quaternion.setFromEuler(new THREE.Euler(part.rotX ?? 0, 0, 0));
-        this.scale.set(part.sx, part.sy, part.sz);
+        this.scale.set(part.sx, sizeY, part.sz);
         this.matrix.compose(this.position, this.quaternion, this.scale);
         this.boxMesh.setMatrixAt(boxSlot, this.matrix);
         this.boxMesh.setColorAt(boxSlot, color.setHex(part.color));
@@ -526,6 +540,24 @@ export class PlantsMesh implements DiffLayer {
     this.domeMesh.instanceMatrix.needsUpdate = true;
     this.writeRotors();
     this.writeSocFills();
+  }
+
+  /**
+   * Lowest ground height under a footprint centred on (x, z): the ground
+   * is planar per triangle, so sampling the corners, edge midpoints and
+   * centre finds the minimum to within the crease.
+   */
+  private lowestGroundUnder(x: number, z: number, sx: number, sz: number): number {
+    const max = this.gridSize - 1e-6;
+    let lowest = Infinity;
+    for (const fx of [-0.5, 0, 0.5]) {
+      for (const fz of [-0.5, 0, 0.5]) {
+        const px = Math.min(max, Math.max(0, x + fx * sx));
+        const pz = Math.min(max, Math.max(0, z + fz * sz));
+        lowest = Math.min(lowest, this.elevation.surfaceY(px, pz));
+      }
+    }
+    return lowest;
   }
 
   private siteOf(index: number): PlantSite {
