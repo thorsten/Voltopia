@@ -232,7 +232,7 @@ test('Escape deselects the inspected tile and closes the inspector (needs WebGL)
   await expect(page.getByTestId('tile-inspector')).toHaveCount(0);
 });
 
-test('tax slider and smart charging are interactive', async ({ page }) => {
+test('tax slider, smart charging and demand response are interactive', async ({ page }) => {
   const slider = page.getByTestId('tax-slider').locator('input');
   await slider.fill('25');
   await expect(page.getByTestId('tax-slider')).toContainText('25%');
