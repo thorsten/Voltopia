@@ -17,7 +17,7 @@ export function HudConsole({
   detailsOpen,
   onToggleDetails,
   onSetTaxRate,
-  onSetSmartCharging,
+  onSetSmartMeterRollout,
   onSetMarketTrading,
   onBuyInsulation,
 }: {
@@ -25,7 +25,7 @@ export function HudConsole({
   detailsOpen: boolean;
   onToggleDetails: () => void;
   onSetTaxRate: (rate: number) => void;
-  onSetSmartCharging: (enabled: boolean) => void;
+  onSetSmartMeterRollout: (active: boolean) => void;
   onSetMarketTrading: (enabled: boolean) => void;
   onBuyInsulation: () => void;
 }) {
@@ -51,22 +51,36 @@ export function HudConsole({
       >
         <EnergyGraph energy={stats.energy} timeOfDay={stats.timeOfDay} />
         <div className="hud-drawer">
-          <EnergyPanel energy={stats.energy} riverFlow={stats.weather.riverFlow} />
+          <EnergyPanel
+            energy={stats.energy}
+            riverFlow={stats.weather.riverFlow}
+            smartMeters={stats.smartMeters}
+          />
           <BudgetPanel budget={stats.budget} />
           <section className="hud-section">
             <h2>{t('hud.section.city')}</h2>
             <TaxSlider rate={stats.taxRate} onChange={onSetTaxRate} />
             <label
-              className="smart-charging-toggle"
+              className="smart-charging-toggle smart-meters"
               data-testid="smart-charging"
-              title={t('smartCharging.title')}
+              title={t('smartMeters.title', {
+                perDay: BALANCE.smartMeters.installsPerDay,
+                cost: BALANCE.smartMeters.costPerMeter,
+              })}
             >
               <input
                 type="checkbox"
-                checked={stats.smartCharging}
-                onChange={(e) => onSetSmartCharging(e.target.checked)}
+                checked={stats.smartMeters.active}
+                onChange={(e) => onSetSmartMeterRollout(e.target.checked)}
               />
-              <span>{t('smartCharging.label')}</span>
+              <span>{t('smartMeters.label')}</span>
+              <span className="smart-meters-coverage" data-testid="smart-meters-coverage">
+                {t('smartMeters.coverage', {
+                  percent: Math.round(stats.smartMeters.coverage * 100),
+                  metered: stats.smartMeters.metered,
+                  buildings: stats.smartMeters.buildings,
+                })}
+              </span>
             </label>
             <label
               className="smart-charging-toggle"

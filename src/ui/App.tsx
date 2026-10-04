@@ -257,7 +257,9 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               detailsOpen={detailsOpen}
               onToggleDetails={toggleDetails}
               onSetTaxRate={(rate) => bridge.send({ type: 'setTaxRate', rate })}
-              onSetSmartCharging={(enabled) => bridge.send({ type: 'setSmartCharging', enabled })}
+              onSetSmartMeterRollout={(active) =>
+                bridge.send({ type: 'setSmartMeterRollout', active })
+              }
               onSetMarketTrading={(enabled) => bridge.send({ type: 'setMarketTrading', enabled })}
               onBuyInsulation={() => bridge.send({ type: 'buyInsulation' })}
             />

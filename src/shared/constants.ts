@@ -624,6 +624,87 @@ export const BALANCE = {
     ] as [number, number],
   },
 
+  /**
+   * Smart-meter rollout: paced installation and the flexible load it
+   * unlocks.
+   *
+   * Confirmed (not changed) by a headless probe
+   * (src/sim/_smartMetersProbe.test.ts, deleted after use): a
+   * 144-building, 960-resident town on 16 plants (7 wind, 6 PV, 2
+   * batteries, 1 biogas) on two weather seeds, plus a 298-building,
+   * 1_766-resident city on 35 plants, each run a full in-game year
+   * (20 days, all four seasons) per configuration against the same city
+   * with the rollout paused. No value moved; the figures behind each one
+   * are below.
+   */
+  smartMeters: {
+    /**
+     * Money per installed meter (billed as the crews install). At
+     * installsPerDay that is 900 money a day while the crews work —
+     * 4.2-4.5 % of either probe city's daily tax income — and 60 money
+     * per building in total: 8_640 for the small town (about five
+     * batteries' worth of capital), 18_000 for the 298-building city.
+     * A year at full coverage then came out 20_000-34_000 money ahead of
+     * the paused town (import 10-13 % lower), so the programme repays
+     * its capital inside a year of full coverage while costing more than
+     * it earns in the year it is being built.
+     */
+    costPerMeter: 60,
+    /**
+     * Meters the crews install per in-game day while the rollout is
+     * active. 15 takes the 298-building probe city — a mid-size city on
+     * the default 64x64 map — from nothing to 98 % coverage over a
+     * 20-day year, the intended "roughly one in-game year"; the small
+     * 144-building town is done in ten days. 8/day left that same city
+     * at 51 % after a year, two in-game years for a mechanic the player
+     * pays for up front.
+     */
+    installsPerDay: 15,
+    /**
+     * Share of a metered building's base load that can wait for surplus.
+     * With heatingFlexShare this puts the flexible pool at 11-13 % of
+     * the town's load in summer (household load only) and 21-23 % in
+     * winter, which moves the served load 10-25 % away from the
+     * unshifted line hour by hour. 0.2/0.35 cut import by a further
+     * 8 percentage points but made a quarter of all city load flexible
+     * and pushed the worst one-tick recovery spike to 1.9-2.3x the
+     * unshifted peak.
+     */
+    householdFlexShare: 0.15,
+    /** Share of a metered building's on-site electric heating that can wait (thermal inertia). */
+    heatingFlexShare: 0.3,
+    /**
+     * Hours of flexible demand the backlog may hold before comfort wins.
+     * 4 hours recovers 2.1-2.2 % of a full-coverage year's consumption
+     * (up to 6.4 % on a single day) and leaves the batteries their job
+     * (mean state of charge 0.42 / 0.54 against the paused town's
+     * 0.46 / 0.50, and 0.553 against 0.553 on the larger city).
+     * 2 hours lets 87 % of all deferred energy overflow
+     * under the comfort rule, so the mechanic barely does anything
+     * (1.2 %); 6-8 hours grows the backlog to 57_000-77_000 energy units
+     * — ten times the town's battery fleet — and drops the mean state of
+     * charge to 0.38-0.40, i.e. the pool takes over storage's job.
+     */
+    backlogHours: 4,
+    /**
+     * Cap on the backlog drained per tick — recovered plus overflow —
+     * as a share of the unshifted load, so a shrinking pool empties
+     * over several ticks instead of one. The comfort bound scales with
+     * the *current* flexible pool, so anything that shrinks that pool
+     * at once (buying insulation halves the heating load, a heat plant
+     * coming online, storm damage, a mass bulldoze) would otherwise
+     * leave the whole backlog above the new bound and serve it in a
+     * single tick — a city-wide deficit out of nowhere. 0.35 is above
+     * the pool's own share of the load (at most householdFlexShare /
+     * heatingFlexShare of it, so under 0.3), which is what guarantees
+     * the backlog still shrinks every tick while it sits above the
+     * bound instead of stalling at a level it can never drain.
+     */
+    maxDrainShare: 0.35,
+    /** Coverage the flexibleCity goal requires. */
+    goalCoverage: 0.8,
+  },
+
   happiness: {
     /** Smoothing factor per tick toward the target happiness. */
     smoothing: 0.02,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, StopState } from '../shared/types.ts';
+import { PlantType, StopState, Zone } from '../shared/types.ts';
 import {
   ageStops,
   buildBusStops,
@@ -23,6 +23,7 @@ import {
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { chargingDemand, laneOccupancy, ticksAtHour, vehiclesStep } from './vehicles.ts';
 import { BusPhase, createSimState, TileType, type SimState } from './state.ts';
 
@@ -441,7 +442,11 @@ describe('transitStep', () => {
   it('smart charging holds off without surplus unless the bus is below the floor', () => {
     const state = busTown(1, 3);
     powerDepot(state);
-    state.smartCharging = true;
+    // busTown has no zoned buildings; give it one so coverage can reach
+    // full (every bus smart) via the meter rollout.
+    state.layers.zone[at(1, 1)] = Zone.Residential;
+    state.layers.density[at(1, 1)] = 1;
+    state.smartMeters.metered = refreshBuildingCount(state); // full coverage: every vehicle is smart
     setHour(state, 3);
     stepAll(state);
     state.buses[0].charge = 0.5;

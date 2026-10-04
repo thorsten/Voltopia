@@ -634,7 +634,12 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           },
           taxRate: s.taxRate,
           maxTaxRate: BALANCE.tax.maxRate,
-          smartCharging: s.smartCharging,
+          smartMeters: {
+            active: s.smartMeters.active,
+            metered: s.smartMeters.metered,
+            buildings: s.smartMeters.buildings,
+            coverage: round(s.smartMeters.coverage, 2),
+          },
           marketTrading: s.marketTrading,
           forestShare: round(s.forestShare, 3),
           insulation: s.insulation,
@@ -719,8 +724,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'get_energy_report',
       description:
         'Full energy statistics for the current tick: generation per source, consumption per ' +
-        'category, storage, curtailment, deficit, grid import/export, and the sampled history of ' +
-        'the last in-game day (oldest first).',
+        'category, storage, curtailment, deficit, grid import/export, flexible-load figures ' +
+        '(flexDeferred, flexRecovered, flexBacklog) and the unshifted curve, and the sampled ' +
+        'history of the last in-game day (oldest first).',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -733,6 +739,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             generation: round(point.generation),
             consumption: round(point.consumption),
             stateOfCharge: round(point.stateOfCharge, 2),
+            unshifted: round(point.unshifted),
           })),
         };
       },
@@ -1063,18 +1070,20 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       },
     },
     {
-      name: 'set_smart_charging',
-      description: 'Enable or disable smart charging (EV charging follows the generation surplus).',
+      name: 'set_smart_meter_rollout',
+      description: `Start or pause the smart-meter rollout. Crews install ${BALANCE.smartMeters.installsPerDay} meters per in-game day at ${BALANCE.smartMeters.costPerMeter} each; coverage (metered buildings / buildings) scales smart EV charging and the flexible-load pool that shifts household and heating load into renewable surplus. See smartMeters in get_game_overview.`,
       inputSchema: {
         type: 'object',
-        properties: { enabled: { type: 'boolean' } },
-        required: ['enabled'],
+        properties: { active: { type: 'boolean' } },
+        required: ['active'],
       },
       async execute(input) {
-        if (typeof input.enabled !== 'boolean')
-          throw new ToolInputError('"enabled" must be boolean');
-        const outcome = await ctx.sendCommand({ type: 'setSmartCharging', enabled: input.enabled });
-        return outcomeResult(outcome, { smartCharging: input.enabled });
+        if (typeof input.active !== 'boolean') throw new ToolInputError('"active" must be boolean');
+        const outcome = await ctx.sendCommand({
+          type: 'setSmartMeterRollout',
+          active: input.active,
+        });
+        return outcomeResult(outcome, { smartMeters: { active: input.active } });
       },
     },
     {

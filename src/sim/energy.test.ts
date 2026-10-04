@@ -16,6 +16,7 @@ import { heatStep } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
 import { pendingHistoryPoint } from './tick.ts';
 import { HEATED_SERVED } from '../shared/types.ts';
@@ -466,6 +467,7 @@ describe('energyStep', () => {
     expect(pendingHistoryPoint(makeState())).toEqual({
       generation: 0,
       consumption: 0,
+      unshifted: 0,
       stateOfCharge: 0,
       price: 1,
     });
@@ -1479,5 +1481,205 @@ describe('isolated supply plants', () => {
     state.layers.supplied[at(10, 10)] = SupplyStatus.Supplied;
     tick(state);
     expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.Supplied);
+  });
+});
+
+describe('flexible load pool (smart meters)', () => {
+  /** Ten houses on a road, fully metered, plus the given plant. */
+  function meteredTown(plant: PlantType | null): SimState {
+    const state = createSimState(9, SIZE);
+    state.money = 1e9;
+    buildRoads(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(i + 2, 5)),
+    );
+    for (let i = 0; i < 10; i++) {
+      state.layers.zone[at(i + 2, 6)] = Zone.Residential;
+      state.layers.density[at(i + 2, 6)] = 2;
+    }
+    if (plant !== null) placePlant(state, at(2, 3), plant);
+    buildPowerLines(state, [at(2, 4)]);
+    // refreshBuildingCount: the coverage denominator is a per-tick cache
+    // and this town never ticked, so refresh it the way stepTick does.
+    state.smartMeters.metered = refreshBuildingCount(state);
+    return state;
+  }
+
+  /** Served consumption reported for this tick. */
+  function served(state: SimState): number {
+    const e = state.lastEnergy;
+    return (
+      e.buildingConsumption +
+      e.heatingConsumption +
+      e.coolingConsumption +
+      e.chargingConsumption +
+      e.heatPumpConsumption
+    );
+  }
+
+  it('is a no-op at zero coverage', () => {
+    const state = meteredTown(PlantType.WindTurbine);
+    state.smartMeters.metered = 0;
+    for (let t = 0; t < 50; t++) {
+      energyStep(state, { chargingDemand: 0 });
+      expect(state.lastEnergy.flexDeferred).toBe(0);
+      expect(state.lastEnergy.flexRecovered).toBe(0);
+      expect(state.flexBacklog).toBe(0);
+      expect(state.lastEnergy.unshifted).toBeCloseTo(served(state), 9);
+    }
+  });
+
+  it('defers the flexible share at night without surplus and bounds the backlog', () => {
+    // A battery connects the houses to a grid that generates nothing.
+    // A cold night (full heating load against the load profile's trough)
+    // is where the flexible pool is larger than the household load alone.
+    const state = meteredTown(PlantType.Battery);
+    state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24
+    state.season = { ...state.season, temperature: -4 };
+    // Same town, same tick, no meters: the undeferred demands.
+    const bare = meteredTown(PlantType.Battery);
+    bare.smartMeters.metered = 0;
+    bare.tick = state.tick;
+    bare.season = { ...bare.season, temperature: -4 };
+    energyStep(bare, { chargingDemand: 0 });
+    energyStep(state, { chargingDemand: 0 });
+    const e = state.lastEnergy;
+    const { householdFlexShare, heatingFlexShare, backlogHours } = BALANCE.smartMeters;
+    const flexible =
+      householdFlexShare * bare.lastEnergy.buildingConsumption +
+      heatingFlexShare * bare.lastEnergy.heatingConsumption;
+    expect(flexible).toBeGreaterThan(0);
+    // The pool is bigger than the household line on its own, so an
+    // unsplit deferral would print a negative household figure.
+    expect(flexible).toBeGreaterThan(bare.lastEnergy.buildingConsumption);
+    expect(e.flexDeferred).toBeCloseTo(flexible, 9);
+    expect(e.flexRecovered).toBe(0);
+    // Both lines carry their own share, so neither can go negative.
+    expect(e.buildingConsumption).toBeGreaterThanOrEqual(0);
+    expect(e.heatingConsumption).toBeGreaterThanOrEqual(0);
+    expect(e.buildingConsumption).toBeLessThan(bare.lastEnergy.buildingConsumption);
+    expect(e.heatingConsumption).toBeLessThan(bare.lastEnergy.heatingConsumption);
+    // Nothing generated: unshifted = demand, served = demand - deferred.
+    expect(e.unshifted).toBeCloseTo(bare.lastEnergy.unshifted, 9);
+    expect(e.unshifted - served(state)).toBeCloseTo(e.flexDeferred, 9);
+    // Keep deferring: the backlog saturates at backlogHours of flexible demand.
+    for (let t = 0; t < TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
+    const capacity = flexible * backlogHours * (TICKS_PER_DAY / 24);
+    expect(state.flexBacklog).toBeLessThanOrEqual(capacity + 1e-6);
+    expect(state.flexBacklog).toBeGreaterThan(capacity * 0.5);
+  });
+
+  it('serves the flexible share and drains the backlog when renewables exceed the inflexible load', () => {
+    const state = meteredTown(PlantType.WindTurbine);
+    placePlant(state, at(3, 3), PlantType.WindTurbine);
+    placePlant(state, at(4, 3), PlantType.WindTurbine);
+    state.weather.windSpeed = 0.9;
+    state.flexBacklog = 5;
+    energyStep(state, { chargingDemand: 0 });
+    const e = state.lastEnergy;
+    expect(e.flexDeferred).toBe(0);
+    expect(e.flexRecovered).toBeGreaterThan(0);
+    expect(e.flexRecovered).toBeLessThanOrEqual(5);
+    expect(state.flexBacklog).toBeCloseTo(5 - e.flexRecovered, 9);
+    expect(state.flexBacklog).toBeGreaterThanOrEqual(0);
+  });
+
+  it('serves the overflow and holds the backlog at the comfort bound', () => {
+    const state = meteredTown(PlantType.Battery);
+    state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24, nothing generated
+    energyStep(state, { chargingDemand: 0 });
+    const flexible = state.lastEnergy.flexDeferred; // no surplus: deferred == flexible
+    const capacity = flexible * BALANCE.smartMeters.backlogHours * (TICKS_PER_DAY / 24);
+    // Start a little above the bound: comfort wins and the excess is
+    // served now. "A little" because the whole excess only leaves in one
+    // tick while it fits under the per-tick drain cap — the test below
+    // covers a backlog that does not.
+    const excess = 0.2 * flexible;
+    expect(excess + flexible).toBeLessThan(
+      BALANCE.smartMeters.maxDrainShare * state.lastEnergy.unshifted,
+    );
+    state.flexBacklog = capacity + excess;
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.flexOverflow).toBeCloseTo(excess + flexible, 9);
+    expect(state.flexBacklog).toBeCloseTo(capacity, 9);
+  });
+
+  it('caps the drained backlog per tick when the pool shrinks', () => {
+    const state = meteredTown(PlantType.Battery);
+    state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24, nothing generated
+    state.season = { ...state.season, temperature: -4 };
+    // Saturate the backlog against the comfort bound of the cold,
+    // uninsulated town.
+    for (let t = 0; t < 2 * TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
+    const saturated = state.flexBacklog;
+    expect(saturated).toBeGreaterThan(0);
+    // Insulation halves the heating load, so the pool — and with it the
+    // comfort bound — shrinks in one tick. The backlog is now far above
+    // capacity, but only maxDrainShare of the load may be served per tick.
+    state.insulation = true;
+    const { maxDrainShare, backlogHours } = BALANCE.smartMeters;
+    energyStep(state, { chargingDemand: 0 });
+    const first = state.lastEnergy;
+    // Nothing generated, so the whole pool is deferred: flexDeferred is
+    // this tick's `flexible`, hence its comfort bound.
+    const capacity = first.flexDeferred * backlogHours * (TICKS_PER_DAY / 24);
+    expect(capacity).toBeLessThan(saturated); // the bound really did shrink
+    // Exactly the cap left the backlog this tick, and that is a fraction
+    // of what sits above the new bound: no one-tick dump.
+    expect(first.flexRecovered + first.flexOverflow).toBeCloseTo(
+      maxDrainShare * first.unshifted,
+      9,
+    );
+    expect(state.flexBacklog).toBeGreaterThan(capacity);
+    expect(first.flexOverflow).toBeLessThan(state.flexBacklog - capacity);
+    // From here it drains tick by tick until it reaches the new bound.
+    let previous = state.flexBacklog;
+    let settled = false;
+    for (let t = 0; t < 2 * TICKS_PER_DAY; t++) {
+      energyStep(state, { chargingDemand: 0 });
+      const e = state.lastEnergy;
+      expect(e.flexRecovered + e.flexOverflow).toBeLessThanOrEqual(
+        maxDrainShare * e.unshifted + 1e-6,
+      );
+      if (state.flexBacklog <= e.flexDeferred * backlogHours * (TICKS_PER_DAY / 24) + 1e-6) {
+        settled = true;
+        break;
+      }
+      expect(state.flexBacklog).toBeLessThan(previous);
+      previous = state.flexBacklog;
+    }
+    expect(settled).toBe(true);
+    expect(state.flexBacklog).toBeLessThan(saturated);
+  });
+
+  it('clears the backlog when the city has no load at all', () => {
+    const state = createSimState(9, SIZE);
+    state.flexBacklog = 42;
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.unshifted).toBe(0);
+    expect(state.lastEnergy.flexOverflow).toBe(0);
+    expect(state.lastEnergy.flexRecovered).toBe(0);
+    expect(state.flexBacklog).toBe(0);
+  });
+
+  it('keeps the identity unshifted - consumption = deferred - recovered - overflow', () => {
+    const state = meteredTown(PlantType.WindTurbine);
+    for (let t = 0; t < 200; t++) {
+      const before = state.flexBacklog;
+      energyStep(state, { chargingDemand: 0 });
+      const e = state.lastEnergy;
+      // consumption actually served this tick = unshifted - deferred + recovered + overflow
+      // (the field sum carries heatStoreCharge on top of totalDemand once a
+      // heat network exists; this town has none, so the two coincide)
+      const overflow = Math.max(0, before + e.flexDeferred - e.flexRecovered - state.flexBacklog);
+      expect(e.unshifted - e.flexDeferred + e.flexRecovered + overflow).toBeCloseTo(
+        served(state),
+        6,
+      );
+      expect(e.flexBacklog).toBe(state.flexBacklog);
+      expect(e.flexOverflow).toBeCloseTo(overflow, 9);
+      expect(e.buildingConsumption).toBeGreaterThanOrEqual(0);
+      expect(e.heatingConsumption).toBeGreaterThanOrEqual(0);
+    }
   });
 });

@@ -218,11 +218,32 @@ export interface SimState {
   speed: Speed;
   money: number;
   taxRate: number;
-  smartCharging: boolean;
   /** Storage trades on the spot market: sell at scarcity, buy cheap. */
   marketTrading: boolean;
   /** Building insulation upgrade bought (halves the heating load). */
   insulation: boolean;
+  /**
+   * Smart-meter rollout: crews installing, meters in place, and the crew
+   * time carried between ticks (in ticks: installsPerDay per tick,
+   * TICKS_PER_DAY buys one meter). Transient, like any sub-tick carry.
+   */
+  smartMeters: {
+    active: boolean;
+    metered: number;
+    installCarry: number;
+  };
+  /** Deferred flexible energy waiting for renewable surplus (energy units). */
+  flexBacklog: number;
+  /**
+   * Buildings counted at the last `refreshBuildingCount` — the coverage
+   * denominator for the whole tick. Counting them is a full-grid scan,
+   * and `isSmartVehicle` asks for coverage once per parked vehicle, van
+   * and bus, so the count is cached once per tick instead. Transient:
+   * not persisted, recomputed from the layers on load.
+   */
+  lastBuildingCount: number;
+  /** Smart-meter install cost paid last tick (budget line). */
+  lastSmartMeterCost: number;
   /** Day number on which year 1 started; 0 for new games. */
   seasonOriginDay: number;
   /** Seasonal signal for the current tick, recomputed in stepTick. */
@@ -269,6 +290,8 @@ export interface SimState {
   energyHistoryAccum: {
     generation: number;
     consumption: number;
+    /** Consumption before load shifting (smart meters). */
+    unshifted: number;
     soc: number;
     price: number;
     ticks: number;
@@ -300,7 +323,9 @@ export interface SimState {
    * and `geothermalTicks` are single-day streaks, so a reload resetting them
    * is an accepted cost, not an oversight — they stay transient. `stormTicks`
    * is shorter still (one storm, not even a full day), so it stays
-   * transient for the same reason.
+   * transient for the same reason. `flexTicks` is the exception that
+   * proves the rule: it is cumulative, not a streak, so the ticks a
+   * reload would drop are gone for good — it is persisted.
    */
   goalProgress: {
     cleanDayTicks: number;
@@ -313,6 +338,7 @@ export interface SimState {
     geothermalTicks: number;
     stormTicks: number;
     warmWinterTicks: number;
+    flexTicks: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -375,6 +401,16 @@ export interface SimState {
     /** Stored energy sold / bought by market trading this tick. */
     tradeSell: number;
     tradeBuy: number;
+    /** Flexible load deferred into the backlog this tick (smart meters). */
+    flexDeferred: number;
+    /** Backlog served from renewable surplus this tick. */
+    flexRecovered: number;
+    /** Deferred flexible energy still waiting after this tick. */
+    flexBacklog: number;
+    /** Backlog served regardless of the weather this tick (comfort bound). */
+    flexOverflow: number;
+    /** What consumption would have been without shifting. */
+    unshifted: number;
   };
 }
 
@@ -422,9 +458,13 @@ export function createSimState(
     speed: 1,
     money: startingMoney,
     taxRate: BALANCE.tax.defaultRate,
-    smartCharging: false,
     marketTrading: false,
     insulation: false,
+    smartMeters: { active: false, metered: 0, installCarry: 0 },
+    flexBacklog: 0,
+    // A fresh map has no buildings; stepTick refreshes this every tick.
+    lastBuildingCount: 0,
+    lastSmartMeterCost: 0,
     seasonOriginDay: 0,
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
     happiness: BALANCE.happiness.base,
@@ -456,7 +496,7 @@ export function createSimState(
     buses: [],
     undoStack: [],
     energyHistory: [],
-    energyHistoryAccum: { generation: 0, consumption: 0, soc: 0, price: 0, ticks: 0 },
+    energyHistoryAccum: { generation: 0, consumption: 0, unshifted: 0, soc: 0, price: 0, ticks: 0 },
     dirty: new Set(),
     statsDirty: false,
     lastDemand: { residential: 0, commercial: 0, retail: 0 },
@@ -475,6 +515,7 @@ export function createSimState(
       geothermalTicks: 0,
       stormTicks: 0,
       warmWinterTicks: 0,
+      flexTicks: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
@@ -526,6 +567,11 @@ export function createSimState(
       spotPrice: 1,
       tradeSell: 0,
       tradeBuy: 0,
+      flexDeferred: 0,
+      flexRecovered: 0,
+      flexBacklog: 0,
+      flexOverflow: 0,
+      unshifted: 0,
     },
   };
 }
@@ -843,7 +889,6 @@ export function serializeState(state: SimState): SaveGame {
     tick: state.tick,
     money: state.money,
     taxRate: state.taxRate,
-    smartCharging: state.smartCharging,
     marketTrading: state.marketTrading,
     storedEnergy: state.storedEnergy,
     goals: [...state.goalsAchieved],
@@ -854,6 +899,8 @@ export function serializeState(state: SimState): SaveGame {
     seasonOriginDay: state.seasonOriginDay,
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
+    smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
+    flexBacklog: state.flexBacklog,
     winterTicks: state.goalProgress.winterTicks,
     summerTicks: state.goalProgress.summerTicks,
     freeFlowTicks: state.goalProgress.freeFlowTicks,
@@ -861,6 +908,7 @@ export function serializeState(state: SimState): SaveGame {
     transitTicks: state.goalProgress.transitTicks,
     heatStored: state.heatStored,
     warmWinterTicks: state.goalProgress.warmWinterTicks,
+    flexTicks: state.goalProgress.flexTicks,
     disasterScale: state.disasterScale,
     disasters: {
       nextId: state.disasters.nextId,
@@ -896,7 +944,6 @@ export function deserializeState(save: SaveGame): SimState {
   state.tick = save.tick;
   state.money = save.money;
   state.taxRate = save.taxRate;
-  state.smartCharging = save.smartCharging;
   state.marketTrading = save.marketTrading ?? false;
   state.storedEnergy = save.storedEnergy;
   state.goalsAchieved = new Set(save.goals ?? []);
@@ -916,12 +963,42 @@ export function deserializeState(save: SaveGame): SimState {
   // season readable (whole days, snow cover 0..1).
   state.weather.snowpack = Math.min(1, Math.max(0, save.snowpack ?? 0));
   state.insulation = save.insulation ?? false;
+  // Rollout: new saves carry it; legacy saves with smart charging on get
+  // every building metered so the city keeps the effect it had. Clamp
+  // against hand-edited JSON exports holding out-of-range or non-finite
+  // values, the same way the snowpack read above does.
+  {
+    const buildings = countBuildings(state);
+    // The coverage denominator for the first tick after the load: the
+    // cache is transient, so it has to be recomputed here rather than
+    // restored (stepTick keeps it current from then on).
+    state.lastBuildingCount = buildings;
+    if (save.smartMeters) {
+      const metered = Number.isFinite(save.smartMeters.metered) ? save.smartMeters.metered : 0;
+      state.smartMeters = {
+        active: save.smartMeters.active,
+        metered: Math.min(buildings, Math.max(0, metered)),
+        installCarry: 0,
+      };
+    } else {
+      state.smartMeters = {
+        active: save.smartCharging === true,
+        metered: save.smartCharging === true ? buildings : 0,
+        installCarry: 0,
+      };
+    }
+    state.flexBacklog =
+      typeof save.flexBacklog === 'number' && Number.isFinite(save.flexBacklog)
+        ? Math.max(0, save.flexBacklog)
+        : 0;
+  }
   state.goalProgress.winterTicks = save.winterTicks ?? 0;
   state.goalProgress.summerTicks = save.summerTicks ?? 0;
   state.goalProgress.freeFlowTicks = save.freeFlowTicks ?? 0;
   state.goalProgress.wellStockedTicks = save.wellStockedTicks ?? 0;
   state.goalProgress.transitTicks = save.transitTicks ?? 0;
   state.goalProgress.warmWinterTicks = save.warmWinterTicks ?? 0;
+  state.goalProgress.flexTicks = save.flexTicks ?? 0;
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.season = seasonState({
@@ -1012,6 +1089,16 @@ export function countPopulationAndJobs(state: SimState): {
     }
   }
   return { population, jobs };
+}
+
+/** Buildings standing on zoned land (density > 0). */
+export function countBuildings(state: SimState): number {
+  const { density, tileType } = state.layers;
+  let n = 0;
+  for (let i = 0; i < density.length; i++) {
+    if (tileType[i] === TileType.Empty && density[i] > 0) n++;
+  }
+  return n;
 }
 
 /** Number of plants of a given type currently placed. */

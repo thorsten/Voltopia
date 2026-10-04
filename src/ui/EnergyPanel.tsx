@@ -1,4 +1,4 @@
-import type { EnergyStats } from '../shared/types.ts';
+import type { EnergyStats, GlobalStats } from '../shared/types.ts';
 import { useI18n } from './i18n.tsx';
 import { useSmoothedNumber } from './useSmoothedNumber.ts';
 
@@ -72,7 +72,15 @@ function SocBlock({
  * report, so building a battery or firing up a biogas plant never changes
  * the panel's height or shuffles the rows underneath.
  */
-export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverFlow: number }) {
+export function EnergyPanel({
+  energy,
+  riverFlow,
+  smartMeters,
+}: {
+  energy: EnergyStats;
+  riverFlow: number;
+  smartMeters: GlobalStats['smartMeters'];
+}) {
   const { t } = useI18n();
   const totalGeneration =
     energy.generation.solar +
@@ -172,6 +180,31 @@ export function EnergyPanel({ energy, riverFlow }: { energy: EnergyStats; riverF
           value={energy.consumption.heatPumps}
           testId="detail-energy-heat-pumps"
         />
+        {(smartMeters.coverage > 0 || energy.consumption.flexBacklog > 0) && (
+          <>
+            <div className="energy-row" data-testid="detail-energy-smart-meters">
+              <span>{t('energy.smartMeters')}</span>
+              <span>
+                {t('smartMeters.coverage', {
+                  percent: Math.round(smartMeters.coverage * 100),
+                  metered: smartMeters.metered,
+                  buildings: smartMeters.buildings,
+                })}
+              </span>
+            </div>
+            <Row
+              label={t('energy.flexRecovered')}
+              value={energy.consumption.flexRecovered}
+              testId="detail-energy-flex-recovered"
+              tone="positive"
+            />
+            <Row
+              label={t('energy.flexBacklog')}
+              value={energy.consumption.flexBacklog}
+              testId="detail-energy-flex-backlog"
+            />
+          </>
+        )}
         <div
           className={`energy-row balance ${balance >= 0 ? 'positive' : 'negative'}`}
           data-testid="detail-energy-balance"

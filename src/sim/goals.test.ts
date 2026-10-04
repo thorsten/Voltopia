@@ -6,6 +6,7 @@ import { placePlant } from './energy.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { isCoastalSea } from './sea.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
@@ -452,5 +453,48 @@ describe('goals', () => {
       goalsStep(state);
       expect(state.goalsAchieved.has('stormProof')).toBe(false);
     });
+  });
+});
+
+describe('flexibleCity', () => {
+  function flexCity(): SimState {
+    const state = createSimState(4, 16);
+    for (let i = 0; i < 20; i++) {
+      state.layers.zone[at(i % 16, 2 + Math.floor(i / 16))] = Zone.Residential;
+      state.layers.density[at(i % 16, 2 + Math.floor(i / 16))] = 3; // population >= 50
+    }
+    state.smartMeters.metered = 20;
+    // The coverage denominator is a per-tick cache; this city never
+    // ticked, so refresh it the way stepTick does.
+    refreshBuildingCount(state);
+    state.lastEnergy.flexDeferred = 1;
+    return state;
+  }
+
+  it('achieves after half a day of metered, shifting ticks', () => {
+    const state = flexCity();
+    for (let i = 0; i < TICKS_PER_DAY / 2 - 1; i++) goalsStep(state);
+    expect(state.goalsAchieved.has('flexibleCity')).toBe(false);
+    goalsStep(state);
+    expect(state.goalsAchieved.has('flexibleCity')).toBe(true);
+  });
+
+  it('needs coverage and actual shifting', () => {
+    const low = flexCity();
+    low.smartMeters.metered = 10; // 50 % < goalCoverage
+    for (let i = 0; i < TICKS_PER_DAY; i++) goalsStep(low);
+    expect(low.goalsAchieved.has('flexibleCity')).toBe(false);
+    const idle = flexCity();
+    idle.lastEnergy.flexDeferred = 0;
+    idle.lastEnergy.flexRecovered = 0;
+    for (let i = 0; i < TICKS_PER_DAY; i++) goalsStep(idle);
+    expect(idle.goalsAchieved.has('flexibleCity')).toBe(false);
+  });
+
+  it('round-trips its progress', () => {
+    const state = flexCity();
+    for (let i = 0; i < 7; i++) goalsStep(state);
+    const restored = deserializeState(serializeState(state));
+    expect(restored.goalProgress.flexTicks).toBe(7);
   });
 });

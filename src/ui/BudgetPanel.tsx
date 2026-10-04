@@ -54,6 +54,7 @@ const EXPENSE_COLORS: Record<string, string> = {
   [PlantType.BusDepot]: '#5b8fc7',
   fuel: '#d98f54',
   repair: '#c47a9e',
+  smartMeters: '#8fb3c9',
   import: 'var(--hud-negative)',
 };
 
@@ -191,6 +192,12 @@ export function BudgetPanel({ budget }: { budget: BudgetStats }) {
       label: t('budget.repair'),
       value: perDay(budget.repair),
       color: EXPENSE_COLORS.repair,
+    },
+    {
+      key: 'smartMeters',
+      label: t('budget.smartMeters'),
+      value: perDay(budget.smartMeters),
+      color: EXPENSE_COLORS.smartMeters,
     },
     {
       key: 'import',

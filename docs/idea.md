@@ -198,9 +198,15 @@ Collected 2026-09-24; roughly in the order we want to build them.
   sea view.
 - **Railways**: trains connecting villages/districts on large maps;
   best built after per-district grids so regions mean something.
-- **Smart-meter rollout**: turn the smart-charging toggle into a
-  mechanic — per-household rollout costs, load shifting for heat
-  pumps/households, richer live graphs.
+- **Smart-meter rollout** (done): the free smart-charging toggle becomes
+  a paced programme — crews install 15 meters an in-game day at 60 money
+  each, so a mid-size city takes about an in-game year to cover and new
+  buildings keep costing. Coverage gates smart vehicle charging and
+  feeds a flexible load pool (15 % of metered household load, 30 % of
+  metered electric heating) that waits for renewable surplus, carries a backlog of at
+  most four hours before comfort wins, and shows up as a dashed
+  unshifted line in the energy graph, shifted-load rows in the energy
+  panel and the `flexibleCity` goal.
 - **Disasters/events** (done): storms (warned hours ahead) feather the
   wind fleet past cut-out speed and strike pylons, turbines, plants and
   buildings; fires (no warning, finally giving fire stations an active

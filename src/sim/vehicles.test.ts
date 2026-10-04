@@ -5,9 +5,16 @@ import { PlantType, RoadClass, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { buildRoads } from './roads.ts';
 import { findRoadPath } from './routing.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { createSimState, TileType, VanPhase, VehiclePhase, type SimState } from './state.ts';
 import { updateTrafficLoad } from './traffic.ts';
-import { chargingDemand, drivingVehicles, isRider, vehiclesStep } from './vehicles.ts';
+import {
+  chargingDemand,
+  drivingVehicles,
+  isRider,
+  surplusAvailable,
+  vehiclesStep,
+} from './vehicles.ts';
 
 const SIZE = 24;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -264,7 +271,7 @@ describe('emergent charging', () => {
 
   it('smart charging defers home charging until there is surplus', () => {
     const state = commuterTown(5, 200);
-    state.smartCharging = true;
+    state.smartMeters.metered = refreshBuildingCount(state); // full coverage: every vehicle is smart
     setHour(state, 3); // everyone parked at home
     stepVehicles(state);
     for (const v of state.vehicles) v.charge = 0.8; // above the floor
@@ -291,7 +298,7 @@ describe('emergent charging', () => {
 
   it('smart charging counts hydro surplus (run-of-river covers night load too)', () => {
     const state = commuterTown(5, 200);
-    state.smartCharging = true;
+    state.smartMeters.metered = refreshBuildingCount(state); // full coverage: every vehicle is smart
     setHour(state, 3); // everyone parked at home
     stepVehicles(state);
     for (const v of state.vehicles) v.charge = 0.8; // above the floor
@@ -310,7 +317,7 @@ describe('emergent charging', () => {
 
   it('smart charging gate counts cooling load, not just building consumption', () => {
     const state = commuterTown(5, 200);
-    state.smartCharging = true;
+    state.smartMeters.metered = refreshBuildingCount(state); // full coverage: every vehicle is smart
     setHour(state, 3); // everyone parked at home
     stepVehicles(state);
     for (const v of state.vehicles) v.charge = 0.8; // above the floor
@@ -786,5 +793,28 @@ describe('riders', () => {
     expect(state.vehicles.filter((v) => v.phase === VehiclePhase.ParkedWork)).toHaveLength(
       state.vehicles.length,
     );
+  });
+});
+
+describe('surplusAvailable', () => {
+  it('measures renewables against the unshifted household load', () => {
+    const state = createSimState(1, SIZE);
+    // Smart meters deferred 10 units, so the served household figure (50)
+    // understates what the city actually wants (60).
+    state.lastEnergy = {
+      ...state.lastEnergy,
+      buildingConsumption: 50,
+      heatingConsumption: 0,
+      coolingConsumption: 0,
+      flexDeferred: 10,
+      flexRecovered: 0,
+      flexOverflow: 0,
+      wind: 55,
+    };
+    // Above the served load but below the unshifted one: no surplus — the
+    // shortfall is exactly why load was deferred in the first place.
+    expect(surplusAvailable(state)).toBe(false);
+    state.lastEnergy = { ...state.lastEnergy, wind: 65 };
+    expect(surplusAvailable(state)).toBe(true);
   });
 });

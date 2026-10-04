@@ -156,6 +156,8 @@ export interface EnergyHistoryPoint {
   generation: number;
   /** Total consumption in energy units per tick. */
   consumption: number;
+  /** Consumption without load shifting (equals consumption when nothing is metered). */
+  unshifted: number;
   /** Combined state of charge of batteries and pumped storage, 0..1. */
   stateOfCharge: number;
   /** Average spot price factor over the sample window. */
@@ -185,6 +187,12 @@ export interface EnergyStats {
     electrolysis: number;
     /** Electricity the district-heating pumps drew (serving plus charging the store). */
     heatPumps: number;
+    /** Flexible load metered households deferred this tick (smart meters). */
+    flexDeferred: number;
+    /** Deferred load served from renewable surplus this tick ("load shifted"). */
+    flexRecovered: number;
+    /** Deferred flexible energy still waiting for surplus. */
+    flexBacklog: number;
   };
   /** Absolute stored energy across all batteries. */
   storedEnergy: number;
@@ -307,6 +315,8 @@ export interface BudgetStats {
   biogasFuelCost: number;
   /** Repair spend on damaged tiles this tick. */
   repair: number;
+  /** Smart-meter installs paid this tick. */
+  smartMeters: number;
   gridImportCost: number;
   /** Income - expenses for this tick. */
   net: number;
@@ -506,8 +516,14 @@ export interface GlobalStats {
   /** Current tax rate, 0..MAX_TAX_RATE. */
   taxRate: number;
   speed: Speed;
-  /** Whether smart charging (charging follows surplus) is enabled. */
-  smartCharging: boolean;
+  /** Smart-meter rollout: crews active, meters in place, coverage and the price per meter. */
+  smartMeters: {
+    active: boolean;
+    metered: number;
+    buildings: number;
+    coverage: number;
+    costPerMeter: number;
+  };
   /** Whether storage trades on the spot market (sell dear, buy cheap). */
   marketTrading: boolean;
   /** Whether the building insulation upgrade has been bought. */
@@ -689,7 +705,8 @@ export interface SaveGame {
   tick: number;
   money: number;
   taxRate: number;
-  smartCharging: boolean;
+  /** Legacy smart-charging switch; read on load, never written. */
+  smartCharging?: boolean;
   storedEnergy: number;
   /** Achieved goal ids (absent in older saves). */
   goals?: string[];
@@ -723,6 +740,12 @@ export interface SaveGame {
   heatStored?: number;
   /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
   warmWinterTicks?: number;
+  /** flexibleCity progress ticks (absent in older saves -> 0). */
+  flexTicks?: number;
+  /** Smart-meter rollout (absent in older saves: migrated from smartCharging). */
+  smartMeters?: { active: boolean; metered: number };
+  /** Deferred flexible energy waiting for surplus (absent → 0). */
+  flexBacklog?: number;
   /** Disaster intensity of this city (absent in older saves → 0 = off). */
   disasterScale?: number;
   /** Events in flight (absent in older saves → none). */

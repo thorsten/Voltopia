@@ -68,9 +68,10 @@ function niceCeil(value: number): number {
 function useNiceMax(energy: EnergyStats): number {
   const peak = Math.max(
     1,
-    ...energy.history.flatMap((p) => [p.generation, p.consumption]),
+    ...energy.history.flatMap((p) => [p.generation, p.consumption, p.unshifted]),
     energy.pending.generation,
     energy.pending.consumption,
+    energy.pending.unshifted,
   );
   const needed = niceCeil(peak);
   const scaleRef = useRef(needed);
@@ -86,8 +87,17 @@ function useNiceMax(energy: EnergyStats): number {
 interface Series {
   generation: Array<[number, number]>;
   consumption: Array<[number, number]>;
+  /** Consumption without load shifting (see `showsUnshifted`). */
+  unshifted: Array<[number, number]>;
   /** Spot price factor, on its own fixed 0..spotMax scale. */
   price: Array<[number, number]>;
+}
+
+/** The dashed line only earns its place once shifting actually happens. */
+export function showsUnshifted(energy: Pick<EnergyStats, 'history' | 'pending'>): boolean {
+  return [...energy.history, energy.pending].some(
+    (p) => Math.abs(p.unshifted - p.consumption) > 1e-6,
+  );
 }
 
 /**
@@ -136,6 +146,7 @@ function seriesOf(
   return {
     generation: project((p) => p.generation),
     consumption: project((p) => p.consumption),
+    unshifted: project((p) => p.unshifted),
     price: projectPrice(),
   };
 }
@@ -304,6 +315,17 @@ export function EnergyGraph({ energy, timeOfDay }: { energy: EnergyStats; timeOf
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
+        {showsUnshifted(energy) && (
+          <polyline
+            points={line(series.unshifted)}
+            fill="none"
+            style={{ stroke: CONSUMPTION_COLOR, opacity: 0.55 }}
+            strokeWidth="1.5"
+            strokeDasharray="4 3"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
         <Curves series={series} width={2} />
       </svg>
       {/* Labels sit outside the SVG: the drawing space is stretched, which
@@ -318,6 +340,9 @@ export function EnergyGraph({ energy, timeOfDay }: { energy: EnergyStats; timeOf
       <div className="energy-graph-legend">
         <span className="legend-generation">{t('energy.legend.generation')}</span>
         <span className="legend-consumption">{t('energy.legend.consumption')}</span>
+        {showsUnshifted(energy) && (
+          <span className="legend-unshifted">{t('energy.legend.unshifted')}</span>
+        )}
         <span className="legend-price">{t('energy.legend.price')}</span>
       </div>
     </div>

@@ -1,9 +1,10 @@
-import { BALANCE, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
 import { HEATED_SERVED, PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
 import { isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
+import { meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { coolingDegree, heatingDegree } from '../shared/heating.ts';
@@ -392,9 +393,59 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   heatingDemand += heat.fallback;
 
   const chargingDemand = Math.max(0, input.chargingDemand);
-  const totalDemand =
-    buildingDemand + heatingDemand + coolingDemand + chargingDemand + heat.pumpPower;
   const generation = solar + wind + rooftop + hydro + tidal + geothermal;
+
+  // Smart meters: a share of metered household load and on-site electric
+  // heating waits for renewable surplus (see smartMeters.ts). Cooling,
+  // charging and the network pumps stay inflexible. With no coverage
+  // every term is 0 and the step is unchanged.
+  const unshifted =
+    buildingDemand + heatingDemand + coolingDemand + chargingDemand + heat.pumpPower;
+  const coverage = meteredCoverage(state);
+  const { householdFlexShare, heatingFlexShare, backlogHours, maxDrainShare } = BALANCE.smartMeters;
+  const flexible =
+    coverage * (householdFlexShare * buildingDemand + heatingFlexShare * heatingDemand);
+  const inflexible = unshifted - flexible;
+  const renewableSurplus = generation - inflexible;
+  let servedNow = 0;
+  let recovered = 0;
+  let deferred = flexible;
+  if (renewableSurplus > 0) {
+    servedNow = Math.min(flexible, renewableSurplus);
+    recovered = Math.min(state.flexBacklog, renewableSurplus - servedNow);
+    deferred = flexible - servedNow;
+  }
+  // The backlog may only drain so fast. The comfort bound below scales
+  // with the current pool, so anything that shrinks the pool at once —
+  // insulation halving the heating load, a heat plant coming online,
+  // storm damage, a mass bulldoze — would leave the whole backlog above
+  // the new bound and serve it in a single tick, a city-wide deficit out
+  // of nowhere. Capped, the backlog may sit above the bound for a while
+  // and empties over several ticks instead.
+  const drainCap = maxDrainShare * unshifted;
+  recovered = Math.min(recovered, drainCap);
+  // Comfort bound: past a few hours of deferred demand the pool is served
+  // regardless of the weather.
+  const backlogCapacity = flexible * backlogHours * (TICKS_PER_DAY / 24);
+  const overflow = Math.min(
+    Math.max(0, state.flexBacklog + deferred - recovered - backlogCapacity),
+    Math.max(0, drainCap - recovered),
+  );
+  state.flexBacklog = Math.max(0, state.flexBacklog + deferred - recovered - overflow);
+  // No load at all (an empty city, or every building disconnected): there
+  // is nothing to drain into, and the cap would hold the backlog forever.
+  if (unshifted === 0) state.flexBacklog = 0;
+  const totalDemand = inflexible + servedNow + recovered + overflow;
+  // Report both lines as what was actually served this tick. The shift is
+  // split in proportion to what each line contributed to the pool —
+  // charging all of it to the household line would print a negative
+  // figure on a cold night, where heating alone is the larger share.
+  const householdFlex = householdFlexShare * buildingDemand;
+  const householdShare =
+    flexible > 0 ? householdFlex / (householdFlex + heatingFlexShare * heatingDemand) : 0;
+  const shift = -deferred + recovered + overflow;
+  buildingDemand += householdShare * shift;
+  heatingDemand += (1 - householdShare) * shift;
 
   const storageCapacity = census.batteries * BALANCE.energy.batteryCapacity;
   const powerLimit = census.batteries * BALANCE.energy.batteryPowerLimit;
@@ -578,6 +629,11 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     spotPrice,
     tradeSell,
     tradeBuy,
+    flexDeferred: deferred,
+    flexRecovered: recovered,
+    flexBacklog: state.flexBacklog,
+    flexOverflow: overflow,
+    unshifted,
   };
 
   // Average across the sample window instead of snapshotting the last
@@ -590,6 +646,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const accum = state.energyHistoryAccum;
   accum.generation += generation + biogas + fuelCell;
   accum.consumption += totalDemand;
+  accum.unshifted += unshifted;
   accum.soc += soc;
   accum.price += spotPrice;
   accum.ticks++;
@@ -598,11 +655,13 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     pushEnergyHistory(state, {
       generation: accum.generation / accum.ticks,
       consumption: accum.consumption / accum.ticks,
+      unshifted: accum.unshifted / accum.ticks,
       stateOfCharge: accum.soc / accum.ticks,
       price: accum.price / accum.ticks,
     });
     accum.generation = 0;
     accum.consumption = 0;
+    accum.unshifted = 0;
     accum.soc = 0;
     accum.price = 0;
     accum.ticks = 0;

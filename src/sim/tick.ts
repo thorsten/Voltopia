@@ -1,4 +1,4 @@
-import { TICKS_PER_DAY } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { PlantType, RoadClass } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
@@ -7,6 +7,7 @@ import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
+import { meteredCoverage, smartMetersStep } from './smartMeters.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -74,6 +75,12 @@ export function stepTick(state: SimState): void {
   decayStep(state);
   forestStep(state);
   const { population, jobs } = countPopulationAndJobs(state);
+  // After growth and decay, before economy, goals and the stats:
+  // smartMetersStep refreshes state.lastBuildingCount (the tick's one
+  // building scan) and everything downstream reads coverage off it. The
+  // steps above — vehicles and the energy balance — read last tick's
+  // count, one tick of lag the mechanic does not notice.
+  smartMetersStep(state);
   economyStep(state, population, jobs);
   // After the income of this tick has landed: repairs are paid out of it.
   repairStep(state);
@@ -195,6 +202,9 @@ export function buildStats(state: SimState): GlobalStats {
         cooling: e.coolingConsumption,
         electrolysis: e.electrolysis,
         heatPumps: e.heatPumpConsumption,
+        flexDeferred: e.flexDeferred,
+        flexRecovered: e.flexRecovered,
+        flexBacklog: e.flexBacklog,
       },
       storedEnergy: state.storedEnergy,
       storageCapacity: totalStorageCapacity(state),
@@ -222,7 +232,13 @@ export function buildStats(state: SimState): GlobalStats {
     },
     taxRate: state.taxRate,
     speed: state.speed,
-    smartCharging: state.smartCharging,
+    smartMeters: {
+      active: state.smartMeters.active,
+      metered: state.smartMeters.metered,
+      buildings: state.lastBuildingCount,
+      coverage: meteredCoverage(state),
+      costPerMeter: BALANCE.smartMeters.costPerMeter,
+    },
     marketTrading: state.marketTrading,
     insulation: state.insulation,
     services: { ...state.lastServices },
@@ -252,11 +268,14 @@ export function pendingHistoryPoint(state: SimState): EnergyHistoryPoint {
   const accum = state.energyHistoryAccum;
   if (accum.ticks === 0) {
     const last = state.energyHistory[state.energyHistory.length - 1];
-    return last ? { ...last } : { generation: 0, consumption: 0, stateOfCharge: 0, price: 1 };
+    return last
+      ? { ...last }
+      : { generation: 0, consumption: 0, unshifted: 0, stateOfCharge: 0, price: 1 };
   }
   return {
     generation: accum.generation / accum.ticks,
     consumption: accum.consumption / accum.ticks,
+    unshifted: accum.unshifted / accum.ticks,
     stateOfCharge: accum.soc / accum.ticks,
     price: accum.price / accum.ticks,
   };
@@ -280,6 +299,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     busStopUpkeep: b.busStopUpkeep,
     biogasFuelCost: b.biogasFuelCost,
     repair: state.lastRepairCost,
+    smartMeters: state.lastSmartMeterCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +
@@ -289,6 +309,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       b.plantUpkeep -
       b.biogasFuelCost -
       b.gridImportCost -
-      state.lastRepairCost,
+      state.lastRepairCost -
+      state.lastSmartMeterCost,
   };
 }

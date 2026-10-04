@@ -2,6 +2,7 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { DisasterKind, PlantType } from '../shared/types.ts';
 import { hasPowerInfrastructure } from './energy.ts';
 import { hasPowerLines } from './powerLines.ts';
+import { meteredCoverage } from './smartMeters.ts';
 import { countPlants, countPopulationAndJobs, type SimState } from './state.ts';
 
 export const GOAL_IDS = [
@@ -23,6 +24,7 @@ export const GOAL_IDS = [
   'geothermalBaseload',
   'stormProof',
   'warmWinter',
+  'flexibleCity',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -129,6 +131,17 @@ export function goalsStep(state: SimState): void {
     progress.warmWinterTicks = 0;
   }
 
+  // Smart meters: a well-metered city that actually shifts load. Unlike
+  // the streaks above this counter is cumulative — half a day of
+  // qualifying ticks, whenever they happen.
+  if (
+    population >= CLEAN_DAY_MIN_POPULATION &&
+    meteredCoverage(state) >= BALANCE.smartMeters.goalCoverage &&
+    e.flexDeferred + e.flexRecovered > 0
+  ) {
+    progress.flexTicks++;
+  }
+
   const achieved = state.goalsAchieved;
 
   // Riding out a storm: count the ticks a storm blows while the grid
@@ -210,6 +223,9 @@ export function goalsStep(state: SimState): void {
   }
   if (!achieved.has('warmWinter') && progress.warmWinterTicks >= TICKS_PER_DAY) {
     achieved.add('warmWinter');
+  }
+  if (!achieved.has('flexibleCity') && progress.flexTicks >= TICKS_PER_DAY / 2) {
+    achieved.add('flexibleCity');
   }
 }
 

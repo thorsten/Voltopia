@@ -9,8 +9,10 @@ interface SaveGameJson {
   tick: number;
   money: number;
   taxRate: number;
-  smartCharging: boolean;
+  smartCharging?: boolean;
   storedEnergy: number;
+  smartMeters?: { active: boolean; metered: number };
+  flexBacklog?: number;
   goals?: string[];
   lifetime?: LifetimeSample[];
   riverFlow?: number;
@@ -27,6 +29,7 @@ interface SaveGameJson {
   transitTicks?: number;
   heatStored?: number;
   warmWinterTicks?: number;
+  flexTicks?: number;
   disasterScale?: number;
   disasters?: SavedDisasters;
   layers: Record<string, string>;
@@ -64,8 +67,10 @@ export function saveToJson(save: SaveGame): string {
     tick: save.tick,
     money: save.money,
     taxRate: save.taxRate,
-    smartCharging: save.smartCharging,
     storedEnergy: save.storedEnergy,
+    ...(save.smartCharging !== undefined ? { smartCharging: save.smartCharging } : {}),
+    ...(save.smartMeters !== undefined ? { smartMeters: save.smartMeters } : {}),
+    ...(save.flexBacklog !== undefined ? { flexBacklog: save.flexBacklog } : {}),
     ...(save.goals ? { goals: save.goals } : {}),
     ...(save.lifetime ? { lifetime: save.lifetime } : {}),
     ...(save.riverFlow !== undefined ? { riverFlow: save.riverFlow } : {}),
@@ -84,6 +89,7 @@ export function saveToJson(save: SaveGame): string {
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
     ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
     ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
+    ...(save.flexTicks !== undefined ? { flexTicks: save.flexTicks } : {}),
     ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
     ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
     layers,
@@ -128,6 +134,13 @@ function isSavedDisasters(value: unknown): value is SavedDisasters {
     Array.isArray(candidate.events) &&
     candidate.events.every(isSavedDisasterEvent)
   );
+}
+
+/** Shallow shape check: a hand-edited export must not break the loader. */
+function isSavedSmartMeters(value: unknown): value is { active: boolean; metered: number } {
+  if (typeof value !== 'object' || value === null) return false;
+  const m = value as Partial<{ active: boolean; metered: number }>;
+  return typeof m.active === 'boolean' && typeof m.metered === 'number';
 }
 
 /**
@@ -196,8 +209,10 @@ export function saveFromJson(text: string): SaveGame {
     tick: parsed.tick,
     money: parsed.money,
     taxRate: typeof parsed.taxRate === 'number' ? parsed.taxRate : 0.1,
-    smartCharging: parsed.smartCharging === true,
     storedEnergy: typeof parsed.storedEnergy === 'number' ? parsed.storedEnergy : 0,
+    ...(typeof parsed.smartCharging === 'boolean' ? { smartCharging: parsed.smartCharging } : {}),
+    ...(isSavedSmartMeters(parsed.smartMeters) ? { smartMeters: parsed.smartMeters } : {}),
+    ...(typeof parsed.flexBacklog === 'number' ? { flexBacklog: parsed.flexBacklog } : {}),
     ...(Array.isArray(parsed.goals)
       ? { goals: parsed.goals.filter((g): g is string => typeof g === 'string') }
       : {}),
@@ -230,6 +245,11 @@ export function saveFromJson(text: string): SaveGame {
     ...(typeof parsed.heatStored === 'number' ? { heatStored: parsed.heatStored } : {}),
     ...(typeof parsed.warmWinterTicks === 'number'
       ? { warmWinterTicks: parsed.warmWinterTicks }
+      : {}),
+    // Finite, not just a number: NaN from a hand-edited export would
+    // poison a cumulative counter for good (the goal could never be met).
+    ...(typeof parsed.flexTicks === 'number' && Number.isFinite(parsed.flexTicks)
+      ? { flexTicks: parsed.flexTicks }
       : {}),
     ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
     ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),

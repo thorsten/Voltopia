@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
 import { tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import {
@@ -143,7 +143,7 @@ describe('agent tools: reading', () => {
       'undo',
       'set_speed',
       'set_tax_rate',
-      'set_smart_charging',
+      'set_smart_meter_rollout',
       'plant_forest',
       'set_market_trading',
       'buy_insulation',
@@ -433,7 +433,7 @@ describe('agent tools: building', () => {
     });
     expect(await call('set_speed', { speed: 2 })).toMatchObject({ ok: false });
     expect(await call('set_tax_rate', { rate: 'high' })).toMatchObject({ ok: false });
-    expect(await call('set_smart_charging', { enabled: 'yes' })).toMatchObject({ ok: false });
+    expect(await call('set_smart_meter_rollout', { active: 'yes' })).toMatchObject({ ok: false });
     expect(await call('advance_time', {})).toMatchObject({ ok: false });
     expect(await call('advance_time', { days: MAX_ADVANCE_DAYS + 1 })).toMatchObject({ ok: false });
     expect(await call('start_new_city', { size: 50 })).toMatchObject({ ok: false });
@@ -465,8 +465,15 @@ describe('agent tools: building', () => {
       ok: true,
       taxRate: BALANCE.tax.maxRate,
     });
-    expect(await call('set_smart_charging', { enabled: true })).toMatchObject({ ok: true });
-    expect(engine.state.smartCharging).toBe(true);
+    expect(await call('set_smart_meter_rollout', { active: true })).toMatchObject({ ok: true });
+    expect(engine.state.smartMeters.active).toBe(true);
+    const overview = await call('get_game_overview');
+    expect(overview.smartMeters).toMatchObject({ active: true });
+    expect(overview).not.toHaveProperty('smartCharging');
+    // Advance one history-sample window so a sample exists to inspect.
+    await call('advance_time', { ticks: TICKS_PER_HISTORY_SAMPLE });
+    const report = await call('get_energy_report');
+    expect((report.history as Array<Record<string, unknown>>)[0]).toHaveProperty('unshifted');
     expect(await call('set_market_trading', { enabled: true })).toMatchObject({ ok: true });
     expect(engine.state.marketTrading).toBe(true);
     const wood = findLand(engine, 12);
