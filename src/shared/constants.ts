@@ -765,7 +765,10 @@ export const BALANCE = {
      * Paid per energy unit shed. Below market.importCostPerEnergyUnit, so
      * a call beats importing whenever spot >= activationPrice / importCost
      * (0.5 at these values) — normal and scarce prices, not abundance
-     * (spot bottoms out at market.spotMin = 0.25).
+     * (market.spotMin clamps the spot at 0.25, though the weather model
+     * never actually gets there: the cheapest hour it can reach is a
+     * sunny, windy 11 am at factor 0.3625, i.e. an import price of
+     * 0.145 — see the abundance-price test in energy.test.ts).
      *
      * In practice this is a cost knob, not a dispatch knob: the import
      * link carries only market.importCapacity = 60 EU/tick, so nearly
@@ -775,9 +778,10 @@ export const BALANCE = {
      * for rather than import it avoids — 15_300 of the year's 26_800
      * contract bill on the quiet seed. The spec's 0.3 (threshold 0.75)
      * cost 28 % more for the same shedding — 34_465 instead of 26_816 on
-     * that seed; 0.15 would drop the threshold to 0.375, within sight of
-     * spotMin, i.e. calling businesses at prices where the regional grid
-     * is all but giving energy away.
+     * that seed; 0.15 would drop the threshold to 0.375 — below every
+     * import price the weather model can produce bar the single cheapest
+     * hour (0.145), so the contract would be calling businesses even
+     * when the regional grid is all but giving energy away.
      */
     activationPricePerEnergyUnit: 0.2,
     /**

@@ -1753,16 +1753,24 @@ describe('demand response in the cascade', () => {
   it('a small shortfall at an abundance price imports instead of shedding', () => {
     const state = makeState();
     // A battery (empty) connects the building, and the city has no
-    // generation of its own beyond the building's roof. A sunny, windy
-    // noon maximises regional supply against a midday demand trough, so
-    // the spot price sits on market.spotMin — the cheapest the link ever
-    // gets, and comfortably under the activation premium. (0.8, not 1,
-    // for the wind: at 1 the turbines' cut-out speed zeroes the regional
-    // wind factor and the spot price would read scarce instead; anything
-    // from 0.6 up is already the cap.)
+    // generation of its own beyond the building's roof. 11 am on a
+    // sunny, windy day is the cheapest the regional link ever gets in
+    // this model: regional demand sits in its daylight trough (the
+    // residential profile's 0.45) while supply is all but complete
+    // (0.55 x 0.966 solar + 0.45 x 1 wind = 0.981), so the spot factor
+    // is 1 + 1.2 x (0.45 - 0.981) = 0.3625 and the import price 0.145 —
+    // under the 0.2 activation premium, which is what this test needs.
+    // Note it never reaches market.spotMin (0.25): that would want
+    // demand - supply <= -0.625, and supply caps at 1.0 while the
+    // profile never dips below 0.45 in daylight. Noon is dearer (0.16),
+    // because regional demand is already climbing again.
+    // (windSpeed 0.8, not 1: at 1 the turbines' cut-out speed zeroes the
+    // regional wind factor and the spot price would read scarce instead;
+    // anything from 0.6 up is already the cap.)
     placePlant(state, at(6, 5), PlantType.Battery);
     state.storedEnergy = 0;
     setNoonClearSky(state);
+    state.tick = (11 * TICKS_PER_DAY) / 24;
     state.weather.windSpeed = 0.8;
     addBuilding(state, at(8, 5), Zone.Retail, 3);
     state.demandResponse.active = true;
