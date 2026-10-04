@@ -307,6 +307,8 @@ export interface BudgetStats {
   biogasFuelCost: number;
   /** Repair spend on damaged tiles this tick. */
   repair: number;
+  /** Smart-meter installs paid this tick. */
+  smartMeters: number;
   gridImportCost: number;
   /** Income - expenses for this tick. */
   net: number;
@@ -723,6 +725,10 @@ export interface SaveGame {
   heatStored?: number;
   /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
   warmWinterTicks?: number;
+  /** Smart-meter rollout (absent in older saves: migrated from smartCharging). */
+  smartMeters?: { active: boolean; metered: number };
+  /** Deferred flexible energy waiting for surplus (absent → 0). */
+  flexBacklog?: number;
   /** Disaster intensity of this city (absent in older saves → 0 = off). */
   disasterScale?: number;
   /** Events in flight (absent in older saves → none). */

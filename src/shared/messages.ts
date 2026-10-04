@@ -37,6 +37,7 @@ type SimCommandBody =
   | { type: 'undo' }
   | { type: 'setTaxRate'; rate: number }
   | { type: 'setSmartCharging'; enabled: boolean }
+  | { type: 'setSmartMeterRollout'; active: boolean }
   | { type: 'setMarketTrading'; enabled: boolean }
   | { type: 'plantForest'; tiles: number[] }
   | { type: 'buyInsulation' }

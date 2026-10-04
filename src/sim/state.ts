@@ -223,6 +223,16 @@ export interface SimState {
   marketTrading: boolean;
   /** Building insulation upgrade bought (halves the heating load). */
   insulation: boolean;
+  /** Smart-meter rollout: crews installing, meters in place, fractional carry. */
+  smartMeters: {
+    active: boolean;
+    metered: number;
+    installCarry: number;
+  };
+  /** Deferred flexible energy waiting for renewable surplus (energy units). */
+  flexBacklog: number;
+  /** Smart-meter install cost paid last tick (budget line). */
+  lastSmartMeterCost: number;
   /** Day number on which year 1 started; 0 for new games. */
   seasonOriginDay: number;
   /** Seasonal signal for the current tick, recomputed in stepTick. */
@@ -425,6 +435,9 @@ export function createSimState(
     smartCharging: false,
     marketTrading: false,
     insulation: false,
+    smartMeters: { active: false, metered: 0, installCarry: 0 },
+    flexBacklog: 0,
+    lastSmartMeterCost: 0,
     seasonOriginDay: 0,
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
     happiness: BALANCE.happiness.base,
@@ -854,6 +867,8 @@ export function serializeState(state: SimState): SaveGame {
     seasonOriginDay: state.seasonOriginDay,
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
+    smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
+    flexBacklog: state.flexBacklog,
     winterTicks: state.goalProgress.winterTicks,
     summerTicks: state.goalProgress.summerTicks,
     freeFlowTicks: state.goalProgress.freeFlowTicks,
@@ -916,6 +931,25 @@ export function deserializeState(save: SaveGame): SimState {
   // season readable (whole days, snow cover 0..1).
   state.weather.snowpack = Math.min(1, Math.max(0, save.snowpack ?? 0));
   state.insulation = save.insulation ?? false;
+  // Rollout: new saves carry it; legacy saves with smart charging on get
+  // every building metered so the city keeps the effect it had.
+  {
+    const buildings = countBuildings(state);
+    if (save.smartMeters) {
+      state.smartMeters = {
+        active: save.smartMeters.active,
+        metered: Math.min(save.smartMeters.metered, buildings),
+        installCarry: 0,
+      };
+    } else {
+      state.smartMeters = {
+        active: save.smartCharging === true,
+        metered: save.smartCharging === true ? buildings : 0,
+        installCarry: 0,
+      };
+    }
+    state.flexBacklog = save.flexBacklog ?? 0;
+  }
   state.goalProgress.winterTicks = save.winterTicks ?? 0;
   state.goalProgress.summerTicks = save.summerTicks ?? 0;
   state.goalProgress.freeFlowTicks = save.freeFlowTicks ?? 0;
@@ -1012,6 +1046,16 @@ export function countPopulationAndJobs(state: SimState): {
     }
   }
   return { population, jobs };
+}
+
+/** Buildings standing on zoned land (density > 0). */
+export function countBuildings(state: SimState): number {
+  const { density, tileType } = state.layers;
+  let n = 0;
+  for (let i = 0; i < density.length; i++) {
+    if (tileType[i] === TileType.Empty && density[i] > 0) n++;
+  }
+  return n;
 }
 
 /** Number of plants of a given type currently placed. */

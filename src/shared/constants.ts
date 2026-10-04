@@ -624,6 +624,22 @@ export const BALANCE = {
     ] as [number, number],
   },
 
+  /** Smart-meter rollout: paced installation and the flexible load it unlocks. */
+  smartMeters: {
+    /** Money per installed meter (billed as the crews install). */
+    costPerMeter: 60,
+    /** Meters the crews install per in-game day while the rollout is active. */
+    installsPerDay: 15,
+    /** Share of a metered building's base load that can wait for surplus. */
+    householdFlexShare: 0.15,
+    /** Share of a metered building's on-site electric heating that can wait (thermal inertia). */
+    heatingFlexShare: 0.3,
+    /** Hours of flexible demand the backlog may hold before comfort wins. */
+    backlogHours: 4,
+    /** Coverage the flexibleCity goal requires. */
+    goalCoverage: 0.8,
+  },
+
   happiness: {
     /** Smoothing factor per tick toward the target happiness. */
     smoothing: 0.02,

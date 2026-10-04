@@ -53,6 +53,17 @@ describe('SimEngine basics', () => {
     expect(engine.state.smartCharging).toBe(true);
   });
 
+  it('starts and pauses the smart-meter rollout and flushes stats', () => {
+    const engine = makeEngine();
+    engine.applyCommand({ type: 'setSmartMeterRollout', active: true });
+    expect(engine.state.smartMeters.active).toBe(true);
+    const flushed = engine.flush();
+    if (flushed?.type !== 'tick') throw new Error('expected a tick event');
+    expect(flushed.stats.budget.smartMeters).toBe(0);
+    engine.applyCommand({ type: 'setSmartMeterRollout', active: false });
+    expect(engine.state.smartMeters.active).toBe(false);
+  });
+
   it('toggles market trading', () => {
     const engine = makeEngine();
     engine.applyCommand({ type: 'setMarketTrading', enabled: true });

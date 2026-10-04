@@ -8,6 +8,7 @@ import { drivingVans } from './deliveries.ts';
 import { placePlant } from './energy.ts';
 import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
 import { paintZones } from './zones.ts';
@@ -67,6 +68,9 @@ export class SimEngine {
       case 'setSmartCharging':
         state.smartCharging = command.enabled;
         state.statsDirty = true;
+        return [];
+      case 'setSmartMeterRollout':
+        setSmartMeterRollout(state, command.active);
         return [];
       case 'setMarketTrading':
         state.marketTrading = command.enabled;

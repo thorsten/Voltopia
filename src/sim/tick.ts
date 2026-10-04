@@ -7,6 +7,7 @@ import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
+import { smartMetersStep } from './smartMeters.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -74,6 +75,7 @@ export function stepTick(state: SimState): void {
   decayStep(state);
   forestStep(state);
   const { population, jobs } = countPopulationAndJobs(state);
+  smartMetersStep(state);
   economyStep(state, population, jobs);
   // After the income of this tick has landed: repairs are paid out of it.
   repairStep(state);
@@ -280,6 +282,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     busStopUpkeep: b.busStopUpkeep,
     biogasFuelCost: b.biogasFuelCost,
     repair: state.lastRepairCost,
+    smartMeters: state.lastSmartMeterCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +
@@ -289,6 +292,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       b.plantUpkeep -
       b.biogasFuelCost -
       b.gridImportCost -
-      state.lastRepairCost,
+      state.lastRepairCost -
+      state.lastSmartMeterCost,
   };
 }
