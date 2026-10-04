@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import { callBudgetTicks, dispatchDemandResponse, setDemandResponse } from './demandResponse.ts';
+import {
+  callBudgetTicks,
+  demandResponseStep,
+  dispatchDemandResponse,
+  setDemandResponse,
+} from './demandResponse.ts';
 import { createSimState, deserializeState, serializeState } from './state.ts';
+import { buildStats, stepTick } from './tick.ts';
 
 const SIZE = 16;
 
@@ -134,5 +140,81 @@ describe('dispatchDemandResponse', () => {
   it('never sheds more than the shortfall', () => {
     const state = contracted();
     expect(dispatchDemandResponse(state, 100, 5, breakEven).shed).toBeCloseTo(5, 9);
+  });
+});
+
+describe('demandResponseStep', () => {
+  const { retainerPerBuildingPerDay, activationPricePerEnergyUnit } = BALANCE.demandResponse;
+
+  it('bills nothing with the contract off', () => {
+    const state = createSimState(1, SIZE);
+    state.lastEnergy.shed = 10;
+    state.lastEnergy.contractedBuildings = 5;
+    const before = state.money;
+    expect(demandResponseStep(state)).toBe(0);
+    expect(state.money).toBe(before);
+    expect(state.lastDemandResponseCost).toBe(0);
+  });
+
+  it('bills the retainer per contracted building and day plus the activation premium', () => {
+    const state = createSimState(1, SIZE);
+    state.demandResponse.active = true;
+    state.lastEnergy.contractedBuildings = 5;
+    state.lastEnergy.shed = 10;
+    const before = state.money;
+    const spent = demandResponseStep(state);
+    const retainer = (5 * retainerPerBuildingPerDay) / TICKS_PER_DAY;
+    expect(spent).toBeCloseTo(retainer + 10 * activationPricePerEnergyUnit, 9);
+    expect(state.money).toBeCloseTo(before - spent, 9);
+    expect(state.lastDemandResponseCost).toBeCloseTo(spent, 9);
+  });
+
+  it('a day of retainer is exactly retainerPerBuildingPerDay per building', () => {
+    const state = createSimState(1, SIZE);
+    state.demandResponse.active = true;
+    state.lastEnergy.contractedBuildings = 3;
+    let total = 0;
+    for (let t = 0; t < TICKS_PER_DAY; t++) total += demandResponseStep(state);
+    expect(total).toBeCloseTo(3 * retainerPerBuildingPerDay, 6);
+  });
+
+  it('keeps billing when the treasury is empty (a contract, not a purchase)', () => {
+    const state = createSimState(1, SIZE);
+    state.demandResponse.active = true;
+    state.lastEnergy.contractedBuildings = 1;
+    state.money = 0;
+    demandResponseStep(state);
+    expect(state.money).toBeLessThan(0);
+  });
+
+  it('reaches the stats and the budget line', () => {
+    const state = createSimState(1, SIZE);
+    state.demandResponse.active = true;
+    state.demandResponse.callBudget = callBudgetTicks() / 2;
+    state.lastEnergy.contractedBuildings = 4;
+    state.lastEnergy.shed = 2;
+    state.lastEnergy.shedPool = 8;
+    const spent = demandResponseStep(state);
+    const stats = buildStats(state);
+    expect(stats.demandResponse).toEqual({
+      active: true,
+      pool: 8,
+      shed: 2,
+      callHoursLeft: BALANCE.demandResponse.maxCallHoursPerDay / 2,
+      contractedBuildings: 4,
+      retainerPerBuildingPerDay,
+      activationPrice: activationPricePerEnergyUnit,
+    });
+    expect(stats.energy.consumption.shed).toBe(2);
+    expect(stats.budget.demandResponse).toBeCloseTo(spent, 9);
+  });
+
+  it('is billed every tick of a running city', () => {
+    const state = createSimState(1, SIZE);
+    state.demandResponse.active = true;
+    stepTick(state);
+    // No businesses yet: the retainer is zero, but the step ran.
+    expect(state.lastDemandResponseCost).toBe(0);
+    expect(buildStats(state).budget.demandResponse).toBe(0);
   });
 });

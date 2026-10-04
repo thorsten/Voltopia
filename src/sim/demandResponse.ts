@@ -52,3 +52,33 @@ export function dispatchDemandResponse(
   contract.callBudget = Math.max(0, contract.callBudget - shed / pool);
   return { pool, shed };
 }
+
+/**
+ * One tick of the contract's money: the retainer for every contracted
+ * business (per building and day, so a day sums to exactly
+ * retainerPerBuildingPerDay each) plus the activation premium for what
+ * the energy step shed this tick. Runs after the energy step and the
+ * smart meters, before the economy, so the cost lands in this tick's
+ * budget. A contract is not a purchase: it is billed even when the
+ * treasury is empty. Returns the money spent and records it for the
+ * budget line.
+ */
+export function demandResponseStep(state: SimState): number {
+  let spent = 0;
+  if (state.demandResponse.active) {
+    const { retainerPerBuildingPerDay, activationPricePerEnergyUnit } = BALANCE.demandResponse;
+    const { contractedBuildings, shed } = state.lastEnergy;
+    spent =
+      (contractedBuildings * retainerPerBuildingPerDay) / TICKS_PER_DAY +
+      shed * activationPricePerEnergyUnit;
+  }
+  state.money -= spent;
+  state.lastDemandResponseCost = spent;
+  if (spent > 0) state.statsDirty = true;
+  return spent;
+}
+
+/** Call hours left today, for the HUD. */
+export function callHoursLeft(state: SimState): number {
+  return (state.demandResponse.callBudget * 24) / TICKS_PER_DAY;
+}

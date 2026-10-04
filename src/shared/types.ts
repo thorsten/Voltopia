@@ -193,6 +193,8 @@ export interface EnergyStats {
     flexRecovered: number;
     /** Deferred flexible energy still waiting for surplus. */
     flexBacklog: number;
+    /** Business load shed under the demand-response contract this tick. */
+    shed: number;
   };
   /** Absolute stored energy across all batteries. */
   storedEnergy: number;
@@ -317,6 +319,8 @@ export interface BudgetStats {
   repair: number;
   /** Smart-meter installs paid this tick. */
   smartMeters: number;
+  /** Demand-response retainer and activation premiums paid this tick. */
+  demandResponse: number;
   gridImportCost: number;
   /** Income - expenses for this tick. */
   net: number;
@@ -523,6 +527,16 @@ export interface GlobalStats {
     buildings: number;
     coverage: number;
     costPerMeter: number;
+  };
+  /** Demand-response contract: in force, pool and shed this tick, call hours left today, partners and prices. */
+  demandResponse: {
+    active: boolean;
+    pool: number;
+    shed: number;
+    callHoursLeft: number;
+    contractedBuildings: number;
+    retainerPerBuildingPerDay: number;
+    activationPrice: number;
   };
   /** Whether storage trades on the spot market (sell dear, buy cheap). */
   marketTrading: boolean;
