@@ -46,6 +46,7 @@ src/
     growth.ts      # demand model, building spawn/densify/decay, abandonment, age-stage dirty marks
     economy.ts     # taxes, upkeep, construction costs, slope surcharge
     energy.ts      # plants (PV/wind/biogas/hydro/pumped/hydrogen), storage, balance
+    smartMeters.ts # smart-meter rollout: coverage, paced installs, billing, vehicle gate
     market.ts      # spot price (regional weather + demand), storage trading
     powerGrid.ts   # connectivity: which tiles are energised
     powerLines.ts  # pylon placement, water crossings

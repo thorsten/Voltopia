@@ -14,9 +14,11 @@ The rollout turns that switch into a mechanic with pacing and a price:
 the city installs smart meters building by building, coverage grows
 over weeks, and every smart effect scales with coverage. Metered
 households and their electric heating become a flexible-load pool that
-moves consumption from the evening peak into the midday surplus, which
-the energy graph shows directly. A goal rewards a highly metered city
-that actually shifts load.
+moves consumption out of the hours without renewable surplus and into
+the hours with it — usually the midday, though a windy evening counts
+too (see the probe results under Testing) — which the energy graph
+shows directly. A goal rewards a highly metered city that actually
+shifts load.
 
 ## Decisions
 
@@ -42,6 +44,8 @@ Decisions made with the user during brainstorming:
 
 ### Balance (`src/shared/constants.ts`)
 
+Final values, frozen after the pacing probe (see Testing):
+
 ```ts
 smartMeters: {
   /** Money per installed meter (billed as the crews install). */
@@ -61,8 +65,15 @@ smartMeters: {
 
 `BALANCE.costs` is not used for the meter price because the price is
 per unit installed, not a one-off; it lives with the mechanic's other
-values. All numbers are provisional until the pacing probe (see
-Testing).
+values.
+
+No value moved: the probe confirmed all six. The measurements behind
+each one are comments next to it in `constants.ts`; the probe figures
+are summarised under Testing. One constraint found there is worth
+repeating: `installsPerDay` must stay a multiple of 15, because
+`installsPerDay / TICKS_PER_DAY` is only exactly representable then
+(960 = 64 × 15) — any other value lets the per-tick carry drift and
+delays the day's last install into the next day.
 
 ### Sim state (`src/sim/state.ts`)
 
@@ -136,17 +147,31 @@ if surplus > 0:
 else:
     servedNow = 0; recovered = 0; deferred = flexible
 capacity   = flexible × backlogHours × (TICKS_PER_DAY / 24)  // comfort bound, in energy units
-overflow   = max(0, flexBacklog + deferred − capacity)   // served regardless
-flexBacklog = flexBacklog + deferred − recovered − overflow
+overflow   = max(0, flexBacklog + deferred − recovered − capacity)   // served regardless
+flexBacklog = max(0, flexBacklog + deferred − recovered − overflow)
 consumptionThisTick = inflexible + servedNow + recovered + overflow
 ```
+
+`overflow` subtracts `recovered` (as implemented): without it, energy
+already served out of the backlog this tick would be counted towards the
+comfort bound again and served a second time.
+
+`buildingConsumption` and `heatingConsumption` are then reported as what
+each line actually drew: the net shift (`−deferred + recovered +
+overflow`) is split between them in proportion to what each contributed
+to the pool (`householdFlexShare × buildingDemand` against
+`heatingFlexShare × heatingDemand`). Charging the whole shift to the
+household line printed a negative household figure on a cold night,
+where heating is the larger share of the pool.
 
 `totalDemand` is replaced by `consumptionThisTick` for everything
 downstream (storage cascade, biogas, deficit, import). The result
 gains `flexDeferred = deferred`, `flexRecovered = recovered`,
-`flexBacklog`, and `unshifted = inflexible + flexible` (what
-consumption would have been). With coverage 0 every new term is 0 and
-the step is numerically identical to today. No randomness is added.
+`flexBacklog`, `flexOverflow = overflow` (as implemented: the energy
+panel needs to tell "shifted into surplus" from "served anyway") and
+`unshifted = inflexible + flexible` (what consumption would have been).
+With coverage 0 every new term is 0 and the step is numerically
+identical to today. No randomness is added.
 
 ### Stats and history (`src/shared/types.ts`, `src/sim/tick.ts`)
 
@@ -157,7 +182,10 @@ the step is numerically identical to today. No randomness is added.
   averages it like consumption. History is in-memory only.
 - `GlobalStats` replaces `smartCharging: boolean` with
   `smartMeters: { active: boolean; metered: number; buildings: number;
-coverage: number; costPerMeter: number }`.
+coverage: number; costPerMeter: number }`. The old boolean was deleted
+  outright when the agent tool was cut over (nothing reads it any more);
+  only `SaveGame`/`SaveGameJson` keep an optional legacy
+  `smartCharging?: boolean` for migrating old saves.
 - `GlobalStats.budget` gains `smartMeters` (install cost per tick,
   flattened like `repair`).
 
@@ -235,6 +263,53 @@ operations.
   values so full coverage takes roughly one in-game year for a mid-size
   city and shifted load is visible (≥ 5 % of consumption) without
   trivialising storage.
+
+  Done (`src/sim/_smartMetersProbe.test.ts`, deleted): a 144-building,
+  960-resident town on 16 plants over two weather seeds, plus a
+  298-building, 1_766-resident city on 35 plants, each run a full year
+  (20 days, all four seasons) per configuration and always against the
+  same city with the rollout paused. Results that the Balance block is
+  frozen on:
+
+  - **Pacing**: at `installsPerDay` 15 the 298-building city (a
+    mid-size city on the default 64×64 map) reaches 98 % coverage over
+    the 20-day year, the small 144-building town in ten days; at 8 the
+    larger city was still at 51 % after a year. The 150-building
+    yardstick in the target above was written before the probe: on the
+    default map size, 15 a day is what "roughly one in-game year"
+    means.
+  - **Cost**: 900 money a day while the crews work, 4.2-4.5 % of either
+    city's daily tax income; 8_640 for the small town (about five
+    batteries), 18_000 for the larger one. A full-coverage year ran
+    20_000-34_000 money ahead of the paused town (import 10-13 %
+    lower), the build-up year behind it — the programme pays for itself
+    from the second year.
+  - **Shifted load**: 2.1-2.2 % of a full-coverage year's consumption is
+    recovered out of the backlog, up to 6.4 % on a single day. The
+    spec's "≥ 5 % of consumption" target is a daily-average figure the
+    mechanic only reaches on its best days; hour by hour it is far more
+    visible, with served load 10-25 % below the unshifted line through a
+    deficit evening and 20-25 % above it when generation returns.
+  - **Storage**: at 4 backlog hours the mean state of charge is
+    0.42 / 0.54 against the paused town's 0.46 / 0.50, and 0.553
+    against 0.553 on the larger city — no systematic loss. At 6-8 hours
+    it drops to 0.38-0.40 while the backlog grows to ten times the
+    town's battery capacity: the pool would take over storage's job.
+  - **Comfort bound**: about three quarters of all deferred energy is
+    served under the comfort rule rather than shifted into surplus
+    (87 % at 2 backlog hours, 67 % at 8) — a night is longer than the
+    window, which is the intended behaviour, not a tuning failure.
+  - **Peaks**: the pool shifts load out of hours _without_ renewable
+    surplus and into hours _with_ it, which is not always the midday —
+    a windy evening drains the backlog, so the evening peak can be
+    higher than it would have been without the rollout (up to +20 % in
+    the measured year, always within that hour's generation). Recovery
+    has no per-tick rate limit, so a strongly over-generating city can
+    serve the whole backlog in a few ticks: the worst single tick
+    measured was 1.36x the unshifted peak at the frozen values (1.9-2.3x
+    with larger flex shares). A `recoveryRate` cap would be the fix if
+    this ever reads badly in play.
+
 - `node scripts/smoke.mjs`; `pnpm coverage` gate; e2e `smart-charging`
   checkbox test still passes.
 - Mac visual pass: the dashed line reads clearly against the solid
