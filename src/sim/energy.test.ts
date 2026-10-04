@@ -1752,16 +1752,19 @@ describe('demand response in the cascade', () => {
 
   it('a small shortfall at an abundance price imports instead of shedding', () => {
     const state = makeState();
-    // A battery (empty) connects the building; strong wind with no
-    // turbine keeps generation at zero but pushes the spot price down.
+    // A battery (empty) connects the building, and the city has no
+    // generation of its own beyond the building's roof. A sunny, windy
+    // noon maximises regional supply against a midday demand trough, so
+    // the spot price sits on market.spotMin — the cheapest the link ever
+    // gets, and comfortably under the activation premium. (0.8, not 1,
+    // for the wind: at 1 the turbines' cut-out speed zeroes the regional
+    // wind factor and the spot price would read scarce instead; anything
+    // from 0.6 up is already the cap.)
     placePlant(state, at(6, 5), PlantType.Battery);
     state.storedEnergy = 0;
-    // 0.8, not 1: at 1 the turbines' cut-out speed zeroes the wind
-    // factor and the spot price would read scarce instead.
+    setNoonClearSky(state);
     state.weather.windSpeed = 0.8;
-    state.weather.cloudCover = 1;
     addBuilding(state, at(8, 5), Zone.Retail, 3);
-    state.tick = TICKS_PER_DAY / 8 + 1; // 3 am: low regional demand
     state.demandResponse.active = true;
     const importPrice = BALANCE.market.importCostPerEnergyUnit * spotPriceFactor(state);
     expect(importPrice).toBeLessThan(activationPricePerEnergyUnit); // precondition

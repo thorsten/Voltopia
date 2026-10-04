@@ -710,24 +710,100 @@ export const BALANCE = {
    * under which a share of their base load is shed in a deficit. Called
    * automatically inside the cascade (after biogas, before import)
    * when a call is cheaper than importing at the tick's spot price, or
-   * when the shortfall exceeds the import link. Initial values; the
-   * pacing probe freezes them (see the design spec).
+   * when the shortfall exceeds the import link.
+   *
+   * Frozen by a 20-day headless probe over two weather seeds
+   * (src/sim/_demandResponseProbe.test.ts, deleted after use). The probe
+   * city: 288 density-3 buildings in six banded rows, 96 of them
+   * commercial and retail, smart meters on, against a 158-plant park (36
+   * wind, 36 solar, 64 batteries, 16 biogas, 6 hydrogen) — generation
+   * 3_723 EU/tick mean against 2_106 EU of load, so a well-supplied city
+   * that still runs dry on a Dunkelflaute: 13-14 of its 20 days need no
+   * call at all and the deficits all sit in the dark, calm hours. Every
+   * figure below is that city measured against itself with the contract
+   * off. (A thinner 122-plant park was measured too, as a stretched
+   * city; its numbers are in the spec, but the trajectories part company
+   * once a day blacks out hard enough to abandon buildings, because the
+   * abandonment roll only draws from the Rng for a chronically troubled
+   * building, so the two runs' weather streams desynchronise. The
+   * well-supplied city never diverges and is what the values are tuned
+   * on.)
    */
   demandResponse: {
-    /** Share of the commercial and retail base load the contract may shed. */
+    /**
+     * Share of the commercial and retail base load the contract may shed.
+     * At 0.4 the pool is 212 EU/tick on the probe city — a tenth of its
+     * load, and 37 % of the 568 EU mean depth of the deficits it is
+     * called into, which is why the contract thins blackouts rather than
+     * ending them: 8-10 % fewer deficit ticks over a year (790 -> 711 and
+     * 1_505 -> 1_382 on the two seeds), 10-15 % less unserved energy and
+     * 9-10 % less import money. 0.6 buys 14-17 % fewer deficit ticks for
+     * 27-29 % more contract money and sheds 60 % of a shop district's base
+     * load, which the design prices at nothing (the daily allowance is
+     * the only comfort rule); 0.2 halves the effect to 4-6 % fewer
+     * deficit ticks, at which point the retainer buys almost nothing.
+     * The deep shortfalls stay deep at every share: no plausible pool
+     * reaches the spec's hoped-for halving of blackout ticks, because a
+     * dark, calm night takes the whole city off its generation, not a
+     * tenth of it.
+     */
     shedShare: 0.4,
-    /** Retainer per contracted business building and in-game day, paid while the contract runs. */
-    retainerPerBuildingPerDay: 20,
+    /**
+     * Retainer per contracted business building and in-game day, paid
+     * while the contract runs. 96 businesses at 6 is 576 money a day —
+     * 2.4 % of the probe city's daily net income, and 11_520 over a year
+     * against a measured gross benefit (import saved plus buildings not
+     * abandoned) of 3_600-5_700. That is the intended shape: the
+     * contract leaves a well-supplied city 4.8-8.6 % behind on the year's
+     * net income, so signing it is a decision about reliability, not a
+     * free upgrade. The spec's 20 put the retainer at 38_400 a year and
+     * the city 12.0-21.5 % behind — more than the whole mechanic is
+     * worth, and the retainer alone was 63 % of the bill.
+     */
+    retainerPerBuildingPerDay: 6,
     /**
      * Paid per energy unit shed. Below market.importCostPerEnergyUnit, so
      * a call beats importing whenever spot >= activationPrice / importCost
-     * (0.75 at these values) — normal and scarce prices, not abundance.
+     * (0.5 at these values) — normal and scarce prices, not abundance
+     * (spot bottoms out at market.spotMin = 0.25).
+     *
+     * In practice this is a cost knob, not a dispatch knob: the import
+     * link carries only market.importCapacity = 60 EU/tick, so nearly
+     * every deficit the probe city sees is deeper than the link and the
+     * security rule calls the pool whatever the price. The premium
+     * therefore decides how much of the call is insurance the city pays
+     * for rather than import it avoids — 15_300 of the year's 26_800
+     * contract bill on the quiet seed. The spec's 0.3 (threshold 0.75)
+     * cost 28 % more for the same shedding — 34_465 instead of 26_816 on
+     * that seed; 0.15 would drop the threshold to 0.375, within sight of
+     * spotMin, i.e. calling businesses at prices where the regional grid
+     * is all but giving energy away.
      */
-    activationPricePerEnergyUnit: 0.3,
-    /** Hours of full-pool shedding the contract allows per in-game day. */
+    activationPricePerEnergyUnit: 0.2,
+    /**
+     * Hours of full-pool shedding the contract allows per in-game day.
+     * 4 rations the mechanic exactly where it is meant to: the probe
+     * city spends 9.5-18.5 call hours over a whole 20-day year, uses
+     * none at all on 13-14 of the 20 days, and runs the allowance flat
+     * out on the two worst winter days. 6 h a day is affordable
+     * (454_898 / 292_516 net money against 458_952 / 294_798) and on one
+     * seed nearly doubles the blackout aversion (711 -> 648 deficit
+     * ticks), but on the other it changes nothing at all (1_382 either
+     * way) — so it buys a seed-dependent extra at the price of letting a
+     * shop district sit shed for a quarter of the day, and the daily
+     * allowance is the only comfort rule the design has. Kept at 4.
+     */
     maxCallHoursPerDay: 4,
-    /** Cumulative shed energy the loadManager goal requires. */
-    goalShedEnergy: 2_000,
+    /**
+     * Cumulative shed energy the loadManager goal requires. A contracted
+     * probe city sheds 76_000-110_000 energy units over a 20-day year
+     * (77_000-197_000 on the stretched park), so 20_000 is about a
+     * quarter of the quietest year: reachable inside one in-game year of
+     * holding the contract through a winter, but not on a single windless
+     * evening. The spec's 2_000 was one Dunkelflaute day's shedding —
+     * the goal would have unlocked with the toggle.
+     */
+    goalShedEnergy: 20_000,
   },
 
   happiness: {

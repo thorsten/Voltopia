@@ -44,24 +44,26 @@ have mattered as a storm-resilience upgrade.
 
 ### Balance (`src/shared/constants.ts`)
 
-Initial values; the pacing probe (see Testing) freezes them:
+Frozen by the pacing probe (see Testing); the per-value measurements
+are comments in `constants.ts`:
 
 ```ts
 demandResponse: {
   /** Share of the commercial and retail base load the contract may shed. */
   shedShare: 0.4,
   /** Retainer per contracted business building and in-game day, paid while the contract runs. */
-  retainerPerBuildingPerDay: 20,
+  retainerPerBuildingPerDay: 6,   // was 20 before the probe
   /**
    * Paid per energy unit shed. Below market.importCostPerEnergyUnit, so
    * a call beats importing whenever spot ≥ activationPrice / importCost
-   * (0.75 at these values) — normal and scarce prices, not abundance.
+   * (0.5 at these values) — normal and scarce prices, not abundance
+   * (spot bottoms out at market.spotMin = 0.25).
    */
-  activationPricePerEnergyUnit: 0.3,
+  activationPricePerEnergyUnit: 0.2,  // was 0.3
   /** Hours of full-pool shedding the contract allows per in-game day. */
   maxCallHoursPerDay: 4,
   /** Cumulative shed energy the loadManager goal requires. */
-  goalShedEnergy: 2_000,
+  goalShedEnergy: 20_000,  // was 2_000 — one Dunkelflaute day's shedding
 },
 ```
 
@@ -147,9 +149,10 @@ the step is numerically identical to today. No randomness is added.
 ### Economy (`src/sim/economy.ts`)
 
 `EconomyBreakdown` gains `demandResponse` (the step's return value,
-read from `lastDemandResponseCost`); it is subtracted from the money
-alongside the import cost and flattened into `GlobalStats.budget`
-like `smartMeters`.
+read from `lastDemandResponseCost`); the step deducts it from the money
+itself, as the smart-meter step does, and `buildBudget` flattens
+`lastDemandResponseCost` into the budget — flattened into
+`GlobalStats.budget` like `smartMeters`.
 
 ### Stats (`src/shared/types.ts`, `src/sim/tick.ts`)
 
@@ -234,6 +237,65 @@ RNG, no extra grid scan.
   `retainerPerBuildingPerDay`, `activationPricePerEnergyUnit` and
   `maxCallHoursPerDay`; record the measurements as comments next to
   the values.
+
+  **Done.** The probe city: 288 density-3 buildings in six banded rows
+  (24 per side), 96 of them commercial and retail, smart meters on, on
+  a flat 64×64 map with the treasury unconstrained. Two plant parks
+  were measured: a _well-supplied_ one (158 plants — 36 wind, 36 solar,
+  64 batteries, 16 biogas, 6 hydrogen; generation 3_723 / 3_735 EU/tick
+  mean against 2_106 EU of load) and a _stretched_ one (122 plants —
+  30 wind, 30 solar, 48 batteries, 10 biogas, 4 hydrogen; generation
+  3_202 / 3_135). The brief's original 24-plant park against 480
+  buildings was in permanent blackout (18_200 of 19_200 ticks in
+  deficit), which is no basis for tuning a scarcity mechanic, so the
+  park was sized up until the city only ran dry in the dark, calm
+  hours: the well-supplied city needs no call at all on 13-14 of its 20
+  days.
+
+  Final values (`shedShare` 0.4, `retainerPerBuildingPerDay` 6,
+  `activationPricePerEnergyUnit` 0.2, `maxCallHoursPerDay` 4,
+  `goalShedEnergy` 20_000), per 20-day year:
+
+  | city          | seed | shed    | call h | import OFF → ON           | deficit ticks OFF → ON  | net money OFF → ON         | contract cost |
+  | ------------- | ---- | ------- | ------ | ------------------------- | ----------------------- | -------------------------- | ------------- |
+  | well-supplied | 7    | 76_482  | 9.5    | 35_288 → 31_677 (−10.2 %) | 790 → 711 (−10.0 %)     | 482_157 → 458_952 (−4.8 %) | 26_816        |
+  | well-supplied | 11   | 110_489 | 18.5   | 65_700 → 59_977 (−8.7 %)  | 1_505 → 1_382 (−8.2 %)  | 322_693 → 294_798 (−8.6 %) | 33_618        |
+  | stretched     | 7    | 77_134  | 22.6   | 60_225 → 61_137 (+1.5 %)  | 1_484 → 1_556 (+4.9 %)  | 431_118 → 411_963 (−4.4 %) | 26_947        |
+  | stretched     | 11   | 197_158 | 29.8   | 103_306 → 93_247 (−9.7 %) | 2_460 → 2_212 (−10.1 %) | 281_040 → 267_195 (−4.9 %) | 50_952        |
+
+  Unserved energy fell by the same order: 475_459 → 404_188 and
+  1_028_471 → 925_478 on the well-supplied city, 2_607_871 → 2_098_217
+  on the stretched city at seed 11.
+
+  Against the three targets: imports are clearly below the uncontracted
+  city (−8.7 to −10.2 %) and the year ends 4.4-8.6 % behind it, so the
+  contract reads as insurance with a price rather than a free upgrade —
+  the net-money target is met on three of the four runs and missed by
+  3.6 points on the fourth. **The ≥ 50 % blackout-tick target is not
+  reachable and the spec was wrong to expect it**: the pool is 212
+  EU/tick (a tenth of the city's load) while the mean depth of the
+  deficits it is called into is 568-683 EU, because a dark, calm night
+  takes the whole city off its generation, not a tenth of it. The
+  contract therefore thins blackouts by 8-10 % of their ticks and
+  10-20 % of their energy. Raising `shedShare` does not fix the shape:
+  0.6 reaches only 14-17 % fewer ticks (660 and 1_291) for 27-29 % more
+  contract money, 0.2 falls to 4-6 % (745 and 1_445).
+  `maxCallHoursPerDay` 6 nearly doubled the aversion on one seed
+  (711 → 648) and changed nothing on the other (1_382 either way), so
+  the allowance stayed at 4 — it is also the design's only comfort
+  rule. The spec's original retainer 20 / premium 0.3 left the
+  well-supplied city 12.0 % and the stretched city 12.5-21.5 % behind,
+  with the retainer alone 63 % of the bill.
+
+  One probe caveat worth keeping: the two runs of a seed share the Rng,
+  but `growthStep`'s abandonment roll only draws for a _chronically_
+  troubled building, so as soon as a day blacks out hard enough to
+  abandon buildings the draw counts diverge and the weather streams part
+  company (visible as the stretched city's seed-7 row above, which
+  parted on day 16 and is the one row where ON looks worse). The
+  well-supplied city never diverged — identical generation and
+  curtailment totals ON and OFF — and is what the values are tuned on.
+
 - `node scripts/smoke.mjs`; `pnpm coverage` gate; e2e HUD test extended
   by one click on the new toggle.
 - Mac visual pass: the HUD label fits the console width in both
