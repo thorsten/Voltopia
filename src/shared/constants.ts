@@ -705,6 +705,31 @@ export const BALANCE = {
     goalCoverage: 0.8,
   },
 
+  /**
+   * Demand response: a contract with the commercial and retail zones
+   * under which a share of their base load is shed in a deficit. Called
+   * automatically inside the cascade (after biogas, before import)
+   * when a call is cheaper than importing at the tick's spot price, or
+   * when the shortfall exceeds the import link. Initial values; the
+   * pacing probe freezes them (see the design spec).
+   */
+  demandResponse: {
+    /** Share of the commercial and retail base load the contract may shed. */
+    shedShare: 0.4,
+    /** Retainer per contracted business building and in-game day, paid while the contract runs. */
+    retainerPerBuildingPerDay: 20,
+    /**
+     * Paid per energy unit shed. Below market.importCostPerEnergyUnit, so
+     * a call beats importing whenever spot >= activationPrice / importCost
+     * (0.75 at these values) — normal and scarce prices, not abundance.
+     */
+    activationPricePerEnergyUnit: 0.3,
+    /** Hours of full-pool shedding the contract allows per in-game day. */
+    maxCallHoursPerDay: 4,
+    /** Cumulative shed energy the loadManager goal requires. */
+    goalShedEnergy: 2_000,
+  },
+
   happiness: {
     /** Smoothing factor per tick toward the target happiness. */
     smoothing: 0.02,

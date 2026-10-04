@@ -746,6 +746,10 @@ export interface SaveGame {
   smartMeters?: { active: boolean; metered: number };
   /** Deferred flexible energy waiting for surplus (absent → 0). */
   flexBacklog?: number;
+  /** Demand-response contract and the call budget left today (absent in older saves → off, full). */
+  demandResponse?: { active: boolean; callBudget: number };
+  /** Cumulative energy shed under the contract (absent in older saves → 0). */
+  shedTotal?: number;
   /** Disaster intensity of this city (absent in older saves → 0 = off). */
   disasterScale?: number;
   /** Events in flight (absent in older saves → none). */

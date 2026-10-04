@@ -30,6 +30,7 @@ import {
   TileType,
   Zone,
 } from '../shared/types.ts';
+import { callBudgetTicks } from './demandResponse.ts';
 import { emptyPlantMap, type EconomyBreakdown } from './economy.ts';
 import {
   discoverGeothermalFields,
@@ -244,6 +245,18 @@ export interface SimState {
   lastBuildingCount: number;
   /** Smart-meter install cost paid last tick (budget line). */
   lastSmartMeterCost: number;
+  /**
+   * Demand-response contract with the commercial and retail zones:
+   * whether it is in force, and the ticks of full-pool shedding still
+   * allowed today (fractions for partial calls). The budget is
+   * persisted so a reload cannot refill the day's allowance.
+   */
+  demandResponse: {
+    active: boolean;
+    callBudget: number;
+  };
+  /** Retainer plus activation premiums paid last tick (budget line). */
+  lastDemandResponseCost: number;
   /** Day number on which year 1 started; 0 for new games. */
   seasonOriginDay: number;
   /** Seasonal signal for the current tick, recomputed in stepTick. */
@@ -339,6 +352,8 @@ export interface SimState {
     stormTicks: number;
     warmWinterTicks: number;
     flexTicks: number;
+    /** Cumulative energy shed under the contract (loadManager); persisted like flexTicks. */
+    shedTotal: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -465,6 +480,8 @@ export function createSimState(
     // A fresh map has no buildings; stepTick refreshes this every tick.
     lastBuildingCount: 0,
     lastSmartMeterCost: 0,
+    demandResponse: { active: false, callBudget: callBudgetTicks() },
+    lastDemandResponseCost: 0,
     seasonOriginDay: 0,
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
     happiness: BALANCE.happiness.base,
@@ -516,6 +533,7 @@ export function createSimState(
       stormTicks: 0,
       warmWinterTicks: 0,
       flexTicks: 0,
+      shedTotal: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
@@ -909,6 +927,11 @@ export function serializeState(state: SimState): SaveGame {
     heatStored: state.heatStored,
     warmWinterTicks: state.goalProgress.warmWinterTicks,
     flexTicks: state.goalProgress.flexTicks,
+    demandResponse: {
+      active: state.demandResponse.active,
+      callBudget: state.demandResponse.callBudget,
+    },
+    shedTotal: state.goalProgress.shedTotal,
     disasterScale: state.disasterScale,
     disasters: {
       nextId: state.disasters.nextId,
@@ -999,6 +1022,20 @@ export function deserializeState(save: SaveGame): SimState {
   state.goalProgress.transitTicks = save.transitTicks ?? 0;
   state.goalProgress.warmWinterTicks = save.warmWinterTicks ?? 0;
   state.goalProgress.flexTicks = save.flexTicks ?? 0;
+  state.goalProgress.shedTotal =
+    typeof save.shedTotal === 'number' && Number.isFinite(save.shedTotal)
+      ? Math.max(0, save.shedTotal)
+      : 0;
+  // Clamp into the daily allowance: a hand-edited export must not grant
+  // more call hours than a day has, and NaN would poison the budget.
+  const savedBudget = save.demandResponse?.callBudget;
+  state.demandResponse = {
+    active: save.demandResponse?.active === true,
+    callBudget:
+      typeof savedBudget === 'number' && Number.isFinite(savedBudget)
+        ? Math.min(callBudgetTicks(), Math.max(0, savedBudget))
+        : callBudgetTicks(),
+  };
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.season = seasonState({
