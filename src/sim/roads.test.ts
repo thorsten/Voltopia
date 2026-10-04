@@ -3,7 +3,7 @@ import { BALANCE } from '../shared/constants.ts';
 import { DIR_E, DIR_N, DIR_S, DIR_W, tileIndex } from '../shared/grid.ts';
 import { RoadClass, Terrain } from '../shared/types.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
-import { collectDiffs, createSimState, TileType, Zone } from './state.ts';
+import { collectDiffs, createSimState, SupplyStatus, TileType, Zone } from './state.ts';
 
 const SIZE = 16;
 
@@ -136,6 +136,19 @@ describe('bulldozeTiles', () => {
     const before = state.money;
     bulldozeTiles(state, [at(1, 1)]);
     expect(state.money).toBe(before);
+  });
+
+  it('resets a stale supplied status when the tile is cleared', () => {
+    const state = makeState();
+    const index = at(2, 2);
+    state.layers.zone[index] = Zone.Commercial;
+    state.layers.density[index] = 1;
+    state.layers.supplied[index] = SupplyStatus.Supplied;
+    bulldozeTiles(state, [index]);
+    expect(state.layers.supplied[index]).toBe(SupplyStatus.NotConnected);
+    expect(collectDiffs(state).find((d) => d.index === index)?.supplied).toBe(
+      SupplyStatus.NotConnected,
+    );
   });
 });
 

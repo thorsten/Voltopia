@@ -78,7 +78,7 @@ tileType Empty and density > 0 within lineSupplyRadius`. Damage is
   already marks the tile dirty only on change, so an unchanged plant
   costs no diff. `placePlant` sets the same status right after placing
   a supply plant so the first diff is correct (no one-tick red flash).
-  Bulldozing already resets `supplied` to 0 with the tile.
+  Bulldozing resets `supplied` with the tile (added in this feature).
 
   Semantics of `layers.supplied` for a supply plant are therefore:
   `Supplied` = serves something (line attached or building in ring),
@@ -105,22 +105,25 @@ isSupplySource(plantType) && supplied === NotConnected`). Plant icons
   row is replaced by two rows: **Line attached** yes/no (from
   `info.connected`, whose meaning for supply plants is already "line
   attached") and **Serves** with either "buildings nearby" (positive)
-  or "no building — output still counts; draw a power line to reach
-  homes" (negative), from `info.supplied`. Stations, hubs, depots and
-  heat plants keep the existing "Grid connection" row, because for them
-  it really means powered or not.
+  or the short "no building" (negative), from `info.supplied`. The
+  negative case also renders a wrapping advice line,
+  `inspect.servesNothingHint` ("Its output still counts — draw a power
+  line toward your homes."), styled like the growth-blocker list.
+  Stations, hubs, depots and heat plants keep the existing "Grid
+  connection" row, because for them it really means powered or not.
 - `src/ui/i18n.tsx` — new keys in English and German:
   `inspect.lineAttached` ("Line attached" / "Leitung angeschlossen"),
   `inspect.serves` ("Serves" / "Versorgt"),
   `inspect.servesNearby` ("buildings nearby" / "Gebäude im Umkreis"),
-  `inspect.servesNothing` ("no building — output still counts; draw a
-  power line to reach homes" / "kein Gebäude – Erzeugung zählt
-  trotzdem, Leitung zu den Häusern ziehen"). The bolt help sentence
-  (`help.*` entry that explains red and orange bolts) gains: "A
-  blue-grey bolt above a plant means it reaches no building; its output
-  still counts, but nobody nearby uses it." / "Ein blaugrauer Blitz über
-  einer Anlage: sie erreicht kein Gebäude. Ihre Erzeugung zählt
-  trotzdem, aber niemand in der Nähe nutzt sie."
+  `inspect.servesNothing` ("no building" / "kein Gebäude"),
+  `inspect.servesNothingHint` ("Its output still counts — draw a power
+  line toward your homes." / "Die Erzeugung zählt trotzdem – ziehe eine
+  Leitung zu den Häusern."). The bolt help sentence (`help.*` entry
+  that explains red and orange bolts) gains: "A blue-grey bolt above a
+  plant means it reaches no building; its output still counts, but
+  nobody nearby uses it." / "Ein blaugrauer Blitz über einer Anlage: sie
+  erreicht kein Gebäude. Ihre Erzeugung zählt trotzdem, aber niemand in
+  der Nähe nutzt sie."
 
 ### Agent tools
 

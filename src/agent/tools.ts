@@ -9,6 +9,7 @@
 import { BALANCE, GRID_SIZE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { lShapedPath, neighbors4, rectTiles, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { SimCommand } from '../shared/messages.ts';
+import { isSupplySource } from '../shared/plants.ts';
 import {
   DisasterKind,
   PlantType,
@@ -216,6 +217,7 @@ export const FIND_KINDS = [
   'building',
   'not_connected_building',
   'undersupplied_building',
+  'isolated_plant',
   'bus_stop',
   'damaged',
 ] as const;
@@ -780,7 +782,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         "capacity sustains — heat and every well's output fall once wells drilled exceed that " +
         'capacity. On a heat plant a "heatPlant" field reports its road reach, buildings ' +
         'served, COP and whether it is active; a building reports "heated" (true when the ' +
-        'district network heats it). See get_disasters for the events causing any damage.',
+        'district network heats it). On a supply plant, "supply" is not_connected when the ' +
+        'plant is isolated (no power line attached and no building within the supply radius; ' +
+        'its output still counts — see find_tiles isolated_plant) and connected means a power ' +
+        'line is attached. See get_disasters for the events causing any damage.',
       inputSchema: {
         type: 'object',
         properties: { x: { type: 'integer' }, y: { type: 'integer' } },
@@ -812,7 +817,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'lake, for pumped storage), coastal_sea (empty sea tile touching land, for tidal plants), ' +
         'geothermal_hotspot (empty land tile carrying a hotspot, for geothermal plants), ' +
         'road, power_line, plant, zoned_empty, building, not_connected_building, ' +
-        'undersupplied_building, bus_stop, damaged (out of service from a storm, fire or flood; ' +
+        'undersupplied_building, isolated_plant (a supply plant with no power line attached ' +
+        'and no building in its supply ring — its output still counts, nobody nearby uses it), ' +
+        'bus_stop, damaged (out of service from a storm, fire or flood; ' +
         'see get_disasters). Optionally nearest to a point first.',
       inputSchema: {
         type: 'object',
@@ -1339,6 +1346,12 @@ function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
       return tiles.density[i] > 0 && tiles.supplied[i] === SupplyStatus.NotConnected;
     case 'undersupplied_building':
       return tiles.density[i] > 0 && tiles.supplied[i] === SupplyStatus.Undersupplied;
+    case 'isolated_plant':
+      return (
+        tiles.tileType[i] === TileType.Plant &&
+        isSupplySource(tiles.plantType[i] as PlantType) &&
+        tiles.supplied[i] === SupplyStatus.NotConnected
+      );
     case 'bus_stop':
       return tiles.busStop[i] !== 0;
     case 'damaged':

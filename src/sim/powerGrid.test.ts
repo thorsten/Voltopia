@@ -3,9 +3,10 @@ import { BALANCE } from '../shared/constants.ts';
 import { chebyshevDistance, LINE_PRESENT, tileIndex } from '../shared/grid.ts';
 import { PlantType } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
-import { isSupplySource, recomputeGrid } from './powerGrid.ts';
+import { hasLineAttached, isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
-import { bumpGridVersion, createSimState, type SimState } from './state.ts';
+import { buildRoads } from './roads.ts';
+import { bumpGridVersion, createSimState, TileType, Zone, type SimState } from './state.ts';
 
 const SIZE = 24;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -36,6 +37,21 @@ describe('recomputeGrid', () => {
     recomputeGrid(state);
     expect(state.layers.energized[at(10 + R, 10 + R)]).toBe(1);
     expect(state.layers.energized[at(10 + R + 1, 10)]).toBe(0);
+  });
+
+  it('a geothermal plant is a supply source: it energises its ring and seeds a line', () => {
+    // Geothermal is the game's only baseload; it must tie into the grid
+    // like every other generator (it was missing from the set once).
+    const state = makeState();
+    const site = at(10, 10);
+    state.layers.tileType[site] = TileType.Plant;
+    state.layers.plantType[site] = PlantType.GeothermalPlant;
+    bumpGridVersion(state);
+    buildPowerLines(state, [at(11, 10), at(12, 10)]);
+    recomputeGrid(state);
+    expect(state.layers.energized[at(10 + R, 10 + R)]).toBe(1);
+    expect(state.layers.energized[at(12 + R, 10)]).toBe(1);
+    expect(state.layers.energized[at(12 + R + 1, 10)]).toBe(0);
   });
 
   it('lines connected to a plant extend the energised area', () => {
@@ -121,5 +137,52 @@ describe('recomputeGrid', () => {
     bumpGridVersion(state);
     recomputeGrid(state);
     expect(state.layers.energized[at(10, 10)]).toBe(0);
+  });
+});
+
+describe('isIsolatedPlant', () => {
+  /** A supply plant at (10,10) on an otherwise empty map. */
+  function lonePlant(): SimState {
+    const state = makeState();
+    placePlant(state, at(10, 10), PlantType.WindTurbine);
+    return state;
+  }
+  function house(state: SimState, index: number): void {
+    state.layers.zone[index] = Zone.Residential;
+    state.layers.density[index] = 1;
+  }
+
+  it('flags a supply plant with no line and no building in its ring', () => {
+    const state = lonePlant();
+    expect(hasLineAttached(state, at(10, 10))).toBe(false);
+    expect(isIsolatedPlant(state, at(10, 10))).toBe(true);
+  });
+
+  it('is not isolated once a building stands inside the ring, up to the ring edge', () => {
+    const inside = lonePlant();
+    house(inside, at(10 + R, 10 - R)); // Chebyshev distance exactly R
+    expect(isIsolatedPlant(inside, at(10, 10))).toBe(false);
+    const outside = lonePlant();
+    house(outside, at(10 + R + 1, 10));
+    expect(isIsolatedPlant(outside, at(10, 10))).toBe(true);
+    // Zoning alone does not lift isolation: a tile needs an actual building.
+    const zonedOnly = lonePlant();
+    zonedOnly.layers.zone[at(11, 10)] = Zone.Residential; // density stays 0
+    expect(isIsolatedPlant(zonedOnly, at(10, 10))).toBe(true);
+  });
+
+  it('is not isolated once a power line touches one of its sides', () => {
+    const state = lonePlant();
+    buildPowerLines(state, [at(11, 10), at(12, 10)]);
+    expect(hasLineAttached(state, at(10, 10))).toBe(true);
+    expect(isIsolatedPlant(state, at(10, 10))).toBe(false);
+  });
+
+  it('never flags empty tiles or non-supply plants', () => {
+    const state = makeState();
+    expect(isIsolatedPlant(state, at(3, 3))).toBe(false);
+    buildRoads(state, [at(2, 3)]); // stations need a road 4-neighbour
+    expect(placePlant(state, at(3, 3), PlantType.FireStation)).toEqual({});
+    expect(isIsolatedPlant(state, at(3, 3))).toBe(false);
   });
 });

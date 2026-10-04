@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { SupplyStatus, TileType } from '../shared/types.ts';
+import { isSupplySource } from '../shared/plants.ts';
 import type { DiffLayer } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 
@@ -12,6 +13,8 @@ const LINGER_SECONDS = 2;
 
 const COLOR_NOT_CONNECTED = new THREE.Color(0xe05263);
 const COLOR_UNDERSUPPLIED = new THREE.Color(0xffb347);
+/** Isolated supply plant: information, not an outage, so blue-grey. */
+const COLOR_ISOLATED_PLANT = new THREE.Color(0x7fa7c9);
 
 /** White lightning bolt on transparent ground, tinted per instance. */
 function createBoltTexture(): THREE.Texture {
@@ -42,6 +45,7 @@ interface IconEntry {
   status: SupplyStatus;
   /** Renderer clock time after which the icon disappears. */
   expiresAt: number;
+  plant: boolean;
 }
 
 /**
@@ -88,6 +92,21 @@ export class IconsMesh implements DiffLayer {
   applyDiffs(diffs: TileDiff[]): void {
     for (const diff of diffs) {
       const isBuilding = diff.tileType === TileType.Empty && diff.density > 0;
+      const isSupplyPlant = diff.tileType === TileType.Plant && isSupplySource(diff.plantType);
+      if (isSupplyPlant) {
+        // A plant that serves nothing (no line, no building in its ring)
+        // keeps a permanent marker; it clears the moment it serves again.
+        if (diff.supplied === SupplyStatus.NotConnected) {
+          this.icons.set(diff.index, {
+            status: diff.supplied,
+            expiresAt: Number.POSITIVE_INFINITY,
+            plant: true,
+          });
+        } else {
+          this.icons.delete(diff.index);
+        }
+        continue;
+      }
       if (isBuilding && diff.supplied !== SupplyStatus.Supplied) {
         this.icons.set(diff.index, {
           status: diff.supplied,
@@ -97,6 +116,7 @@ export class IconsMesh implements DiffLayer {
             diff.supplied === SupplyStatus.NotConnected
               ? Number.POSITIVE_INFINITY
               : this.nowSeconds + LINGER_SECONDS,
+          plant: false,
         });
       } else if (!isBuilding) {
         this.icons.delete(diff.index);
@@ -108,6 +128,7 @@ export class IconsMesh implements DiffLayer {
           this.icons.set(diff.index, {
             status: diff.supplied,
             expiresAt: this.nowSeconds + LINGER_SECONDS,
+            plant: false,
           });
         }
       }
@@ -133,7 +154,11 @@ export class IconsMesh implements DiffLayer {
       this.mesh.setMatrixAt(slot, this.matrix);
       this.mesh.setColorAt(
         slot,
-        entry.status === SupplyStatus.NotConnected ? COLOR_NOT_CONNECTED : COLOR_UNDERSUPPLIED,
+        entry.plant
+          ? COLOR_ISOLATED_PLANT
+          : entry.status === SupplyStatus.NotConnected
+            ? COLOR_NOT_CONNECTED
+            : COLOR_UNDERSUPPLIED,
       );
       slot++;
     }

@@ -11,8 +11,10 @@ import {
   type GlobalStats,
 } from '../shared/types.ts';
 import { addDamage } from '../sim/disasters.ts';
+import { placePlant } from '../sim/energy.ts';
 import { SimEngine } from '../sim/engine.ts';
 import { discoverGeothermalFields } from '../sim/geothermal.ts';
+import { buildPowerLines } from '../sim/powerLines.ts';
 import { isCoastalSea } from '../sim/sea.ts';
 import { markDirty, slopeCostMultiplier } from '../sim/state.ts';
 import { TileMirror } from './tileMirror.ts';
@@ -685,5 +687,23 @@ describe('agent tools: building', () => {
     const map = (await call('get_map', { layer: 'overview' })) as Record<string, any>;
     expect(map.rows[y][x]).toBe('Q');
     expect(map.legend).toContain('Q heat plant');
+  });
+
+  it('find_tiles isolated_plant lists supply plants that serve nothing', async () => {
+    const { call, engine } = createHarness();
+    // (2,2) is too steep for this seed's terrain; (2,22) is flat, empty
+    // land far from any building or the wired turbine below.
+    const lone = tileIndex(2, 22, SIZE);
+    const wired = tileIndex(20, 20, SIZE);
+    engine.state.money = 1e9;
+    placePlant(engine.state, lone, PlantType.WindTurbine);
+    placePlant(engine.state, wired, PlantType.WindTurbine);
+    buildPowerLines(engine.state, [tileIndex(21, 20, SIZE), tileIndex(22, 20, SIZE)]);
+    // The tool mirror only sees tiles through tick diffs: advance one tick.
+    await call('advance_time', { ticks: 1 });
+    const found = await call('find_tiles', { kind: 'isolated_plant' });
+    const coords = (found.tiles as Array<{ x: number; y: number }>).map((t) => `${t.x},${t.y}`);
+    expect(coords).toContain('2,22');
+    expect(coords).not.toContain('20,20');
   });
 });

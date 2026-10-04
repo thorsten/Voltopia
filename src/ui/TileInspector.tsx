@@ -21,6 +21,7 @@ import {
   type TileInfo,
 } from '../shared/types.ts';
 import { disasterLabelKey, useI18n, type TranslationKey } from './i18n.tsx';
+import { isSupplySource } from '../shared/plants.ts';
 
 /** What felling the woods on a tile of this growth stage costs. */
 function fellingFee(stage: number): number {
@@ -150,6 +151,7 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
   const isStation =
     info.tileType === TileType.Plant &&
     (info.plantType === PlantType.FireStation || info.plantType === PlantType.PoliceStation);
+  const isSupplyPlant = info.tileType === TileType.Plant && isSupplySource(info.plantType);
   const upkeepPerDay = (info.upkeepPerTick + info.fuelCostPerTick) * TICKS_PER_DAY;
   const taxPerDay = info.taxPerTick * TICKS_PER_DAY;
   const netPerDay = taxPerDay - upkeepPerDay;
@@ -373,12 +375,36 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
             testId="inspect-supply"
           />
         )}
-        {!isBuilding && (
+        {!isBuilding && !isSupplyPlant && (
           <Row
             label={t('inspect.connected')}
             value={info.connected ? t('inspect.yes') : t('inspect.no')}
             tone={info.connected ? 'positive' : 'muted'}
           />
+        )}
+        {isSupplyPlant && (
+          <>
+            <Row
+              label={t('inspect.lineAttached')}
+              value={info.connected ? t('inspect.yes') : t('inspect.no')}
+              tone={info.connected ? 'positive' : 'muted'}
+            />
+            <Row
+              label={t('inspect.serves')}
+              value={
+                info.supplied === SupplyStatus.NotConnected
+                  ? t('inspect.servesNothing')
+                  : t('inspect.servesNearby')
+              }
+              tone={info.supplied === SupplyStatus.NotConnected ? 'negative' : 'positive'}
+              testId="inspect-serves"
+            />
+            {info.supplied === SupplyStatus.NotConnected && (
+              <p className="inspect-blockers" data-testid="inspect-serves-hint">
+                {t('inspect.servesNothingHint')}
+              </p>
+            )}
+          </>
         )}
       </section>
 
