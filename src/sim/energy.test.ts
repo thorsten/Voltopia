@@ -1449,6 +1449,10 @@ describe('isolated supply plants', () => {
     tick(state);
     expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.NotConnected);
 
+    state.dirty.clear();
+    tick(state);
+    expect(state.dirty.has(at(10, 10))).toBe(false); // unchanged status: no re-dirty, no diff churn
+
     state.layers.zone[at(13, 13)] = Zone.Residential;
     state.layers.density[at(13, 13)] = 1;
     state.dirty.clear();
@@ -1468,9 +1472,12 @@ describe('isolated supply plants', () => {
   it('leaves non-supply plants alone', () => {
     const state = createSimState(1, SIZE);
     state.money = 1e9;
-    placePlant(state, at(10, 10), PlantType.FireStation);
-    const before = state.layers.supplied[at(10, 10)];
+    // A station needs a road neighbor or placePlant rejects it (needsRoad)
+    // and the tile never becomes a Plant tile, defeating the test below.
+    buildRoads(state, [at(9, 10)]);
+    expect(placePlant(state, at(10, 10), PlantType.FireStation)).toEqual({});
+    state.layers.supplied[at(10, 10)] = SupplyStatus.Supplied;
     tick(state);
-    expect(state.layers.supplied[at(10, 10)]).toBe(before);
+    expect(state.layers.supplied[at(10, 10)]).toBe(SupplyStatus.Supplied);
   });
 });
