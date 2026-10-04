@@ -286,7 +286,7 @@ const en = {
     'Left mouse: use the selected tool (drag for roads and zones). Right or middle mouse drag: pan. Mouse wheel: zoom. Q/E: rotate the view. WASD/arrows: pan. Ctrl+S: quick-save. The game autosaves every 30 seconds.',
   'help.icons.title': 'Warning icons',
   'help.icons.body':
-    'A red bolt above a building means it is not connected to any plant; an orange bolt means the grid cannot cover its demand right now.',
+    'A red bolt above a building means it is not connected to any plant; an orange bolt means the grid cannot cover its demand right now. A blue-grey bolt above a plant means it reaches no building: its output still counts, but nobody nearby uses it — draw a power line toward your homes.',
   'help.nature.title': 'Woods and nature',
   'help.nature.body':
     'Every map starts with woodland. Building through it fells the trees for a fee that scales with how grown they are, so a road through the forest costs more than one over open land — the bulldozer clears bare woods for the same fee. Woods within five tiles of a building raise happiness, on top of parks. You can plant new woods by the patch (🌲); saplings take a few in-game days to mature. The catch: trees slow the wind, so a turbine standing in closed forest loses up to 30 % of its output. Plant the woods where people live, keep them clear of your wind park.',
@@ -479,6 +479,10 @@ const en = {
   'inspect.connected': 'Grid connection',
   'inspect.yes': 'yes',
   'inspect.no': 'no',
+  'inspect.lineAttached': 'Line attached',
+  'inspect.serves': 'Serves',
+  'inspect.servesNearby': 'buildings nearby',
+  'inspect.servesNothing': 'no building — output still counts; draw a power line to reach homes',
   'inspect.demand': 'Zone demand',
   'inspect.residents': 'Residents',
   'inspect.troubled': 'Ticks undersupplied',
@@ -821,7 +825,7 @@ const de: Record<TranslationKey, string> = {
     'Linke Maustaste: gewähltes Werkzeug benutzen (für Straßen und Zonen ziehen). Rechte oder mittlere Maustaste ziehen: Ansicht bewegen. Mausrad: zoomen. Q/E: Ansicht drehen. WASD/Pfeile: bewegen. Strg+S: Schnellspeichern. Das Spiel speichert alle 30 Sekunden automatisch.',
   'help.icons.title': 'Warnsymbole',
   'help.icons.body':
-    'Ein roter Blitz über einem Gebäude bedeutet: nicht an eine Anlage angeschlossen. Ein oranger Blitz: das Netz kann den Bedarf gerade nicht decken.',
+    'Ein roter Blitz über einem Gebäude bedeutet: nicht an eine Anlage angeschlossen. Ein oranger Blitz: das Netz kann den Bedarf gerade nicht decken. Ein blaugrauer Blitz über einer Anlage: sie erreicht kein Gebäude. Ihre Erzeugung zählt trotzdem, aber niemand in der Nähe nutzt sie – ziehe eine Leitung zu den Häusern.',
   'help.nature.title': 'Wald und Natur',
   'help.nature.body':
     'Jede Karte startet mit Wald. Wer hindurchbaut, rodet ihn gegen eine Gebühr, die mit dem Wuchs steigt — eine Straße durch den Wald kostet also mehr als über offenes Land; die Planierraupe rodet reinen Wald zum selben Preis. Wald im Umkreis von fünf Feldern um ein Gebäude hebt die Zufriedenheit, zusätzlich zu Parks. Neuen Wald pflanzt du flächenweise (🌲); Setzlinge brauchen ein paar Spieltage bis zur Reife. Der Haken: Bäume bremsen den Wind, eine Turbine im geschlossenen Wald verliert bis zu 30 % Leistung. Pflanze den Wald dort, wo Menschen wohnen, und halte ihn vom Windpark fern.',
@@ -1017,6 +1021,10 @@ const de: Record<TranslationKey, string> = {
   'inspect.connected': 'Netzanschluss',
   'inspect.yes': 'ja',
   'inspect.no': 'nein',
+  'inspect.lineAttached': 'Leitung angeschlossen',
+  'inspect.serves': 'Versorgt',
+  'inspect.servesNearby': 'Gebäude im Umkreis',
+  'inspect.servesNothing': 'kein Gebäude – Erzeugung zählt trotzdem, Leitung zu den Häusern ziehen',
   'inspect.demand': 'Zonennachfrage',
   'inspect.residents': 'Einwohner',
   'inspect.troubled': 'Ticks unterversorgt',
