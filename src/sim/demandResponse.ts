@@ -11,3 +11,44 @@ export function setDemandResponse(state: SimState, active: boolean): void {
   state.demandResponse.active = active;
   state.statsDirty = true;
 }
+
+export interface DemandResponseCall {
+  /** Energy the contract could shed this tick (shedShare of the business base load, 0 when off). */
+  pool: number;
+  /** Energy actually shed this tick. */
+  shed: number;
+}
+
+/**
+ * One tick of the contract inside the deficit cascade (after biogas,
+ * before import). `shortfall` is what is still uncovered, `spotPrice`
+ * the tick's spot factor. Two rules, combined with max rather than
+ * summed: the economic call sheds whatever the pool can give whenever
+ * importing would cost more than the activation premium; the security
+ * call only adds, at abundance prices, the part of the shortfall the
+ * import link cannot carry. The day's allowance refills on the first
+ * tick of every in-game day and is spent in fractions of a full-pool
+ * tick, so a partial call costs a partial tick. Shed energy is gone,
+ * not deferred.
+ */
+export function dispatchDemandResponse(
+  state: SimState,
+  businessDemand: number,
+  shortfall: number,
+  spotPrice: number,
+): DemandResponseCall {
+  const contract = state.demandResponse;
+  if (state.tick % TICKS_PER_DAY === 0) contract.callBudget = callBudgetTicks();
+  if (!contract.active) return { pool: 0, shed: 0 };
+  const { shedShare, activationPricePerEnergyUnit } = BALANCE.demandResponse;
+  const { importCapacity, importCostPerEnergyUnit } = BALANCE.market;
+  const pool = shedShare * businessDemand;
+  if (pool <= 0 || shortfall <= 0) return { pool, shed: 0 };
+  const available = pool * Math.min(1, Math.max(0, contract.callBudget));
+  const importPrice = importCostPerEnergyUnit * spotPrice;
+  const economic = importPrice >= activationPricePerEnergyUnit ? Math.min(shortfall, available) : 0;
+  const secure = Math.min(Math.max(0, shortfall - importCapacity), available);
+  const shed = Math.max(economic, secure);
+  contract.callBudget = Math.max(0, contract.callBudget - shed / pool);
+  return { pool, shed };
+}

@@ -23,6 +23,7 @@ import {
   type SimState,
   type UndoEntry,
 } from './state.ts';
+import { dispatchDemandResponse } from './demandResponse.ts';
 import { spotPriceFactor } from './market.ts';
 import { timeOfDay } from './tick.ts';
 import { currentSolarFactor, currentWindFactor, riverFlowFactor } from './weather.ts';
@@ -320,7 +321,8 @@ function dischargePool(
  *    what the link cannot take (selling hydrogen once the tanks are
  *    full) and only the rest is curtailed,
  * 3. deficit discharges batteries, then pumped storage, then the
- *    hydrogen fuel cells, then dispatches biogas, then imports over the
+ *    hydrogen fuel cells, then dispatches biogas, then sheds contracted
+ *    business load (demand response), then imports over the
  *    transmission link,
  * 4. remaining deficit becomes undersupply: a matching share of connected
  *    (energised) buildings is flagged undersupplied (deterministic flicker).
@@ -347,6 +349,9 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   let heatingDemand = 0;
   let coolingDemand = 0;
   let rooftop = 0;
+  // Base load of the connected businesses — the demand-response pool.
+  let businessDemand = 0;
+  let contractedBuildings = 0;
 
   // Service stations draw a fixed load while connected to the grid.
   for (let i = 0; i < layers.tileType.length; i++) {
@@ -374,6 +379,10 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     const zone = layers.zone[i] as Zone;
     const density = layers.density[i];
     buildingDemand += buildingConsumption(zone, density, time);
+    if (zone === Zone.Commercial || zone === Zone.Retail) {
+      businessDemand += buildingConsumption(zone, density, time);
+      contractedBuildings++;
+    }
     // A served building gets its heat from the network; its own
     // electric heating only runs for the fallback share (added below).
     if (layers.heated[i] !== HEATED_SERVED) {
@@ -469,9 +478,15 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   let batteryPowerUsed = 0;
   let pumpedPowerUsed = 0;
   let heatStoreCharge = 0;
+  let shed = 0;
+  let shedPool = 0;
 
+  // The spot factor depends only on the state (clock and weather), so
+  // reading it before the cascade changes nothing for trading below.
+  const spotPrice = spotPriceFactor(state);
   const net = generation - totalDemand;
   if (net >= 0) {
+    shedPool = dispatchDemandResponse(state, businessDemand, 0, spotPrice).pool;
     const battery = chargePool(
       state.storedEnergy,
       storageCapacity,
@@ -530,6 +545,12 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     shortfall -= fuelCell;
     biogas = Math.min(shortfall, census.biogasPlants * BALANCE.energy.biogasMaxOutput);
     shortfall -= biogas;
+    // The demand-response contract sheds business load when a call is
+    // cheaper than importing or the link alone cannot carry the rest.
+    const call = dispatchDemandResponse(state, businessDemand, shortfall, spotPrice);
+    shedPool = call.pool;
+    shed = call.shed;
+    shortfall -= shed;
     // Expensive imports over the limited transmission link come last.
     gridImport = Math.min(shortfall, BALANCE.market.importCapacity);
     shortfall -= gridImport;
@@ -542,7 +563,6 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   // disjoint (buyCeiling < sellFloor), so the same energy can never be
   // bought low and sold high — selling monetises the city's own shifted
   // surplus, buying pre-empts expensive imports.
-  const spotPrice = spotPriceFactor(state);
   let tradeSell = 0;
   let tradeBuy = 0;
   if (state.marketTrading) {
@@ -594,9 +614,14 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     }
   }
 
+  // Shed load was never served: it leaves the businesses' line and the
+  // tick's consumption, so the dashed unshifted curve shows it as a gap.
+  buildingDemand -= shed;
+  const consumptionThisTick = totalDemand - shed;
+
   // Flag a deterministic, tick-varying share of connected buildings as
   // undersupplied so they visibly flicker while the grid is short.
-  const deficitShare = totalDemand > 0 ? deficit / totalDemand : 0;
+  const deficitShare = consumptionThisTick > 0 ? deficit / consumptionThisTick : 0;
   for (const index of connectedBuildings) {
     const undersupplied = deficitShare > 0 && hashTileTick(index, state.tick) < deficitShare;
     setSupplied(state, index, undersupplied ? SupplyStatus.Undersupplied : SupplyStatus.Supplied);
@@ -634,6 +659,9 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     flexBacklog: state.flexBacklog,
     flexOverflow: overflow,
     unshifted,
+    shed,
+    shedPool,
+    contractedBuildings,
   };
 
   // Average across the sample window instead of snapshotting the last
@@ -645,7 +673,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     totalCapacity > 0 ? (state.storedEnergy + state.pumpedStorageEnergy) / totalCapacity : 0;
   const accum = state.energyHistoryAccum;
   accum.generation += generation + biogas + fuelCell;
-  accum.consumption += totalDemand;
+  accum.consumption += consumptionThisTick;
   accum.unshifted += unshifted;
   accum.soc += soc;
   accum.price += spotPrice;

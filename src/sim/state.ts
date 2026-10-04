@@ -426,6 +426,12 @@ export interface SimState {
     flexOverflow: number;
     /** What consumption would have been without shifting. */
     unshifted: number;
+    /** Energy shed under the demand-response contract this tick. */
+    shed: number;
+    /** What the contract could have shed this tick (0 while it is off). */
+    shedPool: number;
+    /** Connected commercial and retail buildings (the contract's partners). */
+    contractedBuildings: number;
   };
 }
 
@@ -590,6 +596,9 @@ export function createSimState(
       flexBacklog: 0,
       flexOverflow: 0,
       unshifted: 0,
+      shed: 0,
+      shedPool: 0,
+      contractedBuildings: 0,
     },
   };
 }
