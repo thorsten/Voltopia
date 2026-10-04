@@ -4,6 +4,7 @@ import type { TileDiff } from '../shared/types.ts';
 import { PlantType, Terrain, TileType } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
+import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 
 const MAX_BOX_PARTS_PER_PLANT = 8;
 const ROTOR_MAX_SPEED_RAD_PER_S = 6;
@@ -12,6 +13,9 @@ const DOME_RADIUS = 0.3;
 const DOME_SQUASH = 0.75;
 const DOME_BASE = 0.12;
 const BIOGAS_DOME_TOP = DOME_BASE + DOME_RADIUS * DOME_SQUASH;
+/** Park lawn: a near-full-tile decal, thin like a road pad. */
+const PARK_PAD_SIZE = 0.94;
+const PARK_PAD_HEIGHT = 0.03;
 
 interface BoxPart {
   sx: number;
@@ -140,8 +144,9 @@ function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
         { sx: 0.2, sy: 0.35, sz: 0.12, ox: 0, oy: 0, oz: 0.32, color: COLORS.batteryFrame },
       ];
     case PlantType.Park:
+      // The lawn is not a part: it is laid as two ground-fitted prisms in
+      // rebuild(), like a road pad, so it never floats on a slope.
       return [
-        { sx: 0.94, sy: 0.03, sz: 0.94, ox: 0, oy: 0, oz: 0, color: COLORS.parkGrass },
         // three low-poly trees: trunk + foliage cube each
         { sx: 0.05, sy: 0.16, sz: 0.05, ox: -0.24, oy: 0.03, oz: -0.2, color: COLORS.treeTrunk },
         { sx: 0.22, sy: 0.26, sz: 0.22, ox: -0.24, oy: 0.17, oz: -0.2, color: COLORS.treeFoliage },
@@ -332,7 +337,9 @@ function createRotorGeometry(): THREE.BufferGeometry {
  * state-of-charge fill bars.
  */
 export class PlantsMesh implements DiffLayer {
-  private readonly boxMesh: THREE.InstancedMesh;
+  readonly boxMesh: THREE.InstancedMesh;
+  /** Park lawns: two prisms per park, each flush with one ground triangle. */
+  readonly parkPads: THREE.InstancedMesh;
   private readonly rotorMesh: THREE.InstancedMesh;
   private readonly domeMesh: THREE.InstancedMesh;
   private readonly socFillMesh: THREE.InstancedMesh;
@@ -371,6 +378,18 @@ export class PlantsMesh implements DiffLayer {
     this.boxMesh.castShadow = true;
     this.boxMesh.count = 0;
     scene.add(this.boxMesh);
+
+    this.parkPads = new THREE.InstancedMesh(
+      createHalfTilePrism(),
+      new THREE.MeshLambertMaterial({ color: COLORS.parkGrass }),
+      capacity * 2,
+    );
+    // Instance transforms live across the whole grid; the base geometry's
+    // bounds would wrongly cull the mesh, so culling is disabled.
+    this.parkPads.frustumCulled = false;
+    this.parkPads.receiveShadow = true;
+    this.parkPads.count = 0;
+    scene.add(this.parkPads);
 
     this.rotorMesh = new THREE.InstancedMesh(
       createRotorGeometry(),
@@ -449,6 +468,7 @@ export class PlantsMesh implements DiffLayer {
   private rebuild(): void {
     let boxSlot = 0;
     let domeSlot = 0;
+    let padSlot = 0;
     this.rotorPositions.length = 0;
     this.batteryPositions.length = 0;
     const color = new THREE.Color();
@@ -458,8 +478,27 @@ export class PlantsMesh implements DiffLayer {
       const cz = Math.floor(index / this.gridSize) + 0.5;
       const lift = this.elevation.centerY(index);
       const site = this.siteOf(index);
+      const isPark = plant === PlantType.Park;
+      if (isPark) {
+        // Lawn flush with the ground on both triangles of the tile.
+        for (const high of [false, true]) {
+          composePrismOnGround(
+            this.matrix,
+            this.elevation,
+            index,
+            high,
+            PARK_PAD_SIZE,
+            PARK_PAD_HEIGHT,
+            0,
+          );
+          this.parkPads.setMatrixAt(padSlot++, this.matrix);
+        }
+      }
       for (const part of plantBoxParts(plant, site)) {
-        this.position.set(cx + part.ox, part.oy + lift, cz + part.oz);
+        // Trees stand on the ground where they are; everything else keeps
+        // the tile-centre lift its recipe was tuned for.
+        const partLift = isPark ? this.elevation.surfaceY(cx + part.ox, cz + part.oz) : lift;
+        this.position.set(cx + part.ox, part.oy + partLift, cz + part.oz);
         this.quaternion.setFromEuler(new THREE.Euler(part.rotX ?? 0, 0, 0));
         this.scale.set(part.sx, part.sy, part.sz);
         this.matrix.compose(this.position, this.quaternion, this.scale);
@@ -480,6 +519,8 @@ export class PlantsMesh implements DiffLayer {
 
     this.boxMesh.count = boxSlot;
     this.boxMesh.instanceMatrix.needsUpdate = true;
+    this.parkPads.count = padSlot;
+    this.parkPads.instanceMatrix.needsUpdate = true;
     if (this.boxMesh.instanceColor) this.boxMesh.instanceColor.needsUpdate = true;
     this.domeMesh.count = domeSlot;
     this.domeMesh.instanceMatrix.needsUpdate = true;
