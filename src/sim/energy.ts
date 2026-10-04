@@ -402,7 +402,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const unshifted =
     buildingDemand + heatingDemand + coolingDemand + chargingDemand + heat.pumpPower;
   const coverage = meteredCoverage(state);
-  const { householdFlexShare, heatingFlexShare, backlogHours } = BALANCE.smartMeters;
+  const { householdFlexShare, heatingFlexShare, backlogHours, maxDrainShare } = BALANCE.smartMeters;
   const flexible =
     coverage * (householdFlexShare * buildingDemand + heatingFlexShare * heatingDemand);
   const inflexible = unshifted - flexible;
@@ -415,11 +415,26 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     recovered = Math.min(state.flexBacklog, renewableSurplus - servedNow);
     deferred = flexible - servedNow;
   }
+  // The backlog may only drain so fast. The comfort bound below scales
+  // with the current pool, so anything that shrinks the pool at once —
+  // insulation halving the heating load, a heat plant coming online,
+  // storm damage, a mass bulldoze — would leave the whole backlog above
+  // the new bound and serve it in a single tick, a city-wide deficit out
+  // of nowhere. Capped, the backlog may sit above the bound for a while
+  // and empties over several ticks instead.
+  const drainCap = maxDrainShare * unshifted;
+  recovered = Math.min(recovered, drainCap);
   // Comfort bound: past a few hours of deferred demand the pool is served
   // regardless of the weather.
   const backlogCapacity = flexible * backlogHours * (TICKS_PER_DAY / 24);
-  const overflow = Math.max(0, state.flexBacklog + deferred - recovered - backlogCapacity);
+  const overflow = Math.min(
+    Math.max(0, state.flexBacklog + deferred - recovered - backlogCapacity),
+    Math.max(0, drainCap - recovered),
+  );
   state.flexBacklog = Math.max(0, state.flexBacklog + deferred - recovered - overflow);
+  // No load at all (an empty city, or every building disconnected): there
+  // is nothing to drain into, and the cap would hold the backlog forever.
+  if (unshifted === 0) state.flexBacklog = 0;
   const totalDemand = inflexible + servedNow + recovered + overflow;
   // Report both lines as what was actually served this tick. The shift is
   // split in proportion to what each line contributed to the pool —

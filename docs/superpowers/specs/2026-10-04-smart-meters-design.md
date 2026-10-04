@@ -58,6 +58,8 @@ smartMeters: {
   heatingFlexShare: 0.3,
   /** Hours of flexible demand the backlog may hold before comfort wins. */
   backlogHours: 4,
+  /** Cap on the backlog drained per tick (recovered + overflow) as a share of the unshifted load. */
+  maxDrainShare: 0.35,
   /** Coverage the flexibleCity goal requires. */
   goalCoverage: 0.8,
 },
@@ -67,13 +69,16 @@ smartMeters: {
 per unit installed, not a one-off; it lives with the mechanic's other
 values.
 
-No value moved: the probe confirmed all six. The measurements behind
-each one are comments next to it in `constants.ts`; the probe figures
-are summarised under Testing. One constraint found there is worth
-repeating: `installsPerDay` must stay a multiple of 15, because
-`installsPerDay / TICKS_PER_DAY` is only exactly representable then
-(960 = 64 × 15) — any other value lets the per-tick carry drift and
-delays the day's last install into the next day.
+No value moved: the probe confirmed all six it was run on. The
+measurements behind each one are comments next to it in `constants.ts`;
+the probe figures are summarised under Testing. `maxDrainShare` was
+added in the final review (see the Flexible pool below) and is not a
+pacing value: it only has to stay above the pool's own share of the
+load — at most `householdFlexShare` / `heatingFlexShare` of it, so
+under 0.3 — or a backlog sitting above the comfort bound could never
+drain. The install carry counts crew time in whole ticks, so
+`installsPerDay` needs no rounding constraint: any rate installs
+exactly `installsPerDay` meters a day.
 
 ### Sim state (`src/sim/state.ts`)
 
@@ -83,7 +88,7 @@ smartMeters: {
   active: boolean;
   /** Buildings with a meter (never above the building count). */
   metered: number;
-  /** Fractional installs carried between ticks (installsPerDay / TICKS_PER_DAY per tick). */
+  /** Crew time carried between ticks, in ticks (installsPerDay per tick, TICKS_PER_DAY per meter). */
   installCarry: number;
 }
 /** Deferred flexible energy waiting for surplus, in energy units. */
@@ -109,12 +114,16 @@ export function setSmartMeterRollout(state: SimState, active: boolean): void;
 
 `smartMetersStep` runs once per tick from `stepTick`, after growth and
 before the economy step so the install cost lands in that tick's
-budget. It clamps `metered` to the current building count (demolition
-and abandonment lose meters), then, if active and `metered <
-buildings`, adds `installsPerDay / TICKS_PER_DAY` to `installCarry`;
-each whole meter in the carry installs one meter and costs
-`costPerMeter`, as long as the treasury can pay (otherwise the carry
-waits; the rollout does not go into debt). The cost is returned to the
+budget. It counts the buildings once — the tick's only full-grid
+building scan, cached on `state.lastBuildingCount` by
+`refreshBuildingCount` so `meteredCoverage` (asked once per parked
+vehicle, van and bus) is a division, not a scan — and clamps `metered`
+to it (demolition and abandonment lose meters). Then, if active and
+`metered < buildings`, it adds `installsPerDay` to `installCarry` and
+installs one meter per `TICKS_PER_DAY` of carry at `costPerMeter`, as
+long as the treasury can pay (otherwise the carry waits; the rollout
+does not go into debt). Integer carry: a day installs exactly
+`installsPerDay` meters at any rate. The cost is returned to the
 economy as a new `smartMeters` expense line. `setSmartMeterRollout` is
 the command handler (`{ type: 'setSmartMeterRollout'; active: boolean }`
 replaces `setSmartCharging` in `src/shared/messages.ts`).
@@ -132,8 +141,10 @@ rest of the gate (surplus or low battery) is unchanged, as is
 ### Flexible pool (`src/sim/energy.ts`)
 
 In `energyStep`, after the building loop has produced `buildingDemand`
-and `heatingDemand` (on-site electric heating only; network pumps and
-the fallback share are separate) and after `generation` is known:
+and `heatingDemand` (on-site electric heating, which includes the heat
+network's fallback share — that heat _is_ heated electrically on site,
+so it is part of the pool; only the network pumps stay out) and after
+`generation` is known:
 
 ```
 coverage   = meteredCoverage(state)
@@ -146,15 +157,33 @@ if surplus > 0:
     deferred  = flexible − servedNow
 else:
     servedNow = 0; recovered = 0; deferred = flexible
+drainCap   = maxDrainShare × unshifted                   // most the backlog may give up this tick
+recovered  = min(recovered, drainCap)
 capacity   = flexible × backlogHours × (TICKS_PER_DAY / 24)  // comfort bound, in energy units
-overflow   = max(0, flexBacklog + deferred − recovered − capacity)   // served regardless
+overflow   = min(max(0, flexBacklog + deferred − recovered − capacity),
+                 max(0, drainCap − recovered))           // served regardless, but capped
 flexBacklog = max(0, flexBacklog + deferred − recovered − overflow)
+if unshifted == 0: flexBacklog = 0                       // no city: nothing to drain into
 consumptionThisTick = inflexible + servedNow + recovered + overflow
 ```
 
 `overflow` subtracts `recovered` (as implemented): without it, energy
 already served out of the backlog this tick would be counted towards the
 comfort bound again and served a second time.
+
+`drainCap` (added in the final review) is what keeps a shrinking pool
+from dumping its backlog. `capacity` scales with the _current_
+`flexible`, so anything that shrinks the pool at once — buying
+insulation halves the heating load, a heat plant coming online taking
+buildings off on-site heating, storm damage, a mass bulldoze — would
+otherwise leave the whole backlog above the new bound and serve it in a
+single tick: a city-wide deficit out of nowhere. Capped, the backlog
+may sit above the bound for a while and empties over several ticks
+instead. `maxDrainShare` above the pool's own share of the load is what
+guarantees it still shrinks every tick while above the bound. The
+identity `unshifted − deferred + recovered + overflow = served` holds
+either way: both caps only move energy between "served now" and "still
+in the backlog".
 
 `buildingConsumption` and `heatingConsumption` are then reported as what
 each line actually drew: the net shift (`−deferred + recovered +
@@ -167,8 +196,11 @@ where heating is the larger share of the pool.
 `totalDemand` is replaced by `consumptionThisTick` for everything
 downstream (storage cascade, biogas, deficit, import). The result
 gains `flexDeferred = deferred`, `flexRecovered = recovered`,
-`flexBacklog`, `flexOverflow = overflow` (as implemented: the energy
-panel needs to tell "shifted into surplus" from "served anyway") and
+`flexBacklog`, `flexOverflow = overflow` (as implemented, but a sim
+result rather than a panel figure: `surplusAvailable` in
+`src/sim/vehicles.ts` — the EV charging gate — adds the whole shift
+back to reconstruct the unshifted load, and the overflow is part of
+it) and
 `unshifted = inflexible + flexible` (what consumption would have been).
 With coverage 0 every new term is 0 and the step is numerically
 identical to today. No randomness is added.
@@ -304,11 +336,14 @@ operations.
     a windy evening drains the backlog, so the evening peak can be
     higher than it would have been without the rollout (up to +20 % in
     the measured year, always within that hour's generation). Recovery
-    has no per-tick rate limit, so a strongly over-generating city can
-    serve the whole backlog in a few ticks: the worst single tick
-    measured was 1.36x the unshifted peak at the frozen values (1.9-2.3x
-    with larger flex shares). A `recoveryRate` cap would be the fix if
-    this ever reads badly in play.
+    had no per-tick rate limit when this was measured, so a strongly
+    over-generating city could serve the whole backlog in a few ticks:
+    the worst single tick measured was 1.36x the unshifted peak at the
+    frozen values (1.9-2.3x with larger flex shares). The final review
+    added that cap for the shrinking-pool case — `maxDrainShare`, see
+    the Flexible pool — and it bounds this spike as well: served load
+    is now at most `1 + maxDrainShare` times the tick's own unshifted
+    load, i.e. 1.35x, just under what the probe measured.
 
 - `node scripts/smoke.mjs`; `pnpm coverage` gate; e2e `smart-charging`
   checkbox test still passes.

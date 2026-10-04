@@ -658,12 +658,6 @@ export const BALANCE = {
      * 144-building town is done in ten days. 8/day left that same city
      * at 51 % after a year, two in-game years for a mechanic the player
      * pays for up front.
-     *
-     * Keep it a multiple of 15: installsPerDay / TICKS_PER_DAY is only
-     * exactly representable then (960 = 64 x 15), and with any other
-     * value the per-tick carry accumulates a rounding error that delays
-     * the day's last install into the next day (8/day installs 7 on the
-     * first day and then runs one meter behind).
      */
     installsPerDay: 15,
     /**
@@ -692,6 +686,21 @@ export const BALANCE = {
      * charge to 0.38-0.40, i.e. the pool takes over storage's job.
      */
     backlogHours: 4,
+    /**
+     * Cap on the backlog drained per tick — recovered plus overflow —
+     * as a share of the unshifted load, so a shrinking pool empties
+     * over several ticks instead of one. The comfort bound scales with
+     * the *current* flexible pool, so anything that shrinks that pool
+     * at once (buying insulation halves the heating load, a heat plant
+     * coming online, storm damage, a mass bulldoze) would otherwise
+     * leave the whole backlog above the new bound and serve it in a
+     * single tick — a city-wide deficit out of nowhere. 0.35 is above
+     * the pool's own share of the load (at most householdFlexShare /
+     * heatingFlexShare of it, so under 0.3), which is what guarantees
+     * the backlog still shrinks every tick while it sits above the
+     * bound instead of stalling at a level it can never drain.
+     */
+    maxDrainShare: 0.35,
     /** Coverage the flexibleCity goal requires. */
     goalCoverage: 0.8,
   },

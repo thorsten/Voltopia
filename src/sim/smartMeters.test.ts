@@ -6,10 +6,12 @@ import {
   countBuildings,
   isSmartVehicle,
   meteredCoverage,
+  refreshBuildingCount,
   setSmartMeterRollout,
   smartMetersStep,
 } from './smartMeters.ts';
 import { createSimState, deserializeState, serializeState, Zone, type SimState } from './state.ts';
+import { stepTick } from './tick.ts';
 
 // 32 (not 16) so town() can lay out enough bands for the isSmartVehicle
 // coverage tests below (town(100) needs 8 bands, reaching y = 23).
@@ -61,6 +63,10 @@ function town(n: number, money = 1e9): SimState {
     band++;
   }
   state.money = money;
+  // The coverage denominator is a per-tick cache (see
+  // refreshBuildingCount): a hand-built town never ticked, so refresh it
+  // here, exactly as stepTick does for a running city.
+  refreshBuildingCount(state);
   return state;
 }
 
@@ -159,6 +165,34 @@ describe('smart-meter rollout', () => {
     });
     expect(restored.smartMeters.metered).toBe(0);
     expect(restored.flexBacklog).toBe(0);
+  });
+
+  it('keeps the pacing exact over several days', () => {
+    const state = town(56);
+    setSmartMeterRollout(state, true);
+    const { installsPerDay } = BALANCE.smartMeters;
+    for (let day = 1; day <= 3; day++) {
+      for (let t = 0; t < TICKS_PER_DAY; t++) smartMetersStep(state);
+      expect(state.smartMeters.metered).toBe(installsPerDay * day);
+    }
+  });
+
+  it('refreshes the cached building count once per tick', () => {
+    const state = town(10);
+    state.smartMeters.metered = 10;
+    expect(meteredCoverage(state)).toBe(1);
+    // An eleventh building appears, as growth would place it. Coverage
+    // still reads the cached denominator from the last refresh...
+    const extra = houseTile(10);
+    state.layers.zone[extra] = Zone.Residential;
+    state.layers.density[extra] = 1;
+    expect(state.lastBuildingCount).toBe(10);
+    expect(meteredCoverage(state)).toBe(1);
+    // ...until the next tick refreshes it.
+    stepTick(state);
+    expect(state.lastBuildingCount).toBe(countBuildings(state));
+    expect(state.lastBuildingCount).toBe(11);
+    expect(meteredCoverage(state)).toBeCloseTo(10 / 11, 9);
   });
 
   it('does not stockpile installs while broke', () => {

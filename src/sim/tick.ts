@@ -7,7 +7,7 @@ import { economyStep } from './economy.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
-import { countBuildings, meteredCoverage, smartMetersStep } from './smartMeters.ts';
+import { meteredCoverage, smartMetersStep } from './smartMeters.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { inspectTile } from './inspect.ts';
 import { computeDemand, decayStep, growthStep } from './growth.ts';
@@ -75,6 +75,11 @@ export function stepTick(state: SimState): void {
   decayStep(state);
   forestStep(state);
   const { population, jobs } = countPopulationAndJobs(state);
+  // After growth and decay, before economy, goals and the stats:
+  // smartMetersStep refreshes state.lastBuildingCount (the tick's one
+  // building scan) and everything downstream reads coverage off it. The
+  // steps above — vehicles and the energy balance — read last tick's
+  // count, one tick of lag the mechanic does not notice.
   smartMetersStep(state);
   economyStep(state, population, jobs);
   // After the income of this tick has landed: repairs are paid out of it.
@@ -230,7 +235,7 @@ export function buildStats(state: SimState): GlobalStats {
     smartMeters: {
       active: state.smartMeters.active,
       metered: state.smartMeters.metered,
-      buildings: countBuildings(state),
+      buildings: state.lastBuildingCount,
       coverage: meteredCoverage(state),
       costPerMeter: BALANCE.smartMeters.costPerMeter,
     },

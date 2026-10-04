@@ -23,7 +23,7 @@ import {
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
-import { countBuildings } from './smartMeters.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { chargingDemand, laneOccupancy, ticksAtHour, vehiclesStep } from './vehicles.ts';
 import { BusPhase, createSimState, TileType, type SimState } from './state.ts';
 
@@ -446,7 +446,7 @@ describe('transitStep', () => {
     // full (every bus smart) via the meter rollout.
     state.layers.zone[at(1, 1)] = Zone.Residential;
     state.layers.density[at(1, 1)] = 1;
-    state.smartMeters.metered = countBuildings(state); // full coverage: every vehicle is smart
+    state.smartMeters.metered = refreshBuildingCount(state); // full coverage: every vehicle is smart
     setHour(state, 3);
     stepAll(state);
     state.buses[0].charge = 0.5;

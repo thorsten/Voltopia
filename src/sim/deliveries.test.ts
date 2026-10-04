@@ -15,7 +15,7 @@ import {
 } from './deliveries.ts';
 import { placePlant } from './energy.ts';
 import { bulldozeTiles, buildRoads } from './roads.ts';
-import { countBuildings } from './smartMeters.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { createSimState, TileType, VanPhase, type SimState } from './state.ts';
 import { chargingDemand, laneOccupancy, vehiclesStep } from './vehicles.ts';
 
@@ -314,7 +314,7 @@ describe('deliveriesStep', () => {
   it('smart charging holds off without surplus unless the van is below the floor', () => {
     const state = shopTown(1, 3);
     powerDepot(state);
-    state.smartMeters.metered = countBuildings(state); // full coverage: every vehicle is smart
+    state.smartMeters.metered = refreshBuildingCount(state); // full coverage: every vehicle is smart
     setHour(state, 3);
     stepAll(state);
     state.vans[0].charge = 0.5;

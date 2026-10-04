@@ -222,7 +222,11 @@ export interface SimState {
   marketTrading: boolean;
   /** Building insulation upgrade bought (halves the heating load). */
   insulation: boolean;
-  /** Smart-meter rollout: crews installing, meters in place, fractional carry. */
+  /**
+   * Smart-meter rollout: crews installing, meters in place, and the crew
+   * time carried between ticks (in ticks: installsPerDay per tick,
+   * TICKS_PER_DAY buys one meter). Transient, like any sub-tick carry.
+   */
   smartMeters: {
     active: boolean;
     metered: number;
@@ -230,6 +234,14 @@ export interface SimState {
   };
   /** Deferred flexible energy waiting for renewable surplus (energy units). */
   flexBacklog: number;
+  /**
+   * Buildings counted at the last `refreshBuildingCount` — the coverage
+   * denominator for the whole tick. Counting them is a full-grid scan,
+   * and `isSmartVehicle` asks for coverage once per parked vehicle, van
+   * and bus, so the count is cached once per tick instead. Transient:
+   * not persisted, recomputed from the layers on load.
+   */
+  lastBuildingCount: number;
   /** Smart-meter install cost paid last tick (budget line). */
   lastSmartMeterCost: number;
   /** Day number on which year 1 started; 0 for new games. */
@@ -450,6 +462,8 @@ export function createSimState(
     insulation: false,
     smartMeters: { active: false, metered: 0, installCarry: 0 },
     flexBacklog: 0,
+    // A fresh map has no buildings; stepTick refreshes this every tick.
+    lastBuildingCount: 0,
     lastSmartMeterCost: 0,
     seasonOriginDay: 0,
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
@@ -955,6 +969,10 @@ export function deserializeState(save: SaveGame): SimState {
   // values, the same way the snowpack read above does.
   {
     const buildings = countBuildings(state);
+    // The coverage denominator for the first tick after the load: the
+    // cache is transient, so it has to be recomputed here rather than
+    // restored (stepTick keeps it current from then on).
+    state.lastBuildingCount = buildings;
     if (save.smartMeters) {
       const metered = Number.isFinite(save.smartMeters.metered) ? save.smartMeters.metered : 0;
       state.smartMeters = {

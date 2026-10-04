@@ -6,6 +6,7 @@ import { placePlant } from './energy.ts';
 import { goalsStep, goalStates } from './goals.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { isCoastalSea } from './sea.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
@@ -463,6 +464,9 @@ describe('flexibleCity', () => {
       state.layers.density[at(i % 16, 2 + Math.floor(i / 16))] = 3; // population >= 50
     }
     state.smartMeters.metered = 20;
+    // The coverage denominator is a per-tick cache; this city never
+    // ticked, so refresh it the way stepTick does.
+    refreshBuildingCount(state);
     state.lastEnergy.flexDeferred = 1;
     return state;
   }

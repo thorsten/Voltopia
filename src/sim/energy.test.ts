@@ -16,7 +16,7 @@ import { heatStep } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
-import { countBuildings } from './smartMeters.ts';
+import { refreshBuildingCount } from './smartMeters.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
 import { pendingHistoryPoint } from './tick.ts';
 import { HEATED_SERVED } from '../shared/types.ts';
@@ -1499,7 +1499,9 @@ describe('flexible load pool (smart meters)', () => {
     }
     if (plant !== null) placePlant(state, at(2, 3), plant);
     buildPowerLines(state, [at(2, 4)]);
-    state.smartMeters.metered = countBuildings(state);
+    // refreshBuildingCount: the coverage denominator is a per-tick cache
+    // and this town never ticked, so refresh it the way stepTick does.
+    state.smartMeters.metered = refreshBuildingCount(state);
     return state;
   }
 
@@ -1588,12 +1590,76 @@ describe('flexible load pool (smart meters)', () => {
     energyStep(state, { chargingDemand: 0 });
     const flexible = state.lastEnergy.flexDeferred; // no surplus: deferred == flexible
     const capacity = flexible * BALANCE.smartMeters.backlogHours * (TICKS_PER_DAY / 24);
-    // Start above the bound: comfort wins and the excess is served now.
-    const excess = 7;
+    // Start a little above the bound: comfort wins and the excess is
+    // served now. "A little" because the whole excess only leaves in one
+    // tick while it fits under the per-tick drain cap — the test below
+    // covers a backlog that does not.
+    const excess = 0.2 * flexible;
+    expect(excess + flexible).toBeLessThan(
+      BALANCE.smartMeters.maxDrainShare * state.lastEnergy.unshifted,
+    );
     state.flexBacklog = capacity + excess;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.flexOverflow).toBeCloseTo(excess + flexible, 9);
     expect(state.flexBacklog).toBeCloseTo(capacity, 9);
+  });
+
+  it('caps the drained backlog per tick when the pool shrinks', () => {
+    const state = meteredTown(PlantType.Battery);
+    state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24, nothing generated
+    state.season = { ...state.season, temperature: -4 };
+    // Saturate the backlog against the comfort bound of the cold,
+    // uninsulated town.
+    for (let t = 0; t < 2 * TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
+    const saturated = state.flexBacklog;
+    expect(saturated).toBeGreaterThan(0);
+    // Insulation halves the heating load, so the pool — and with it the
+    // comfort bound — shrinks in one tick. The backlog is now far above
+    // capacity, but only maxDrainShare of the load may be served per tick.
+    state.insulation = true;
+    const { maxDrainShare, backlogHours } = BALANCE.smartMeters;
+    energyStep(state, { chargingDemand: 0 });
+    const first = state.lastEnergy;
+    // Nothing generated, so the whole pool is deferred: flexDeferred is
+    // this tick's `flexible`, hence its comfort bound.
+    const capacity = first.flexDeferred * backlogHours * (TICKS_PER_DAY / 24);
+    expect(capacity).toBeLessThan(saturated); // the bound really did shrink
+    // Exactly the cap left the backlog this tick, and that is a fraction
+    // of what sits above the new bound: no one-tick dump.
+    expect(first.flexRecovered + first.flexOverflow).toBeCloseTo(
+      maxDrainShare * first.unshifted,
+      9,
+    );
+    expect(state.flexBacklog).toBeGreaterThan(capacity);
+    expect(first.flexOverflow).toBeLessThan(state.flexBacklog - capacity);
+    // From here it drains tick by tick until it reaches the new bound.
+    let previous = state.flexBacklog;
+    let settled = false;
+    for (let t = 0; t < 2 * TICKS_PER_DAY; t++) {
+      energyStep(state, { chargingDemand: 0 });
+      const e = state.lastEnergy;
+      expect(e.flexRecovered + e.flexOverflow).toBeLessThanOrEqual(
+        maxDrainShare * e.unshifted + 1e-6,
+      );
+      if (state.flexBacklog <= e.flexDeferred * backlogHours * (TICKS_PER_DAY / 24) + 1e-6) {
+        settled = true;
+        break;
+      }
+      expect(state.flexBacklog).toBeLessThan(previous);
+      previous = state.flexBacklog;
+    }
+    expect(settled).toBe(true);
+    expect(state.flexBacklog).toBeLessThan(saturated);
+  });
+
+  it('clears the backlog when the city has no load at all', () => {
+    const state = createSimState(9, SIZE);
+    state.flexBacklog = 42;
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.unshifted).toBe(0);
+    expect(state.lastEnergy.flexOverflow).toBe(0);
+    expect(state.lastEnergy.flexRecovered).toBe(0);
+    expect(state.flexBacklog).toBe(0);
   });
 
   it('keeps the identity unshifted - consumption = deferred - recovered - overflow', () => {

@@ -101,6 +101,16 @@ describe('save game JSON export/import', () => {
     expect(restored.flexBacklog).toBe(12.5);
   });
 
+  it('round-trips the cumulative flexible-load ticks', () => {
+    const save = makeSave();
+    save.flexTicks = 123;
+    expect(saveFromJson(saveToJson(save)).flexTicks).toBe(123);
+  });
+
+  it('accepts an old save without flexTicks', () => {
+    expect(saveFromJson(saveToJson(makeSave())).flexTicks).toBeUndefined();
+  });
+
   it('accepts an old save without smartMeters or flexBacklog', () => {
     const restored = saveFromJson(saveToJson(makeSave()));
     expect(restored.smartMeters).toBeUndefined();

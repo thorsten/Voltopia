@@ -29,6 +29,7 @@ interface SaveGameJson {
   transitTicks?: number;
   heatStored?: number;
   warmWinterTicks?: number;
+  flexTicks?: number;
   disasterScale?: number;
   disasters?: SavedDisasters;
   layers: Record<string, string>;
@@ -88,6 +89,7 @@ export function saveToJson(save: SaveGame): string {
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
     ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
     ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
+    ...(save.flexTicks !== undefined ? { flexTicks: save.flexTicks } : {}),
     ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
     ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
     layers,
@@ -243,6 +245,11 @@ export function saveFromJson(text: string): SaveGame {
     ...(typeof parsed.heatStored === 'number' ? { heatStored: parsed.heatStored } : {}),
     ...(typeof parsed.warmWinterTicks === 'number'
       ? { warmWinterTicks: parsed.warmWinterTicks }
+      : {}),
+    // Finite, not just a number: NaN from a hand-edited export would
+    // poison a cumulative counter for good (the goal could never be met).
+    ...(typeof parsed.flexTicks === 'number' && Number.isFinite(parsed.flexTicks)
+      ? { flexTicks: parsed.flexTicks }
       : {}),
     ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
     ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),
