@@ -5,7 +5,7 @@ import { HEATED_SERVED, SupplyStatus, TileType, Zone } from '../shared/types.ts'
 import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
-import { ACCENT } from './buildings/palette.ts';
+import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
 import { DOOR, MAX_PARTS_PER_KIND, PartRole, StreetFace, faceDepth } from './buildings/recipes.ts';
 import { type AccentAnchor, type AccentSink, type AccentState } from './buildings/accents.ts';
 
@@ -669,5 +669,122 @@ describe('BuildingsMesh accent sink', () => {
     mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
     mesh.applyDiffs([empty(CENTRE)]);
     expect(sink.calls.map((c) => c.op)).toEqual(['set', 'remove']);
+  });
+});
+
+describe('BuildingsMesh age stages', () => {
+  /** A building diff at the given age stage. */
+  function aged(index: number, zone: Zone, density: number, ageStage: number): TileDiff {
+    return { ...building(index, zone, density, 0), ageStage } as TileDiff;
+  }
+
+  function bodyColor(mesh: BuildingsMesh): THREE.Color {
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const parts = mesh.partsAt(CENTRE)!;
+    // Slot of the main body within the Box block: boxes are written in
+    // recipe order, and the first building owns block 0.
+    const slot = parts.filter((p) => p.kind === PartKind.Box).indexOf(main);
+    const c = new THREE.Color();
+    mesh.kindMeshes[PartKind.Box].getColorAt(slot, c);
+    return c;
+  }
+
+  it('recolours the body on an age flip without touching matrices, windows or the sink', () => {
+    const { mesh, sink } = setupWithSink();
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 1, 0)]);
+    const boxMesh = mesh.kindMeshes[PartKind.Box];
+    const matricesBefore = drawn(boxMesh).map((m) => m.toArray());
+    const windowsBefore = mesh.windowCount();
+    const colorBefore = bodyColor(mesh);
+    sink.calls = [];
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 1, 2)]);
+    expect(drawn(boxMesh).map((m) => m.toArray())).toEqual(matricesBefore);
+    expect(mesh.windowCount()).toBe(windowsBefore);
+    expect(sink.calls).toEqual([]);
+    expect(bodyColor(mesh).getHex()).not.toBe(colorBefore.getHex());
+  });
+
+  it('applies the palette age tint before the supply tint, leaving accents alone', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([
+      { ...aged(CENTRE, Zone.Residential, 1, 2), supplied: SupplyStatus.Undersupplied } as TileDiff,
+    ]);
+    const parts = mesh.partsAt(CENTRE)!;
+    const main = parts.find((p) => p.main)!;
+    const expected = applySupplyTint(
+      applyAgeTint(main.color, 2, false, new THREE.Color()),
+      SupplyStatus.Undersupplied,
+      new THREE.Color(),
+    );
+    expect(bodyColor(mesh).getHex()).toBe(expected.getHex());
+    // The chimney is an accent: same colour at every stage.
+    const boxes = parts.filter((p) => p.kind === PartKind.Box);
+    const chimneySlot = boxes.findIndex((p) => p.color.getHex() === ACCENT.chimney.getHex());
+    expect(chimneySlot).toBeGreaterThanOrEqual(0);
+    const chimney = new THREE.Color();
+    mesh.kindMeshes[PartKind.Box].getColorAt(chimneySlot, chimney);
+    expect(chimney.getHex()).toBe(ACCENT.chimney.getHex());
+  });
+
+  it('gives a weathered gable roof the patina and a new one none', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    // Residential density 2 (town house) always has a gable roof.
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 2, 0)]);
+    const gable = mesh.partsAt(CENTRE)!.find((p) => p.kind === PartKind.GableRoof)!;
+    const fresh = new THREE.Color();
+    mesh.kindMeshes[PartKind.GableRoof].getColorAt(0, fresh);
+    expect(fresh.getHex()).toBe(gable.color.getHex());
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 2, 2)]);
+    const old = new THREE.Color();
+    mesh.kindMeshes[PartKind.GableRoof].getColorAt(0, old);
+    expect(old.getHex()).toBe(applyAgeTint(gable.color, 2, true, new THREE.Color()).getHex());
+  });
+
+  it('a densify returns the tile to stage 0 colours', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([aged(CENTRE, Zone.Commercial, 1, 2)]);
+    mesh.applyDiffs([aged(CENTRE, Zone.Commercial, 2, 0)]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    expect(bodyColor(mesh).getHex()).toBe(main.color.getHex());
+  });
+
+  it('ignores a re-sent identical age stage', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([aged(CENTRE, Zone.Retail, 1, 1)]);
+    const attr = mesh.kindMeshes[PartKind.Box].instanceColor!;
+    attr.clearUpdateRanges();
+    mesh.applyDiffs([aged(CENTRE, Zone.Retail, 1, 1)]);
+    expect(attr.updateRanges).toEqual([]);
+  });
+
+  it('paints the new stage when supply and age flip in the same diff', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 1, 0)]);
+    mesh.applyDiffs([
+      { ...aged(CENTRE, Zone.Residential, 1, 2), supplied: SupplyStatus.Undersupplied } as TileDiff,
+    ]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const expected = applySupplyTint(
+      applyAgeTint(main.color, 2, false, new THREE.Color()),
+      SupplyStatus.Undersupplied,
+      new THREE.Color(),
+    );
+    expect(bodyColor(mesh).getHex()).toBe(expected.getHex());
+  });
+
+  it('keeps the age tint when a road beside the building re-issues it', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([aged(CENTRE, Zone.Residential, 1, 2)]);
+    mesh.applyDiffs([road(CENTRE + 1)]); // east of the house: face flips South -> East, recipe re-issued
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    expect(bodyColor(mesh).getHex()).toBe(
+      applyAgeTint(main.color, 2, false, new THREE.Color()).getHex(),
+    );
   });
 });

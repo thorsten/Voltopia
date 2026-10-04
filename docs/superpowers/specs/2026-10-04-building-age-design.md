@@ -61,7 +61,7 @@ Decisions made with the user during brainstorming:
   uses (hoist it to a module constant so both read one number). No
   other balance value changes.
 
-- `src/sim/growth.ts` — exports
+- `src/sim/state.ts` — exports
 
   ```ts
   /** 0 = new, 1 = lived-in, 2 = weathered. */
@@ -69,11 +69,15 @@ Decisions made with the user during brainstorming:
   ```
 
   returning 0 below the first threshold, 1 below the second, 2 at or
-  above it. The per-tick age increment in `growthStep` gains one check:
-  when the incremented age equals either threshold, the tile is marked
-  dirty. Placement, densify and abandonment decay already reset the age
-  to 0 and mark the tile dirty, so a rebuilt facade reads as new at
-  once. Nothing else in the sim changes.
+  above it. It lives beside `deliveryStateOfAge` and `stopStateOfAge`
+  rather than in `growth.ts`, because `collectDiffs` (which calls it)
+  is in `state.ts`, and `growth.ts` already imports from `state.ts` —
+  the reverse import would cycle. The per-tick age increment in
+  `growthStep` (in `growth.ts`) gains one check: when the incremented
+  age equals either threshold, the tile is marked dirty. Placement,
+  densify and abandonment decay already reset the age to 0 and mark
+  the tile dirty, so a rebuilt facade reads as new at once. Nothing
+  else in the sim changes.
 
 - `src/sim/state.ts` — `collectDiffs` writes
   `ageStage: ageStageOf(layers.buildingAge[index])` into every diff

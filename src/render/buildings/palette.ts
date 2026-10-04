@@ -64,3 +64,48 @@ export function applySupplyTint(
   }
   return out;
 }
+
+/** Visual age of a building (TileDiff.ageStage). */
+export const AgeStage = { New: 0, LivedIn: 1, Weathered: 2 } as const;
+export type AgeStage = (typeof AgeStage)[keyof typeof AgeStage];
+
+/** How far toward its own grey a lived-in / weathered surface fades. */
+const LIVED_IN_DESATURATE = 0.12;
+const WEATHERED_DESATURATE = 0.3;
+/** Lightness multipliers per stage. */
+const LIVED_IN_DARKEN = 0.96;
+const WEATHERED_DARKEN = 0.9;
+/** Muted slate-green that weathered pitched roofs lean toward. */
+const ROOF_PATINA = new THREE.Color(0x6f7a74);
+const WEATHERED_PATINA_BLEND = 0.3;
+
+const grey = new THREE.Color();
+
+/** Blend `out` toward its own luminance grey by `amount` (hue is kept). */
+function desaturate(out: THREE.Color, amount: number): void {
+  const luminance = 0.299 * out.r + 0.587 * out.g + 0.114 * out.b;
+  out.lerp(grey.setRGB(luminance, luminance, luminance), amount);
+}
+
+/**
+ * Colour-only ageing. New copies the colour; lived-in dulls and darkens
+ * a little; weathered more so, and a pitched roof additionally takes on
+ * a patina. Accents never go through this. Writes into `out`.
+ */
+export function applyAgeTint(
+  color: THREE.Color,
+  stage: number,
+  roof: boolean,
+  out: THREE.Color,
+): THREE.Color {
+  out.copy(color);
+  if (stage <= AgeStage.New) return out;
+  if (stage === AgeStage.LivedIn) {
+    desaturate(out, LIVED_IN_DESATURATE);
+    return out.multiplyScalar(LIVED_IN_DARKEN);
+  }
+  desaturate(out, WEATHERED_DESATURATE);
+  out.multiplyScalar(WEATHERED_DARKEN);
+  if (roof) out.lerp(ROOF_PATINA, WEATHERED_PATINA_BLEND);
+  return out;
+}

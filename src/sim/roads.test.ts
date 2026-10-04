@@ -3,7 +3,7 @@ import { BALANCE } from '../shared/constants.ts';
 import { DIR_E, DIR_N, DIR_S, DIR_W, tileIndex } from '../shared/grid.ts';
 import { RoadClass, Terrain } from '../shared/types.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
-import { createSimState, TileType, Zone } from './state.ts';
+import { collectDiffs, createSimState, TileType, Zone } from './state.ts';
 
 const SIZE = 16;
 
@@ -90,6 +90,16 @@ describe('buildRoads', () => {
     buildRoads(state, [at(3, 3)]);
     expect(state.layers.tileType[at(3, 3)]).toBe(TileType.Empty);
     expect(state.layers.density[at(3, 3)]).toBe(2);
+  });
+
+  it('resets a stale building age when paving over a cleared lot', () => {
+    const state = makeState();
+    const index = at(3, 3);
+    state.layers.zone[index] = Zone.Residential;
+    state.layers.buildingAge[index] = BALANCE.growth.ageStageTicks[1] + 1;
+    buildRoads(state, [index]);
+    expect(collectDiffs(state).find((d) => d.index === index)?.ageStage).toBe(0);
+    expect(state.layers.buildingAge[index]).toBe(0);
   });
 
   it('marks changed tiles dirty for the renderer', () => {

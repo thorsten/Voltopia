@@ -7,7 +7,15 @@ import { PlantType } from '../shared/types.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
 import { SERVICE_FIRE } from './services.ts';
-import { createSimState, SupplyStatus, TileType, Zone, type SimState } from './state.ts';
+import {
+  ageStageOf,
+  collectDiffs,
+  createSimState,
+  SupplyStatus,
+  TileType,
+  Zone,
+  type SimState,
+} from './state.ts';
 import { paintZones } from './zones.ts';
 
 const SIZE = 16;
@@ -292,5 +300,59 @@ describe('delivery gate', () => {
 
   it('a supplied shop densifies', () => {
     expect(shop(0)).toBeGreaterThan(1);
+  });
+});
+
+describe('age stages (building visuals stage 3)', () => {
+  it('marks a building dirty on exactly the ticks its age reaches a threshold', () => {
+    // No roads: nothing can spawn or densify, so the only dirty marks
+    // come from the age loop.
+    const state = createSimState(7, SIZE);
+    const index = at(3, 3);
+    state.layers.zone[index] = Zone.Residential;
+    state.layers.density[index] = 1;
+    for (const threshold of BALANCE.growth.ageStageTicks) {
+      state.layers.buildingAge[index] = threshold - 2;
+      state.dirty.clear();
+      growthStep(state, computeDemand(state)); // -> threshold - 1
+      expect(state.dirty.has(index)).toBe(false);
+      growthStep(state, computeDemand(state)); // -> threshold
+      expect(state.dirty.has(index)).toBe(true);
+      state.dirty.clear();
+      growthStep(state, computeDemand(state)); // -> threshold + 1
+      expect(state.dirty.has(index)).toBe(false);
+    }
+  });
+
+  it('does not age or dirty an empty tile', () => {
+    const state = createSimState(7, SIZE);
+    const index = at(3, 3);
+    state.layers.buildingAge[index] = BALANCE.growth.ageStageTicks[0] - 1;
+    state.dirty.clear();
+    growthStep(state, computeDemand(state));
+    expect(state.layers.buildingAge[index]).toBe(BALANCE.growth.ageStageTicks[0] - 1);
+    expect(state.dirty.has(index)).toBe(false);
+  });
+
+  it('a densified building starts over as new', () => {
+    const state = cityWithRoad();
+    const index = at(4, 4);
+    paintZones(state, [index], Zone.Residential);
+    state.layers.density[index] = 1;
+    state.layers.supplied[index] = SupplyStatus.Supplied;
+    // Old enough to be weathered and to densify.
+    state.layers.buildingAge[index] = BALANCE.growth.ageStageTicks[1] + 10;
+    expect(ageStageOf(state.layers.buildingAge[index])).toBe(2);
+    for (
+      let t = 0;
+      t < BALANCE.growth.densifyMinAge * 30 && state.layers.density[index] === 1;
+      t++
+    ) {
+      growthStep(state, computeDemand(state));
+    }
+    expect(state.layers.density[index]).toBe(2);
+    expect(state.layers.buildingAge[index]).toBe(0);
+    const diff = collectDiffs(state).find((d) => d.index === index);
+    expect(diff?.ageStage).toBe(0);
   });
 });

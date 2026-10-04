@@ -87,8 +87,15 @@ export function growthStep(state: SimState, demand: DemandStats): void {
   const { layers } = state;
   const tileCount = state.size * state.size;
 
+  const [livedInAge, weatheredAge] = BALANCE.growth.ageStageTicks;
   layers.buildingAge.forEach((_, i) => {
-    if (layers.density[i] > 0) layers.buildingAge[i]++;
+    if (layers.density[i] === 0) return;
+    const age = ++layers.buildingAge[i];
+    // The renderer only hears about dirty tiles: tell it the moment a
+    // building turns lived-in or weathered (ageStageOf in state.ts). Age
+    // only ever moves by +1 or resets to 0 (never jumps or decrements by
+    // more), so this equality check against the thresholds is exact.
+    if (age === livedInAge || age === weatheredAge) markDirty(state, i);
   });
 
   if (state.happiness < BALANCE.happiness.growthMinimum) return;

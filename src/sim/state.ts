@@ -593,6 +593,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       geothermal: layers.geothermal[index],
       reservoirHeat: layers.reservoirHeat[index],
       damage: layers.damage[index],
+      ageStage: ageStageOf(layers.buildingAge[index]),
       deliveryState: deliveryStateOfAge(layers.deliveryAge[index]),
       busStop: layers.busStop[index],
       stopState:
@@ -677,6 +678,18 @@ export function stopStateOfAge(age: number): StopState {
   if (age > stopServiceTicks()) return StopState.Unserved;
   if (age > stopDueTicks()) return StopState.Due;
   return StopState.Served;
+}
+
+/**
+ * Visual age bucket of a building given its ticks since the last rebuild
+ * (placement, densify or decay): 0 = new, 1 = lived-in, 2 = weathered.
+ * Render only; nothing in the sim reads it.
+ */
+export function ageStageOf(buildingAge: number): number {
+  const [livedIn, weathered] = BALANCE.growth.ageStageTicks;
+  if (buildingAge >= weathered) return 2;
+  if (buildingAge >= livedIn) return 1;
+  return 0;
 }
 
 /** Levels of drop from a river tile to its lowest water 4-neighbour.

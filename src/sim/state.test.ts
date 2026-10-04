@@ -9,6 +9,7 @@ import { isCoastalSea } from './sea.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
 import {
+  ageStageOf,
   BuildIntent,
   buildRejection,
   collectDiffs,
@@ -628,5 +629,41 @@ describe('transit state', () => {
     );
     state.layers.tileType[at(5, 6)] = TileType.Road;
     expect(buildRejection(state, at(5, 5), BuildIntent.Plant, PlantType.BusDepot)).toBeNull();
+  });
+});
+
+describe('ageStageOf (building visuals stage 3)', () => {
+  it('buckets a building age into new, lived-in and weathered at the thresholds', () => {
+    const [livedIn, weathered] = BALANCE.growth.ageStageTicks;
+    expect(ageStageOf(0)).toBe(0);
+    expect(ageStageOf(livedIn - 1)).toBe(0);
+    expect(ageStageOf(livedIn)).toBe(1);
+    expect(ageStageOf(weathered - 1)).toBe(1);
+    expect(ageStageOf(weathered)).toBe(2);
+    expect(ageStageOf(weathered * 10)).toBe(2);
+  });
+
+  it('turns lived-in after one season and weathered after one year', () => {
+    const [livedIn, weathered] = BALANCE.growth.ageStageTicks;
+    expect(livedIn).toBe(BALANCE.seasons.daysPerSeason * TICKS_PER_DAY);
+    expect(weathered).toBe(4 * BALANCE.seasons.daysPerSeason * TICKS_PER_DAY);
+  });
+
+  it('carries the age stage in diffs and reports 0 for an empty tile', () => {
+    const state = createSimState(1, 8);
+    const [livedIn, weathered] = BALANCE.growth.ageStageTicks;
+    state.layers.zone[10] = Zone.Residential;
+    state.layers.density[10] = 1;
+    state.layers.buildingAge[10] = livedIn;
+    state.layers.zone[11] = Zone.Commercial;
+    state.layers.density[11] = 2;
+    state.layers.buildingAge[11] = weathered + 5;
+    markDirty(state, 10);
+    markDirty(state, 11);
+    markDirty(state, 12);
+    const diffs = collectDiffs(state);
+    expect(diffs.find((d) => d.index === 10)?.ageStage).toBe(1);
+    expect(diffs.find((d) => d.index === 11)?.ageStage).toBe(2);
+    expect(diffs.find((d) => d.index === 12)?.ageStage).toBe(0);
   });
 });
