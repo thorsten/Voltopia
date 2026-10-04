@@ -14,6 +14,7 @@ export const SUPPLY_SOURCES: ReadonlySet<PlantType> = new Set<PlantType>([
   PlantType.PumpedStorage,
   PlantType.HydrogenPlant,
   PlantType.TidalPlant,
+  PlantType.GeothermalPlant,
 ]);
 
 export function isSupplySource(plant: PlantType): boolean {

@@ -13,6 +13,7 @@ describe('supply sources', () => {
       PlantType.PumpedStorage,
       PlantType.HydrogenPlant,
       PlantType.TidalPlant,
+      PlantType.GeothermalPlant,
     ]) {
       expect(isSupplySource(plant)).toBe(true);
       expect(SUPPLY_SOURCES.has(plant)).toBe(true);

@@ -6,7 +6,7 @@ import { placePlant } from './energy.ts';
 import { hasLineAttached, isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
-import { bumpGridVersion, createSimState, Zone, type SimState } from './state.ts';
+import { bumpGridVersion, createSimState, TileType, Zone, type SimState } from './state.ts';
 
 const SIZE = 24;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -37,6 +37,21 @@ describe('recomputeGrid', () => {
     recomputeGrid(state);
     expect(state.layers.energized[at(10 + R, 10 + R)]).toBe(1);
     expect(state.layers.energized[at(10 + R + 1, 10)]).toBe(0);
+  });
+
+  it('a geothermal plant is a supply source: it energises its ring and seeds a line', () => {
+    // Geothermal is the game's only baseload; it must tie into the grid
+    // like every other generator (it was missing from the set once).
+    const state = makeState();
+    const site = at(10, 10);
+    state.layers.tileType[site] = TileType.Plant;
+    state.layers.plantType[site] = PlantType.GeothermalPlant;
+    bumpGridVersion(state);
+    buildPowerLines(state, [at(11, 10), at(12, 10)]);
+    recomputeGrid(state);
+    expect(state.layers.energized[at(10 + R, 10 + R)]).toBe(1);
+    expect(state.layers.energized[at(12 + R, 10)]).toBe(1);
+    expect(state.layers.energized[at(12 + R + 1, 10)]).toBe(0);
   });
 
   it('lines connected to a plant extend the energised area', () => {
