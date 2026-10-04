@@ -415,6 +415,9 @@ const en = {
   'goal.flexibleCity.title': 'Flexible city',
   'goal.flexibleCity.body':
     'Shift load for half a day with smart meters on 80% of your buildings (50+ residents).',
+  'goal.loadManager.title': 'Load manager',
+  'goal.loadManager.body':
+    'Shed 2,000 energy units of business load under a demand-response contract.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -968,6 +971,9 @@ const de: Record<TranslationKey, string> = {
   'goal.flexibleCity.title': 'Flexible Stadt',
   'goal.flexibleCity.body':
     'Verschiebe einen halben Tag lang Last mit Smart Metern auf 80 % deiner Gebäude (ab 50 Einwohnern).',
+  'goal.loadManager.title': 'Lastmanager',
+  'goal.loadManager.body':
+    'Wirf unter einem Demand-Response-Vertrag 2.000 Energieeinheiten Gewerbelast ab.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

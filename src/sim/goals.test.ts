@@ -498,3 +498,31 @@ describe('flexibleCity', () => {
     expect(restored.goalProgress.flexTicks).toBe(7);
   });
 });
+
+describe('loadManager', () => {
+  it('achieves once the cumulative shed reaches the target', () => {
+    const state = createSimState(4, 16);
+    const target = BALANCE.demandResponse.goalShedEnergy;
+    state.lastEnergy.shed = target / 4;
+    for (let i = 0; i < 3; i++) goalsStep(state);
+    expect(state.goalProgress.shedTotal).toBeCloseTo((3 * target) / 4, 9);
+    expect(state.goalsAchieved.has('loadManager')).toBe(false);
+    goalsStep(state);
+    expect(state.goalsAchieved.has('loadManager')).toBe(true);
+  });
+
+  it('does not progress without shedding', () => {
+    const state = createSimState(4, 16);
+    for (let i = 0; i < 100; i++) goalsStep(state);
+    expect(state.goalProgress.shedTotal).toBe(0);
+    expect(state.goalsAchieved.has('loadManager')).toBe(false);
+  });
+
+  it('round-trips its progress', () => {
+    const state = createSimState(4, 16);
+    state.lastEnergy.shed = 5;
+    for (let i = 0; i < 7; i++) goalsStep(state);
+    const restored = deserializeState(serializeState(state));
+    expect(restored.goalProgress.shedTotal).toBeCloseTo(35, 9);
+  });
+});

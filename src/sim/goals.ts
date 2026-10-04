@@ -25,6 +25,7 @@ export const GOAL_IDS = [
   'stormProof',
   'warmWinter',
   'flexibleCity',
+  'loadManager',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -142,6 +143,9 @@ export function goalsStep(state: SimState): void {
     progress.flexTicks++;
   }
 
+  // Cumulative business load shed under the demand-response contract.
+  progress.shedTotal += e.shed;
+
   const achieved = state.goalsAchieved;
 
   // Riding out a storm: count the ticks a storm blows while the grid
@@ -226,6 +230,9 @@ export function goalsStep(state: SimState): void {
   }
   if (!achieved.has('flexibleCity') && progress.flexTicks >= TICKS_PER_DAY / 2) {
     achieved.add('flexibleCity');
+  }
+  if (!achieved.has('loadManager') && progress.shedTotal >= BALANCE.demandResponse.goalShedEnergy) {
+    achieved.add('loadManager');
   }
 }
 
