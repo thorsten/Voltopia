@@ -168,6 +168,8 @@ test('build menu shows every tool in one row when the window is wide', async ({ 
   await expect(page.getByTestId('tool-plant-depot')).toBeVisible();
   await expect(page.getByTestId('tool-bus-stop')).toBeVisible();
   await expect(page.getByTestId('tool-plant-busdepot')).toBeVisible();
+  await expect(page.getByTestId('tool-zone-industrial')).toBeVisible();
+  await expect(page.getByTestId('demand-industrial')).toBeVisible();
 
   // Shrinking the window folds the row into tabs; growing unfolds it.
   await page.setViewportSize({ width: 1024, height: 768 });
