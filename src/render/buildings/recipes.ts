@@ -638,6 +638,119 @@ function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily
 }
 
 /**
+ * Factories: low halls under a saw-tooth roof (two gable parts side by
+ * side), a roll-up door on the street face, a chimney for the stage 2
+ * smoke; the bigger plants add a tank or a silo and flat PV.
+ */
+function industrial(
+  density: number,
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+): BuildingPart[] {
+  const wall = p.from(family.walls);
+  const roof = p.from(family.roofs);
+  const trim = p.from(family.trims);
+  const parts: BuildingPart[] = [];
+
+  const sawTooth = (w: number, d: number, top: number, ox: number, oz: number): void => {
+    const half = w / 2;
+    for (const side of [-1, 1]) {
+      parts.push({
+        kind: PartKind.GableRoof,
+        sx: half,
+        sy: 0.1,
+        sz: d,
+        ox: ox + (side * half) / 2,
+        oy: top,
+        oz,
+        turn: 0,
+        color: roof,
+      });
+    }
+  };
+  const chimney = (sx: number, sy: number, ox: number, oy: number, oz: number): BuildingPart => ({
+    kind: PartKind.Cylinder,
+    sx,
+    sy,
+    sz: sx,
+    ox,
+    oy,
+    oz,
+    turn: 0,
+    color: ACCENT.chimney,
+    accent: true,
+    role: PartRole.Chimney,
+  });
+
+  if (density === 1) {
+    // Workshop: one hall, saw-tooth roof, door, chimney at the back.
+    const w = 0.7;
+    const d = 0.5;
+    const h = 0.28 + p.unit() * 0.04;
+    const body = box(w, h, d, 0, 0, 0, wall, { main: true });
+    parts.push(body);
+    sawTooth(w, d, h, 0, 0);
+    parts.push(onStreetFace(body, face, 0.4, h * 0.7, 0.02, 0, trim));
+    parts.push(chimney(0.06, 0.22, -0.25, h, -0.15));
+  } else if (density === 2) {
+    // Plant: main hall behind, lower annex in front, tank, chimney, PV.
+    const w = 0.7;
+    const h = 0.36 + p.unit() * 0.04;
+    const body = box(w, h, 0.34, 0, 0, -0.12, wall, { main: true });
+    parts.push(body);
+    sawTooth(w, 0.34, h, 0, -0.12);
+    const annexH = h * 0.7;
+    const annex = box(0.5, annexH, 0.22, -0.08, 0, 0.19, wall);
+    parts.push(annex);
+    parts.push(onStreetFace(annex, face, 0.5, annexH * 0.7, 0.02, 0, trim));
+    parts.push({
+      kind: PartKind.Cylinder,
+      sx: 0.14,
+      sy: 0.3,
+      sz: 0.14,
+      ox: 0.28,
+      oy: 0,
+      oz: 0.22,
+      turn: 0,
+      color: ACCENT.waterTank,
+      accent: true,
+    });
+    parts.push(chimney(0.06, 0.34, -0.27, h, -0.2));
+    parts.push(
+      box(0.3, ROOFTOP_PV_THICKNESS, 0.16, 0.1, annexH, 0.19, ACCENT.rooftopPv, { accent: true }),
+    );
+  } else {
+    // Works: long hall, trim band, silo, tall chimney, door, PV.
+    const w = 0.74;
+    const d = 0.5;
+    const h = 0.42 + p.unit() * 0.06;
+    const body = box(w, h, d, 0, 0, -0.04, wall, { main: true });
+    parts.push(body);
+    sawTooth(w, d, h, 0, -0.04);
+    parts.push(box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true }));
+    parts.push(onStreetFace(body, face, 0.3, h * 0.6, 0.02, 0, trim));
+    parts.push({
+      kind: PartKind.Cylinder,
+      sx: 0.18,
+      sy: 0.7,
+      sz: 0.18,
+      ox: 0.3,
+      oy: 0,
+      oz: 0.3,
+      turn: 0,
+      color: ACCENT.waterTank,
+      accent: true,
+    });
+    parts.push(chimney(0.06, 0.55, -0.3, h, -0.25));
+    parts.push(
+      box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.15, h + 0.1, 0.1, ACCENT.rooftopPv, { accent: true }),
+    );
+  }
+  return parts;
+}
+
+/**
  * Procedural low-poly building parts for a zone/density/variant/tile
  * triple facing `face`. Deterministic in its inputs so every client
  * renders the same city.
@@ -659,6 +772,8 @@ export function buildingParts(
       return commercial(density, picker, face, family);
     case Zone.Retail:
       return retail(density, picker, face, family);
+    case Zone.Industrial:
+      return industrial(density, picker, face, family);
     default:
       return [];
   }

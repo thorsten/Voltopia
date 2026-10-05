@@ -4,7 +4,7 @@ import { SupplyStatus, Zone } from '../../shared/types.ts';
 import { ACCENT, ZONE_FAMILIES, applySupplyTint, AgeStage, applyAgeTint } from './palette.ts';
 
 describe('building palette', () => {
-  it.each([Zone.Residential, Zone.Commercial, Zone.Retail])(
+  it.each([Zone.Residential, Zone.Commercial, Zone.Retail, Zone.Industrial])(
     'zone %i exposes 4 wall, 3 roof and 2 trim hues',
     (zone) => {
       const family = ZONE_FAMILIES[zone];

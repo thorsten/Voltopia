@@ -24,7 +24,7 @@ import {
 const VARIANTS = 8;
 const GRID = 64;
 /** Zones with recipes so far — later tasks append to this list. */
-const ZONES: Zone[] = [Zone.Residential, Zone.Commercial, Zone.Retail];
+const ZONES: Zone[] = [Zone.Residential, Zone.Commercial, Zone.Retail, Zone.Industrial];
 
 /** Every (zone, density, variant, face) over a sample of tile indices. */
 function* allRecipes(indices: Iterable<number>): Generator<{
@@ -414,6 +414,16 @@ describe('building recipes', () => {
     }
   });
 
+  it('gives factories a saw-tooth roof: two gable parts side by side on the hall', () => {
+    for (const { zone, parts } of allRecipes(SAMPLE)) {
+      if (zone !== Zone.Industrial) continue;
+      const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
+      expect(gables).toHaveLength(2);
+      expect(gables[0].oy).toBeCloseTo(gables[1].oy, 9);
+      expect(gables[0].ox).not.toBeCloseTo(gables[1].ox, 9);
+    }
+  });
+
   describe('part roles (stage 2 accents)', () => {
     function roles(parts: readonly BuildingPart[], role: PartRole): BuildingPart[] {
       return parts.filter((p) => p.role === role);
@@ -429,6 +439,13 @@ describe('building recipes', () => {
             expect(chimneys[0].color.getHex()).toBe(ACCENT.chimney.getHex());
           }
         }
+      }
+    });
+
+    it('tags exactly one chimney on every factory', () => {
+      for (const { zone, parts } of allRecipes(SAMPLE)) {
+        if (zone !== Zone.Industrial) continue;
+        expect(parts.filter((p) => p.role === PartRole.Chimney)).toHaveLength(1);
       }
     });
 
@@ -471,7 +488,8 @@ describe('building recipes', () => {
         const expected =
           (zone === Zone.Residential && density === 1) ||
           (zone === Zone.Commercial && density >= 2) ||
-          (zone === Zone.Retail && density === 3);
+          (zone === Zone.Retail && density === 3) ||
+          zone === Zone.Industrial;
         if (!expected) expect(tagged).toHaveLength(0);
         for (const p of tagged) {
           expect(p.turn).toBe(0);

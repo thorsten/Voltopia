@@ -11,8 +11,9 @@ const colors = (...hex: number[]): readonly THREE.Color[] => hex.map((h) => new 
 
 /**
  * Per-zone colour families. Each zone keeps its identity (warm cream and
- * brick, cool grey and glass, rose and apricot) so zones still read at a
- * glance with several hues each.
+ * brick, cool grey and glass, rose and apricot, corrugated grey with
+ * rust and safety yellow) so zones still read at a glance with several
+ * hues each.
  */
 export const ZONE_FAMILIES: Record<number, ZoneFamily> = {
   [Zone.Residential]: {
@@ -29,6 +30,11 @@ export const ZONE_FAMILIES: Record<number, ZoneFamily> = {
     walls: colors(0xd9a39b, 0xe9b98f, 0xe9d99a, 0xd6b39c),
     roofs: colors(0x8f3b3b, 0x7a7f4a, 0x6f7378),
     trims: colors(0xc9453f, 0x3f8f8a),
+  },
+  [Zone.Industrial]: {
+    walls: colors(0x9aa0a6, 0xb5b0a3, 0x8c8f93, 0xa7a295),
+    roofs: colors(0x5b5f66, 0x8a4b3a, 0x6f7378),
+    trims: colors(0xe0b030, 0x3f4650),
   },
 };
 

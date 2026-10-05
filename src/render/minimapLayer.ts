@@ -18,11 +18,13 @@ const COLORS = {
     [Zone.Residential]: '#a9d3ab',
     [Zone.Commercial]: '#a9c3e0',
     [Zone.Retail]: '#e0bfa9',
+    [Zone.Industrial]: '#d9cfa9',
   } as Record<number, string>,
   building: {
     [Zone.Residential]: '#4c9a51',
     [Zone.Commercial]: '#3c6fb4',
     [Zone.Retail]: '#c07a45',
+    [Zone.Industrial]: '#8a7a3c',
   } as Record<number, string>,
   plant: {
     [PlantType.SolarFarm]: '#2b3d66',

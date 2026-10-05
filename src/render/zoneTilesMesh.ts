@@ -14,6 +14,7 @@ const ZONE_TINTS: Record<number, THREE.Color> = {
   [Zone.Residential]: new THREE.Color(0x67c26b),
   [Zone.Commercial]: new THREE.Color(0x5b8fd6),
   [Zone.Retail]: new THREE.Color(0xd6815b),
+  [Zone.Industrial]: new THREE.Color(0xb3a06a),
 };
 
 /**
