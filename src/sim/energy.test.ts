@@ -15,7 +15,7 @@ import {
 import { callBudgetTicks } from './demandResponse.ts';
 import { heatStep, IDLE_HEAT } from './heat.ts';
 import { poolForIsland, syncIslandPools } from './islandPools.ts';
-import { islandOf, isSupplySource } from './powerGrid.ts';
+import { islandOf, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { comfortWindowHours, refreshBuildingCount } from './smartMeters.ts';
@@ -31,7 +31,7 @@ import {
   SupplyStatus,
   Terrain,
   TileType,
-  totalPumpedStorageCapacity,
+  totalPumpedStorageCapacityOnIsland,
   Zone,
   type SimState,
 } from './state.ts';
@@ -650,6 +650,10 @@ describe('terrain energy bonuses', () => {
   function placeDirect(state: SimState, index: number, plant: PlantType): void {
     state.layers.tileType[index] = TileType.Plant;
     state.layers.plantType[index] = plant;
+    // Bypassing placePlant also bypasses its version bump, and the
+    // capacity helpers read the island labelling.
+    bumpGridVersion(state);
+    recomputeGrid(state);
   }
 
   it('flat maps reproduce the unbonused outputs', () => {
@@ -720,7 +724,7 @@ describe('terrain energy bonuses', () => {
     state.lakeLevel = 1; // head = 5 - 1 = 4, from the hilltop
     placeDirect(state, shore, PlantType.PumpedStorage);
     const factor = 1 + BALANCE.terrain.headBonusPerLevel * 4;
-    expect(totalPumpedStorageCapacity(state)).toBeCloseTo(
+    expect(totalPumpedStorageCapacityOnIsland(state)).toBeCloseTo(
       BALANCE.energy.pumpedStorageCapacity * factor,
     );
     // The clamp uses the boosted capacity.
@@ -740,7 +744,7 @@ describe('terrain energy bonuses', () => {
     state.layers.elevation[at(6, 3)] = 7;
     state.lakeLevel = 1; // head = 2 - 1 = 1, from the shore tile itself
     placeDirect(state, shore, PlantType.PumpedStorage);
-    expect(totalPumpedStorageCapacity(state)).toBeCloseTo(
+    expect(totalPumpedStorageCapacityOnIsland(state)).toBeCloseTo(
       BALANCE.energy.pumpedStorageCapacity * (1 + BALANCE.terrain.headBonusPerLevel * 1),
     );
   });
@@ -751,7 +755,9 @@ describe('terrain energy bonuses', () => {
     state.layers.terrain[at(3, 4)] = Terrain.Lake;
     placeDirect(state, shore, PlantType.PumpedStorage);
     expect(pumpedHeadAt(state, shore)).toBe(0);
-    expect(totalPumpedStorageCapacity(state)).toBeCloseTo(BALANCE.energy.pumpedStorageCapacity);
+    expect(totalPumpedStorageCapacityOnIsland(state)).toBeCloseTo(
+      BALANCE.energy.pumpedStorageCapacity,
+    );
   });
 });
 

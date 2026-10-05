@@ -132,21 +132,17 @@ export function scaleTiles(state: SimState, tiles: readonly number[], factor: nu
   }
 }
 
-/** Everything the city's intact plants of one storage kind hold. */
-export function storedByKind(state: SimState, plant: PlantType): number {
-  return poolOf(state, storageTilesOfKind(state, plant)).stored;
-}
-
 /**
- * Everything the city's intact plants of one storage kind hold, counting
- * only tiles that sit on a grid island (`layers.island[i] !== 0`). A heat
- * store never seeds its own island (it is not a supply source — see
- * `SUPPLY_SOURCES` in `shared/plants.ts`), so one built with no line and
- * no building in reach would otherwise inflate the city-wide SoC figures
- * past what the energy history's SoC reports, which already excludes
- * island 0.
+ * Everything the city's intact plants of one storage kind hold. With
+ * `onIsland`, only tiles that sit on a grid island
+ * (`layers.island[i] !== 0`) count: a heat store never seeds its own
+ * island (it is not a supply source — see `SUPPLY_SOURCES` in
+ * `shared/plants.ts`), so one built with no line and no building in
+ * reach would otherwise inflate the city-wide SoC figures past what the
+ * energy history's SoC reports, which already excludes island 0.
  */
-export function storedByKindOnIsland(state: SimState, plant: PlantType): number {
-  const tiles = storageTilesOfKind(state, plant).filter((i) => state.layers.island[i] !== 0);
+export function storedByKind(state: SimState, plant: PlantType, onIsland = false): number {
+  let tiles = storageTilesOfKind(state, plant);
+  if (onIsland) tiles = tiles.filter((i) => state.layers.island[i] !== 0);
   return poolOf(state, tiles).stored;
 }

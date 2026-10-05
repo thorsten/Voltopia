@@ -4,6 +4,7 @@ import { tileIndex } from '../shared/grid.ts';
 import { PlantType } from '../shared/types.ts';
 import { addDamage } from './disasters.ts';
 import { placePlant } from './energy.ts';
+import { recomputeGrid } from './powerGrid.ts';
 import { createSimState, type SimState } from './state.ts';
 import { buildStats, stepTick } from './tick.ts';
 import {
@@ -87,6 +88,29 @@ describe('storage per tile', () => {
     expect(state.layers.stored[damaged]).toBe(500);
     scaleTiles(state, tiles, 0.5);
     expect(state.layers.stored[damaged]).toBe(500);
+  });
+
+  it('a damaged battery inside a live island counts toward neither the SoC nor the capacity', () => {
+    // The numerator (storageTilesOfKind) skips damaged tiles, so the
+    // capacity must skip them too — otherwise the panel's SoC bar halves
+    // after a storm while the graph's SoC line, which excludes damaged
+    // plants on both sides, does not move.
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    const damaged = at(2, 2);
+    const intact = at(5, 2);
+    placePlant(state, damaged, PlantType.Battery);
+    placePlant(state, intact, PlantType.Battery);
+    state.layers.stored[damaged] = 500;
+    state.layers.stored[intact] = 500;
+    addDamage(state, damaged, 10);
+    recomputeGrid(state);
+    // A damaged plant seeds nothing, but it still sits in the intact
+    // battery's supply ring (radius 3), so it is on that island.
+    expect(state.layers.island[damaged]).not.toBe(0);
+    const stats = buildStats(state);
+    expect(stats.energy.storedEnergy).toBeCloseTo(500, 6);
+    expect(stats.energy.storageCapacity).toBe(BALANCE.energy.batteryCapacity);
   });
 
   it('a heat store on no island does not count toward the city-wide SoC stats', () => {

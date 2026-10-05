@@ -494,30 +494,23 @@ export function drivingVehicleCount(state: SimState): number {
 }
 
 /**
- * Charging demand for this tick: cars plugged in at home or a hub, vans
- * plugged in at their depot, and buses plugged in at theirs, each times
- * its charger power.
+ * Charging demand for this tick over the whole city: cars plugged in at
+ * home or a hub, vans plugged in at their depot, and buses plugged in at
+ * theirs, each times its charger power. The per-island buckets are the
+ * one definition of that rule, so this is their sum.
  */
 export function chargingDemand(state: SimState): number {
-  let cars = 0;
-  for (const vehicle of state.vehicles) if (vehicle.charging) cars++;
-  let vans = 0;
-  for (const van of state.vans) if (van.charging) vans++;
-  let buses = 0;
-  for (const bus of state.buses) if (bus.charging) buses++;
-  return (
-    cars * BALANCE.vehicles.chargingEnergyPerVehicle +
-    vans * BALANCE.deliveries.chargingEnergyPerVan +
-    buses * BALANCE.transit.chargingEnergyPerBus
-  );
+  let total = 0;
+  for (const load of chargingDemandByIsland(state)) total += load;
+  return total;
 }
 
 /**
  * Charging demand per island this tick (index = island number, 0 = not
  * energised): cars at their home road or hub, vans and buses at their
- * depot tile. Sums to `chargingDemand`, which is the same figure for
- * the whole city. Bucket 0 stays empty: nothing charges off the grid —
- * `decideCharging` and `depotPowered` both refuse an unpowered tile.
+ * depot tile. `chargingDemand` is the sum over the buckets. Bucket 0
+ * stays empty: nothing charges off the grid — `decideCharging` and
+ * `depotPowered` both refuse an unpowered tile.
  */
 export function chargingDemandByIsland(state: SimState): Float64Array {
   recomputeGrid(state);
