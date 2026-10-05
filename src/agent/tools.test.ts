@@ -849,4 +849,55 @@ describe('district grids', () => {
     const inspected = (await call('inspect_tile', { x: sub!.x, y: sub!.y })) as Record<string, any>;
     expect(inspected.substation).toBeDefined();
   });
+
+  it("delivers a bare ring tile's island number to the tile mirror, not just the plant/line tiles", async () => {
+    const { call, ctx, engine } = createHarness();
+    engine.state.money = 1e9;
+    const { terrain, tileType, density } = engine.state.layers;
+    const buildable = (x: number, y: number): boolean => {
+      if (x < 0 || y < 0 || x >= SIZE || y >= SIZE) return false;
+      const i = tileIndex(x, y, SIZE);
+      return (
+        terrain[i] === Terrain.Land &&
+        tileType[i] === TileType.Empty &&
+        density[i] === 0 &&
+        slopeAt(engine.state, i) <= BALANCE.terrain.maxBuildSlope
+      );
+    };
+    const R = BALANCE.energy.lineSupplyRadius;
+    // Enough buildable land in a row for the plant, a line running east
+    // of it, and the bare tile only the line's own ring (not the
+    // plant's) reaches.
+    const span = 2 * R + 2;
+    let origin: { x: number; y: number } | null = null;
+    for (let y = 0; y < SIZE && !origin; y++) {
+      for (let x = 0; x + span < SIZE && !origin; x++) {
+        let ok = true;
+        for (let dx = 0; dx <= span && ok; dx++) ok = buildable(x + dx, y);
+        if (ok) origin = { x, y };
+      }
+    }
+    expect(origin).not.toBeNull();
+    const { x, y } = origin!;
+
+    const wind = await call('place_plant', { plant: 'wind', x, y });
+    expect(wind).toMatchObject({ ok: true });
+    const line = await call('build_power_line', {
+      from: { x: x + 1, y },
+      to: { x: x + R + 2, y },
+    });
+    expect(line).toMatchObject({ ok: true });
+    await call('advance_time', { ticks: 2 });
+
+    // Bare land reached only by the far line tile's own ring, never the
+    // plant's — and never a line tile itself, so nothing ever called
+    // markDirty on it directly.
+    const farTile = tileIndex(x + R + 2 + R, y, SIZE);
+    expect(engine.state.layers.tileType[farTile]).toBe(TileType.Empty);
+
+    const report = (await call('get_energy_report')) as Record<string, any>;
+    const islandNumber = (report.islands as Array<{ number: number }>)[0].number;
+    expect(islandNumber).toBeGreaterThan(0);
+    expect(ctx.tiles.island[farTile]).toBe(islandNumber);
+  });
 });

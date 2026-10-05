@@ -149,6 +149,35 @@ describe('recomputeGrid', () => {
     recomputeGrid(state);
     expect(state.layers.energized[at(10, 10)]).toBe(0);
   });
+
+  it('dirties a bare tile whose island number changes, even with no diff reason of its own', () => {
+    const state = makeState();
+    placePlant(state, at(10, 10), PlantType.WindTurbine);
+    recomputeGrid(state);
+    state.dirty.clear();
+
+    // A line east of the plant, stopping short of the far tile below —
+    // the line tiles get their own markDirty from buildPowerLines, but
+    // the bare land their ring newly reaches past the plant's own ring
+    // does not.
+    const lineTiles: number[] = [];
+    for (let dx = 1; dx <= R + 2; dx++) lineTiles.push(at(10 + dx, 10));
+    buildPowerLines(state, lineTiles);
+    state.dirty.clear(); // isolate recomputeGrid's own dirtying from the build's
+
+    recomputeGrid(state);
+
+    // Bare land only inside the last line tile's ring, never the
+    // plant's own ring and never a line or line-neighbour tile itself.
+    const newlyEnergised = at(10 + (R + 2) + R, 10);
+    expect(state.layers.tileType[newlyEnergised]).toBe(TileType.Empty);
+    expect(state.layers.energized[newlyEnergised]).toBe(1);
+    expect(state.dirty.has(newlyEnergised)).toBe(true);
+
+    const farAway = at(SIZE - 1, SIZE - 1);
+    expect(state.layers.energized[farAway]).toBe(0);
+    expect(state.dirty.has(farAway)).toBe(false);
+  });
 });
 
 describe('isIsolatedPlant', () => {

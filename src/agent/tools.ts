@@ -1443,12 +1443,10 @@ function matchesKind(
     case 'substation':
       return tiles.tileType[i] === TileType.Plant && tiles.plantType[i] === PlantType.Substation;
     case 'island_without_substation':
-      // The island's key tile is often bare land that never carries a
-      // power line or building, so it rarely gets a diff of its own —
-      // the tile mirror's `island` layer can stay stale (0) there even
-      // though the authoritative stats say otherwise. Match on
-      // membership in the (authoritative) key set directly instead of
-      // re-checking tiles.island[i].
+      // The key is always a tile of its island (its lowest tile index),
+      // so membership in the set is enough on its own — the stats are
+      // the authority on which islands have no substation, not a
+      // per-tile layer this matcher would otherwise have to re-derive.
       return keysWithoutSubstation.has(i);
   }
 }

@@ -117,6 +117,13 @@ export function recomputeGrid(state: SimState): void {
     }
   }
 
+  // Snapshot the labelling about to be overwritten, purely to tell which
+  // tiles' island number this recompute actually changes (see the dirty
+  // loop below) — distinct from `prevIsland` above, which is a
+  // sync-gated snapshot `syncIslandPools` owns and must not be reused
+  // for this.
+  const oldIsland = island.slice();
+
   // 3. Number islands ascending by lowest tile; the lowest tile is the key.
   energized.fill(0);
   island.fill(0);
@@ -136,6 +143,20 @@ export function recomputeGrid(state: SimState): void {
   }
   state.islandKeys = keys;
   state.gridComputedVersion = state.gridVersion;
+
+  // A tile's island number never gets its own markDirty call elsewhere:
+  // placing a plant or building a line only dirties the tiles it
+  // directly touches, not the whole supply ring it energises. Without
+  // this, a bare ring tile that joins or leaves an island would never
+  // reach a diff, so clients (the renderer's grid overlay, the agent's
+  // tile mirror) would never learn its island changed. Call
+  // state.dirty.add directly rather than markDirty: this module's
+  // import of state.ts stays type-only. A topology change (the only
+  // time recomputeGrid actually runs) can renumber many islands at
+  // once, dirtying many tiles in one burst — rare enough to be fine.
+  for (let t = 0; t < tiles; t++) {
+    if (oldIsland[t] !== island[t]) state.dirty.add(t);
+  }
 }
 
 /** Island number of a tile (0 = not energised). Recomputes the grid if stale. */
