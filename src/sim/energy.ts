@@ -3,6 +3,7 @@ import { HEATED_SERVED, PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
+import { chargePool, dischargePool } from './islandBalance.ts';
 import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.ts';
 import { comfortWindowHours, meteredCoverage } from './smartMeters.ts';
@@ -304,29 +305,6 @@ export interface EnergyTickInput {
   chargingDemand: number;
   /** This tick's district-heating balance (IDLE_HEAT when absent). */
   heat?: HeatTickResult;
-}
-
-/** Absorb surplus into a storage pool within its power limit and headroom. */
-function chargePool(
-  stored: number,
-  capacity: number,
-  powerLimit: number,
-  efficiency: number,
-  surplus: number,
-): { stored: number; absorbed: number } {
-  const headroom = Math.max(0, capacity - stored);
-  const absorbed = Math.max(0, Math.min(surplus, powerLimit, headroom / efficiency));
-  return { stored: stored + absorbed * efficiency, absorbed };
-}
-
-/** Release stored energy toward a shortfall within the power limit. */
-function dischargePool(
-  stored: number,
-  powerLimit: number,
-  shortfall: number,
-): { stored: number; released: number } {
-  const released = Math.max(0, Math.min(shortfall, powerLimit, stored));
-  return { stored: stored - released, released };
 }
 
 /** Island number with the most energised tiles (a short tile-count scan). */
