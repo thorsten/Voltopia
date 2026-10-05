@@ -16,7 +16,7 @@ import { SimEngine } from '../sim/engine.ts';
 import { discoverGeothermalFields } from '../sim/geothermal.ts';
 import { buildPowerLines } from '../sim/powerLines.ts';
 import { isCoastalSea } from '../sim/sea.ts';
-import { markDirty, slopeCostMultiplier } from '../sim/state.ts';
+import { markDirty, slopeAt, slopeCostMultiplier } from '../sim/state.ts';
 import { TileMirror } from './tileMirror.ts';
 import {
   callTool,
@@ -771,5 +771,82 @@ describe('agent tools: building', () => {
     const coords = (found.tiles as Array<{ x: number; y: number }>).map((t) => `${t.x},${t.y}`);
     expect(coords).toContain('2,22');
     expect(coords).not.toContain('20,20');
+  });
+});
+
+describe('district grids', () => {
+  it('overview and energy report list islands; find_tiles names islands without a substation', async () => {
+    const { call, engine } = createHarness();
+    engine.state.money = 1e9;
+    const { terrain, tileType, density } = engine.state.layers;
+    const buildable = (x: number, y: number): boolean => {
+      if (x < 0 || y < 0 || x >= SIZE || y >= SIZE) return false;
+      const i = tileIndex(x, y, SIZE);
+      return (
+        terrain[i] === Terrain.Land &&
+        tileType[i] === TileType.Empty &&
+        density[i] === 0 &&
+        slopeAt(engine.state, i) <= BALANCE.terrain.maxBuildSlope
+      );
+    };
+    // Two land tiles far enough apart (beyond the line supply radius on
+    // each side) that their plants never share a ring and so land on two
+    // separate islands.
+    const land: Array<{ x: number; y: number }> = [];
+    for (let y = 0; y < SIZE && land.length < 2; y++) {
+      for (let x = 0; x < SIZE && land.length < 2; x++) {
+        if (!buildable(x, y)) continue;
+        if (land.length === 1) {
+          const [first] = land;
+          if (Math.max(Math.abs(first.x - x), Math.abs(first.y - y)) < 7) continue;
+        }
+        land.push({ x, y });
+      }
+    }
+    expect(land.length).toBe(2);
+    const [a, b] = land;
+
+    const wind = await call('place_plant', { plant: 'wind', x: a.x, y: a.y });
+    expect(wind).toMatchObject({ ok: true });
+    const solar = await call('place_plant', { plant: 'solar', x: b.x, y: b.y });
+    expect(solar).toMatchObject({ ok: true });
+
+    // A substation within the solar farm's supply ring joins its island.
+    let sub: { x: number; y: number } | null = null;
+    for (const [dx, dy] of [
+      [1, 0],
+      [2, 0],
+      [0, 1],
+      [0, 2],
+      [-1, 0],
+      [-2, 0],
+      [0, -1],
+      [0, -2],
+      [1, 1],
+      [-1, -1],
+    ]) {
+      if (buildable(b.x + dx, b.y + dy)) {
+        sub = { x: b.x + dx, y: b.y + dy };
+        break;
+      }
+    }
+    expect(sub).not.toBeNull();
+    const substation = await call('place_plant', { plant: 'substation', x: sub!.x, y: sub!.y });
+    expect(substation).toMatchObject({ ok: true });
+    // A tick is needed for the grid (and so the island layer) to recompute.
+    await call('advance_time', { ticks: 2 });
+
+    const overview = (await call('get_game_overview')) as Record<string, any>;
+    expect(overview.islands).toBe(2);
+    expect(typeof overview.islandsInDeficit).toBe('number');
+
+    const report = (await call('get_energy_report')) as Record<string, any>;
+    expect((report.islands as unknown[]).length).toBe(2);
+
+    const missing = await call('find_tiles', { kind: 'island_without_substation' });
+    expect((missing.tiles as { x: number; y: number }[]).length).toBe(1);
+
+    const inspected = (await call('inspect_tile', { x: sub!.x, y: sub!.y })) as Record<string, any>;
+    expect(inspected.substation).toBeDefined();
   });
 });

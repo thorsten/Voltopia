@@ -227,6 +227,7 @@ export const FIND_KINDS = [
   'bus_stop',
   'damaged',
   'substation',
+  'island_without_substation',
 ] as const;
 export type FindKind = (typeof FIND_KINDS)[number];
 
@@ -525,9 +526,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Current state of the city: funds, population, jobs, happiness, zone demand, clock and ' +
         'season, weather, energy balance summary, budget per tick, tax rate, upgrades, goals, ' +
-        'tile counts, grid size and a disasters summary (intensity, warning/active counts, ' +
-        'damaged tiles, repair cost — see get_disasters for the detail). Call this first and ' +
-        'after every advance_time.',
+        'tile counts, grid size, grid islands (count, in deficit) and a disasters summary ' +
+        '(intensity, warning/active counts, damaged tiles, repair cost — see get_disasters for ' +
+        'the detail). Call this first and after every advance_time.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -645,6 +646,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             damagedTiles: s.disasters.damagedTiles,
             repairPerTick: round(s.disasters.repairPerTick, 3),
           },
+          islands: s.islands.length,
+          islandsInDeficit: s.islands.filter((i) => i.deficit > 0).length,
           taxRate: s.taxRate,
           maxTaxRate: BALANCE.tax.maxRate,
           smartMeters: {
@@ -749,8 +752,11 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Full energy statistics for the current tick: generation per source, consumption per ' +
         'category, storage, curtailment, deficit, grid import/export, flexible-load figures ' +
-        '(flexDeferred, flexRecovered, flexBacklog), the business load shed under the demand-response contract (shed), the unshifted curve, and the sampled ' +
-        'history of the last in-game day (oldest first).',
+        '(flexDeferred, flexRecovered, flexBacklog), the business load shed under the demand-response contract (shed), the unshifted curve, ' +
+        'the sampled history of the last in-game day (oldest first), and per-island figures ' +
+        '(islands: number, key, tiles, buildings, substations, generation, consumption, stored, ' +
+        'capacity, deficit, curtailment, gridImport, gridExport, importCost) — see get_game_overview ' +
+        'for the city-wide island count.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -759,6 +765,17 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           tick: s.tick,
           hour: round(s.timeOfDay * 24, 1),
           ...s.energy,
+          islands: s.islands.map((i) => ({
+            ...i,
+            generation: round(i.generation),
+            consumption: round(i.consumption),
+            stored: Math.round(i.stored),
+            deficit: round(i.deficit),
+            curtailment: round(i.curtailment),
+            gridImport: round(i.gridImport),
+            gridExport: round(i.gridExport),
+            importCost: round(i.importCost),
+          })),
           history: s.energy.history.map((point) => ({
             generation: round(point.generation),
             consumption: round(point.consumption),
@@ -854,7 +871,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         "supply plants within each other's supply radius — has no power line attached and no building " +
         'in any of its rings; its output still counts, nobody nearby uses it), ' +
         'bus_stop, damaged (out of service from a storm, fire or flood; ' +
-        'see get_disasters), substation. Optionally nearest to a point first.',
+        "see get_disasters), substation, island_without_substation (one tile — the island's key " +
+        'tile — per grid island that has no substation and so cannot import or export). ' +
+        'Optionally nearest to a point first.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -869,9 +888,13 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         const kind = readEnum(input, 'kind', FIND_KINDS);
         const near = 'near' in input ? readPoint(input, 'near', tiles) : null;
         const limit = Math.max(1, readInt(input, 'limit', 50));
+        const stats = requireStats(ctx);
+        const keysWithoutSubstation = new Set(
+          stats.islands.filter((i) => i.substations === 0).map((i) => i.key),
+        );
         const matches: number[] = [];
         for (let i = 0; i < size * size; i++) {
-          if (matchesKind(tiles, i, kind)) matches.push(i);
+          if (matchesKind(tiles, i, kind, keysWithoutSubstation)) matches.push(i);
         }
         if (near) {
           const dist = (i: number): number =>
@@ -1366,11 +1389,18 @@ function liveFigures(info: TileInfo): Record<string, unknown> {
     busDepot: info.busDepot,
     heated: info.heated,
     ...(info.heatPlant ? { heatPlant: info.heatPlant } : {}),
+    ...(info.island ? { island: info.island } : {}),
+    ...(info.substation ? { substation: info.substation } : {}),
     damage: info.damage,
   };
 }
 
-function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
+function matchesKind(
+  tiles: TileMirror,
+  i: number,
+  kind: FindKind,
+  keysWithoutSubstation: ReadonlySet<number>,
+): boolean {
   const terrain = tiles.terrain[i];
   const empty = tiles.tileType[i] === TileType.Empty && tiles.density[i] === 0;
   switch (kind) {
@@ -1412,6 +1442,14 @@ function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
       return tiles.damage[i] !== 0;
     case 'substation':
       return tiles.tileType[i] === TileType.Plant && tiles.plantType[i] === PlantType.Substation;
+    case 'island_without_substation':
+      // The island's key tile is often bare land that never carries a
+      // power line or building, so it rarely gets a diff of its own —
+      // the tile mirror's `island` layer can stay stale (0) there even
+      // though the authoritative stats say otherwise. Match on
+      // membership in the (authoritative) key set directly instead of
+      // re-checking tiles.island[i].
+      return keysWithoutSubstation.has(i);
   }
 }
 
