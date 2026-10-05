@@ -409,6 +409,28 @@ describe('agent tools: building', () => {
     expect(Array.isArray(zoned.growthBlockers)).toBe(true);
   });
 
+  it('paints the industrial zone and reports it on the map and in the overview', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    await call('build_road', { from: { x, y }, to: { x: x + 5, y } });
+    const result = await call('paint_zone', {
+      zone: 'industrial',
+      from: { x, y: y + 1 },
+      to: { x: x + 5, y: y + 1 },
+    });
+    expect(result).toMatchObject({ ok: true });
+    expect(engine.state.layers.zone[tileIndex(x + 2, y + 1, SIZE)]).toBe(Zone.Industrial);
+    const map = await call('get_map');
+    expect((map.rows as string[])[y + 1]).toContain('i');
+    const overview = await call('get_game_overview');
+    expect(typeof (overview.demand as { industrial: number }).industrial).toBe('number');
+    expect((overview.deliveries as { factories: number }).factories).toBe(0);
+    expect((overview.deliveries as { localShare: number }).localShare).toBe(1);
+    expect((overview.budgetPerTick as { goodsImport: number }).goodsImport).toBe(0);
+    const found = await call('find_tiles', { kind: 'factory', near: { x: x + 2, y: y + 1 } });
+    expect(found.tiles).toHaveLength(0);
+  });
+
   it('surfaces sim rejections with the code and an English message', async () => {
     const { call, engine } = createHarness();
     const { x, y } = findLand(engine);
@@ -425,7 +447,7 @@ describe('agent tools: building', () => {
     expect(await call('build_road', {})).toMatchObject({ ok: false, error: 'invalidInput' });
     expect(await call('build_road', { from: { x: -1, y: 0 } })).toMatchObject({ ok: false });
     expect(await call('build_road', { tiles: [{ x: 1 }] })).toMatchObject({ ok: false });
-    expect(await call('paint_zone', { zone: 'industrial', from: { x: 1, y: 1 } })).toMatchObject({
+    expect(await call('paint_zone', { zone: 'farmland', from: { x: 1, y: 1 } })).toMatchObject({
       ok: false,
     });
     expect(await call('place_plant', { plant: 'coal', x: 1, y: 1 })).toMatchObject({ ok: false });

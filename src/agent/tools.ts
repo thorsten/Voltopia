@@ -86,6 +86,7 @@ export const ZONE_NAMES = {
   residential: Zone.Residential,
   commercial: Zone.Commercial,
   retail: Zone.Retail,
+  industrial: Zone.Industrial,
 } as const;
 export type ZoneName = keyof typeof ZONE_NAMES;
 
@@ -217,6 +218,7 @@ export const FIND_KINDS = [
   'building',
   'not_connected_building',
   'undersupplied_building',
+  'factory',
   'isolated_plant',
   'bus_stop',
   'damaged',
@@ -419,13 +421,14 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
   if (zone === Zone.Residential) return built ? 'R' : 'r';
   if (zone === Zone.Commercial) return built ? 'C' : 'c';
   if (zone === Zone.Retail) return built ? 'S' : 's';
+  if (zone === Zone.Industrial) return built ? 'I' : 'i';
   return '.';
 }
 
 const OVERVIEW_LEGEND =
   '. empty land, ~ river, # lake, % sea, + road (or bridge), o road with a bus stop, ' +
   '= power line on empty land, ' +
-  'r/c/s zoned but unbuilt (residential/commercial/retail), R/C/S building, ' +
+  'r/c/s/i zoned but unbuilt (residential/commercial/retail/industrial), R/C/S/I building, ' +
   'plants: V solar, W wind, B battery, G biogas, H charging hub, P park, ' +
   'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot, ' +
   'Q heat plant, K heat store. ' +
@@ -679,8 +682,12 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           ticksPerDay: TICKS_PER_DAY,
           rules: [
             'Roads connect the city; buildings only appear on zoned tiles next to a road.',
-            'Zones (residential, commercial, retail) grow on their own when demand is positive ' +
-              'and the tile is fully supplied with energy; buildings densify up to level 3.',
+            'Zones (residential, commercial, retail, industrial) grow on their own when demand is positive ' +
+              'and the tile is fully supplied with energy; buildings densify up to level 3. ' +
+              'Industrial demand follows the retail jobs; factories hand goods to delivery vans and ' +
+              'lower the happiness of homes within ' +
+              BALANCE.happiness.industryRadius +
+              ' tiles.',
             `Plants supply only what power lines connect to them. Every energised line tile and every ` +
               `supply plant connects buildings within ${BALANCE.energy.lineSupplyRadius} tiles ` +
               '(chessboard distance). Lines run over empty land, roads and water, not over buildings or plants.',
@@ -835,7 +842,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'lake, for pumped storage), coastal_sea (empty sea tile touching land, for tidal plants), ' +
         'geothermal_hotspot (empty land tile carrying a hotspot, for geothermal plants), ' +
         'road, power_line, plant, zoned_empty, building, not_connected_building, ' +
-        'undersupplied_building, isolated_plant (a supply plant with no power line attached ' +
+        'undersupplied_building, factory (an industrial building), isolated_plant (a supply plant with no power line attached ' +
         'and no building in its supply ring — its output still counts, nobody nearby uses it), ' +
         'bus_stop, damaged (out of service from a storm, fire or flood; ' +
         'see get_disasters). Optionally nearest to a point first.',
@@ -970,7 +977,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
     {
       name: 'paint_zone',
       description:
-        'Zone every empty land tile in a rectangle as residential, commercial or retail. ' +
+        'Zone every empty land tile in a rectangle as residential, commercial, retail or industrial. ' +
         'Buildings only grow on zoned tiles that touch a road and are supplied with energy.',
       inputSchema: {
         ...RECT_SCHEMA,
@@ -1099,7 +1106,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
     },
     {
       name: 'set_demand_response',
-      description: `Sign or end the demand-response contract with the commercial and retail buildings. Under contract, up to ${Math.round(BALANCE.demandResponse.shedShare * 100)} % of their base load is shed automatically in a deficit — after storage and biogas, before import — whenever a call is cheaper than importing at the spot price or the import link cannot carry the shortfall, for at most ${BALANCE.demandResponse.maxCallHoursPerDay} h a day. Costs ${BALANCE.demandResponse.retainerPerBuildingPerDay} per business and day plus ${BALANCE.demandResponse.activationPricePerEnergyUnit} per energy unit shed. See demandResponse in get_game_overview.`,
+      description: `Sign or end the demand-response contract with the commercial, retail and industrial buildings. Under contract, up to ${Math.round(BALANCE.demandResponse.shedShare * 100)} % of the business base load and ${Math.round(BALANCE.demandResponse.industrialShedShare * 100)} % of the industrial base load is shed automatically in a deficit — after storage and biogas, before import — whenever a call is cheaper than importing at the spot price or the import link cannot carry the shortfall, for at most ${BALANCE.demandResponse.maxCallHoursPerDay} h a day. Costs ${BALANCE.demandResponse.retainerPerBuildingPerDay} per business and day plus ${BALANCE.demandResponse.activationPricePerEnergyUnit} per energy unit shed. See demandResponse in get_game_overview.`,
       inputSchema: {
         type: 'object',
         properties: { active: { type: 'boolean' } },
@@ -1293,6 +1300,8 @@ function plantFigures(type: PlantType): Record<string, number> {
       return {
         vans: BALANCE.deliveries.vansPerDepot,
         routeReachTiles: BALANCE.deliveries.maxRouteTiles,
+        loadTicks: BALANCE.deliveries.loadTicks,
+        importFeePerTour: BALANCE.deliveries.importFeePerTour,
       };
     case PlantType.BusDepot:
       return {
@@ -1380,6 +1389,8 @@ function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
       return tiles.density[i] > 0 && tiles.supplied[i] === SupplyStatus.NotConnected;
     case 'undersupplied_building':
       return tiles.density[i] > 0 && tiles.supplied[i] === SupplyStatus.Undersupplied;
+    case 'factory':
+      return tiles.zone[i] === Zone.Industrial && tiles.density[i] > 0;
     case 'isolated_plant':
       return (
         tiles.tileType[i] === TileType.Plant &&
