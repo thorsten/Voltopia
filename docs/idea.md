@@ -275,9 +275,10 @@ Collected 2026-09-24; roughly in the order we want to build them.
   the only gate between an island and the outer grid, so an island
   without one stands entirely on its own. The Grid overlay colours
   each island and dims the ones with no substation, the energy
-  drawer lists every island's own figures, and the `districtGrid`
-  goal rewards a city where every sizeable island has a substation
-  and no island saw a deficit all day.
+  drawer lists every island's own figures, the inspector names a
+  tile's district, and the `districtGrid` goal rewards a city where
+  every sizeable island has a substation and no island saw a deficit
+  all day.
 
 ## Way of Working
 

@@ -639,4 +639,44 @@ describe('districtGrid', () => {
     goalsStep(hadDeficit);
     expect(hadDeficit.goalsAchieved.has('districtGrid')).toBe(false);
   });
+
+  it('does not unlock when no island is sizeable (the every() guard must not be vacuous)', () => {
+    const state = city(1, 0);
+    state.lastIslands = state.lastIslands.map((island) => ({
+      ...island,
+      buildings: BALANCE.goals.districtGrid.minBuildings - 1,
+    }));
+    goalsStep(state);
+    expect(state.goalsAchieved.has('districtGrid')).toBe(false);
+  });
+
+  it('does not check or reset the counter off the day boundary', () => {
+    const state = city(1, 0);
+    state.tick = TICKS_PER_DAY + 1; // not a boundary
+    state.goalProgress.districtDeficitTicks = 5;
+    goalsStep(state);
+    expect(state.goalsAchieved.has('districtGrid')).toBe(false);
+    // No deficit this tick, so the accumulation line would not raise it either:
+    // unchanged proves the boundary block (which would reset it to 0) never ran.
+    expect(state.goalProgress.districtDeficitTicks).toBe(5);
+  });
+
+  it('resets the counter at each boundary, so a deficit day does not block a later clean one', () => {
+    const state = city(1, 0);
+
+    // Day 1 has one deficit tick before its boundary.
+    state.tick = TICKS_PER_DAY - 1;
+    state.lastIslands[0].deficit = 1;
+    goalsStep(state);
+    state.lastIslands[0].deficit = 0;
+    state.tick = TICKS_PER_DAY;
+    goalsStep(state);
+    expect(state.goalsAchieved.has('districtGrid')).toBe(false);
+    expect(state.goalProgress.districtDeficitTicks).toBe(0);
+
+    // Day 2 is clean all the way to its boundary.
+    state.tick = TICKS_PER_DAY * 2;
+    goalsStep(state);
+    expect(state.goalsAchieved.has('districtGrid')).toBe(true);
+  });
 });
