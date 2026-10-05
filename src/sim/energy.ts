@@ -442,8 +442,11 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
 
   // The heat network spans islands: its pump power and the heat it could
   // not deliver are split over them by their share of the heat plants
-  // and of the served heat demand.
-  const heatPlantsTotal = census.reduce((s, c) => s + c.heatPlants, 0);
+  // and of the served heat demand. Only the islands count: a heat plant
+  // off the grid runs nothing, so it must not hold a slice of the pump
+  // load out of the balance.
+  let heatPlantsTotal = 0;
+  for (let n = 1; n < islands; n++) heatPlantsTotal += census[n].heatPlants;
   const fallbackShare = heat.demand > 0 ? heat.fallback / heat.demand : 0;
 
   // The spot factor depends only on the state (clock and weather), so

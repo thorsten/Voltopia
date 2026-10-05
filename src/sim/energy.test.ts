@@ -1594,6 +1594,20 @@ describe('heat plants', () => {
     expect(e.heatPumpConsumption).toBeCloseTo(e.heatStoreCharge, 6);
   });
 
+  it('an unconnected heat plant takes no share of the pump load', () => {
+    const state = heatedVillageState(4);
+    state.season = { ...state.season, temperature: 0 };
+    // A second heat plant out in the fields: no line, no supply ring, so
+    // it is on no island and runs nothing.
+    placePlant(state, at(28, 2), PlantType.HeatPlant);
+    expect(islandOf(state, at(28, 2))).toBe(0);
+    const heat = heatStep(state);
+    expect(heat.pumpPower).toBeGreaterThan(0);
+    energyStep(state, { chargingByIsland: oneIsland(0), heat });
+    // The whole pump draw lands on the island that actually runs the network.
+    expect(state.lastEnergy.heatPumpConsumption).toBeCloseTo(heat.pumpPower, 6);
+  });
+
   it('does not charge the store on a warm day', () => {
     const state = heatedVillageState(0);
     placePlant(state, at(2, 14), PlantType.HeatStore);

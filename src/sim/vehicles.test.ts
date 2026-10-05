@@ -25,8 +25,12 @@ const at = (x: number, y: number) => tileIndex(x, y, SIZE);
 /**
  * A commuter town: homes in the west, jobs in the east, one main road.
  * ~citizens residents plus enough commercial density for workplaces.
+ * Powered by default — a solar farm on a line that runs the length of
+ * the street, so every home road and the workplaces are on one island;
+ * cars only charge where there is a grid. Pass `powered: false` for a
+ * town that never got a plant.
  */
-function commuterTown(seed = 1, citizens = 150): SimState {
+function commuterTown(seed = 1, citizens = 150, powered = true): SimState {
   const state = createSimState(seed, SIZE);
   const road = Array.from({ length: 16 }, (_, x) => at(x + 3, 10));
   buildRoads(state, road);
@@ -39,6 +43,14 @@ function commuterTown(seed = 1, citizens = 150): SimState {
   for (let i = 0; i < 4; i++) {
     state.layers.zone[at(15 + i, 9)] = Zone.Commercial;
     state.layers.density[at(15 + i, 9)] = 3;
+  }
+  if (powered) {
+    state.money = 1e9;
+    buildPowerLines(
+      state,
+      Array.from({ length: 16 }, (_, x) => at(x + 3, 12)),
+    );
+    placePlant(state, at(10, 13), PlantType.SolarFarm); // touches the line
   }
   return state;
 }
@@ -828,13 +840,6 @@ describe('surplusAvailable', () => {
 describe('chargingDemandByIsland', () => {
   it('buckets a car charging at home by the island of its home road, and sums to chargingDemand', () => {
     const state = commuterTown(11, 200);
-    // One island over the whole town: a plant feeding a line along the
-    // street, so every home road is energised.
-    placePlant(state, at(10, 12), PlantType.SolarFarm);
-    buildPowerLines(
-      state,
-      Array.from({ length: 16 }, (_, x) => at(x + 3, 11)),
-    );
     vehiclesStep(state);
     const byIsland = chargingDemandByIsland(state);
     let total = 0;
@@ -844,5 +849,21 @@ describe('chargingDemandByIsland', () => {
     expect(charging.chargeTile).toBe(charging.homeRoad);
     expect(islandOf(state, charging.homeRoad)).toBeGreaterThan(0);
     expect(byIsland[islandOf(state, charging.homeRoad)]).toBeGreaterThan(0);
+    // Nothing charges off the grid, so the unconnected bucket stays empty.
+    expect(byIsland[0]).toBe(0);
+  });
+
+  it('a car parked in an unpowered street does not charge at all', () => {
+    const dark = commuterTown(11, 200, false);
+    vehiclesStep(dark);
+    expect(dark.vehicles.length).toBeGreaterThan(0);
+    expect(dark.vehicles.some((v) => v.charging)).toBe(false);
+    expect(chargingDemand(dark)).toBe(0);
+
+    // The same town with a plant and a line down the street: they plug in.
+    const lit = commuterTown(11, 200);
+    vehiclesStep(lit);
+    expect(lit.vehicles.some((v) => v.charging)).toBe(true);
+    expect(chargingDemand(lit)).toBeGreaterThan(0);
   });
 });

@@ -256,6 +256,9 @@ export function surplusAvailable(state: SimState): boolean {
  * `updateTrafficLoad` (see `tick.ts`).
  */
 export function vehiclesStep(state: SimState): Map<number, number> {
+  // The charging decisions below read the island labels: a car can only
+  // draw from a tile that is on a grid island at all.
+  recomputeGrid(state);
   const { population, jobs } = countPopulationAndJobs(state);
   const targetCount = Math.min(
     BALANCE.vehicles.maxVehicles,
@@ -392,7 +395,8 @@ export function vehiclesStep(state: SimState): Map<number, number> {
  * whenever the battery isn't full (smart charging defers to renewable
  * surplus unless the battery is low), a charging hub with free capacity
  * near the workplace, or -1 for not charging at all. The tile decides
- * which island carries the load.
+ * which island carries the load, and a tile on no island carries none:
+ * a car parked in an unpowered street does not charge.
  */
 function decideCharging(
   state: SimState,
@@ -402,8 +406,10 @@ function decideCharging(
   surplusAvailable: boolean,
 ): number {
   if (vehicle.charge >= 1) return -1;
+  const { island } = state.layers;
 
   if (vehicle.phase === VehiclePhase.ParkedHome) {
+    if (island[vehicle.homeRoad] === 0) return -1;
     if (!isSmartVehicle(state, vehicle.id)) return vehicle.homeRoad;
     return surplusAvailable || vehicle.charge < BALANCE.vehicles.smartChargeFloor
       ? vehicle.homeRoad
@@ -419,6 +425,8 @@ function decideCharging(
         Math.abs(wy - tileY(hub, state.size)),
       );
       if (distance > BALANCE.vehicles.hubRadius) continue;
+      // An unpowered hub has nothing to give; it does not fill up either.
+      if (island[hub] === 0) continue;
       const used = hubLoad.get(hub) ?? 0;
       if (used >= BALANCE.vehicles.vehiclesPerHub) continue;
       hubLoad.set(hub, used + 1);
@@ -508,7 +516,8 @@ export function chargingDemand(state: SimState): number {
  * Charging demand per island this tick (index = island number, 0 = not
  * energised): cars at their home road or hub, vans and buses at their
  * depot tile. Sums to `chargingDemand`, which is the same figure for
- * the whole city.
+ * the whole city. Bucket 0 stays empty: nothing charges off the grid —
+ * `decideCharging` and `depotPowered` both refuse an unpowered tile.
  */
 export function chargingDemandByIsland(state: SimState): Float64Array {
   recomputeGrid(state);
