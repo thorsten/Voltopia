@@ -97,6 +97,24 @@ export function recomputeHeated(state: SimState): void {
   }
 }
 
+/**
+ * Heat plants that can actually run their pumps: energised and intact —
+ * the same gate `recomputeHeated` applies before a plant heats a single
+ * road. Counting the whole census instead would let an off-grid plant
+ * (which the network excludes) widen the pumps' delivery capacity.
+ * Call after `recomputeGrid`, so `energized` is current.
+ */
+function connectedHeatPlants(state: SimState): number {
+  const { tileType, plantType, energized, damage } = state.layers;
+  let count = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant || plantType[i] !== PlantType.HeatPlant) continue;
+    if (energized[i] !== 1 || damage[i] !== 0) continue;
+    count++;
+  }
+  return count;
+}
+
 export interface HeatTickResult {
   /** Heat the served buildings wanted this tick. */
   demand: number;
@@ -168,7 +186,7 @@ export function heatStep(state: SimState): HeatTickResult {
   const cop = heatPumpCop(temperature);
   const fromStore = Math.min(demand, census.heatStores * cfg.storeDischargeLimit, pool.stored);
   dischargeTiles(state, stores, fromStore);
-  const pumpPowerLimit = census.heatPlants * cfg.pumpPowerLimit;
+  const pumpPowerLimit = connectedHeatPlants(state) * cfg.pumpPowerLimit;
   const pumpHeat = Math.min(demand - fromStore, pumpPowerLimit * cop);
   const pumpPower = pumpHeat / cop;
   const fallback = demand - fromStore - pumpHeat;

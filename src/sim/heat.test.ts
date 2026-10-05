@@ -276,6 +276,24 @@ describe('heatStep', () => {
     expect(heat.pumpPowerLeft).toBeCloseTo(0, 6);
   });
 
+  it('an off-grid heat plant does not widen the pump limit', () => {
+    const state = freshState();
+    village(state, 80, 3);
+    // A second heat plant with no power: `recomputeHeated` already
+    // refuses to let it heat a single road, so it must not raise the
+    // pumps' delivery capacity either.
+    placePlant(state, at(30, 30), PlantType.HeatPlant);
+    expect(state.layers.energized[at(30, 30)]).toBe(0);
+    state.season = { ...state.season, temperature: -20 };
+    const heat = heatStep(state);
+    const cop = heatPumpCop(-20);
+    const pumpLimit = BALANCE.heat.pumpPowerLimit; // the one connected plant
+    expect(heat.demand).toBeGreaterThan(pumpLimit * cop);
+    expect(heat.pumpHeat).toBeCloseTo(pumpLimit * cop, 6);
+    expect(heat.pumpPower).toBeCloseTo(pumpLimit, 6);
+    expect(heat.pumpPowerLeft).toBeCloseTo(0, 6);
+  });
+
   it('clamps the store to the installed capacity and reports headroom', () => {
     const state = freshState();
     village(state, 0);
