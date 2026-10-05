@@ -416,12 +416,12 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               testId="inspect-district"
             />
             <Row
-              label={t('inspect.district')}
+              label={t('inspect.districtBalance')}
               value={`${t('inspect.districtFigures', {
                 generation: energy(info.island.generation),
                 consumption: energy(info.island.consumption),
-              })}${info.island.deficit > 0 ? ` — ${t('inspect.districtDeficit')}` : ''}`}
-              tone={info.island.deficit > 0 ? 'negative' : 'muted'}
+              })}${info.island.deficit > 0 ? ` · ${t('inspect.districtDeficit')}` : ''}`}
+              tone={info.island.deficit > 0 ? 'negative' : 'positive'}
             />
           </>
         )}
@@ -436,8 +436,8 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               testId="inspect-substation"
             />
             <Row
-              label={t('inspect.substationLink')}
-              value={t('inspect.substationCapacity', {
+              label={t('inspect.substationCapacity')}
+              value={t('inspect.substationCapacityValue', {
                 importCapacity: energy(info.substation.importCapacity),
                 exportCapacity: energy(info.substation.exportCapacity),
               })}
