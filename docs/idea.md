@@ -278,7 +278,13 @@ Collected 2026-09-24; roughly in the order we want to build them.
   drawer lists every island's own figures, the inspector names a
   tile's district, and the `districtGrid` goal rewards a city where
   every sizeable island has a substation and no island saw a deficit
-  all day.
+  all day. A two-island probe over an in-game year says splitting a
+  town costs it almost nothing in money (1.2 % under the old
+  single-balance city) but moves the shortage where it belongs: the
+  home island can no longer borrow the business island's midday
+  surplus, so a substation pays for itself in six weeks on the island
+  with a surplus to sell and is a bill worth paying on the one that
+  goes short.
 
 ## Way of Working
 

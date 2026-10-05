@@ -257,7 +257,7 @@ capacity) so the battery SoC fill is per tile.
 
 ## Balance (`src/shared/constants.ts`)
 
-Starting values, frozen by the probe:
+Starting values, all four frozen unchanged by the probe (see Testing):
 
 ```ts
 costs.plant[PlantType.Substation]: 3_000,      // between heat plant 2_800 and wind 4_500
@@ -303,13 +303,63 @@ Unit tests, colocated:
   note. e2e: the substation tool is on the build bar; the Grid overlay
   toggles.
 
-Pacing probe (temporary, deleted after use): the 560-building probe
-town laid as two islands with the river between them, each with its own
-park, with and without substations, 20 days, seeds 7 and 11. Measured
-against the single-balance baseline: deficit ticks, import cost, net
-money, curtailment per island. Freezes the substation cost and upkeep
-and confirms the 60/80 per-substation link. Results recorded here and
-in the constants' comments.
+**Pacing probe (2026-10-05, `src/sim/_districtProbe.test.ts`, deleted
+after use).** The 560-building probe town laid as two islands. Band
+roads at y = 6, 11, 16, 21 (island A: 320 dense homes) and y = 30, 35,
+40, 45 (island B: 160 shops and offices plus 80 homes), each group with
+its own connector line down x = 3, its own trunk line down x = 45 and
+its own half of the park (45 wind, 45 solar, 80 batteries, 20 biogas,
+7-8 hydrogen). Nothing at all between y = 23 and y = 28: rings are
+connections, so with `lineSupplyRadius` 3 two line ends or two plants
+merge into one island unless they are at least 7 tiles apart — the
+earlier 5-tile band spacing of the industrial probe cannot be split at
+all. `islandCount` was asserted per variant. Variant 1 bridges both
+gaps and is the pre-feature city: one island, one 60/80 link.
+
+One in-game year (20 days), seeds 7 and 11, market trading off:
+
+| seed | variant               | deficit ticks (A / B) | unserved | import | export  | net     |
+| ---- | --------------------- | --------------------- | -------- | ------ | ------- | ------- |
+| 7    | one island, no link   | 793                   | 994_886  | 0      | 0       | 527_451 |
+| 7    | one island, 1 sub     | 579                   | 707_891  | 24_852 | 25_741  | 443_614 |
+| 7    | two islands, no link  | 1_095 / 75            | 784_865  | 0      | 0       | 690_325 |
+| 7    | two islands, 1 sub ea | 1_009 / 56            | 717_546  | 45_663 | 51_696  | 692_662 |
+| 7    | two islands, 2 sub ea | 941 / 44              | 656_221  | 87_835 | 102_916 | 698_050 |
+| 11   | one island, no link   | 95                    | 26_516   | 0      | 0       | 942_958 |
+| 11   | one island, 1 sub     | 85                    | 21_092   | 3_770  | 29_173  | 966_746 |
+| 11   | two islands, no link  | 803 / 0               | 356_570  | 0      | 0       | 930_473 |
+| 11   | two islands, 1 sub ea | 674 / 0               | 312_256  | 31_094 | 58_773  | 954_771 |
+| 11   | two islands, 2 sub ea | 592 / 0               | 274_301  | 58_427 | 117_198 | 982_488 |
+
+Splitting the town costs **net money nothing** — seed 11 lands 1.2 %
+under the single-balance baseline with one substation each, seed 7
+lands above it — but it does move the deficit, which is the point: the
+home island can no longer borrow the business island's midday surplus,
+so its deficit ticks go 85 → 674 (seed 11) and 579 → 1_009 (seed 7)
+while the business island, holding half the park for two thirds of the
+load, never goes short at all and curtails 32-38 million EU beside it.
+A relative deficit target of 10 % is unreachable against a baseline
+that near zero, and should be: the island's own balance has to bite.
+Both islands' figures sum to the city's, as the unit tests require.
+
+The two directions of the link price the substation from opposite ends,
+and 3_000 sits inside both — the export payback on the surplus island,
+the reliability cost on the short one; the measurements are recorded on
+`costs.plant[Substation]`, `upkeepPerTick.plant[Substation]` and
+`market.importCapacity`/`exportCapacity` (now per substation). Stacked
+eight deep on the one-island town the export rate stayed linear
+(203_767-231_188 a year), and it stays under the hydrogen plant's rate
+per money invested, so a substation never becomes the best way to sell
+surplus. All four values frozen unchanged.
+
+One negative result worth keeping: run at **half** that park, the town
+cannot carry its own winter (gen 5_103 against 4_165 EU/tick of load
+but 18 % of ticks in deficit) and the link then makes things _worse_ —
+seed 7 went from −136_679 without a link to −156_884 with one, and to
+−631_473 as two islands with a substation each, because importing at
+0.4 x spot is dearer than blacking out, which costs no money at all. A
+substation is not a fix for an undersized park, and the probe says so
+in numbers.
 
 ## Out of scope
 
