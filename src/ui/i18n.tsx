@@ -14,7 +14,8 @@ const en = {
   'hud.traffic': 'traffic',
   'hud.traffic.title': '{label} · {driving} cars on the road · {avenues} % avenues',
   'hud.deliveries': 'deliveries',
-  'hud.deliveries.title': '{supplied} of {shops} shops supplied · {vans} vans on the road',
+  'hud.deliveries.title':
+    "{supplied} of {shops} shops supplied · {vans} vans on the road · {factories} factories · {local} % of today's tours loaded locally",
   'hud.transit': 'transit',
   'hud.transit.title':
     '{riders} riders · {buses} buses on the road · {served} of {stops} stops served',
@@ -34,7 +35,7 @@ const en = {
   'tide.falling': 'falling',
   'tide.high': 'high water',
   'tide.low': 'low water',
-  'hud.demand.title': 'Demand: residential / commercial / retail',
+  'hud.demand.title': 'Demand: residential / commercial / retail / industrial',
   'hud.details': 'Details',
   'hud.section.city': 'City',
 
@@ -50,6 +51,7 @@ const en = {
   'tool.zone-residential': 'Residential',
   'tool.zone-commercial': 'Commercial',
   'tool.zone-retail': 'Retail',
+  'tool.zone-industrial': 'Industrial',
   'tool.plant-solar': 'Solar farm',
   'tool.plant-wind': 'Wind turbine',
   'tool.plant-battery': 'Battery',
@@ -94,6 +96,8 @@ const en = {
   'tool.zone-residential.desc': 'Homes. Residents move in once the lot has a road and power.',
   'tool.zone-commercial.desc': 'Offices. Provide jobs for your residents.',
   'tool.zone-retail.desc': 'Shops. Keep residents happy and add jobs.',
+  'tool.zone-industrial.desc':
+    'Factories. Grow with your shops, add jobs and night-time load, hand their goods to the delivery vans — and bother the homes next door.',
   'tool.plant-solar.desc': 'Generates with sunlight — peaks at noon, nothing at night.',
   'tool.plant-wind.desc':
     'Generates with wind speed, day and night. Offshore turbines catch free wind for a bonus, at a construction surcharge.',
@@ -180,7 +184,7 @@ const en = {
   'demandResponse.label': 'Demand-response contract',
   'demandResponse.figure': '{pool} sheddable · {hours} h left',
   'demandResponse.title':
-    'Commercial and retail buildings sign up to shed up to {share} % of their base load, for {retainer} per business and day plus {price} per energy unit shed. Called automatically for at most {hours} h a day — when a call is cheaper than importing, or the link alone cannot carry the shortfall.',
+    'Commercial and retail buildings sign up to shed up to {share} % of their base load, factories a larger share, for {retainer} per business and day plus {price} per energy unit shed. Called automatically for at most {hours} h a day — when a call is cheaper than importing, or the link alone cannot carry the shortfall.',
   'marketTrading.label': '📈 Market trading',
   'marketTrading.title':
     'Storage works the spot market: sells its top slice at scarcity prices while a surplus refills it, buys cheap regional surplus',
@@ -261,10 +265,10 @@ const en = {
     'Grow a happy city powered entirely by renewable energy. Generation fluctuates with sun and wind — keep it in balance with consumption, or buildings go dark, happiness drops and growth stops.',
   'help.build.title': 'Building',
   'help.build.body':
-    'Drag roads, then paint residential, commercial and retail zones next to them. Buildings appear on their own when there is demand (see the R/C/S bars) and densify over time — but only while they are fully supplied with energy.',
+    'Drag roads, then paint residential, commercial, retail and industrial zones next to them. Buildings appear on their own when there is demand (see the R/C/S/I bars) and densify over time — but only while they are fully supplied with energy.',
   'help.energy.title': 'Energy',
   'help.energy.body':
-    'Plants supply only what power lines connect to them (see Grid and power lines). Solar peaks at noon and suffers under clouds; wind follows the weather day and night. Batteries store the midday surplus for the evening; the biogas plant is dispatchable backup — reliable but expensive to run, and it only fires when sun, wind, water and storage cannot cover the load, so it usually sits on standby. Dense buildings add rooftop PV automatically. The hydrogen plant electrolyses surplus that batteries and pumped storage cannot absorb — ahead of the export link, because a unit kept in the tank later replaces an expensive import: it fills a large tank, re-electrifies through its fuel cell in a lull, and once the tank is full keeps the electrolysers running to sell hydrogen whenever that pays better than exporting — curtailed energy becomes income. The transmission link trades at a spot price that follows the region: sunny, windy hours are cheap, calm overcast evenings dear — the dashed amber line in the energy graph. With market trading on, your storage sells at scarcity prices — but only the top slice of a nearly full pool, and only while a surplus is refilling it, so the sale shifts energy you were about to export or curtail into an expensive hour and the reserve itself stays for the Dunkelflaute — and buys cheap regional surplus. A tidal plant on the coast is fully predictable — four generation peaks and four slack-water gaps a day, drifting slowly against the clock — so storage is what bridges the slack. The same coast also carries offshore wind turbines and raises the happiness of buildings with a sea view. A geothermal plant only builds on a hotspot and generates the same output day and night in any weather — the one true baseload — but each hotspot sustains only a limited number of wells before its reservoir starts cooling and drags every well on it down. Smart meters are rolled out building by building; metered buildings charge their cars on surplus and defer part of their load and heating until the sun or wind returns — the faint dashed line in the consumption colour shows what consumption would have been without that. A demand-response contract lets your commercial and retail buildings shed part of their load in a deficit — for a daily retainer plus a premium per unit shed, called automatically when that beats importing or the link is full, a few hours a day at most; shed load widens the gap under the dashed line too.',
+    'Plants supply only what power lines connect to them (see Grid and power lines). Solar peaks at noon and suffers under clouds; wind follows the weather day and night. Batteries store the midday surplus for the evening; the biogas plant is dispatchable backup — reliable but expensive to run, and it only fires when sun, wind, water and storage cannot cover the load, so it usually sits on standby. Dense buildings add rooftop PV automatically. The hydrogen plant electrolyses surplus that batteries and pumped storage cannot absorb — ahead of the export link, because a unit kept in the tank later replaces an expensive import: it fills a large tank, re-electrifies through its fuel cell in a lull, and once the tank is full keeps the electrolysers running to sell hydrogen whenever that pays better than exporting — curtailed energy becomes income. The transmission link trades at a spot price that follows the region: sunny, windy hours are cheap, calm overcast evenings dear — the dashed amber line in the energy graph. With market trading on, your storage sells at scarcity prices — but only the top slice of a nearly full pool, and only while a surplus is refilling it, so the sale shifts energy you were about to export or curtail into an expensive hour and the reserve itself stays for the Dunkelflaute — and buys cheap regional surplus. A tidal plant on the coast is fully predictable — four generation peaks and four slack-water gaps a day, drifting slowly against the clock — so storage is what bridges the slack. The same coast also carries offshore wind turbines and raises the happiness of buildings with a sea view. A geothermal plant only builds on a hotspot and generates the same output day and night in any weather — the one true baseload — but each hotspot sustains only a limited number of wells before its reservoir starts cooling and drags every well on it down. Smart meters are rolled out building by building; metered buildings charge their cars on surplus and defer part of their load and heating until the sun or wind returns — the faint dashed line in the consumption colour shows what consumption would have been without that. A demand-response contract lets your commercial, retail and industrial buildings shed part of their load in a deficit — for a daily retainer plus a premium per unit shed, called automatically when that beats importing or the link is full, a few hours a day at most; shed load widens the gap under the dashed line too.',
   'help.grid.title': 'Grid and power lines',
   'help.grid.body':
     'Plants only supply buildings connected to them. Draw power lines (⚡, key L) from a plant along your streets — they run over roads and across water. Every energised line tile and every plant connects buildings within three tiles. A line that does not touch a plant carries nothing; the supply overlay shows what is connected. Cities from before power lines got lines along their roads for free.',
@@ -285,7 +289,7 @@ const en = {
     'Every car commutes: home to work in the morning, back in the evening, along the fastest route it can find. A lane holds two cars; queues form behind full tiles and long commutes cost happiness. Avenues carry four cars per lane at higher speed and can be drawn over existing streets. The traffic overlay shows where it jams.',
   'help.deliveries.title': 'Deliveries',
   'help.deliveries.body':
-    'Shops need goods. A logistics depot sends three electric vans on tours along the roads; a shop that has not seen a van for a day and a half stops growing. Vans queue in traffic like cars and charge at the depot, so keep it powered and in reach of your retail streets. The deliveries overlay shows who is due.',
+    'Shops need goods. A logistics depot sends three electric vans on tours along the roads; a shop that has not seen a van for a day and a half stops growing. Vans queue in traffic like cars and charge at the depot, so keep it powered and in reach of your retail streets. The deliveries overlay shows who is due. Vans load at a powered factory in reach before their shop leg; a depot without one imports the goods and pays a fee per tour. Factories follow your shops, run day and night — and homes within a few tiles of one are less happy.',
   'help.transit.title': 'Transit',
   'help.transit.body':
     'Mark bus stops on your roads and build a bus depot. Three electric buses tour the stops that have waited longest; a stop a bus visited recently counts as served and covers the roads around it. A commuter with a served stop near home and near work leaves the car at home, which eases traffic and the evening charging peak. Too many stops for one depot leave some unserved.',
@@ -423,8 +427,6 @@ const en = {
   'goal.loadManager.title': 'Load manager',
   'goal.loadManager.body':
     'Shed 20,000 energy units of business load under a demand-response contract.',
-  // Added ahead of its Task 5 UI wiring: the goal id exists from Task 4 on,
-  // and get_game_overview (agent/tools.ts) looks up every goal's title.
   'goal.localGoods.title': 'Made locally',
   'goal.localGoods.body':
     'A whole day in which every delivery tour loaded at your own factories (10+ stocked shops, 3+ factories).',
@@ -444,6 +446,7 @@ const en = {
   'budget.repair': 'Repairs',
   'budget.smartMeters': 'Smart meters',
   'budget.demandResponse': 'Demand response',
+  'budget.goodsImport': 'Goods import',
   'budget.import': 'Grid import',
   'budget.note': 'Upkeep is a money cost only — it does not consume energy.',
 
@@ -462,6 +465,7 @@ const en = {
   'inspect.section.traffic': 'Traffic',
   'inspect.section.deliveries': 'Deliveries',
   'inspect.section.transit': 'Transit',
+  'inspect.section.goods': 'Goods',
   'inspect.roadClass': 'Road',
   'inspect.street': 'Street',
   'inspect.avenue': 'Avenue',
@@ -474,9 +478,16 @@ const en = {
   'inspect.lastDelivery': 'Last delivery',
   'inspect.lastDelivery.daysAgo': '{days} days ago',
   'inspect.lastDelivery.never': 'never',
+  'inspect.factory.goods': 'Goods',
+  'inspect.factory.supplying': 'Supplies depots in reach',
+  'inspect.factory.unpowered': 'No power — depots import instead',
   'inspect.depot.vans': 'Vans',
   'inspect.depot.vansValue': '{driving} on the road · {charging} charging · {total} total',
   'inspect.depot.shopsInReach': 'Shops in reach',
+  'inspect.depot.factoriesInReach': 'Factories in reach',
+  'inspect.depot.goodsSource': 'Goods',
+  'inspect.depot.goodsLocal': 'Loaded locally, nearest factory {tiles} tiles',
+  'inspect.depot.goodsImported': 'Imported, {fee} per tour',
   'inspect.busStop': 'Bus stop',
   'inspect.stopState': 'Service',
   'inspect.stop.served': 'served',
@@ -576,7 +587,8 @@ const de: Record<TranslationKey, string> = {
   'hud.traffic': 'Verkehr',
   'hud.traffic.title': '{label} · {driving} Autos unterwegs · {avenues} % Alleen',
   'hud.deliveries': 'Lieferungen',
-  'hud.deliveries.title': '{supplied} von {shops} Läden beliefert · {vans} Lieferwagen unterwegs',
+  'hud.deliveries.title':
+    '{supplied} von {shops} Läden beliefert · {vans} Lieferwagen unterwegs · {factories} Fabriken · {local} % der heutigen Touren lokal beladen',
   'hud.transit': 'ÖPNV',
   'hud.transit.title':
     '{riders} Fahrgäste · {buses} Busse unterwegs · {served} von {stops} Haltestellen bedient',
@@ -596,7 +608,7 @@ const de: Record<TranslationKey, string> = {
   'tide.falling': 'ablaufend',
   'tide.high': 'Hochwasser',
   'tide.low': 'Niedrigwasser',
-  'hud.demand.title': 'Nachfrage: Wohnen / Gewerbe / Handel',
+  'hud.demand.title': 'Nachfrage: Wohnen / Gewerbe / Handel / Industrie',
   'hud.details': 'Details',
   'hud.section.city': 'Stadt',
 
@@ -612,6 +624,7 @@ const de: Record<TranslationKey, string> = {
   'tool.zone-residential': 'Wohngebiet',
   'tool.zone-commercial': 'Gewerbe',
   'tool.zone-retail': 'Einzelhandel',
+  'tool.zone-industrial': 'Industrie',
   'tool.plant-solar': 'Solarpark',
   'tool.plant-wind': 'Windrad',
   'tool.plant-battery': 'Batteriespeicher',
@@ -656,6 +669,8 @@ const de: Record<TranslationKey, string> = {
   'tool.zone-residential.desc': 'Wohnhäuser. Bewohner ziehen ein, sobald Straße und Strom da sind.',
   'tool.zone-commercial.desc': 'Büros. Schaffen Arbeitsplätze für deine Bewohner.',
   'tool.zone-retail.desc': 'Läden. Halten Bewohner zufrieden und schaffen Arbeitsplätze.',
+  'tool.zone-industrial.desc':
+    'Fabriken. Wachsen mit deinen Läden, bringen Jobs und Nachtlast, beladen die Lieferwagen — und stören die Nachbarn.',
   'tool.plant-solar.desc': 'Erzeugt mit Sonnenlicht — Spitze mittags, nachts nichts.',
   'tool.plant-wind.desc':
     'Erzeugt mit Windgeschwindigkeit, Tag und Nacht. Offshore-Anlagen fangen freien Wind für einen Bonus ein, gegen einen Aufpreis beim Bau.',
@@ -743,7 +758,7 @@ const de: Record<TranslationKey, string> = {
   'demandResponse.label': 'Demand-Response-Vertrag',
   'demandResponse.figure': '{pool} abschaltbar · {hours} h übrig',
   'demandResponse.title':
-    'Gewerbe und Einzelhandel verpflichten sich, bis zu {share} % ihrer Grundlast abzuwerfen, für {retainer} je Betrieb und Tag plus {price} je abgeworfener Energieeinheit. Wird automatisch abgerufen, höchstens {hours} h am Tag — wenn das günstiger ist als Import oder die Netzleitung allein das Defizit nicht trägt.',
+    'Gewerbe und Einzelhandel verpflichten sich, bis zu {share} % ihrer Grundlast abzuwerfen, Fabriken einen größeren Anteil, für {retainer} je Betrieb und Tag plus {price} je abgeworfener Energieeinheit. Wird automatisch abgerufen, höchstens {hours} h am Tag — wenn das günstiger ist als Import oder die Netzleitung allein das Defizit nicht trägt.',
   'marketTrading.label': '📈 Stromhandel',
   'marketTrading.title':
     'Speicher handeln an der Strombörse: verkaufen ihre Spitzenladung zu Knappheitspreisen, solange Überschuss nachfüllt, kaufen billigen regionalen Überschuss',
@@ -825,10 +840,10 @@ const de: Record<TranslationKey, string> = {
     'Baue eine zufriedene Stadt, die vollständig mit erneuerbarer Energie läuft. Die Erzeugung schwankt mit Sonne und Wind — halte sie mit dem Verbrauch im Gleichgewicht, sonst werden Gebäude dunkel, die Zufriedenheit sinkt und das Wachstum stoppt.',
   'help.build.title': 'Bauen',
   'help.build.body':
-    'Ziehe Straßen und male daneben Wohn-, Gewerbe- und Einzelhandelszonen. Gebäude entstehen von selbst, wenn Nachfrage besteht (siehe die R/C/S-Balken), und verdichten sich mit der Zeit — aber nur, solange sie vollständig mit Energie versorgt sind.',
+    'Ziehe Straßen und male daneben Wohn-, Gewerbe-, Einzelhandels- und Industriezonen. Gebäude entstehen von selbst, wenn Nachfrage besteht (siehe die R/C/S/I-Balken), und verdichten sich mit der Zeit — aber nur, solange sie vollständig mit Energie versorgt sind.',
   'help.energy.title': 'Energie',
   'help.energy.body':
-    'Anlagen versorgen nur, was Stromleitungen mit ihnen verbinden (siehe Netz und Leitungen). Solar liefert mittags am meisten und leidet unter Wolken; Wind folgt dem Wetter, Tag und Nacht. Batterien speichern den Mittagsüberschuss für den Abend; die Biogasanlage ist regelbare Reserve — zuverlässig, aber teuer im Betrieb, und sie springt nur an, wenn Sonne, Wind, Wasser und Speicher die Last nicht decken; meist steht sie in Bereitschaft. Dichte Gebäude bekommen automatisch Dach-PV. Die Wasserstoffanlage elektrolysiert Überschuss, den Batterien und Pumpspeicher nicht aufnehmen können — noch vor der Netzeinspeisung, denn eine im Tank gehaltene Einheit ersetzt später einen teuren Import: Sie füllt einen großen Tank, verstromt in der Flaute über ihre Brennstoffzelle und lässt bei vollem Tank die Elektrolyseure weiterlaufen, um Wasserstoff zu verkaufen, wann immer das mehr einbringt als der Export — abgeregelte Energie wird zu Einnahmen. Die Netzleitung handelt zum Spotpreis, der der Region folgt: sonnige, windige Stunden sind billig, windstille bedeckte Abende teuer — die gestrichelte bernsteinfarbene Linie im Energie-Graphen. Mit aktiviertem Stromhandel verkaufen deine Speicher zu Knappheitspreisen — aber nur die Spitzenladung eines fast vollen Speichers und nur, solange Überschuss sie nachfüllt, sodass der Verkauf Energie, die du ohnehin exportiert oder abgeregelt hättest, in eine teure Stunde verschiebt und die eigentliche Reserve für die Dunkelflaute erhalten bleibt — und kaufen billigen regionalen Überschuss. Ein Gezeitenkraftwerk an der Küste ist vollständig vorhersagbar — vier Erzeugungsspitzen und vier Stillwasserphasen am Tag, die langsam gegen die Uhr wandern — deshalb überbrückt der Speicher die Flaute. Dieselbe Küste trägt auch Offshore-Windräder und steigert die Zufriedenheit von Gebäuden mit Meerblick. Ein Geothermiekraftwerk baut nur auf einem Hotspot und erzeugt Tag und Nacht bei jedem Wetter dieselbe Menge — die einzige echte Grundlast —, aber jeder Hotspot trägt nur eine begrenzte Zahl Bohrungen, bevor sein Reservoir auszukühlen beginnt und jede Bohrung darauf mit hinunterzieht. Smart Meter werden Gebäude für Gebäude ausgerollt; Gebäude mit Zähler laden ihre Autos bei Überschuss und verschieben einen Teil von Last und Heizung, bis Sonne oder Wind zurück sind — die blasse gestrichelte Linie in der Verbrauchsfarbe zeigt, wie hoch der Verbrauch ohne diese Verschiebung wäre. Ein Demand-Response-Vertrag lässt Gewerbe und Einzelhandel im Defizit einen Teil ihrer Last abwerfen — gegen eine tägliche Bereitstellungsprämie plus eine Abrufprämie je Einheit, automatisch abgerufen, wenn das günstiger ist als Import oder die Leitung voll ist, höchstens ein paar Stunden am Tag; abgeworfene Last vergrößert ebenfalls die Lücke unter der gestrichelten Linie.',
+    'Anlagen versorgen nur, was Stromleitungen mit ihnen verbinden (siehe Netz und Leitungen). Solar liefert mittags am meisten und leidet unter Wolken; Wind folgt dem Wetter, Tag und Nacht. Batterien speichern den Mittagsüberschuss für den Abend; die Biogasanlage ist regelbare Reserve — zuverlässig, aber teuer im Betrieb, und sie springt nur an, wenn Sonne, Wind, Wasser und Speicher die Last nicht decken; meist steht sie in Bereitschaft. Dichte Gebäude bekommen automatisch Dach-PV. Die Wasserstoffanlage elektrolysiert Überschuss, den Batterien und Pumpspeicher nicht aufnehmen können — noch vor der Netzeinspeisung, denn eine im Tank gehaltene Einheit ersetzt später einen teuren Import: Sie füllt einen großen Tank, verstromt in der Flaute über ihre Brennstoffzelle und lässt bei vollem Tank die Elektrolyseure weiterlaufen, um Wasserstoff zu verkaufen, wann immer das mehr einbringt als der Export — abgeregelte Energie wird zu Einnahmen. Die Netzleitung handelt zum Spotpreis, der der Region folgt: sonnige, windige Stunden sind billig, windstille bedeckte Abende teuer — die gestrichelte bernsteinfarbene Linie im Energie-Graphen. Mit aktiviertem Stromhandel verkaufen deine Speicher zu Knappheitspreisen — aber nur die Spitzenladung eines fast vollen Speichers und nur, solange Überschuss sie nachfüllt, sodass der Verkauf Energie, die du ohnehin exportiert oder abgeregelt hättest, in eine teure Stunde verschiebt und die eigentliche Reserve für die Dunkelflaute erhalten bleibt — und kaufen billigen regionalen Überschuss. Ein Gezeitenkraftwerk an der Küste ist vollständig vorhersagbar — vier Erzeugungsspitzen und vier Stillwasserphasen am Tag, die langsam gegen die Uhr wandern — deshalb überbrückt der Speicher die Flaute. Dieselbe Küste trägt auch Offshore-Windräder und steigert die Zufriedenheit von Gebäuden mit Meerblick. Ein Geothermiekraftwerk baut nur auf einem Hotspot und erzeugt Tag und Nacht bei jedem Wetter dieselbe Menge — die einzige echte Grundlast —, aber jeder Hotspot trägt nur eine begrenzte Zahl Bohrungen, bevor sein Reservoir auszukühlen beginnt und jede Bohrung darauf mit hinunterzieht. Smart Meter werden Gebäude für Gebäude ausgerollt; Gebäude mit Zähler laden ihre Autos bei Überschuss und verschieben einen Teil von Last und Heizung, bis Sonne oder Wind zurück sind — die blasse gestrichelte Linie in der Verbrauchsfarbe zeigt, wie hoch der Verbrauch ohne diese Verschiebung wäre. Ein Demand-Response-Vertrag lässt Gewerbe, Einzelhandel und Industrie im Defizit einen Teil ihrer Last abwerfen — gegen eine tägliche Bereitstellungsprämie plus eine Abrufprämie je Einheit, automatisch abgerufen, wenn das günstiger ist als Import oder die Leitung voll ist, höchstens ein paar Stunden am Tag; abgeworfene Last vergrößert ebenfalls die Lücke unter der gestrichelten Linie.',
   'help.grid.title': 'Netz und Leitungen',
   'help.grid.body':
     'Anlagen versorgen nur Gebäude, die mit ihnen verbunden sind. Ziehe Stromleitungen (⚡, Taste L) von einer Anlage entlang deiner Straßen — sie laufen über Straßen und über Wasser. Jedes angeschlossene Leitungsfeld und jede Anlage versorgt Gebäude im Umkreis von drei Feldern. Eine Leitung ohne Anlage führt keinen Strom; das Versorgungs-Overlay zeigt, was angeschlossen ist. Städte aus der Zeit vor den Leitungen haben ihre Leitungen entlang der Straßen geschenkt bekommen.',
@@ -849,7 +864,7 @@ const de: Record<TranslationKey, string> = {
     'Jedes Auto pendelt: morgens zur Arbeit, abends zurück, auf der schnellsten Route, die es findet. Eine Spur fasst zwei Autos; hinter vollen Kacheln bilden sich Staus, und lange Pendelzeiten kosten Zufriedenheit. Alleen fassen vier Autos pro Spur bei höherem Tempo und lassen sich über bestehende Straßen ziehen. Das Verkehrs-Overlay zeigt, wo es stockt.',
   'help.deliveries.title': 'Lieferverkehr',
   'help.deliveries.body':
-    'Läden brauchen Waren. Ein Logistikdepot schickt drei E-Lieferwagen auf Touren über die Straßen; ein Laden, den anderthalb Tage kein Wagen erreicht hat, wächst nicht weiter. Lieferwagen stehen im Stau wie Autos und laden im Depot – also Strom anschließen und in Reichweite der Einkaufsstraßen bauen. Das Lieferungen-Overlay zeigt, wer fällig ist.',
+    'Läden brauchen Waren. Ein Logistikdepot schickt drei E-Lieferwagen auf Touren über die Straßen; ein Laden, den anderthalb Tage kein Wagen erreicht hat, wächst nicht weiter. Lieferwagen stehen im Stau wie Autos und laden im Depot – also Strom anschließen und in Reichweite der Einkaufsstraßen bauen. Das Lieferungen-Overlay zeigt, wer fällig ist. Lieferwagen beladen vor der Ladentour an einer versorgten Fabrik in Reichweite; ein Depot ohne Fabrik importiert die Ware und zahlt pro Tour eine Gebühr. Fabriken folgen deinen Läden, laufen Tag und Nacht — und Wohnhäuser wenige Kacheln daneben sind weniger zufrieden.',
   'help.transit.title': 'ÖPNV',
   'help.transit.body':
     'Setze Haltestellen auf deine Straßen und baue ein Busdepot. Drei Elektrobusse fahren die Haltestellen ab, die am längsten warten; eine Haltestelle mit kürzlichem Bushalt gilt als bedient und deckt die Straßen ringsum ab. Pendler mit bedienter Haltestelle nahe Wohnung und Arbeit lassen das Auto stehen, was Verkehr und abendliche Ladespitze entlastet. Zu viele Haltestellen für ein Depot bleiben teils unbedient.',
@@ -1009,6 +1024,7 @@ const de: Record<TranslationKey, string> = {
   'budget.repair': 'Reparaturen',
   'budget.smartMeters': 'Smart Meter',
   'budget.demandResponse': 'Demand Response',
+  'budget.goodsImport': 'Güterimport',
   'budget.import': 'Netzbezug',
   'budget.note': 'Unterhalt kostet nur Geld – er verbraucht keine Energie.',
 
@@ -1027,6 +1043,7 @@ const de: Record<TranslationKey, string> = {
   'inspect.section.traffic': 'Verkehr',
   'inspect.section.deliveries': 'Lieferungen',
   'inspect.section.transit': 'ÖPNV',
+  'inspect.section.goods': 'Güter',
   'inspect.roadClass': 'Straßenart',
   'inspect.street': 'Straße',
   'inspect.avenue': 'Allee',
@@ -1039,9 +1056,16 @@ const de: Record<TranslationKey, string> = {
   'inspect.lastDelivery': 'Letzte Lieferung',
   'inspect.lastDelivery.daysAgo': 'vor {days} Tagen',
   'inspect.lastDelivery.never': 'nie',
+  'inspect.factory.goods': 'Güter',
+  'inspect.factory.supplying': 'Beliefert Depots in Reichweite',
+  'inspect.factory.unpowered': 'Kein Strom — Depots importieren stattdessen',
   'inspect.depot.vans': 'Lieferwagen',
   'inspect.depot.vansValue': '{driving} unterwegs · {charging} laden · {total} gesamt',
   'inspect.depot.shopsInReach': 'Läden in Reichweite',
+  'inspect.depot.factoriesInReach': 'Fabriken in Reichweite',
+  'inspect.depot.goodsSource': 'Güter',
+  'inspect.depot.goodsLocal': 'Lokal beladen, nächste Fabrik {tiles} Kacheln',
+  'inspect.depot.goodsImported': 'Importiert, {fee} pro Tour',
   'inspect.busStop': 'Haltestelle',
   'inspect.stopState': 'Bedienung',
   'inspect.stop.served': 'bedient',

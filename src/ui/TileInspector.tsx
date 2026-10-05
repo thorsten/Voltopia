@@ -54,8 +54,7 @@ const ZONE_LABEL: Record<Zone, TranslationKey | null> = {
   [Zone.Residential]: 'tool.zone-residential',
   [Zone.Commercial]: 'tool.zone-commercial',
   [Zone.Retail]: 'tool.zone-retail',
-  // Industrial zone UI (label, tool, overlay) lands in a later task.
-  [Zone.Industrial]: null,
+  [Zone.Industrial]: 'tool.zone-industrial',
 };
 
 const BLOCKER_LABEL: Record<GrowthBlocker, TranslationKey> = {
@@ -429,6 +428,21 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
         </section>
       )}
 
+      {isBuilding && info.zone === Zone.Industrial && (
+        <section data-testid="inspect-goods">
+          <h3>{t('inspect.section.goods')}</h3>
+          <Row
+            label={t('inspect.factory.goods')}
+            value={t(
+              info.supplied === SupplyStatus.Supplied
+                ? 'inspect.factory.supplying'
+                : 'inspect.factory.unpowered',
+            )}
+            tone={info.supplied === SupplyStatus.Supplied ? 'positive' : 'negative'}
+          />
+        </section>
+      )}
+
       {isBuilding && info.zone === Zone.Retail && (
         <section data-testid="inspect-deliveries">
           <h3>{t('inspect.section.deliveries')}</h3>
@@ -473,6 +487,20 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
             label={t('inspect.depot.shopsInReach')}
             value={String(info.depot.shopsInReach)}
             tone={info.depot.shopsInReach > 0 ? 'positive' : 'negative'}
+          />
+          <Row
+            label={t('inspect.depot.factoriesInReach')}
+            value={String(info.depot.factoriesInReach)}
+            tone={info.depot.factoriesInReach > 0 ? 'positive' : 'muted'}
+          />
+          <Row
+            label={t('inspect.depot.goodsSource')}
+            value={
+              info.depot.nearestFactoryTiles >= 0
+                ? t('inspect.depot.goodsLocal', { tiles: info.depot.nearestFactoryTiles })
+                : t('inspect.depot.goodsImported', { fee: BALANCE.deliveries.importFeePerTour })
+            }
+            tone={info.depot.nearestFactoryTiles >= 0 ? 'positive' : 'negative'}
           />
         </section>
       )}

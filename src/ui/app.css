@@ -848,6 +848,9 @@ body,
 .demand-retail {
   background: #d6815b;
 }
+.demand-industrial {
+  background: #b3a06a;
+}
 
 .demand-bar-label {
   position: absolute;

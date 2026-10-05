@@ -55,6 +55,7 @@ const CATEGORIES: Category[] = [
       { id: 'zone-residential', icon: '🏠', cost: BALANCE.costs.zonePerTile, perTile: true },
       { id: 'zone-commercial', icon: '🏢', cost: BALANCE.costs.zonePerTile, perTile: true },
       { id: 'zone-retail', icon: '🛍', cost: BALANCE.costs.zonePerTile, perTile: true },
+      { id: 'zone-industrial', icon: '🏭', cost: BALANCE.costs.zonePerTile, perTile: true },
     ],
   },
   {

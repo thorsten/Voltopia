@@ -5,9 +5,10 @@ const BARS: Array<{ key: keyof DemandStats; label: string; className: string }> 
   { key: 'residential', label: 'R', className: 'demand-residential' },
   { key: 'commercial', label: 'C', className: 'demand-commercial' },
   { key: 'retail', label: 'S', className: 'demand-retail' },
+  { key: 'industrial', label: 'I', className: 'demand-industrial' },
 ];
 
-/** Compact R/C/S demand indicator (S = shopping/retail). */
+/** Compact R/C/S/I demand indicator (S = shopping/retail, I = industry). */
 export function DemandBars({ demand }: { demand: DemandStats }) {
   const { t } = useI18n();
   return (

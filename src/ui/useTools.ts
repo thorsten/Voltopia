@@ -15,6 +15,7 @@ export type ToolId =
   | 'zone-residential'
   | 'zone-commercial'
   | 'zone-retail'
+  | 'zone-industrial'
   | 'plant-solar'
   | 'plant-wind'
   | 'plant-battery'
@@ -39,9 +40,10 @@ const ZONE_BY_TOOL: Partial<Record<ToolId, Zone>> = {
   'zone-residential': Zone.Residential,
   'zone-commercial': Zone.Commercial,
   'zone-retail': Zone.Retail,
+  'zone-industrial': Zone.Industrial,
 };
 
-/** Keyboard shortcuts for tools (digits row plus B, P, H, U, L, F, C, G, V, T, K, W, I, Y, E, R and O). */
+/** Keyboard shortcuts for tools (digits row plus B, P, H, U, L, F, C, G, V, T, K, N, W, I, Y, E, R and O). */
 export const TOOL_HOTKEYS: Record<string, ToolId> = {
   '1': 'select',
   '2': 'road',
@@ -70,6 +72,7 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
   v: 'avenue',
   t: 'bus-stop',
   k: 'plant-busdepot',
+  n: 'zone-industrial',
 };
 
 export interface DragCostPreview {

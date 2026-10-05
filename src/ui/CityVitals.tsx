@@ -69,6 +69,8 @@ export function CityVitals({ stats }: { stats: GlobalStats }) {
             supplied: Math.round(stats.deliveries.suppliedShare * stats.deliveries.shops),
             shops: stats.deliveries.shops,
             vans: stats.deliveries.driving,
+            factories: stats.deliveries.factories,
+            local: Math.round(stats.deliveries.localShare * 100),
           })}
         >
           <span className="hud-stat-value">

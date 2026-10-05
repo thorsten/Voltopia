@@ -34,4 +34,8 @@ describe('tool hotkeys', () => {
     expect(PLANT_BY_TOOL['plant-heat']).toBe(PlantType.HeatPlant);
     expect(PLANT_BY_TOOL['plant-heatstore']).toBe(PlantType.HeatStore);
   });
+
+  it('binds the industrial zone to N', () => {
+    expect(TOOL_HOTKEYS.n).toBe('zone-industrial');
+  });
 });
