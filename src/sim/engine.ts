@@ -9,6 +9,7 @@ import { drivingVans } from './deliveries.ts';
 import { placePlant } from './energy.ts';
 import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { recomputeGrid } from './powerGrid.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -120,6 +121,11 @@ export class SimEngine {
    * immediately while the game is paused.
    */
   flush(): SimEvent | null {
+    // A build while paused changes the grid topology, and a tile's island
+    // number is only dirtied by the recompute itself — without this, a
+    // line drawn while paused would reach the client's overlay a command
+    // late. Version-gated, so it is a no-op when nothing changed.
+    recomputeGrid(this.state);
     if (this.state.dirty.size === 0 && !this.state.statsDirty) return null;
     this.state.statsDirty = false;
     return this.snapshot();
@@ -130,6 +136,7 @@ export class SimEngine {
    * inspector even while the game is paused.
    */
   snapshot(): SimEvent {
+    recomputeGrid(this.state);
     return {
       type: 'tick',
       diffs: collectDiffs(this.state),

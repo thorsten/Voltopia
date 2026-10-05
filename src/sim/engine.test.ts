@@ -355,6 +355,23 @@ describe('SimEngine basics', () => {
     expect(engine.flush()).toBeNull();
   });
 
+  it('flushes the island numbers of a ring built while paused', () => {
+    const engine = makeEngine();
+    const size = engine.state.size;
+    const tile = (x: number, y: number) => tileIndex(x, y, size);
+    engine.applyCommand({ type: 'setSpeed', speed: 0 });
+    engine.state.money = 1e9;
+    engine.applyCommand({ type: 'placePlant', tile: tile(4, 4), plant: PlantType.SolarFarm });
+    engine.applyCommand({ type: 'buildPowerLine', tiles: [tile(5, 4), tile(6, 4)] });
+    const flushed = engine.flush();
+    if (flushed?.type !== 'tick') throw new Error('expected a tick event');
+    // A bare tile inside the new supply ring: nothing dirties it but the
+    // grid recompute, so without one the overlay would stay stale until
+    // the next command or tick.
+    const bare = flushed.diffs.find((d) => d.index === tile(6, 6));
+    expect(bare?.island).toBeGreaterThan(0);
+  });
+
   it('flushes stats after a tax rate change', () => {
     const engine = makeEngine();
     engine.applyCommand({ type: 'setTaxRate', rate: 0.2 });
