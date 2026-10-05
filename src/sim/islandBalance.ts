@@ -409,13 +409,13 @@ export function balanceIsland(input: IslandInput, pool: IslandPool): IslandResul
         importRoom -= bought;
         return { stored: stored + bought * efficiency, bought };
       };
-      const bought = buyInto(
+      const batteryBought = buyInto(
         battery.stored,
         trading.buyCeiling * battery.capacity,
         battery.powerLimit - batteryPowerUsed,
         battery.efficiency,
       );
-      battery.stored = bought.stored;
+      battery.stored = batteryBought.stored;
       const pumpedBought = buyInto(
         pumped.stored,
         trading.buyCeiling * pumped.capacity,
@@ -423,7 +423,7 @@ export function balanceIsland(input: IslandInput, pool: IslandPool): IslandResul
         pumped.efficiency,
       );
       pumped.stored = pumpedBought.stored;
-      tradeBuy = bought.bought + pumpedBought.bought;
+      tradeBuy = batteryBought.bought + pumpedBought.bought;
       gridImport += tradeBuy;
     }
   }
