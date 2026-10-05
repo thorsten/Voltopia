@@ -482,6 +482,23 @@ export interface TileInfo {
     /** Connected to the grid and intact, i.e. actually heating. */
     active: boolean;
   };
+  /** Present on every energised tile: its grid island and that island's figures this tick. */
+  island?: {
+    number: number;
+    key: number;
+    generation: number;
+    consumption: number;
+    deficit: number;
+    substations: number;
+  };
+  /** Present on a substation: the link figures of its island this tick. */
+  substation?: {
+    island: number;
+    gridImport: number;
+    gridExport: number;
+    importCapacity: number;
+    exportCapacity: number;
+  };
   /** For fire/police stations: connected to the grid and covering its ring. */
   stationActive: boolean;
   /** Road class of a road tile (Street for everything else). */

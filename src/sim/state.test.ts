@@ -141,6 +141,15 @@ describe('buildRejection', () => {
       'tileOccupied',
     );
   });
+
+  it('accepts a substation on empty land and nowhere else', () => {
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    expect(placePlant(state, at(4, 4), PlantType.Substation)).toEqual({});
+    expect(buildRejection(makeState(), at(5, 5), BuildIntent.Plant, PlantType.Substation)).toBe(
+      'cannotBuildOnWater',
+    );
+  });
 });
 
 describe('sea build rules', () => {

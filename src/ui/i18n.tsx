@@ -133,6 +133,9 @@ const en = {
   'tool.plant-heatstore.desc':
     'A hot-water tank. Surplus fills it through the heat plants while the nights are cold, ' +
     'and it covers the evening heat peak later. Heat never turns back into electricity.',
+  'tool.plant-substation.desc':
+    'The gate of a grid island to the outer grid. Only an island with a substation can import in a shortfall or export its surplus; each one adds a link of ' +
+    '60 in and 80 out per tick. Islands are the separate networks your lines and plants form — see the Grid overlay.',
   'tool.plant-forest.desc':
     'Plant saplings by the patch. They grow over a few days, raise happiness nearby — and slow the wind for turbines standing in them.',
   'tool.bulldoze.desc': 'Clears roads, zones and plants. Drag to clear an area.',
@@ -568,6 +571,12 @@ const en = {
   'inspect.heating': 'Heating',
   'inspect.heatNetwork': 'district heating',
   'inspect.heatOwn': 'own heating',
+  'inspect.district': 'District',
+  'inspect.districtFigures': '{generation} in, {consumption} out',
+  'inspect.districtDeficit': 'in deficit',
+  'inspect.substationLink': 'Link',
+  'inspect.substationFlow': 'import {importValue} / export {exportValue}',
+  'inspect.substationCapacity': '{importCapacity} in / {exportCapacity} out per tick',
   'disaster.storm': 'Storm',
   'disaster.fire': 'Fire',
   'disaster.flood': 'Flood',
@@ -714,6 +723,9 @@ const de: Record<TranslationKey, string> = {
   'tool.plant-heatstore.desc':
     'Ein Warmwasserspeicher. Überschuss füllt ihn über die Heizwerke, solange die Nächte kalt sind, ' +
     'und er deckt später die abendliche Wärmespitze. Wärme wird nie wieder zu Strom.',
+  'tool.plant-substation.desc':
+    'Das Tor einer Netzinsel zum Außennetz. Nur eine Insel mit Umspannwerk kann im Defizit importieren oder Überschuss exportieren; jedes Werk bringt einen Link von ' +
+    '60 Einheiten hinein und 80 hinaus pro Tick. Inseln sind die getrennten Netze, die deine Leitungen und Anlagen bilden – siehe Overlay „Netz“.',
   'tool.plant-forest.desc':
     'Pflanzt Setzlinge flächenweise. Sie wachsen über einige Tage, heben die Zufriedenheit in der Nähe — und bremsen den Wind für Turbinen, die darin stehen.',
   'tool.bulldoze.desc': 'Entfernt Straßen, Gebiete und Anlagen. Ziehen räumt eine Fläche.',
@@ -1154,6 +1166,12 @@ const de: Record<TranslationKey, string> = {
   'inspect.heating': 'Heizung',
   'inspect.heatNetwork': 'Fernwärme',
   'inspect.heatOwn': 'eigene Heizung',
+  'inspect.district': 'Bezirk',
+  'inspect.districtFigures': '{generation} rein, {consumption} raus',
+  'inspect.districtDeficit': 'im Defizit',
+  'inspect.substationLink': 'Link',
+  'inspect.substationFlow': 'Import {importValue} / Export {exportValue}',
+  'inspect.substationCapacity': '{importCapacity} rein / {exportCapacity} raus pro Tick',
   'disaster.storm': 'Sturm',
   'disaster.fire': 'Brand',
   'disaster.flood': 'Hochwasser',

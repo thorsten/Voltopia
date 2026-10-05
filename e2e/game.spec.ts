@@ -173,6 +173,7 @@ test('build menu shows every tool in one row when the window is wide', async ({ 
   await expect(page.getByTestId('tool-road')).toBeVisible();
   await expect(page.getByTestId('tool-avenue')).toBeVisible();
   await expect(page.getByTestId('tool-plant-wind')).toBeVisible();
+  await expect(page.getByTestId('tool-plant-substation')).toBeVisible();
   await expect(page.getByTestId('tool-plant-park')).toBeVisible();
   await expect(page.getByTestId('tool-plant-fire')).toBeVisible();
   await expect(page.getByTestId('tool-plant-police')).toBeVisible();

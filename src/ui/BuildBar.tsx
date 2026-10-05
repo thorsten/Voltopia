@@ -73,6 +73,7 @@ const CATEGORIES: Category[] = [
       { id: 'plant-hydrogen', icon: '🫧', cost: BALANCE.costs.plant[PlantType.HydrogenPlant] },
       { id: 'plant-heat', icon: '🔥', cost: BALANCE.costs.plant[PlantType.HeatPlant] },
       { id: 'plant-heatstore', icon: '🛢', cost: BALANCE.costs.plant[PlantType.HeatStore] },
+      { id: 'plant-substation', icon: '🏗', cost: BALANCE.costs.plant[PlantType.Substation] },
     ],
   },
   {

@@ -106,6 +106,7 @@ export const PLANT_NAMES = {
   bus_depot: PlantType.BusDepot,
   heat_plant: PlantType.HeatPlant,
   heat_store: PlantType.HeatStore,
+  substation: PlantType.Substation,
 } as const;
 export type PlantName = keyof typeof PLANT_NAMES;
 
@@ -174,6 +175,7 @@ const PLANT_TOOL_KEY: Record<PlantName, TranslationKey> = {
   bus_depot: 'tool.plant-busdepot',
   heat_plant: 'tool.plant-heat',
   heat_store: 'tool.plant-heatstore',
+  substation: 'tool.plant-substation',
 };
 
 const PLANT_PLACEMENT: Record<PlantName, string> = {
@@ -200,6 +202,8 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
     'reach of the roads touching it (reach in get_build_catalog) — needs grid power and at least one adjacent road to serve anyone',
   heat_store:
     'any empty land tile; a hot-water tank the surplus cascade fills through the heat plants while the nights are cold, drained later for district heat',
+  substation:
+    'any empty land tile; the gate of its grid island to the outer grid — import and export need one (60 in / 80 out per substation and tick)',
 };
 
 export const MAP_LAYERS = ['overview', 'terrain', 'supply', 'density', 'power', 'transit'] as const;
@@ -222,6 +226,7 @@ export const FIND_KINDS = [
   'isolated_plant',
   'bus_stop',
   'damaged',
+  'substation',
 ] as const;
 export type FindKind = (typeof FIND_KINDS)[number];
 
@@ -408,6 +413,7 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
       geothermal: 'E',
       heat_plant: 'Q',
       heat_store: 'K',
+      substation: 'N',
     };
     const name = PLANT_NAME_BY_TYPE.get(tiles.plantType[i] as PlantType);
     return name && name !== 'none' ? glyph[name] : '?';
@@ -431,7 +437,7 @@ const OVERVIEW_LEGEND =
   'r/c/s/i zoned but unbuilt (residential/commercial/retail/industrial), R/C/S/I building, ' +
   'plants: V solar, W wind, B battery, G biogas, H charging hub, P park, ' +
   'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot, ' +
-  'Q heat plant, K heat store. ' +
+  'Q heat plant, K heat store, N substation. ' +
   'Roads may also carry a power line (see the power layer).';
 
 function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
@@ -848,7 +854,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         "supply plants within each other's supply radius — has no power line attached and no building " +
         'in any of its rings; its output still counts, nobody nearby uses it), ' +
         'bus_stop, damaged (out of service from a storm, fire or flood; ' +
-        'see get_disasters). Optionally nearest to a point first.',
+        'see get_disasters), substation. Optionally nearest to a point first.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1008,7 +1014,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'Place a plant on one tile: solar, wind, battery, biogas, charging_hub, park, ' +
         'run_of_river (river tile), pumped_storage (land tile next to the lake), hydrogen, ' +
         'tidal (coastal sea tile), geothermal (hotspot tile), logistics_depot, bus_depot, ' +
-        'heat_plant, heat_store. ' +
+        'heat_plant, heat_store, substation. ' +
         'See get_build_catalog for costs and roles.',
       inputSchema: {
         type: 'object',
@@ -1404,6 +1410,8 @@ function matchesKind(tiles: TileMirror, i: number, kind: FindKind): boolean {
       return tiles.busStop[i] !== 0;
     case 'damaged':
       return tiles.damage[i] !== 0;
+    case 'substation':
+      return tiles.tileType[i] === TileType.Plant && tiles.plantType[i] === PlantType.Substation;
   }
 }
 

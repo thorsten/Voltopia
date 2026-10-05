@@ -77,6 +77,10 @@ const COLORS = {
   storeTank: 0xc9a227,
   storePlinth: 0x6f7a86,
   storeCap: 0xe6ebee,
+  substationYard: 0x6f7a86,
+  substationBox: 0x4b5563,
+  substationInsulator: 0xd7dde8,
+  fencePost: 0x9aa3ad,
 } as const;
 
 /** Where a plant stands: which neighbours are water (for hydro shapes). */
@@ -293,6 +297,40 @@ function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
         { sx: 0.46, sy: 0.4, sz: 0.64, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
         { sx: 0.64, sy: 0.4, sz: 0.46, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
         { sx: 0.5, sy: 0.05, sz: 0.5, ox: 0, oy: 0.46, oz: 0, color: COLORS.storeCap },
+      ];
+    case PlantType.Substation:
+      return [
+        { sx: 0.84, sy: 0.03, sz: 0.84, ox: 0, oy: 0, oz: 0, color: COLORS.substationYard },
+        ...[-0.38, 0.38].flatMap((px) =>
+          [-0.38, 0.38].map((pz) => ({
+            sx: 0.04,
+            sy: 0.22,
+            sz: 0.04,
+            ox: px,
+            oy: 0.03,
+            oz: pz,
+            color: COLORS.fencePost,
+          })),
+        ),
+        { sx: 0.36, sy: 0.3, sz: 0.26, ox: 0, oy: 0.03, oz: 0.05, color: COLORS.substationBox },
+        {
+          sx: 0.05,
+          sy: 0.14,
+          sz: 0.05,
+          ox: -0.08,
+          oy: 0.33,
+          oz: 0.05,
+          color: COLORS.substationInsulator,
+        },
+        {
+          sx: 0.05,
+          sy: 0.14,
+          sz: 0.05,
+          ox: 0.08,
+          oy: 0.33,
+          oz: 0.05,
+          color: COLORS.substationInsulator,
+        },
       ];
     default:
       return [];

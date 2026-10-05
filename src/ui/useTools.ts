@@ -33,6 +33,7 @@ export type ToolId =
   | 'plant-geothermal'
   | 'plant-heat'
   | 'plant-heatstore'
+  | 'plant-substation'
   | 'plant-forest'
   | 'bulldoze';
 
@@ -43,7 +44,7 @@ const ZONE_BY_TOOL: Partial<Record<ToolId, Zone>> = {
   'zone-industrial': Zone.Industrial,
 };
 
-/** Keyboard shortcuts for tools (digits row plus B, P, H, U, L, F, C, G, V, T, K, N, W, I, Y, E, R and O). */
+/** Keyboard shortcuts for tools (digits row plus B, P, H, U, L, F, C, G, V, T, K, N, W, I, Y, E, R, O and X). */
 export const TOOL_HOTKEYS: Record<string, ToolId> = {
   '1': 'select',
   '2': 'road',
@@ -73,6 +74,7 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
   t: 'bus-stop',
   k: 'plant-busdepot',
   n: 'zone-industrial',
+  x: 'plant-substation',
 };
 
 export interface DragCostPreview {
@@ -98,6 +100,7 @@ export const PLANT_BY_TOOL: Partial<Record<ToolId, PlantType>> = {
   'plant-geothermal': PlantType.GeothermalPlant,
   'plant-heat': PlantType.HeatPlant,
   'plant-heatstore': PlantType.HeatStore,
+  'plant-substation': PlantType.Substation,
 };
 
 /**

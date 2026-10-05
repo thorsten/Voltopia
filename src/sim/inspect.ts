@@ -25,7 +25,7 @@ import {
 import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { heatPumpCop, plantReach } from './heat.ts';
-import { isSupplySource, isTiedToGrid } from './powerGrid.ts';
+import { isSupplySource, islandOf, isTiedToGrid } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -264,6 +264,9 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
               : 1
       : 1;
 
+  const n = islandOf(state, index);
+  const islandStats = state.lastIslands.find((i) => i.number === n);
+
   const field = fieldAt(state, index);
   const hotspot = field
     ? {
@@ -320,6 +323,29 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     heated: isBuilding && layers.heated[index] === HEATED_SERVED,
     ...(tileType === TileType.Plant && plant === PlantType.HeatPlant
       ? { heatPlant: heatPlantInfo(state, index, connected) }
+      : {}),
+    ...(islandStats
+      ? {
+          island: {
+            number: n,
+            key: islandStats.key,
+            generation: islandStats.generation,
+            consumption: islandStats.consumption,
+            deficit: islandStats.deficit,
+            substations: islandStats.substations,
+          },
+        }
+      : {}),
+    ...(tileType === TileType.Plant && plant === PlantType.Substation && islandStats
+      ? {
+          substation: {
+            island: n,
+            gridImport: islandStats.gridImport,
+            gridExport: islandStats.gridExport,
+            importCapacity: islandStats.substations * BALANCE.market.importCapacity,
+            exportCapacity: islandStats.substations * BALANCE.market.exportCapacity,
+          },
+        }
       : {}),
     stationActive: tileType === TileType.Plant && isStation(plant) && connected,
     roadClass: (tileType === TileType.Road

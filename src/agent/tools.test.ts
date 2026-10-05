@@ -663,6 +663,23 @@ describe('agent tools: building', () => {
     });
   });
 
+  it('places a substation, shows it as N on the overview map, and finds it by kind', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    const result = await call('place_plant', { plant: 'substation', x, y });
+    expect(result).toMatchObject({ ok: true });
+    expect(engine.state.layers.plantType[tileIndex(x, y, SIZE)]).toBe(PlantType.Substation);
+
+    const map = await call('get_map', { origin: { x, y }, width: 1, height: 1 });
+    const rows = map.rows as string[];
+    expect(rows[0]).toBe('N');
+
+    const found = await call('find_tiles', { kind: 'substation' });
+    expect(found.total).toBeGreaterThan(0);
+    const tiles = found.tiles as Array<{ x: number; y: number }>;
+    expect(tiles.some((t) => t.x === x && t.y === y)).toBe(true);
+  });
+
   it('finds a hand-placed geothermal hotspot once its diff reaches the tile mirror', async () => {
     const { call, engine } = createHarness();
     const { x, y } = findLand(engine);

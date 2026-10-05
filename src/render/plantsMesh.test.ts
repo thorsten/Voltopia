@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { PlantType, Terrain, TileType } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { PlantsMesh } from './plantsMesh.ts';
+import { PlantsMesh, plantHeight } from './plantsMesh.ts';
 
 const SIZE = 8;
 
@@ -208,5 +208,17 @@ describe('battery state-of-charge fills', () => {
       { ...battery(A, 0), tileType: TileType.Empty, plantType: PlantType.None } as TileDiff,
     ]);
     expect(mesh.socFillMesh.count).toBe(0);
+  });
+});
+
+describe('substation yard', () => {
+  const flat = field(() => 0);
+
+  it('draws a substation yard with a transformer box', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([plant(0, PlantType.Substation)]);
+    // 4 fence posts + the transformer box + 2 insulators, plus the yard pad.
+    expect(mesh.boxMesh.count).toBeGreaterThanOrEqual(7);
+    expect(plantHeight(PlantType.Substation)).toBeGreaterThan(0.3);
   });
 });

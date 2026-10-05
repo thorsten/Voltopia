@@ -408,6 +408,43 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
             )}
           </>
         )}
+        {info.island && (
+          <>
+            <Row
+              label={t('inspect.district')}
+              value={`#${info.island.number}`}
+              testId="inspect-district"
+            />
+            <Row
+              label={t('inspect.district')}
+              value={`${t('inspect.districtFigures', {
+                generation: energy(info.island.generation),
+                consumption: energy(info.island.consumption),
+              })}${info.island.deficit > 0 ? ` — ${t('inspect.districtDeficit')}` : ''}`}
+              tone={info.island.deficit > 0 ? 'negative' : 'muted'}
+            />
+          </>
+        )}
+        {info.substation && (
+          <>
+            <Row
+              label={t('inspect.substationLink')}
+              value={t('inspect.substationFlow', {
+                importValue: energy(info.substation.gridImport),
+                exportValue: energy(info.substation.gridExport),
+              })}
+              testId="inspect-substation"
+            />
+            <Row
+              label={t('inspect.substationLink')}
+              value={t('inspect.substationCapacity', {
+                importCapacity: energy(info.substation.importCapacity),
+                exportCapacity: energy(info.substation.exportCapacity),
+              })}
+              tone="muted"
+            />
+          </>
+        )}
       </section>
 
       {info.tileType === TileType.Road && (

@@ -38,4 +38,9 @@ describe('tool hotkeys', () => {
   it('binds the industrial zone to N', () => {
     expect(TOOL_HOTKEYS.n).toBe('zone-industrial');
   });
+
+  it('binds the substation to X', () => {
+    expect(TOOL_HOTKEYS.x).toBe('plant-substation');
+    expect(PLANT_BY_TOOL['plant-substation']).toBe(PlantType.Substation);
+  });
 });

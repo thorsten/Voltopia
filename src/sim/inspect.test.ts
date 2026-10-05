@@ -6,14 +6,21 @@ import { DeliveryState, DisasterKind, RoadClass, StopState, TileType } from '../
 import { syncFleet } from './deliveries.ts';
 import { addDamage } from './disasters.ts';
 import { economyStep } from './economy.ts';
-import { buildingConsumption, placePlant } from './energy.ts';
+import { buildingConsumption, energyStep, placePlant } from './energy.ts';
 import { discoverGeothermalFields } from './geothermal.ts';
 import { heatPumpCop, recomputeHeated } from './heat.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
-import { createSimState, PlantType, SupplyStatus, Terrain, Zone } from './state.ts';
+import {
+  bumpGridVersion,
+  createSimState,
+  PlantType,
+  SupplyStatus,
+  Terrain,
+  Zone,
+} from './state.ts';
 import { buildBusStops, syncBusFleet } from './transit.ts';
 import { paintZones } from './zones.ts';
 
@@ -539,5 +546,28 @@ describe('district heating', () => {
     expect(info.storedEnergy).toBeCloseTo(1_500, 6);
     expect(info.storageCapacity).toBe(BALANCE.heat.storeCapacity);
     expect(info.heatPlant).toBeUndefined();
+  });
+});
+
+describe('district grid inspection', () => {
+  const SIZE = 32;
+  const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+  it('a substation reports its island link figures', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(8, 8), PlantType.Substation);
+    for (let i = 0; i < 3; i++) {
+      state.layers.zone[at(9 + i, 10)] = Zone.Residential;
+      state.layers.density[at(9 + i, 10)] = 2;
+    }
+    bumpGridVersion(state);
+    state.tick = TICKS_PER_DAY / 2;
+    energyStep(state, { chargingByIsland: new Float64Array(2) });
+    const info = inspectTile(state, at(8, 8))!;
+    expect(info.substation).toBeDefined();
+    expect(info.substation!.importCapacity).toBe(BALANCE.market.importCapacity);
+    expect(info.substation!.gridImport).toBeGreaterThan(0);
+    expect(info.island?.number).toBe(1);
   });
 });
