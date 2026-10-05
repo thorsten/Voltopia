@@ -183,6 +183,17 @@ describe('agent tools: reading', () => {
     const solar = plants.find((p) => p.name === 'solar')!;
     expect(solar.cost).toBe(BALANCE.costs.plant[PlantType.SolarFarm]);
     expect(plants.find((p) => p.name === 'run_of_river')!.placement).toContain('river');
+    // The link capacities come from BALANCE, in the placement rule and in
+    // the shared tooltip text alike — no figure spelled out in prose, and
+    // no unfilled placeholder reaching the agent.
+    const substation = plants.find((p) => p.name === 'substation') as unknown as {
+      placement: string;
+      description: string;
+    };
+    expect(substation.placement).toContain(`${BALANCE.market.importCapacity} in`);
+    expect(substation.placement).toContain(`${BALANCE.market.exportCapacity} out`);
+    expect(substation.description).toContain(`${BALANCE.market.importCapacity} in`);
+    expect(substation.description).not.toContain('{');
   });
 
   it('get_energy_report exposes the energy stats', async () => {
@@ -842,6 +853,10 @@ describe('district grids', () => {
 
     const report = (await call('get_energy_report')) as Record<string, any>;
     expect((report.islands as unknown[]).length).toBe(2);
+    // Every numeric field of an island is rounded, capacity included.
+    for (const island of report.islands as Array<{ capacity: number }>) {
+      expect(Number.isInteger(island.capacity)).toBe(true);
+    }
 
     const missing = await call('find_tiles', { kind: 'island_without_substation' });
     expect((missing.tiles as { x: number; y: number }[]).length).toBe(1);

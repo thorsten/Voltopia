@@ -24,6 +24,8 @@ interface BuildButton {
   /** Cost display: plain number, or per-tile when perTile is set. */
   cost?: number;
   perTile?: boolean;
+  /** Values the description interpolates, so no balance figure is prose. */
+  descVars?: Record<string, string | number>;
 }
 
 interface Category {
@@ -73,7 +75,15 @@ const CATEGORIES: Category[] = [
       { id: 'plant-hydrogen', icon: '🫧', cost: BALANCE.costs.plant[PlantType.HydrogenPlant] },
       { id: 'plant-heat', icon: '🔥', cost: BALANCE.costs.plant[PlantType.HeatPlant] },
       { id: 'plant-heatstore', icon: '🛢', cost: BALANCE.costs.plant[PlantType.HeatStore] },
-      { id: 'plant-substation', icon: '🏗', cost: BALANCE.costs.plant[PlantType.Substation] },
+      {
+        id: 'plant-substation',
+        icon: '🏗',
+        cost: BALANCE.costs.plant[PlantType.Substation],
+        descVars: {
+          importCapacity: BALANCE.market.importCapacity,
+          exportCapacity: BALANCE.market.exportCapacity,
+        },
+      },
     ],
   },
   {
@@ -180,7 +190,9 @@ export function BuildBar({
             {hotkey && <span className="build-tooltip-key">{hotkey}</span>}
           </span>
           {cost && <span className="build-tooltip-cost">{cost} ⌁</span>}
-          <span className="build-tooltip-desc">{t(`tool.${entry.id}.desc` as TranslationKey)}</span>
+          <span className="build-tooltip-desc">
+            {t(`tool.${entry.id}.desc` as TranslationKey, entry.descVars)}
+          </span>
         </span>
       </button>
     );

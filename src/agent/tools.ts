@@ -178,6 +178,17 @@ const PLANT_TOOL_KEY: Record<PlantName, TranslationKey> = {
   substation: 'tool.plant-substation',
 };
 
+/**
+ * Figures a plant's description interpolates, so no balance number is
+ * spelled out in prose (the build-bar tooltip fills the same keys).
+ */
+const PLANT_DESC_VARS: Partial<Record<PlantName, Record<string, number>>> = {
+  substation: {
+    importCapacity: BALANCE.market.importCapacity,
+    exportCapacity: BALANCE.market.exportCapacity,
+  },
+};
+
 const PLANT_PLACEMENT: Record<PlantName, string> = {
   solar: 'any empty land tile',
   wind: 'any empty land tile',
@@ -203,7 +214,8 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
   heat_store:
     'any empty land tile; a hot-water tank the surplus cascade fills through the heat plants while the nights are cold, drained later for district heat',
   substation:
-    'any empty land tile; the gate of its grid island to the outer grid — import and export need one (60 in / 80 out per substation and tick)',
+    'any empty land tile; the gate of its grid island to the outer grid — import and export need one ' +
+    `(${BALANCE.market.importCapacity} in / ${BALANCE.market.exportCapacity} out per substation and tick)`,
 };
 
 export const MAP_LAYERS = ['overview', 'terrain', 'supply', 'density', 'power', 'transit'] as const;
@@ -732,7 +744,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             return {
               name,
               label: englishText(PLANT_TOOL_KEY[name]),
-              description: englishText(`${PLANT_TOOL_KEY[name]}.desc` as TranslationKey),
+              description: englishText(
+                `${PLANT_TOOL_KEY[name]}.desc` as TranslationKey,
+                PLANT_DESC_VARS[name],
+              ),
               cost: costs.plant[type],
               upkeepPerTick: BALANCE.upkeepPerTick.plant[type],
               placement: PLANT_PLACEMENT[name],
@@ -770,6 +785,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             generation: round(i.generation),
             consumption: round(i.consumption),
             stored: Math.round(i.stored),
+            capacity: Math.round(i.capacity),
             deficit: round(i.deficit),
             curtailment: round(i.curtailment),
             gridImport: round(i.gridImport),

@@ -216,12 +216,16 @@ capacity) so the battery SoC fill is per tile.
   selected.
 - `plantsMesh.ts`: substation recipe — a fenced yard (thin posts on
   four corners, rails), a transformer box with two insulator cylinders
-  on top, a small night lamp (emissive quad, lit by the existing
-  night-window logic); foundation by the slope rule like every plant.
+  on top, ~~a small night lamp (emissive quad, lit by the existing
+  night-window logic)~~ _(dropped: plantsMesh has no emissive machinery,
+  so the lamp would need new plumbing for a purely cosmetic cue —
+  planning refinement, 2026-10-05)_; foundation by the slope rule like
+  every plant.
 
 ### UI (`src/ui/`)
 
-- Build bar: substation tool, hotkey `n`, beside the power-line tool;
+- Build bar: substation tool, hotkey `x` _(`n` is the industrial zone —
+  planning refinement, 2026-10-05)_, beside the power-line tool;
   tooltip with cost and the one-sentence rule.
 - Energy panel: after the city figures, a "Districts" section — one row
   per island sorted by tile count: number, tiles, generation,

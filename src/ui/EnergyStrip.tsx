@@ -154,7 +154,9 @@ export function EnergyStrip({
         <span
           className="energy-chip negative"
           data-testid="energy-districts-deficit"
-          title={t('hud.districtsInDeficit', { count: islandsInDeficit })}
+          title={t(islandsInDeficit === 1 ? 'hud.districtInDeficit' : 'hud.districtsInDeficit', {
+            count: islandsInDeficit,
+          })}
         >
           ⚠ {islandsInDeficit}
         </span>

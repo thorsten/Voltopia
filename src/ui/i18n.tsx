@@ -37,6 +37,7 @@ const en = {
   'tide.low': 'low water',
   'hud.demand.title': 'Demand: residential / commercial / retail / industrial',
   'hud.details': 'Details',
+  'hud.districtInDeficit': '{count} district in deficit',
   'hud.districtsInDeficit': '{count} districts in deficit',
   'hud.section.city': 'City',
 
@@ -136,7 +137,7 @@ const en = {
     'and it covers the evening heat peak later. Heat never turns back into electricity.',
   'tool.plant-substation.desc':
     'The gate of a grid island to the outer grid. Only an island with a substation can import in a shortfall or export its surplus; each one adds a link of ' +
-    '60 in and 80 out per tick. Islands are the separate networks your lines and plants form — see the Grid overlay.',
+    '{importCapacity} in and {exportCapacity} out per tick. Islands are the separate networks your lines and plants form — see the Grid overlay.',
   'tool.plant-forest.desc':
     'Plant saplings by the patch. They grow over a few days, raise happiness nearby — and slow the wind for turbines standing in them.',
   'tool.bulldoze.desc': 'Clears roads, zones and plants. Drag to clear an area.',
@@ -648,6 +649,7 @@ const de: Record<TranslationKey, string> = {
   'tide.low': 'Niedrigwasser',
   'hud.demand.title': 'Nachfrage: Wohnen / Gewerbe / Handel / Industrie',
   'hud.details': 'Details',
+  'hud.districtInDeficit': '{count} Bezirk im Defizit',
   'hud.districtsInDeficit': '{count} Bezirke im Defizit',
   'hud.section.city': 'Stadt',
 
@@ -748,7 +750,7 @@ const de: Record<TranslationKey, string> = {
     'und er deckt später die abendliche Wärmespitze. Wärme wird nie wieder zu Strom.',
   'tool.plant-substation.desc':
     'Das Tor einer Netzinsel zum Außennetz. Nur eine Insel mit Umspannwerk kann im Defizit importieren oder Überschuss exportieren; jedes Werk bringt einen Link von ' +
-    '60 Einheiten hinein und 80 hinaus pro Tick. Inseln sind die getrennten Netze, die deine Leitungen und Anlagen bilden – siehe Overlay „Netz“.',
+    '{importCapacity} Einheiten hinein und {exportCapacity} hinaus pro Tick. Inseln sind die getrennten Netze, die deine Leitungen und Anlagen bilden – siehe Overlay „Netz“.',
   'tool.plant-forest.desc':
     'Pflanzt Setzlinge flächenweise. Sie wachsen über einige Tage, heben die Zufriedenheit in der Nähe — und bremsen den Wind für Turbinen, die darin stehen.',
   'tool.bulldoze.desc': 'Entfernt Straßen, Gebiete und Anlagen. Ziehen räumt eine Fläche.',
@@ -1230,9 +1232,19 @@ const de: Record<TranslationKey, string> = {
 
 const translations: Record<Locale, Record<TranslationKey, string>> = { en, de };
 
+/** Substitute `{name}` placeholders — the one definition for `t` and `englishText`. */
+function fill(text: string, vars?: Record<string, string | number>): string {
+  if (!vars) return text;
+  let filled = text;
+  for (const [name, value] of Object.entries(vars)) {
+    filled = filled.replace(`{${name}}`, String(value));
+  }
+  return filled;
+}
+
 /** English text of a key, for machine-facing output (agent tools, logs). */
-export function englishText(key: TranslationKey): string {
-  return en[key];
+export function englishText(key: TranslationKey, vars?: Record<string, string | number>): string {
+  return fill(en[key], vars);
 }
 
 const LOCALE_STORAGE_KEY = 'voltopia.locale';
@@ -1269,13 +1281,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = useCallback(
     (key: TranslationKey, vars?: Record<string, string | number>) => {
-      let text: string = translations[locale][key] ?? en[key] ?? key;
-      if (vars) {
-        for (const [name, value] of Object.entries(vars)) {
-          text = text.replace(`{${name}}`, String(value));
-        }
-      }
-      return text;
+      const text: string = translations[locale][key] ?? en[key] ?? key;
+      return fill(text, vars);
     },
     [locale],
   );
