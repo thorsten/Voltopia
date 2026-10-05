@@ -423,6 +423,11 @@ const en = {
   'goal.loadManager.title': 'Load manager',
   'goal.loadManager.body':
     'Shed 20,000 energy units of business load under a demand-response contract.',
+  // Added ahead of its Task 5 UI wiring: the goal id exists from Task 4 on,
+  // and get_game_overview (agent/tools.ts) looks up every goal's title.
+  'goal.localGoods.title': 'Made locally',
+  'goal.localGoods.body':
+    'A whole day in which every delivery tour loaded at your own factories (10+ stocked shops, 3+ factories).',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -985,6 +990,9 @@ const de: Record<TranslationKey, string> = {
   'goal.loadManager.title': 'Lastmanager',
   'goal.loadManager.body':
     'Wirf unter einem Demand-Response-Vertrag 20.000 Energieeinheiten Gewerbelast ab.',
+  'goal.localGoods.title': 'Aus eigener Produktion',
+  'goal.localGoods.body':
+    'Ein ganzer Tag, an dem jede Liefertour in deinen eigenen Fabriken beladen wurde (ab 10 belieferten Läden und 3 Fabriken).',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

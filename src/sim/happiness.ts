@@ -1,6 +1,6 @@
 import { BALANCE } from '../shared/constants.ts';
 import { tileX, tileY } from '../shared/grid.ts';
-import { PlantType, SupplyStatus, TileType } from '../shared/types.ts';
+import { PlantType, SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import { damagedBuildingShare } from './disasters.ts';
 import { seaCoverage } from './sea.ts';
 import { forestCoverage } from './forest.ts';
@@ -37,11 +37,53 @@ export function parkCoverage(state: SimState): number {
   return buildings > 0 ? covered / buildings : 0;
 }
 
+/** Share (0..1) of homes that have a factory within the industry radius. */
+export function industryCoverage(state: SimState): number {
+  const { layers } = state;
+  const factories: number[] = [];
+  for (let i = 0; i < layers.tileType.length; i++) {
+    if (
+      layers.tileType[i] === TileType.Empty &&
+      layers.zone[i] === Zone.Industrial &&
+      layers.density[i] > 0
+    ) {
+      factories.push(i);
+    }
+  }
+  if (factories.length === 0) return 0;
+
+  const radius = BALANCE.happiness.industryRadius;
+  let homes = 0;
+  let disturbed = 0;
+  for (let i = 0; i < layers.tileType.length; i++) {
+    if (
+      layers.tileType[i] !== TileType.Empty ||
+      layers.zone[i] !== Zone.Residential ||
+      layers.density[i] === 0
+    ) {
+      continue;
+    }
+    homes++;
+    const x = tileX(i, state.size);
+    const y = tileY(i, state.size);
+    for (const factory of factories) {
+      const dx = Math.abs(x - tileX(factory, state.size));
+      const dy = Math.abs(y - tileY(factory, state.size));
+      if (Math.max(dx, dy) <= radius) {
+        disturbed++;
+        break;
+      }
+    }
+  }
+  return homes > 0 ? disturbed / homes : 0;
+}
+
 /**
  * Move city happiness toward its target: a comfortable base, reduced by
  * taxes above the neutral rate, by buildings without (sufficient) power,
- * and, once the city is big enough, by buildings without police cover.
- * Smoothing avoids jumpy reactions to single bad ticks.
+ * by homes next to factories, and, once the city is big enough, by
+ * buildings without police cover. Smoothing avoids jumpy reactions to
+ * single bad ticks.
  */
 export function happinessStep(state: SimState, population: number): void {
   const { layers } = state;
@@ -64,6 +106,8 @@ export function happinessStep(state: SimState, population: number): void {
   const forestBonus = forestCoverage(state) * BALANCE.forest.coverBonus;
   // A sea view is worth its own bonus, like woods and parks.
   const coastBonus = seaCoverage(state) * BALANCE.sea.coastBonus;
+  // Factories are unwelcome neighbours: homes in their reach weigh on the city.
+  const industryPenalty = industryCoverage(state) * config.industryPenaltyWeight;
   const commutePenalty = Math.min(
     config.commuteMaxPenalty,
     Math.max(0, state.commuteCongestion - config.commuteCongestionThreshold) *
@@ -91,6 +135,7 @@ export function happinessStep(state: SimState, population: number): void {
         coastBonus -
         taxPenalty -
         supplyPenalty -
+        industryPenalty -
         commutePenalty -
         policePenalty -
         damagePenalty -

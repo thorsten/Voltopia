@@ -894,6 +894,15 @@ export const BALANCE = {
      */
     parksAndLightsBonus: 0.08,
     parkRadius: 6,
+    /** Homes within this Chebyshev radius of a factory count as disturbed. */
+    industryRadius: 4,
+    /**
+     * Max happiness penalty when every home has a factory nearby; scales
+     * with the share of residential buildings within industryRadius.
+     * Slightly above the park bonus, so a factory among the homes costs
+     * more than a park next door buys back. Frozen by the Task 9 probe.
+     */
+    industryPenaltyWeight: 0.1,
     /**
      * Commute penalty: when the average commute takes this factor
      * longer than free flow, happiness starts to suffer (scaled by

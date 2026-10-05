@@ -532,3 +532,46 @@ describe('loadManager', () => {
     expect(restored.goalProgress.shedTotal).toBeCloseTo(35, 9);
   });
 });
+
+describe('localGoods', () => {
+  function stockedCity(local: number, imported: number): SimState {
+    const state = createSimState(1, SIZE);
+    state.lastDeliveries = {
+      suppliedShare: 1,
+      shops: BALANCE.deliveries.goalLocalMinShops,
+      driving: 0,
+      depots: 1,
+      factories: BALANCE.deliveries.goalLocalMinFactories,
+      localShare: 1,
+    };
+    state.goods.lastDay = { local, imported };
+    state.tick = TICKS_PER_DAY;
+    return state;
+  }
+
+  it('unlocks at the day boundary after a fully local day with enough shops and factories', () => {
+    const state = stockedCity(5, 0);
+    goalsStep(state);
+    expect(state.goalsAchieved.has('localGoods')).toBe(true);
+  });
+
+  it('does not unlock after a day with one imported tour, nor off the boundary, nor with too few factories', () => {
+    const imported = stockedCity(5, 1);
+    goalsStep(imported);
+    expect(imported.goalsAchieved.has('localGoods')).toBe(false);
+
+    const midday = stockedCity(5, 0);
+    midday.tick = TICKS_PER_DAY + 1;
+    goalsStep(midday);
+    expect(midday.goalsAchieved.has('localGoods')).toBe(false);
+
+    const fewFactories = stockedCity(5, 0);
+    fewFactories.lastDeliveries.factories = BALANCE.deliveries.goalLocalMinFactories - 1;
+    goalsStep(fewFactories);
+    expect(fewFactories.goalsAchieved.has('localGoods')).toBe(false);
+
+    const noTours = stockedCity(0, 0);
+    goalsStep(noTours);
+    expect(noTours.goalsAchieved.has('localGoods')).toBe(false);
+  });
+});

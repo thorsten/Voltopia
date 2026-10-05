@@ -26,6 +26,7 @@ export const GOAL_IDS = [
   'warmWinter',
   'flexibleCity',
   'loadManager',
+  'localGoods',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -233,6 +234,21 @@ export function goalsStep(state: SimState): void {
   }
   if (!achieved.has('loadManager') && progress.shedTotal >= BALANCE.demandResponse.goalShedEnergy) {
     achieved.add('loadManager');
+  }
+
+  // Yesterday every tour loaded at a factory, in a real retail scene.
+  const { goalLocalMinShops, goalLocalMinFactories } = BALANCE.deliveries;
+  const yesterday = state.goods.lastDay;
+  if (
+    !achieved.has('localGoods') &&
+    state.tick % TICKS_PER_DAY === 0 &&
+    yesterday.local > 0 &&
+    yesterday.imported === 0 &&
+    state.lastDeliveries.shops >= goalLocalMinShops &&
+    state.lastDeliveries.suppliedShare >= BALANCE.deliveries.goalSuppliedShare &&
+    state.lastDeliveries.factories >= goalLocalMinFactories
+  ) {
+    achieved.add('localGoods');
   }
 }
 
