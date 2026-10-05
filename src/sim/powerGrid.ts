@@ -52,6 +52,18 @@ export function recomputeGrid(state: SimState): void {
   const radius = BALANCE.energy.lineSupplyRadius;
   const tiles = size * size;
 
+  // The labelling about to be overwritten is only worth snapshotting
+  // when it is the one `syncIslandPools` last synced the pools to —
+  // otherwise `prevIsland`/`prevIslandKeys` already hold that synced
+  // labelling from an earlier recompute, and this one (never synced to)
+  // must not clobber it: several recomputes can happen between two
+  // syncs, and `syncIslandPools` needs to map the new labelling against
+  // the last *synced* one, not the last *computed* one.
+  if (state.gridComputedVersion === state.poolsSyncedVersion) {
+    layers.prevIsland.set(island);
+    state.prevIslandKeys = state.islandKeys;
+  }
+
   // 1. Components of sources and the line tiles they reach.
   const parent = new Int32Array(tiles).fill(-1);
   const reached = new Uint8Array(tiles);

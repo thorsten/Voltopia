@@ -218,6 +218,16 @@ export interface TileLayers {
    * far above any 128x128 map's possible components.
    */
   island: Uint16Array;
+  /**
+   * `island` as it was the last time `syncIslandPools` ran (a snapshot
+   * `recomputeGrid` takes just before overwriting `island`, but only
+   * when the labelling it is about to replace is the one the pools
+   * were synced to — several recomputes can happen between two syncs,
+   * and the snapshot must keep describing the synced labelling through
+   * all of them). Lets `syncIslandPools` map ownership by tile overlap
+   * rather than by a vanished key's old tile. Derived, not persisted.
+   */
+  prevIsland: Uint16Array;
   /** Service coverage bitmask (SERVICE_FIRE | SERVICE_POLICE). Derived, not persisted. */
   services: Uint8Array;
   /** District heating: HEATED_NONE / HEATED_TRUNK / HEATED_SERVED. Derived, not persisted. */
@@ -291,6 +301,12 @@ export interface SimState {
   gridComputedVersion: number;
   /** islandKeys[n] = lowest tile index of island n (its stable key); islandKeys[0] = -1. Rebuilt by recomputeGrid. */
   islandKeys: number[];
+  /**
+   * `islandKeys` as it was the last time `syncIslandPools` ran, paired
+   * with `layers.prevIsland` — together they are the labelling
+   * `syncIslandPools` maps the new one against. Not persisted.
+   */
+  prevIslandKeys: number[];
   /**
    * Per-island pools (flex backlog, demand-response call budget), keyed
    * by the island's stable key (its lowest tile index). Kept in sync
@@ -506,6 +522,7 @@ export function createTileLayers(size: number): TileLayers {
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
     island: new Uint16Array(tiles),
+    prevIsland: new Uint16Array(tiles),
     services: new Uint8Array(tiles),
     heated: new Uint8Array(tiles),
     buildingAge: new Uint32Array(tiles),
@@ -545,6 +562,7 @@ export function createSimState(
     gridVersion: 0,
     gridComputedVersion: -1,
     islandKeys: [-1],
+    prevIslandKeys: [-1],
     islandPools: new Map(),
     poolsSyncedVersion: -1,
     weather: {

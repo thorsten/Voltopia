@@ -15,36 +15,90 @@ function freshPool(): IslandPool {
   return { flexBacklog: 0, callBudget: callBudgetTicks() };
 }
 
+/** Fold `pool` into whatever `map` already holds for new island `n` (sum backlog, min budget). */
+function mergeInto(map: Map<number, IslandPool>, n: number, pool: IslandPool): void {
+  const existing = map.get(n);
+  if (!existing) {
+    map.set(n, pool);
+  } else {
+    existing.flexBacklog += pool.flexBacklog;
+    existing.callBudget = Math.min(existing.callBudget, pool.callBudget);
+  }
+}
+
 /**
- * Bring `state.islandPools` in line with the islands of this tick.
- * Merge: a vanished key whose tile now sits on another island adds its
- * backlog to that island's pool and takes the smaller budget. Split: the
- * surviving key keeps everything, the new key starts fresh. Keys whose
- * tile is no longer energised are dropped. The daily budget refill runs
- * here for every pool on the first tick of a day.
+ * Bring `state.islandPools` in line with the islands of this tick, by
+ * tile-set overlap against the labelling the pools were last synced to
+ * (`layers.prevIsland` / `state.prevIslandKeys`, snapshotted by
+ * `recomputeGrid`) — not by whether a vanished key's own tile happens
+ * to still be energised. An old island's pool goes to whichever new
+ * island shares the most of its tiles (ties keep the lower new number);
+ * that is how a split keeps the pool under the larger fragment even
+ * when the old key tile itself drops out (merge subsumes ownership
+ * transfer too: both are just "most overlap"). Two old islands landing
+ * on the same new island merge (`flexBacklog` summed, `callBudget` =
+ * min). A new island nobody's old tiles overlap starts fresh. The daily
+ * budget refill runs here for every pool on the first tick of a day.
  */
 export function syncIslandPools(state: SimState): void {
   recomputeGrid(state);
-  const { island } = state.layers;
-  const keys = state.islandKeys;
   if (state.poolsSyncedVersion !== state.gridComputedVersion) {
-    const current = new Set<number>();
-    for (let n = 1; n < keys.length; n++) current.add(keys[n]);
-    for (const [key, pool] of [...state.islandPools]) {
-      if (current.has(key)) continue;
-      const n = island[key];
-      if (n !== 0) {
-        const target = keys[n];
-        const into = state.islandPools.get(target) ?? freshPool();
-        into.flexBacklog += pool.flexBacklog;
-        into.callBudget = Math.min(into.callBudget, pool.callBudget);
-        state.islandPools.set(target, into);
+    const { island, prevIsland } = state.layers;
+    const keys = state.islandKeys;
+    const prevKeys = state.prevIslandKeys;
+
+    // overlap[o][n] = tiles of old island o that now lie in new island n.
+    const overlap: number[][] = Array.from({ length: prevKeys.length }, () =>
+      Array.from<number>({ length: keys.length }).fill(0),
+    );
+    for (let t = 0; t < island.length; t++) {
+      overlap[prevIsland[t]][island[t]]++;
+    }
+
+    // For each old island, the new island owning the most of its tiles
+    // inherits its pool; two old islands landing on the same new one merge.
+    const inherited = new Map<number, IslandPool>(); // new island number -> pool
+    const claimed = new Set<number>(); // old keys this pass has already accounted for
+    for (let o = 1; o < prevKeys.length; o++) {
+      const key = prevKeys[o];
+      claimed.add(key);
+      const old = state.islandPools.get(key);
+      if (!old) continue;
+      let bestN = 0;
+      let bestCount = 0;
+      for (let n = 1; n < keys.length; n++) {
+        if (overlap[o][n] > bestCount) {
+          bestCount = overlap[o][n];
+          bestN = n;
+        }
       }
-      state.islandPools.delete(key);
+      if (bestN === 0) continue; // this old island left no trace on any new one
+      mergeInto(inherited, bestN, old);
     }
-    for (const key of current) {
-      if (!state.islandPools.has(key)) state.islandPools.set(key, freshPool());
+    // Safety net for an entry already keyed exactly to a *current*
+    // island but never visited above, because its key isn't any
+    // `prevKeys[o]` — the labelling pools were last synced to may be
+    // stale relative to the map itself, not just relative to the grid:
+    // `deserializeState` restores a save's pools straight from their
+    // saved keys without forcing a recompute first (staying as lazy
+    // about the grid as `islandKeys` already is), so the first real
+    // sync afterwards sees a `state.islandPools` that already matches
+    // the current labelling while `prevIslandKeys` still says "no
+    // islands". Dropping such an entry just because the overlap pass
+    // never reached it would be exactly the kind of silent data loss
+    // this function exists to prevent.
+    for (const [key, pool] of state.islandPools) {
+      if (claimed.has(key)) continue;
+      const n = keys.indexOf(key);
+      if (n <= 0) continue;
+      mergeInto(inherited, n, pool);
     }
+
+    const next = new Map<number, IslandPool>();
+    for (let n = 1; n < keys.length; n++) {
+      next.set(keys[n], inherited.get(n) ?? freshPool());
+    }
+    state.islandPools = next;
     state.poolsSyncedVersion = state.gridComputedVersion;
   }
   // Tick 0 is the pre-game state, never a simulated tick on its own —
