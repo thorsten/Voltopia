@@ -248,9 +248,22 @@ Collected 2026-09-24; roughly in the order we want to build them.
   city's load (business base load on the office-hours profile, small
   in the dark, calm nights where deficits sit) structurally cannot
   halve blackout ticks; it shaves 8-10 % of deficit ticks and 9-10 % of
-  import cost. A bigger pool or an industrial zone is the next lever
-  if demand response should bite harder. (A grid-frequency minigame
-  stays an idea.)
+  import cost. The industrial zone (below) is that bigger pool. (A
+  grid-frequency minigame stays an idea.)
+- **Industrial zone** (done): factories grow with the retail jobs they
+  stock, employ fewer people per tile than offices, run a two-shift
+  load that is the grid's only real night-time draw and shed a larger
+  share of it under the demand-response contract. Delivery vans load
+  at a powered factory in reach before their shop leg; a depot without
+  one imports the goods and pays a fee per tour. Homes within a few
+  tiles of a factory are less happy, so placement is a decision. The
+  `localGoods` goal rewards a day in which every tour loaded locally.
+  Probe: with 40 factories in it the contract saves 32-49 % of the
+  deficit ticks (452 -> 306, 250 -> 127) where the business pool alone
+  saves 27-33 %, though the band's own load still leaves more deficit
+  ticks than a town without it; and the factories spare 6_500 of goods
+  fees over 20 days while their night shift costs 3.3 times their tax
+  in a park not sized for them.
 - **Per-district grids** (deferred earlier): separate grid islands
   with their own balance, coupled by substations.
 

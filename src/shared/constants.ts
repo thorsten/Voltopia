@@ -253,8 +253,19 @@ export const BALANCE = {
       [Zone.Residential]: [0, 2, 4.5, 8],
       [Zone.Commercial]: [0, 3, 6.5, 11],
       [Zone.Retail]: [0, 2.5, 5, 9],
-      /** Factories draw more than offices of the same density. */
-      [Zone.Industrial]: [0, 4, 9, 16],
+      /**
+       * Factories draw more than offices of the same density. Measured in
+       * the industrial probe (a 64×64 town of 560 density-3 buildings,
+       * 40 density-2 factories, a 405-plant park, 20 days, contract on):
+       * at [4, 9, 16] the band raised deficit ticks from 210 to 327 on
+       * the seed whose weather never diverged (11) and cost 209_000 of
+       * the city's 939_000 net money, mostly biogas burnt for the night
+       * shift. One notch down, [3.5, 8, 14], trims that to 306 ticks and
+       * 178_000 and keeps every level above the offices. No notch makes
+       * the band lower deficits: the contract can shed at most 60 % of
+       * the load the band adds, and only four hours a day.
+       */
+      [Zone.Industrial]: [0, 3.5, 8, 14],
     } as Record<Zone, number[]>,
     /**
      * Hourly load profile per zone (24 factors, index = hour). Residential
@@ -632,7 +643,16 @@ export const BALANCE = {
       [Zone.Residential]: [0, 0, 0, 0],
       [Zone.Commercial]: [0, 4, 10, 22],
       [Zone.Retail]: [0, 3, 6, 12],
-      /** Floor space per worker is large: fewer jobs per tile than offices. */
+      /**
+       * Floor space per worker is large: fewer jobs per tile than offices.
+       * In the industrial probe the 40 density-2 factories (320 jobs) add
+       * 51_600 tax over 20 days, 2_580 a day — the 200 money of zoning is
+       * back within the first in-game hours. Tax is not what decides
+       * whether a factory band pays: in the probe park its night shift
+       * cost 171_000 in extra biogas and import (seed 11), 3.3 times its
+       * tax, so the bill depends on the generation the player builds for
+       * it, not on this table. Unchanged by the probe.
+       */
       [Zone.Industrial]: [0, 3, 8, 18],
     } as Record<Zone, number[]>,
     /** Jobs the city can sustain per resident (service jobs etc. abstracted). */
@@ -814,7 +834,16 @@ export const BALANCE = {
      * Share of the industrial base load the contract may shed. Process
      * load is more flexible than office lighting and IT, and it is the
      * only load of any size on a dark, calm night — the gap the
-     * commercial pool could not fill. Frozen by the Task 9 probe.
+     * commercial pool could not fill. In the industrial probe the
+     * contract with 40 factories in it sheds 192_000 over 20 days
+     * against 88_000 for the businesses alone (seed 11) and saves 146
+     * deficit ticks instead of 101 (452 -> 306, -32 %; 55 % less
+     * unserved energy). On seed 7, over the 16 days before the two
+     * runs' weather diverges, it halves the deficit ticks (250 -> 127)
+     * where the business pool alone takes 27 % off (120 -> 88). 0.7,
+     * measured with the old [4, 9, 16] load, saved another 18 ticks
+     * (327 -> 309) for 2_500 more contract money — not worth giving
+     * up more of a factory's day.
      */
     industrialShedShare: 0.6,
     /**
@@ -894,15 +923,27 @@ export const BALANCE = {
      */
     parksAndLightsBonus: 0.08,
     parkRadius: 6,
-    /** Homes within this Chebyshev radius of a factory count as disturbed. */
+    /**
+     * Homes within this Chebyshev radius of a factory count as disturbed.
+     * In the industrial probe a home band whose two sides stood 3 and 5
+     * tiles from the factories counted only its near side (coverage
+     * 0.10); moved one tile closer, 2 and 4 tiles, it counted both
+     * (0.20). Kept at 4: a street of homes right across from a factory
+     * is disturbed, the next block is not.
+     */
     industryRadius: 4,
     /**
      * Max happiness penalty when every home has a factory nearby; scales
      * with the share of residential buildings within industryRadius.
-     * Slightly above the park bonus, so a factory among the homes costs
-     * more than a park next door buys back. Frozen by the Task 9 probe.
+     * Above the park bonus, so a factory among the homes costs more than
+     * a park next door buys back. In the industrial probe a fifth of the
+     * homes sits in reach of the factory band: at 0.1 mean happiness
+     * fell 0.019 and 0.014 below the town without industry (seeds 7, 11),
+     * the second just short of the 0.015-0.03 aimed for; at 0.12 it falls
+     * 0.024 and 0.018 — felt, but a city stays content, so placement
+     * is a decision rather than a wall.
      */
-    industryPenaltyWeight: 0.1,
+    industryPenaltyWeight: 0.12,
     /**
      * Commute penalty: when the average commute takes this factor
      * longer than free flow, happiness starts to suffer (scaled by
@@ -1347,7 +1388,15 @@ export const BALANCE = {
     loadTicks: 8,
     /**
      * Paid per tour a depot starts without a powered factory in reach:
-     * the goods are imported. Frozen by the Task 9 probe.
+     * the goods are imported. In the industrial probe eight depots keep
+     * 80 shops fully supplied on 27 tours a day; without factories every
+     * tour imports, 6_500 over 20 days (325 a day, 0.7 % of the town's
+     * net income), and with the factory band in reach not one does. The
+     * fee pays back the 200 money of zoning 40 factory tiles in under a
+     * day on its own; a 10-20-day payback would need a fee near 1,
+     * which makes imported goods free, so the fee stays a steady nudge
+     * and the localGoods goal is the carrot. The factories' energy bill,
+     * not the fee, decides whether a band pays (see jobsByZoneAndDensity).
      */
     importFeePerTour: 12,
     /** Vans drive this fraction of the car speed (streets and avenues alike). */

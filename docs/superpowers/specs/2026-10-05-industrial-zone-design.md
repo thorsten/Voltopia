@@ -160,9 +160,12 @@ industrialDemand`. Dispatch, call budget, billing and stats are
   any stop; the tour continues as an imported one (the fee was already
   paid, no refund).
 - Vans are not persisted, so `pickup` needs no save handling.
-- `SimState.goods = { localToursToday, importedToursToday }`
-  is reset at the day boundary in `tick.ts` after the goal check reads
-  it. Saved as the optional field `goods`, absent → zeros.
+- `SimState.goods = { localToursToday, importedToursToday, lastDay }`.
+  At the day boundary `deliveriesStep` copies the day's two counters
+  into `goods.lastDay` and zeros them; `goalsStep` reads `lastDay` on
+  the same tick. Transient, like the other single-day goal counters
+  (the `goalProgress` rule in `state.ts`); a reload mid-day forfeits
+  that day's `localGoods` attempt.
 - `DeliveryStats` gains `factories` (count) and `localShare`
   (`localToursToday / (local + imported)`, 1 when no tour started).
   `DepotInfo` gains `factoriesInReach` and `nearestFactoryTiles`
@@ -182,7 +185,7 @@ industrialDemand`. Dispatch, call budget, billing and stats are
 `localGoods`: reached at a day boundary when the finished day had
 `importedToursToday === 0`, `localToursToday > 0`, at least
 `goalLocalMinShops` supplied shops and at least `goalLocalMinFactories`
-factories. The day boundary check runs before `goods` is reset. Title
+factories. The day boundary check reads `goods.lastDay`. Title
 and description in both languages.
 
 ### UI (`src/ui/`)
@@ -214,7 +217,7 @@ and description in both languages.
 - `ZONE_NAMES` gains `industrial`; `paint_zone` and `find_tiles`
   accept it; the ASCII map uses `i`/`I`.
 - `overview` reports factories, the local share and the goods import
-  cost; `energy_report` lists the industrial demand in the pool.
+  cost.
 - Tool descriptions and the `docs/agent-tools.md` table are updated.
 - `tools.test.ts` swaps its "invalid zone" example from `industrial` to
   `farmland`.
@@ -255,8 +258,6 @@ Unit tests, colocated:
   the weight, an office does not; two factories do not double-count.
 - `goals.test.ts`: `localGoods` after a fully local day with enough
   shops and factories; not after a day with one imported tour.
-- `serialization.test.ts`: `goods` round-trips; a save without it
-  loads with zeros.
 - `recipes.test.ts`, `palette.test.ts`: parts for every density and
   variant, family present.
 - `tools.test.ts`: `paint_zone industrial`, overview fields, ASCII
@@ -274,6 +275,56 @@ band at the town edge versus beside the homes; shop supplied share.
 Frozen into `BALANCE` with comments: jobs per density, consumption,
 `industrialShedShare`, `importFeePerTour`, `industryRadius`,
 `industryPenaltyWeight`.
+
+**Done.** The probe town had to be resized before it measured
+anything: the demand-response town's 24-plant park left the 560-
+building town in deficit on 18_460 of 19_200 ticks, and one depot kept
+only 15-30 % of the 80 shops supplied. The measured town: 560
+density-3 buildings along eight roads (five residential bands, two
+with offices on one side and 80 shops in all on the other, the last
+home band at 2 and 4 tiles from the factories, so a fifth of the homes
+is in reach), 40 density-2 factories along the seventh road, eight depots on the connector road beside the shop and
+factory bands, and a 405-plant park (90 wind, 90 solar, 160
+batteries, 40 biogas, 15 hydrogen), smart meters on, treasury
+unconstrained. Each seed ran four variants (band off/on × contract
+off/on). Seed 11's weather is identical in all four; on seed 7 the
+industrial runs' weather diverges from day 16 (chronically troubled
+buildings draw from the `Rng`), so its 20-day totals after the
+Dunkelflaute of day 16 compare different weather — days 0-15 are the
+clean window there.
+
+Totals per 20-day year, contract on, band off → on:
+
+| seed | deficit ticks | grid import     | goods fee | tax                   | tours local/imported | mean happiness  | net money         |
+| ---- | ------------- | --------------- | --------- | --------------------- | -------------------- | --------------- | ----------------- |
+| 7    | 390 → 894     | 16_701 → 38_252 | 6_480 → 0 | 1_696_666 → 1_748_275 | 0/540 → 490/0        | 0.5996 → 0.5752 | 695_650 → 210_947 |
+| 11   | 210 → 306     | 10_502 → 15_053 | 6_516 → 0 | 1_696_666 → 1_748_275 | 0/543 → 494/0        | 0.5945 → 0.5768 | 938_815 → 760_516 |
+
+Contract off → on, deficit ticks: without the band 422 → 390 and
+311 → 210; with it 1_163 → 894 and 452 → 306 (seed 7 days 0-15:
+120 → 88 without, 250 → 127 with). With the band the contract sheds
+192_000-235_000 against 77_000-88_000, saves 146 deficit ticks instead
+of 101 on seed 11 and halves seed 7's clean-window deficits where the
+business pool alone takes 27 % off. Shops stayed 99-100 % supplied
+throughout; with the band not one tour imported.
+
+What the probe found against its targets: the goods loop works, the
+night pool bites (the contract's share of deficits saved holds or
+doubles with 40 factories' extra load in it), and the nuisance costs
+0.018-0.024 mean happiness. Two targets were mis-set. A band never
+lowers deficits against the town without it: the contract sheds at most
+60 % of the load it adds, four hours a day, so the band's load is only
+trimmed one notch. And the 200 money of zoning 40 tiles is repaid within
+hours by 2_580 tax a day, so no fee gives a 10-20-day payback; what
+decides whether the band pays is its night shift's energy bill — 171_000
+extra biogas and import on seed 11, 3.3 times its tax, in a park sized
+without it.
+
+Frozen values: industrial consumption `[0, 3.5, 8, 14]` (was
+`[0, 4, 9, 16]`), `industryPenaltyWeight` 0.12 (was 0.1); unchanged:
+industrial jobs `[0, 3, 8, 18]`, `industrialShedShare` 0.6,
+`importFeePerTour` 12, `industryRadius` 4. `goalLocalMinShops` and
+`goalLocalMinFactories` stay at 10 and 3.
 
 ## Out of scope
 
