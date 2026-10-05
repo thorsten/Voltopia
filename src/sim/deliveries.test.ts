@@ -7,8 +7,13 @@ import {
   claimedStops,
   deliveriesStep,
   deliveryState,
+  deliveryStats,
+  depotInfo,
+  depotReach,
   drivingVans,
   dueTicks,
+  isFactory,
+  planPickup,
   planTour,
   supplyWindowTicks,
   syncFleet,
@@ -16,8 +21,8 @@ import {
 import { placePlant } from './energy.ts';
 import { bulldozeTiles, buildRoads } from './roads.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
-import { createSimState, TileType, VanPhase, type SimState } from './state.ts';
-import { chargingDemand, laneOccupancy, vehiclesStep } from './vehicles.ts';
+import { createSimState, SupplyStatus, TileType, VanPhase, type SimState } from './state.ts';
+import { chargingDemand, laneOccupancy, ticksAtHour, vehiclesStep } from './vehicles.ts';
 
 const SIZE = 24;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -38,6 +43,28 @@ export function shopTown(seed = 1, shops = 6): SimState {
     state.layers.density[at(6 + i, 11)] = 1;
   }
   return state;
+}
+
+/** shopTown plus a factory south of the road at x=4, powered unless told otherwise. */
+function factoryTown(seed = 1, shops = 6, powered = true): SimState {
+  const state = shopTown(seed, shops);
+  const f = at(4, 11);
+  state.layers.zone[f] = Zone.Industrial;
+  state.layers.density[f] = 1;
+  state.layers.supplied[f] = powered ? SupplyStatus.Supplied : SupplyStatus.NotConnected;
+  return state;
+}
+
+/** Make every shop due and put the clock inside the delivery window with charged vans. */
+function readyToDispatch(state: SimState): void {
+  syncFleet(state);
+  for (let i = 0; i < state.layers.zone.length; i++) {
+    if (state.layers.zone[i] === Zone.Retail && state.layers.density[i] > 0) {
+      state.layers.deliveryAge[i] = dueTicks();
+    }
+  }
+  state.tick = ticksAtHour(9);
+  for (const van of state.vans) van.charge = 1;
 }
 
 describe('fleet', () => {
@@ -386,5 +413,133 @@ describe('deliveriesStep', () => {
       return state.vans.map((v) => [v.id, v.x, v.y, v.phase, v.charge]);
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('goods pickup', () => {
+  it('a powered factory beside a reachable road is the pickup; unpowered is not', () => {
+    const powered = factoryTown();
+    expect(isFactory(powered, at(4, 11))).toBe(true);
+    expect(planPickup(powered, depotReach(powered, at(2, 10)))).toBe(at(4, 10));
+    const dark = factoryTown(1, 6, false);
+    expect(isFactory(dark, at(4, 11))).toBe(false);
+    expect(planPickup(dark, depotReach(dark, at(2, 10)))).toBe(-1);
+    const none = shopTown();
+    expect(planPickup(none, depotReach(none, at(2, 10)))).toBe(-1);
+  });
+
+  it('the tour starts at the pickup, visits the shops and closes at the depot', () => {
+    const state = factoryTown();
+    readyToDispatch(state);
+    const van = state.vans[0];
+    const pickup = planPickup(state, depotReach(state, van.depotRoad));
+    const stops = planTour(state, van, new Set(), pickup);
+    expect(stops[0]).toBe(at(4, 10));
+    expect(stops.at(-1)).toBe(van.depotRoad);
+    expect(stops.length).toBe(BALANCE.deliveries.stopsPerTour + 2);
+    expect(stops.slice(1, -1).every((s) => s !== pickup)).toBe(true);
+  });
+
+  it('a local tour costs nothing and counts as local; without a factory the depot pays the import fee', () => {
+    const local = factoryTown();
+    readyToDispatch(local);
+    const money = local.money;
+    deliveriesStep(local, laneOccupancy(local));
+    const started = local.vans.filter((v) => v.phase !== VanPhase.AtDepot);
+    expect(started.length).toBeGreaterThan(0);
+    for (const van of started) expect(van.pickup).toBe(at(4, 10));
+    expect(local.goods.localToursToday).toBe(started.length);
+    expect(local.goods.importedToursToday).toBe(0);
+    expect(local.money).toBe(money);
+    expect(local.lastGoodsImportCost).toBe(0);
+
+    const imported = shopTown();
+    readyToDispatch(imported);
+    const before = imported.money;
+    deliveriesStep(imported, laneOccupancy(imported));
+    const tours = imported.vans.filter((v) => v.phase !== VanPhase.AtDepot).length;
+    expect(tours).toBeGreaterThan(0);
+    for (const van of imported.vans) expect(van.pickup).toBe(-1);
+    expect(imported.goods.importedToursToday).toBe(tours);
+    expect(imported.money).toBeCloseTo(before - tours * BALANCE.deliveries.importFeePerTour, 9);
+    expect(imported.lastGoodsImportCost).toBeCloseTo(
+      tours * BALANCE.deliveries.importFeePerTour,
+      9,
+    );
+  });
+
+  it('the van loads at the factory before it delivers', () => {
+    const state = factoryTown(1, 2);
+    readyToDispatch(state);
+    // One van only, so the phases are easy to follow.
+    state.vans.length = 1;
+    const van = state.vans[0];
+    let sawLoading = false;
+    let firstDelivery = -1;
+    for (let t = 0; t < 600 && firstDelivery < 0; t++) {
+      deliveriesStep(state, laneOccupancy(state));
+      state.tick++;
+      if (van.phase === VanPhase.Loading) sawLoading = true;
+      if (state.layers.deliveryAge[at(6, 11)] === 0 || state.layers.deliveryAge[at(7, 11)] === 0) {
+        firstDelivery = t;
+      }
+    }
+    expect(sawLoading).toBe(true);
+    expect(firstDelivery).toBeGreaterThan(0);
+  });
+
+  it('a pickup that becomes unreachable is skipped and the shops are still served', () => {
+    const state = factoryTown(1, 2);
+    readyToDispatch(state);
+    state.vans.length = 1;
+    const van = state.vans[0];
+    deliveriesStep(state, laneOccupancy(state));
+    expect(van.pickup).toBe(at(4, 10));
+    // Cut the road under the pickup before the van gets there.
+    bulldozeTiles(state, [at(4, 10)]);
+    // The depot road is west of the cut; re-lay a bypass so the shops stay reachable.
+    buildRoads(state, [
+      at(2, 11),
+      at(2, 12),
+      at(3, 12),
+      at(4, 12),
+      at(5, 12),
+      at(5, 11),
+      at(5, 10),
+    ]);
+    let delivered = false;
+    for (let t = 0; t < 800 && !delivered; t++) {
+      deliveriesStep(state, laneOccupancy(state));
+      state.tick++;
+      delivered = state.layers.deliveryAge[at(6, 11)] === 0;
+    }
+    expect(delivered).toBe(true);
+  });
+
+  it('rolls the day counters over at the day boundary and keeps yesterday for the goal', () => {
+    const state = shopTown();
+    syncFleet(state);
+    state.goods.localToursToday = 4;
+    state.goods.importedToursToday = 1;
+    state.tick = TICKS_PER_DAY;
+    deliveriesStep(state, laneOccupancy(state));
+    expect(state.goods.lastDay).toEqual({ local: 4, imported: 1 });
+    expect(state.goods.localToursToday).toBe(0);
+    expect(state.goods.importedToursToday).toBe(0);
+  });
+
+  it('stats count factories and the local share; the depot reports its goods source', () => {
+    const state = factoryTown();
+    syncFleet(state);
+    state.goods.localToursToday = 3;
+    state.goods.importedToursToday = 1;
+    const stats = deliveryStats(state);
+    expect(stats.factories).toBe(1);
+    expect(stats.localShare).toBeCloseTo(0.75, 9);
+    expect(deliveryStats(shopTown()).localShare).toBe(1);
+    const info = depotInfo(state, at(2, 9));
+    expect(info.factoriesInReach).toBe(1);
+    expect(info.nearestFactoryTiles).toBe(2);
+    expect(depotInfo(shopTown(), at(2, 9)).nearestFactoryTiles).toBe(-1);
   });
 });

@@ -264,6 +264,8 @@ describe('goals', () => {
         shops: BALANCE.deliveries.goalMinShops,
         driving: 0,
         depots: 1,
+        factories: 0,
+        localShare: 1,
       };
       for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
       expect(state.goalsAchieved.has('wellStocked')).toBe(false);
@@ -278,6 +280,8 @@ describe('goals', () => {
         shops: BALANCE.deliveries.goalMinShops,
         driving: 0,
         depots: 1,
+        factories: 0,
+        localShare: 1,
       };
       for (let t = 0; t < 50; t++) goalsStep(state);
       expect(state.goalProgress.wellStockedTicks).toBe(50);
@@ -289,6 +293,8 @@ describe('goals', () => {
         shops: BALANCE.deliveries.goalMinShops - 1,
         driving: 0,
         depots: 1,
+        factories: 0,
+        localShare: 1,
       };
       goalsStep(state);
       expect(state.goalProgress.wellStockedTicks).toBe(0);

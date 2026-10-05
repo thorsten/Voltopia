@@ -323,6 +323,8 @@ export interface BudgetStats {
   smartMeters: number;
   /** Demand-response retainer and activation premiums paid this tick. */
   demandResponse: number;
+  /** Import fees for tours that started without a factory in reach. */
+  goodsImport: number;
   gridImportCost: number;
   /** Income - expenses for this tick. */
   net: number;
@@ -348,6 +350,10 @@ export interface DepotInfo {
   vansCharging: number;
   /** Retail buildings a tour from this depot can reach. */
   shopsInReach: number;
+  /** Powered factories a tour from this depot can load at. */
+  factoriesInReach: number;
+  /** Route cost to the nearest such factory, -1 when the depot imports. */
+  nearestFactoryTiles: number;
 }
 
 /** City-wide delivery figures. */
@@ -359,6 +365,10 @@ export interface DeliveryStats {
   /** Vans on the road. */
   driving: number;
   depots: number;
+  /** Industrial buildings (powered or not). */
+  factories: number;
+  /** Tours started today that loaded at a factory, over all tours (1 when none started). */
+  localShare: number;
 }
 
 /** Fleet figures of one bus depot (inspector). */

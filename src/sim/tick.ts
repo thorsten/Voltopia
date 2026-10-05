@@ -314,6 +314,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     repair: state.lastRepairCost,
     smartMeters: state.lastSmartMeterCost,
     demandResponse: state.lastDemandResponseCost,
+    goodsImport: state.lastGoodsImportCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +
@@ -325,6 +326,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       b.gridImportCost -
       state.lastRepairCost -
       state.lastSmartMeterCost -
-      state.lastDemandResponseCost,
+      state.lastDemandResponseCost -
+      state.lastGoodsImportCost,
   };
 }

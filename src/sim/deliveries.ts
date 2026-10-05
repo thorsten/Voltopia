@@ -10,6 +10,7 @@ import {
   deliveryStateOfAge,
   dueTicks,
   markDirty,
+  SupplyStatus,
   supplyWindowTicks,
   TileType,
   VanPhase,
@@ -34,6 +35,45 @@ export function deliveryState(state: SimState, index: number): DeliveryState {
 /** True while the shop had a delivery within the supply window. */
 export function isShopSupplied(state: SimState, index: number): boolean {
   return state.layers.deliveryAge[index] <= supplyWindowTicks();
+}
+
+/** A powered factory: zoned industrial, built, and supplied this tick. */
+export function isFactory(state: SimState, index: number): boolean {
+  const { tileType, zone, density, supplied } = state.layers;
+  return (
+    tileType[index] === TileType.Empty &&
+    zone[index] === Zone.Industrial &&
+    density[index] > 0 &&
+    supplied[index] === SupplyStatus.Supplied
+  );
+}
+
+/** True when a powered factory stands next to this road tile. */
+export function hasFactoryBeside(state: SimState, road: number): boolean {
+  for (const n of neighbors4(road, state.size)) if (isFactory(state, n)) return true;
+  return false;
+}
+
+/** Bounded route costs from a depot's parking road: what its tours can reach. */
+export function depotReach(state: SimState, depotRoad: number): Map<number, number> {
+  return roadDistances(state, depotRoad, BALANCE.deliveries.maxRouteTiles);
+}
+
+/**
+ * The nearest road tile in reach with a powered factory beside it
+ * (ties: lower index), or -1 when the depot has to import.
+ */
+export function planPickup(state: SimState, reach: Map<number, number>): number {
+  let best = -1;
+  let bestCost = Infinity;
+  for (const [tile, distance] of reach) {
+    if (!hasFactoryBeside(state, tile)) continue;
+    if (distance < bestCost || (distance === bestCost && tile < best)) {
+      best = tile;
+      bestCost = distance;
+    }
+  }
+  return best;
 }
 
 function isDepot(state: SimState, tile: number): boolean {
@@ -73,6 +113,7 @@ function createVan(state: SimState, depot: number, depotRoad: number): Van {
     angle: 0,
     phase: VanPhase.AtDepot,
     stops: [],
+    pickup: -1,
     path: [],
     pathIndex: 0,
     charge: state.rng.nextRange(0.5, 0.9),
@@ -156,20 +197,28 @@ function oldestShopAge(state: SimState, road: number): number {
 
 /**
  * Plan a tour for a van waiting at its depot: up to stopsPerTour road
- * tiles with shops beside them, reachable within maxRouteTiles, oldest
- * first (ties: nearer, then lower index), ordered nearest-neighbour from
- * the depot and closed by the depot road. Only candidates with `age >=
- * dueTicks() / 2` are considered, so a shop is visited at most about
- * three times per supply window and an idle fleet does not circle.
- * Empty when nothing qualifies.
+ * tiles with shops beside them, reachable within maxRouteTiles of the
+ * depot, oldest first (ties: nearer, then lower index), ordered
+ * nearest-neighbour from the pickup (or the depot when the goods are
+ * imported) and closed by the depot road. With a pickup the tour opens
+ * at that road tile; a shop beside the pickup tile is stocked while the
+ * van loads, so the tile is never also a shop stop. Only candidates with
+ * `age >= dueTicks() / 2` are considered, so a shop is visited at most
+ * about three times per supply window and an idle fleet does not circle.
+ * Empty when no shop qualifies (a pickup alone is no tour).
  */
-export function planTour(state: SimState, van: Van, claimed: Set<number>): number[] {
+export function planTour(
+  state: SimState,
+  van: Van,
+  claimed: Set<number>,
+  pickup = -1,
+  reach: Map<number, number> = depotReach(state, van.depotRoad),
+): number[] {
   const { stopsPerTour, maxRouteTiles } = BALANCE.deliveries;
-  const distances = roadDistances(state, van.depotRoad, maxRouteTiles);
   const minAge = Math.floor(dueTicks() / 2);
   const candidates: Array<{ tile: number; age: number; distance: number }> = [];
-  for (const [tile, distance] of distances) {
-    if (claimed.has(tile)) continue;
+  for (const [tile, distance] of reach) {
+    if (claimed.has(tile) || tile === pickup) continue;
     const age = oldestShopAge(state, tile);
     if (age < minAge) continue;
     candidates.push({ tile, age, distance });
@@ -178,12 +227,12 @@ export function planTour(state: SimState, van: Van, claimed: Set<number>): numbe
   const remaining = new Set(candidates.slice(0, stopsPerTour).map((c) => c.tile));
   if (remaining.size === 0) return [];
 
-  const ordered: number[] = [];
-  let current = van.depotRoad;
-  // Reuse the depot's bounded distance map for the first hop. Every
-  // later stop lies within maxRouteTiles of the depot road, so twice
-  // that bound covers every hop after it too (triangle inequality).
-  let from = distances;
+  const ordered: number[] = pickup >= 0 ? [pickup] : [];
+  // Every stop lies within maxRouteTiles of the depot road, and so does
+  // the pickup, so twice that bound covers every hop (triangle
+  // inequality). The first hop reuses the depot's map when there is no
+  // pickup.
+  let from = pickup >= 0 ? roadDistances(state, pickup, 2 * maxRouteTiles) : reach;
   while (remaining.size > 0) {
     let best = -1;
     let bestCost = Infinity;
@@ -196,8 +245,7 @@ export function planTour(state: SimState, van: Van, claimed: Set<number>): numbe
     }
     ordered.push(best);
     remaining.delete(best);
-    current = best;
-    from = roadDistances(state, current, 2 * maxRouteTiles);
+    from = roadDistances(state, best, 2 * maxRouteTiles);
   }
   ordered.push(van.depotRoad);
   return ordered;
@@ -260,10 +308,16 @@ function arrive(state: SimState, van: Van): void {
   if (van.stops.length <= 1) {
     // Last stop is always the depot road.
     van.stops = [];
+    van.pickup = -1;
     van.phase = VanPhase.AtDepot;
     van.dwellTicks = BALANCE.deliveries.turnaroundTicks;
     van.x = tileX(van.depotRoad, state.size) + 0.5;
     van.y = tileY(van.depotRoad, state.size) + 0.5;
+    return;
+  }
+  if (van.stops[0] === van.pickup) {
+    van.phase = VanPhase.Loading;
+    van.dwellTicks = BALANCE.deliveries.loadTicks;
     return;
   }
   van.phase = VanPhase.Unloading;
@@ -277,6 +331,13 @@ function arrive(state: SimState, van: Van): void {
  * occupancy map so cars and vans queue behind each other.
  */
 export function deliveriesStep(state: SimState, occupancy: Map<number, number>): void {
+  state.lastGoodsImportCost = 0;
+  if (state.tick % TICKS_PER_DAY === 0) {
+    const goods = state.goods;
+    goods.lastDay = { local: goods.localToursToday, imported: goods.importedToursToday };
+    goods.localToursToday = 0;
+    goods.importedToursToday = 0;
+  }
   syncFleet(state);
   const dueSoon = ageShops(state);
   if (state.vans.length === 0) return;
@@ -301,11 +362,26 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
         // it would return [] anyway, but a full graph walk per idle van
         // per tick is wasted work while the fleet has nothing to do.
         if (dueSoon > 0 && van.dwellTicks === 0 && inWindow && van.charge >= d.minTripCharge) {
-          const stops = planTour(state, van, claimed);
+          const reach = depotReach(state, van.depotRoad);
+          const pickup = planPickup(state, reach);
+          const stops = planTour(state, van, claimed, pickup, reach);
           if (stops.length > 0) {
-            for (const stop of stops) if (stop !== van.depotRoad) claimed.add(stop);
+            for (const stop of stops) {
+              if (stop !== van.depotRoad && stop !== pickup) claimed.add(stop);
+            }
             van.stops = stops;
+            van.pickup = pickup;
             van.charging = false;
+            if (pickup >= 0) {
+              state.goods.localToursToday++;
+            } else {
+              // No factory in reach: the goods are imported, fee per tour,
+              // billed like the contracts even when the treasury is empty.
+              state.money -= d.importFeePerTour;
+              state.lastGoodsImportCost += d.importFeePerTour;
+              state.goods.importedToursToday++;
+              state.statsDirty = true;
+            }
             routeToNextStop(state, van);
           }
         }
@@ -329,6 +405,16 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
         }
         break;
       }
+      case VanPhase.Loading: {
+        van.dwellTicks--;
+        if (van.dwellTicks <= 0) {
+          // Loaded; a shop beside the factory's road is stocked on the spot.
+          deliver(state, van);
+          van.stops.shift();
+          routeToNextStop(state, van);
+        }
+        break;
+      }
     }
   }
 }
@@ -346,20 +432,28 @@ export function drivingVanCount(state: SimState): number {
 
 /** City-wide delivery figures for stats and the goal. */
 export function deliveryStats(state: SimState): DeliveryStats {
-  const { tileType, deliveryAge } = state.layers;
+  const { tileType, zone, density, deliveryAge } = state.layers;
   const window = supplyWindowTicks();
   let shops = 0;
   let supplied = 0;
+  let factories = 0;
   for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] === TileType.Empty && zone[i] === Zone.Industrial && density[i] > 0) {
+      factories++;
+    }
     if (!isShop(state, i)) continue;
     shops++;
     if (deliveryAge[i] <= window) supplied++;
   }
+  const { localToursToday, importedToursToday } = state.goods;
+  const tours = localToursToday + importedToursToday;
   return {
     suppliedShare: shops > 0 ? supplied / shops : 1,
     shops,
     driving: drivingVanCount(state),
     depots: depotTiles(state).length,
+    factories,
+    localShare: tours > 0 ? localToursToday / tours : 1,
   };
 }
 
@@ -376,10 +470,27 @@ export function depotInfo(state: SimState, depot: number): DepotInfo {
   }
   const road = depotRoadTile(state, depot);
   const reached = new Set<number>();
+  const factories = new Set<number>();
+  let nearestFactoryTiles = -1;
   if (road >= 0) {
-    for (const tile of roadDistances(state, road, BALANCE.deliveries.maxRouteTiles).keys()) {
-      for (const n of neighbors4(tile, state.size)) if (isShop(state, n)) reached.add(n);
+    for (const [tile, distance] of depotReach(state, road)) {
+      for (const n of neighbors4(tile, state.size)) {
+        if (isShop(state, n)) reached.add(n);
+        if (isFactory(state, n)) {
+          factories.add(n);
+          if (nearestFactoryTiles < 0 || distance < nearestFactoryTiles) {
+            nearestFactoryTiles = distance;
+          }
+        }
+      }
     }
   }
-  return { vansTotal, vansDriving, vansCharging, shopsInReach: reached.size };
+  return {
+    vansTotal,
+    vansDriving,
+    vansCharging,
+    shopsInReach: reached.size,
+    factoriesInReach: factories.size,
+    nearestFactoryTiles,
+  };
 }

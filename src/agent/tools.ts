@@ -609,6 +609,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             gridImportCost: round(s.budget.gridImportCost, 3),
             gridExportRevenue: round(s.budget.gridExportRevenue, 3),
             hydrogenRevenue: round(s.budget.hydrogenRevenue, 3),
+            goodsImport: round(s.budget.goodsImport, 3),
             net: round(s.budget.net, 3),
             ticksPerDay: TICKS_PER_DAY,
           },
@@ -617,6 +618,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             shops: s.deliveries.shops,
             vansDriving: s.deliveries.driving,
             depots: s.deliveries.depots,
+            factories: s.deliveries.factories,
+            localShare: round(s.deliveries.localShare, 2),
           },
           transit: {
             riderShare: round(s.transit.riderShare, 2),

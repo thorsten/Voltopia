@@ -421,6 +421,8 @@ describe('deliveries in the inspector', () => {
       vansDriving: 0,
       vansCharging: 1,
       shopsInReach: 1,
+      factoriesInReach: 0,
+      nearestFactoryTiles: -1,
     });
     expect(info.upkeepPerTick).toBe(BALANCE.upkeepPerTick.plant[PlantType.LogisticsDepot]);
   });

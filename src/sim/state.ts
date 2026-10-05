@@ -83,7 +83,7 @@ export interface Vehicle {
 }
 
 /** Tour phases of a delivery van. */
-export const VanPhase = { AtDepot: 0, Driving: 1, Unloading: 2 } as const;
+export const VanPhase = { AtDepot: 0, Driving: 1, Unloading: 2, Loading: 3 } as const;
 export type VanPhase = (typeof VanPhase)[keyof typeof VanPhase];
 
 /** One delivery van. Satisfies vehicles.ts' Mover. Not persisted. */
@@ -100,6 +100,8 @@ export interface Van {
   phase: VanPhase;
   /** Remaining stops of the tour (road tiles); the last one is depotRoad. */
   stops: number[];
+  /** Road tile of this tour's factory pickup, -1 when the goods were imported. */
+  pickup: number;
   /** Road tiles from the current position to stops[0]. */
   path: number[];
   pathIndex: number;
@@ -296,6 +298,20 @@ export interface SimState {
   lastRepairCost: number;
   vehicles: Vehicle[];
   vans: Van[];
+  /**
+   * Goods tours of the running day and of the day before (localGoods
+   * goal). Single-day counters: transient by the goalProgress rule.
+   */
+  goods: {
+    localToursToday: number;
+    importedToursToday: number;
+    lastDay: {
+      local: number;
+      imported: number;
+    };
+  };
+  /** Import fees paid this tick (budget line). */
+  lastGoodsImportCost: number;
   buses: Bus[];
   undoStack: UndoEntry[];
   energyHistory: EnergyHistoryPoint[];
@@ -516,6 +532,8 @@ export function createSimState(
     lastRepairCost: 0,
     vehicles: [],
     vans: [],
+    goods: { localToursToday: 0, importedToursToday: 0, lastDay: { local: 0, imported: 0 } },
+    lastGoodsImportCost: 0,
     buses: [],
     undoStack: [],
     energyHistory: [],
@@ -524,7 +542,14 @@ export function createSimState(
     statsDirty: false,
     lastDemand: { residential: 0, commercial: 0, retail: 0, industrial: 0 },
     lastServices: { fire: 0, police: 0 },
-    lastDeliveries: { suppliedShare: 1, shops: 0, driving: 0, depots: 0 },
+    lastDeliveries: {
+      suppliedShare: 1,
+      shops: 0,
+      driving: 0,
+      depots: 0,
+      factories: 0,
+      localShare: 1,
+    },
     lastTransit: { riderShare: 0, riders: 0, driving: 0, stops: 0, stopsServed: 0, depots: 0 },
     goalsAchieved: new Set(),
     goalProgress: {

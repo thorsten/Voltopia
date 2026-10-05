@@ -1334,6 +1334,13 @@ export const BALANCE = {
     turnaroundTicks: 20,
     /** Ticks a van unloads at a stop. */
     unloadTicks: 8,
+    /** Ticks a van loads at a factory before its shop leg. */
+    loadTicks: 8,
+    /**
+     * Paid per tour a depot starts without a powered factory in reach:
+     * the goods are imported. Frozen by the Task 9 probe.
+     */
+    importFeePerTour: 12,
     /** Vans drive this fraction of the car speed (streets and avenues alike). */
     speedFactor: 0.8,
     /** A van needs at least this state of charge to start a tour. */
@@ -1350,6 +1357,10 @@ export const BALANCE = {
     goalSuppliedShare: 0.95,
     /** Retail buildings the well-stocked goal requires. */
     goalMinShops: 20,
+    /** Supplied shops the localGoods goal requires. */
+    goalLocalMinShops: 10,
+    /** Factories the localGoods goal requires. */
+    goalLocalMinFactories: 3,
   },
 
   transit: {

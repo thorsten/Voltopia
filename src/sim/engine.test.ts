@@ -213,7 +213,14 @@ describe('SimEngine basics', () => {
     expect(first.stats.services).toEqual({ fire: 1, police: 1 });
     expect(first.stats.counts.avenueTiles).toBe(0);
     expect(first.stats.traffic).toEqual({ congestion: 1, driving: 0, avenueShare: 0 });
-    expect(first.stats.deliveries).toEqual({ suppliedShare: 1, shops: 0, driving: 0, depots: 0 });
+    expect(first.stats.deliveries).toEqual({
+      suppliedShare: 1,
+      shops: 0,
+      driving: 0,
+      depots: 0,
+      factories: 0,
+      localShare: 1,
+    });
     expect(first.stats.transit).toEqual({
       riderShare: 0,
       riders: 0,
@@ -257,6 +264,7 @@ describe('SimEngine basics', () => {
       angle: 0,
       phase: VanPhase.Unloading,
       stops: [road],
+      pickup: -1,
       path: [],
       pathIndex: 0,
       charge: 1,

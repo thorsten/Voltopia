@@ -727,6 +727,7 @@ describe('vans in the commuter step', () => {
       angle: 0,
       phase: VanPhase.Driving,
       stops: [at(8, 10)],
+      pickup: -1,
       path: [at(5, 10), at(6, 10), at(7, 10), at(8, 10)],
       pathIndex: 1,
       charge: 0.8,
