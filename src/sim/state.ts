@@ -1414,6 +1414,22 @@ export function totalStorageCapacity(state: SimState): number {
   return countPlants(state, PlantType.Battery) * BALANCE.energy.batteryCapacity;
 }
 
+/**
+ * Battery capacity counting only plants on a grid island
+ * (`layers.island[i] !== 0`) — see `totalHeatCapacityOnIsland` for why
+ * `buildStats` needs this instead of the unfiltered `totalStorageCapacity`.
+ */
+export function totalStorageCapacityOnIsland(state: SimState): number {
+  const { tileType, plantType, island } = state.layers;
+  let count = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] === TileType.Plant && plantType[i] === PlantType.Battery && island[i] !== 0) {
+      count++;
+    }
+  }
+  return count * BALANCE.energy.batteryCapacity;
+}
+
 /** Biogas output the city could dispatch per tick if every plant ran flat out. */
 export function totalBiogasCapacity(state: SimState): number {
   return countPlants(state, PlantType.BiogasPlant) * BALANCE.energy.biogasMaxOutput;
@@ -1421,6 +1437,22 @@ export function totalBiogasCapacity(state: SimState): number {
 
 export function totalHydrogenCapacity(state: SimState): number {
   return countPlants(state, PlantType.HydrogenPlant) * BALANCE.hydrogen.capacity;
+}
+
+/** Hydrogen tank capacity counting only plants on a grid island. */
+export function totalHydrogenCapacityOnIsland(state: SimState): number {
+  const { tileType, plantType, island } = state.layers;
+  let count = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (
+      tileType[i] === TileType.Plant &&
+      plantType[i] === PlantType.HydrogenPlant &&
+      island[i] !== 0
+    ) {
+      count++;
+    }
+  }
+  return count * BALANCE.hydrogen.capacity;
 }
 
 /** Installed heat store capacity (heat units); damaged stores do not count. */
@@ -1434,11 +1466,43 @@ export function totalHeatCapacity(state: SimState): number {
   return stores * BALANCE.heat.storeCapacity;
 }
 
+/**
+ * Installed heat store capacity counting only plants on a grid island
+ * (`layers.island[i] !== 0`). A heat store is not a supply source (it
+ * cannot turn back into electricity), so one built with no line and no
+ * building in reach stays on island 0 forever — `buildStats` must use
+ * this instead of `totalHeatCapacity` so the panel's SoC bars agree with
+ * the energy history's SoC, which already excludes island 0.
+ */
+export function totalHeatCapacityOnIsland(state: SimState): number {
+  const { tileType, plantType, damage, island } = state.layers;
+  let stores = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant || damage[i] !== 0 || island[i] === 0) continue;
+    if (plantType[i] === PlantType.HeatStore) stores++;
+  }
+  return stores * BALANCE.heat.storeCapacity;
+}
+
 export function totalPumpedStorageCapacity(state: SimState): number {
   const { tileType, plantType } = state.layers;
   let capacity = 0;
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant || plantType[i] !== PlantType.PumpedStorage) continue;
+    capacity +=
+      (1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, i)) *
+      BALANCE.energy.pumpedStorageCapacity;
+  }
+  return capacity;
+}
+
+/** Pumped-storage capacity counting only plants on a grid island. */
+export function totalPumpedStorageCapacityOnIsland(state: SimState): number {
+  const { tileType, plantType, island } = state.layers;
+  let capacity = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant || plantType[i] !== PlantType.PumpedStorage) continue;
+    if (island[i] === 0) continue;
     capacity +=
       (1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, i)) *
       BALANCE.energy.pumpedStorageCapacity;

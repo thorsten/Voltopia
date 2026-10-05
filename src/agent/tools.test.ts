@@ -704,6 +704,11 @@ describe('agent tools: building', () => {
     const plant = await call('place_plant', { plant: 'heat_plant', x, y });
     expect(plant).toMatchObject({ ok: true });
     expect(engine.state.layers.plantType[tileIndex(x, y, SIZE)]).toBe(PlantType.HeatPlant);
+    // Neither a heat plant nor a heat store is a grid source on its own
+    // (see SUPPLY_SOURCES in shared/plants.ts) — a wind turbine within
+    // the supply ring puts both on a grid island, which the heat store's
+    // capacity now requires to count toward the city-wide SoC figures.
+    placePlant(engine.state, tileIndex(x, y + 2, SIZE), PlantType.WindTurbine);
     let sx = x + 2;
     const sy = y;
     expect(engine.state.layers.terrain[tileIndex(sx, sy, SIZE)]).toBe(Terrain.Land);
@@ -714,6 +719,11 @@ describe('agent tools: building', () => {
       store = await call('place_plant', { plant: 'heat_store', x: sx, y: sy });
     }
     expect(store).toMatchObject({ ok: true });
+    // The grid (and so layers.island) is only recomputed by a real tick,
+    // not by the flush a build command gets for immediate visual
+    // feedback — advance one so the heat store's island membership is
+    // current before the figures below are read.
+    await call('advance_time', { ticks: 1 });
     // get_energy_report spreads EnergyStats as-is, so the new fields are there by name.
     const report = (await call('get_energy_report')) as Record<string, any>;
     expect(report.consumption).toHaveProperty('heatPumps');

@@ -17,7 +17,7 @@ import { happinessStep } from './happiness.ts';
 import { countPowerLineTiles } from './powerLines.ts';
 import { tideState } from './sea.ts';
 import { seasonState } from './seasons.ts';
-import { storedByKind } from './storage.ts';
+import { storedByKindOnIsland } from './storage.ts';
 import { recomputeServices, serviceCoverage } from './services.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import { transitStep, transitStats } from './transit.ts';
@@ -27,10 +27,10 @@ import {
   countPopulationAndJobs,
   TileType,
   totalBiogasCapacity,
-  totalHeatCapacity,
-  totalHydrogenCapacity,
-  totalPumpedStorageCapacity,
-  totalStorageCapacity,
+  totalHeatCapacityOnIsland,
+  totalHydrogenCapacityOnIsland,
+  totalPumpedStorageCapacityOnIsland,
+  totalStorageCapacityOnIsland,
   Zone,
   type SimState,
 } from './state.ts';
@@ -211,18 +211,21 @@ export function buildStats(state: SimState): GlobalStats {
         flexBacklog: e.flexBacklog,
         shed: e.shed,
       },
-      storedEnergy: storedByKind(state, PlantType.Battery),
-      storageCapacity: totalStorageCapacity(state),
-      pumpedStoredEnergy: storedByKind(state, PlantType.PumpedStorage),
-      pumpedCapacity: totalPumpedStorageCapacity(state),
-      hydrogenStoredEnergy: storedByKind(state, PlantType.HydrogenPlant),
-      hydrogenCapacity: totalHydrogenCapacity(state),
+      // Only storage on a grid island counts toward the city-wide SoC
+      // figures (layers.island[i] !== 0), so they agree with the energy
+      // history's SoC, which already excludes island 0.
+      storedEnergy: storedByKindOnIsland(state, PlantType.Battery),
+      storageCapacity: totalStorageCapacityOnIsland(state),
+      pumpedStoredEnergy: storedByKindOnIsland(state, PlantType.PumpedStorage),
+      pumpedCapacity: totalPumpedStorageCapacityOnIsland(state),
+      hydrogenStoredEnergy: storedByKindOnIsland(state, PlantType.HydrogenPlant),
+      hydrogenCapacity: totalHydrogenCapacityOnIsland(state),
       hydrogenSold: e.hydrogenSold,
       networkHeat: e.networkHeat,
       heatFallback: e.heatFallback,
       heatStoreCharge: e.heatStoreCharge,
-      heatStored: storedByKind(state, PlantType.HeatStore),
-      heatCapacity: totalHeatCapacity(state),
+      heatStored: storedByKindOnIsland(state, PlantType.HeatStore),
+      heatCapacity: totalHeatCapacityOnIsland(state),
       heatCop: e.heatCop,
       spotPrice: e.spotPrice,
       tradeSell: e.tradeSell,

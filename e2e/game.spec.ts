@@ -277,6 +277,47 @@ test('overlay toggle switches modes', async ({ page }) => {
   await expect(page.getByTestId('overlay-off')).toHaveClass(/active/);
 });
 
+test('energy drawer lists grid districts and the Grid overlay toggles', async ({ page }) => {
+  // The tools do not need WebGL: they talk to the worker directly. A lone
+  // plant is already a grid island of its own (plants are supply sources
+  // even without a line reaching them), so this is the cheapest way to
+  // get a district row to assert on.
+  type Api = { call: (name: string, input?: unknown) => Promise<Record<string, unknown>> };
+  const call = (name: string, input: unknown = {}): Promise<Record<string, unknown>> =>
+    page.evaluate(
+      ([name, input]) => (window as unknown as { voltopia: Api }).voltopia.call(name, input),
+      [name, input] as [string, unknown],
+    );
+  await expect
+    .poll(() => page.evaluate(() => Boolean((window as unknown as { voltopia?: Api }).voltopia)))
+    .toBe(true);
+
+  const land = await call('find_tiles', { kind: 'empty_land', near: { x: 32, y: 32 }, limit: 1 });
+  const [{ x, y }] = land.tiles as Array<{ x: number; y: number }>;
+  const placed = await call('place_plant', { plant: 'solar', x, y });
+  expect(placed.ok).toBe(true);
+  await call('advance_time', { ticks: 4 });
+
+  // The drawer starts open by default (see 'the HUD detail drawer
+  // toggles...' above) — cycle it closed then open so this exercises the
+  // actual open transition instead of relying on that default.
+  await page.getByTestId('hud-details-toggle').click();
+  await expect(page.getByTestId('hud-drawer')).toBeHidden();
+  await page.getByTestId('hud-details-toggle').click();
+  await expect(page.getByTestId('district-list')).toBeVisible();
+  await expect(page.getByTestId('district-row')).toHaveCount(1);
+
+  await page.getByTestId('overlay-grid').click();
+  await expect(page.getByTestId('overlay-grid')).toHaveClass(/active/);
+
+  // Switch away, then prove selecting a district switches the overlay
+  // back to Grid on its own.
+  await page.getByTestId('overlay-off').click();
+  await expect(page.getByTestId('overlay-off')).toHaveClass(/active/);
+  await page.getByTestId('district-row').first().click();
+  await expect(page.getByTestId('overlay-grid')).toHaveClass(/active/);
+});
+
 test('game state persists across a reload', async ({ page }) => {
   await page.getByTestId('speed-3').click();
   await expect.poll(async () => readTick(page), { timeout: 10_000 }).toBeGreaterThan(20);

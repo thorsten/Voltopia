@@ -37,6 +37,7 @@ const en = {
   'tide.low': 'low water',
   'hud.demand.title': 'Demand: residential / commercial / retail / industrial',
   'hud.details': 'Details',
+  'hud.districtsInDeficit': '{count} districts in deficit',
   'hud.section.city': 'City',
 
   'speed.pause': 'Pause',
@@ -179,6 +180,13 @@ const en = {
   'energy.flexRecovered': '↪ Load shifted',
   'energy.flexBacklog': '⏳ Deferred',
   'energy.shed': '✂ Load shed',
+  'energy.districts': 'Districts ({count})',
+  'energy.districts.none': 'No grid yet — place a plant.',
+  'energy.districts.select': 'Highlight this district on the map',
+  'energy.districts.figures': '{generation} in / {consumption} out',
+  'energy.districts.ok': 'ok',
+  'energy.districts.deficit': 'deficit',
+  'energy.districts.curtailing': 'curtailing',
 
   'tax.label': 'Tax rate',
   'smartMeters.label': 'Smart-meter rollout',
@@ -631,6 +639,7 @@ const de: Record<TranslationKey, string> = {
   'tide.low': 'Niedrigwasser',
   'hud.demand.title': 'Nachfrage: Wohnen / Gewerbe / Handel / Industrie',
   'hud.details': 'Details',
+  'hud.districtsInDeficit': '{count} Bezirke im Defizit',
   'hud.section.city': 'Stadt',
 
   'speed.pause': 'Pause',
@@ -774,6 +783,13 @@ const de: Record<TranslationKey, string> = {
   'energy.flexRecovered': '↪ Verschobene Last',
   'energy.flexBacklog': '⏳ Aufgeschoben',
   'energy.shed': '✂ Abgeworfene Last',
+  'energy.districts': 'Bezirke ({count})',
+  'energy.districts.none': 'Noch kein Netz – setze eine Anlage.',
+  'energy.districts.select': 'Diesen Bezirk auf der Karte hervorheben',
+  'energy.districts.figures': '{generation} rein / {consumption} raus',
+  'energy.districts.ok': 'ok',
+  'energy.districts.deficit': 'Defizit',
+  'energy.districts.curtailing': 'abgeregelt',
 
   'tax.label': 'Steuersatz',
   'smartMeters.label': 'Smart-Meter-Ausbau',

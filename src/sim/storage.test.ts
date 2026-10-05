@@ -5,6 +5,7 @@ import { PlantType } from '../shared/types.ts';
 import { addDamage } from './disasters.ts';
 import { placePlant } from './energy.ts';
 import { createSimState, type SimState } from './state.ts';
+import { buildStats, stepTick } from './tick.ts';
 import {
   chargeTiles,
   dischargeTiles,
@@ -86,5 +87,21 @@ describe('storage per tile', () => {
     expect(state.layers.stored[damaged]).toBe(500);
     scaleTiles(state, tiles, 0.5);
     expect(state.layers.stored[damaged]).toBe(500);
+  });
+
+  it('a heat store on no island does not count toward the city-wide SoC stats', () => {
+    // Unlike the other storage kinds, a heat store cannot generate
+    // electricity, so it never seeds a grid island on its own (see
+    // SUPPLY_SOURCES in shared/plants.ts) — with no line and no building
+    // in reach, it stays on island 0 even after the grid is computed.
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.HeatStore);
+    state.layers.stored[at(2, 2)] = 50;
+    stepTick(state);
+    expect(state.layers.island[at(2, 2)]).toBe(0);
+    const stats = buildStats(state);
+    expect(stats.energy.heatStored).toBe(0);
+    expect(stats.energy.heatCapacity).toBe(0);
   });
 });

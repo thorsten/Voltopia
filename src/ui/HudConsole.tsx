@@ -21,6 +21,8 @@ export function HudConsole({
   onSetDemandResponse,
   onSetMarketTrading,
   onBuyInsulation,
+  selectedIsland,
+  onSelectIsland,
 }: {
   stats: GlobalStats;
   detailsOpen: boolean;
@@ -30,6 +32,8 @@ export function HudConsole({
   onSetDemandResponse: (active: boolean) => void;
   onSetMarketTrading: (enabled: boolean) => void;
   onBuyInsulation: () => void;
+  selectedIsland: number;
+  onSelectIsland: (n: number) => void;
 }) {
   const { t } = useI18n();
 
@@ -41,6 +45,7 @@ export function HudConsole({
         timeOfDay={stats.timeOfDay}
         open={detailsOpen}
         onToggle={onToggleDetails}
+        islandsInDeficit={stats.islands.filter((i) => i.deficit > 0).length}
       />
       {/* Hangs off the bottom of the console instead of growing it, so
           opening the details never nudges the rest of the HUD. Kept mounted
@@ -58,6 +63,9 @@ export function HudConsole({
             riverFlow={stats.weather.riverFlow}
             smartMeters={stats.smartMeters}
             demandResponse={stats.demandResponse}
+            islands={stats.islands}
+            selectedIsland={selectedIsland}
+            onSelectIsland={onSelectIsland}
           />
           <BudgetPanel budget={stats.budget} />
           <section className="hud-section">

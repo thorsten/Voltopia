@@ -120,6 +120,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     gridSize,
   );
   const [overlay, setOverlay] = useState<OverlayMode>(OverlayMode.None);
+  const [selectedIsland, setSelectedIsland] = useState(0);
   const [page, setPage] = useState<'help' | 'imprint' | 'settings' | 'newGame' | 'stats' | null>(
     null,
   );
@@ -148,7 +149,19 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
 
   useEffect(() => {
     rendererRef.current?.setOverlayMode(overlay);
+    // Grid is the only overlay a district selection makes sense on —
+    // switching to any other one drops the highlight.
+    if (overlay !== OverlayMode.Grid) {
+      setSelectedIsland(0);
+      rendererRef.current?.setSelectedIsland(0);
+    }
   }, [overlay]);
+
+  const selectIsland = (n: number): void => {
+    setSelectedIsland(n);
+    rendererRef.current?.setSelectedIsland(n);
+    if (n !== 0) setOverlay(OverlayMode.Grid);
+  };
 
   // Autosave: periodically request a snapshot and persist it. The deps
   // must be the stable callbacks, NOT the bridge object — that changes
@@ -274,6 +287,8 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               onSetDemandResponse={(active) => bridge.send({ type: 'setDemandResponse', active })}
               onSetMarketTrading={(enabled) => bridge.send({ type: 'setMarketTrading', enabled })}
               onBuyInsulation={() => bridge.send({ type: 'buyInsulation' })}
+              selectedIsland={selectedIsland}
+              onSelectIsland={selectIsland}
             />
           )}
           {stats && (

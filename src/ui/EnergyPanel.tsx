@@ -1,4 +1,5 @@
-import type { EnergyStats, GlobalStats } from '../shared/types.ts';
+import type { EnergyStats, GlobalStats, IslandStats } from '../shared/types.ts';
+import { DistrictList } from './DistrictList.tsx';
 import { useI18n } from './i18n.tsx';
 import { useSmoothedNumber } from './useSmoothedNumber.ts';
 
@@ -77,11 +78,17 @@ export function EnergyPanel({
   riverFlow,
   smartMeters,
   demandResponse,
+  islands,
+  selectedIsland,
+  onSelectIsland,
 }: {
   energy: EnergyStats;
   riverFlow: number;
   smartMeters: GlobalStats['smartMeters'];
   demandResponse: GlobalStats['demandResponse'];
+  islands: IslandStats[];
+  selectedIsland: number;
+  onSelectIsland: (n: number) => void;
 }) {
   const { t } = useI18n();
   const totalGeneration =
@@ -280,6 +287,12 @@ export function EnergyPanel({
         stored={energy.heatStored}
         capacity={energy.heatCapacity}
         testId="energy-heat-soc"
+      />
+
+      <DistrictList
+        islands={islands}
+        selectedIsland={selectedIsland}
+        onSelectIsland={onSelectIsland}
       />
     </section>
   );

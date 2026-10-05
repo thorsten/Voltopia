@@ -973,6 +973,83 @@ body,
   transition: width 0.4s;
 }
 
+/* ---- district list ---- */
+
+.district-list {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hud-border);
+}
+
+.district-list h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hud-muted);
+  margin: 0 0 6px;
+}
+
+.district-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 6px;
+  margin: 0 -6px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.district-row:hover {
+  background: var(--hud-hover);
+}
+
+.district-row.selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.district-name {
+  min-width: 24px;
+  font-weight: 600;
+}
+
+.district-soc {
+  flex: none;
+}
+
+.district-soc .soc-track {
+  width: 60px;
+}
+
+.district-link {
+  flex: none;
+}
+
+.district-link.none {
+  opacity: 0.5;
+}
+
+.district-status {
+  margin-left: auto;
+  flex: none;
+  color: var(--hud-muted);
+}
+
+.district-row.deficit .district-status {
+  color: var(--hud-negative);
+}
+
+.district-row.curtailing .district-status {
+  color: var(--hud-muted);
+}
+
 /* ---- day graph ---- */
 
 /* Compact chip in the energy row: enough to read the shape of the day

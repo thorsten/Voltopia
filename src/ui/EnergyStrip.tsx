@@ -26,12 +26,14 @@ export function EnergyStrip({
   timeOfDay,
   open,
   onToggle,
+  islandsInDeficit,
 }: {
   energy: EnergyStats;
   riverFlow: number;
   timeOfDay: number;
   open: boolean;
   onToggle: () => void;
+  islandsInDeficit: number;
 }) {
   const { t } = useI18n();
 
@@ -148,6 +150,15 @@ export function EnergyStrip({
         <span className="energy-chip-value">{formatEnergy(Math.abs(balance))}</span>
         <span className="sr-only">{balanceLabel}</span>
       </span>
+      {islandsInDeficit > 0 && (
+        <span
+          className="energy-chip negative"
+          data-testid="energy-districts-deficit"
+          title={t('hud.districtsInDeficit', { count: islandsInDeficit })}
+        >
+          ⚠ {islandsInDeficit}
+        </span>
+      )}
       <EnergySparkline energy={energy} timeOfDay={timeOfDay} collapsed={open} />
       <span className="sr-only">{t('hud.details')}</span>
       {/* Same glyphs as the goals panel header, so every expandable HUD
