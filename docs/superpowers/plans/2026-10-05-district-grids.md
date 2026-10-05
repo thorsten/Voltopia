@@ -127,7 +127,7 @@ describe('islands', () => {
     expect(islandOf(state, at(5, 2))).toBe(1);
     expect(islandOf(state, at(20, 20))).toBe(2);
     expect(islandOf(state, at(12, 12))).toBe(0);
-    expect(islandKey(state, 1)).toBe(at(2, 2 - R)); // top-left of the turbine's ring
+    expect(islandKey(state, 1)).toBe(at(0, 0)); // top-left of the turbine's ring, clipped to the map
     expect(islandKey(state, 2)).toBe(at(20 - R, 20 - R));
   });
 
@@ -165,7 +165,7 @@ describe('islands', () => {
     expect(islandOf(byPlant, at(5 + R, 5))).toBe(1);
   });
 
-  it('a damaged line tile splits an island and the lower key survives', () => {
+  it('a damaged line stretch longer than two rings splits an island and the lower key survives', () => {
     const state = makeState();
     placePlant(state, at(2, 2), PlantType.WindTurbine);
     buildPowerLines(
@@ -176,7 +176,9 @@ describe('islands', () => {
     recomputeGrid(state);
     expect(islandCount(state)).toBe(1);
     const keyBefore = islandKey(state, 1);
-    addDamage(state, at(9, 2), 10);
+    // Rings are connections: one dead tile leaves the rings of both ends
+    // overlapping, so the gap has to exceed 2 * R tiles (7 here) to split.
+    for (let x = 6; x <= 12; x++) addDamage(state, at(x, 2), 10);
     bumpGridVersion(state);
     recomputeGrid(state);
     expect(islandCount(state)).toBe(2);
@@ -831,7 +833,7 @@ describe('island pools', () => {
     syncIslandPools(state);
     poolForIsland(state, 1).flexBacklog = 80;
     poolForIsland(state, 1).callBudget = 3;
-    addDamage(state, at(9, 2), 10);
+    for (let x = 6; x <= 12; x++) addDamage(state, at(x, 2), 10); // a gap longer than two rings
     bumpGridVersion(state);
     recomputeGrid(state);
     syncIslandPools(state);
@@ -2062,7 +2064,7 @@ Help: `src/ui/HelpPage.tsx` sections gain `{ title: 'help.districts.title', body
 
 Tutorial: `src/ui/Tutorial.tsx` after the `grid` step: `{ id: 'substation', title: 'tutorial.substation.title', body: 'tutorial.substation.body', isComplete: (stats) => stats.islands.some((i) => i.substations > 0) }`. i18n EN: `'Build a substation'` / `'Your network is a grid island. Give it a gate to the outer grid: place a substation (🏗, key X) next to your lines so a shortfall can import and a surplus can export.'`; DE: `'Baue ein Umspannwerk'` / `'Dein Netz ist eine Netzinsel. Gib ihr ein Tor zum Außennetz: setze ein Umspannwerk (🏗, Taste X) neben deine Leitungen, damit ein Defizit importieren und ein Überschuss exportieren kann.'`.
 
-Docs: `docs/idea.md` "Per-district grids" entry → `(done)` with a three-sentence summary (islands, substations as gates, overlay/list/inspector); `docs/plan.md` module map: `powerGrid.ts   # connectivity: islands (connected components), energised tiles`, add `islandBalance.ts # the pure per-island cascade`, `islandPools.ts # per-island flex backlog and call budget`, `storage.ts # storage levels per plant tile`, `overlays.ts` row mentions grid. Spec: replace "gets a dashed border" with "is dimmed" in the Rendering section and "proportional to each tile's capacity" with "charge in proportion to headroom, discharge in proportion to stored energy" in Storage per tile; note both as planning refinements.
+Docs: `docs/idea.md` "Per-district grids" entry → `(done)` with a three-sentence summary (islands, substations as gates, overlay/list/inspector); `docs/plan.md` module map: `powerGrid.ts   # connectivity: islands (connected components), energised tiles`, add `islandBalance.ts # the pure per-island cascade`, `islandPools.ts # per-island flex backlog and call budget`, `storage.ts # storage levels per plant tile`, `overlays.ts` row mentions grid. Spec: replace "gets a dashed border" with "is dimmed" in the Rendering section; in Islands, after "A damaged line tile or plant splits an island as it does today." add "— but since rings are connections, a dead stretch has to be longer than `2 * lineSupplyRadius` tiles (7) before the two ends stop touching; a single struck pylon leaves the island whole", and soften the Goal's "a storm that cuts a pylon splits an island" to "a storm that takes out a stretch of line splits an island" and "proportional to each tile's capacity" with "charge in proportion to headroom, discharge in proportion to stored energy" in Storage per tile; note both as planning refinements.
 
 - [ ] **Step 4: Run, format, commit**
 
