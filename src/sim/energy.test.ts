@@ -17,7 +17,7 @@ import { heatStep } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
-import { refreshBuildingCount } from './smartMeters.ts';
+import { comfortWindowHours, refreshBuildingCount } from './smartMeters.ts';
 import { spotPriceFactor } from './market.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
 import { buildStats, pendingHistoryPoint, stepTick, timeOfDay } from './tick.ts';
@@ -1644,7 +1644,7 @@ describe('flexible load pool (smart meters)', () => {
     energyStep(bare, { chargingDemand: 0 });
     energyStep(state, { chargingDemand: 0 });
     const e = state.lastEnergy;
-    const { householdFlexShare, heatingFlexShare, backlogHours } = BALANCE.smartMeters;
+    const { householdFlexShare, heatingFlexShare } = BALANCE.smartMeters;
     const flexible =
       householdFlexShare * bare.lastEnergy.buildingConsumption +
       heatingFlexShare * bare.lastEnergy.heatingConsumption;
@@ -1662,9 +1662,10 @@ describe('flexible load pool (smart meters)', () => {
     // Nothing generated: unshifted = demand, served = demand - deferred.
     expect(e.unshifted).toBeCloseTo(bare.lastEnergy.unshifted, 9);
     expect(e.unshifted - served(state)).toBeCloseTo(e.flexDeferred, 9);
-    // Keep deferring: the backlog saturates at backlogHours of flexible demand.
+    // Keep deferring: the backlog saturates at the comfort window of flexible demand.
     for (let t = 0; t < TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
-    const capacity = flexible * backlogHours * (TICKS_PER_DAY / 24);
+    const capacity =
+      flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
     expect(state.flexBacklog).toBeLessThanOrEqual(capacity + 1e-6);
     expect(state.flexBacklog).toBeGreaterThan(capacity * 0.5);
   });
@@ -1689,7 +1690,8 @@ describe('flexible load pool (smart meters)', () => {
     state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24, nothing generated
     energyStep(state, { chargingDemand: 0 });
     const flexible = state.lastEnergy.flexDeferred; // no surplus: deferred == flexible
-    const capacity = flexible * BALANCE.smartMeters.backlogHours * (TICKS_PER_DAY / 24);
+    const capacity =
+      flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
     // Start a little above the bound: comfort wins and the excess is
     // served now. "A little" because the whole excess only leaves in one
     // tick while it fits under the per-tick drain cap — the test below
@@ -1717,12 +1719,13 @@ describe('flexible load pool (smart meters)', () => {
     // comfort bound — shrinks in one tick. The backlog is now far above
     // capacity, but only maxDrainShare of the load may be served per tick.
     state.insulation = true;
-    const { maxDrainShare, backlogHours } = BALANCE.smartMeters;
+    const { maxDrainShare } = BALANCE.smartMeters;
+    const windowHours = comfortWindowHours(timeOfDay(state.tick), state.season);
     energyStep(state, { chargingDemand: 0 });
     const first = state.lastEnergy;
     // Nothing generated, so the whole pool is deferred: flexDeferred is
     // this tick's `flexible`, hence its comfort bound.
-    const capacity = first.flexDeferred * backlogHours * (TICKS_PER_DAY / 24);
+    const capacity = first.flexDeferred * windowHours * (TICKS_PER_DAY / 24);
     expect(capacity).toBeLessThan(saturated); // the bound really did shrink
     // Exactly the cap left the backlog this tick, and that is a fraction
     // of what sits above the new bound: no one-tick dump.
@@ -1741,7 +1744,7 @@ describe('flexible load pool (smart meters)', () => {
       expect(e.flexRecovered + e.flexOverflow).toBeLessThanOrEqual(
         maxDrainShare * e.unshifted + 1e-6,
       );
-      if (state.flexBacklog <= e.flexDeferred * backlogHours * (TICKS_PER_DAY / 24) + 1e-6) {
+      if (state.flexBacklog <= e.flexDeferred * windowHours * (TICKS_PER_DAY / 24) + 1e-6) {
         settled = true;
         break;
       }

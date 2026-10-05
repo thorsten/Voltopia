@@ -58,6 +58,8 @@ smartMeters: {
   heatingFlexShare: 0.3,
   /** Hours of flexible demand the backlog may hold before comfort wins. */
   backlogHours: 4,
+  /** At night the window stretches to an hour past sunrise, at most this (added 2026-10-05). */
+  maxBacklogHours: 10,
   /** Cap on the backlog drained per tick (recovered + overflow) as a share of the unshifted load. */
   maxDrainShare: 0.35,
   /** Coverage the flexibleCity goal requires. */
@@ -159,7 +161,9 @@ else:
     servedNow = 0; recovered = 0; deferred = flexible
 drainCap   = maxDrainShare × unshifted                   // most the backlog may give up this tick
 recovered  = min(recovered, drainCap)
-capacity   = flexible × backlogHours × (TICKS_PER_DAY / 24)  // comfort bound, in energy units
+capacity   = flexible × comfortWindowHours(timeOfDay, season) × (TICKS_PER_DAY / 24)  // comfort bound
+           // comfortWindowHours: backlogHours by day; at night max(backlogHours,
+           // min(maxBacklogHours, hours until sunrise + 1)) — added 2026-10-05
 overflow   = min(max(0, flexBacklog + deferred − recovered − capacity),
                  max(0, drainCap − recovered))           // served regardless, but capped
 flexBacklog = max(0, flexBacklog + deferred − recovered − overflow)
@@ -331,6 +335,31 @@ operations.
     served under the comfort rule rather than shifted into surplus
     (87 % at 2 backlog hours, 67 % at 8) — a night is longer than the
     window, which is the intended behaviour, not a tuning failure.
+    **Revisited 2026-10-05** (`src/sim/_smartMetersProbe.test.ts`,
+    deleted after use: the 560-building industrial-probe town without
+    the band, full coverage from day 0, 20 days, seeds 7 and 11, 160
+    and 60 batteries). Two alternatives to the fixed 4-hour window:
+    (a) at night the window stretches to an hour past the coming
+    sunrise, capped at 10 h; (b) at night the pool only defers when
+    sunrise lies within the 4 hours, otherwise it is served at once.
+    (b) was worse on every figure — recovered 1.6-1.8 % of load
+    instead of 2.2-2.9 %, biogas +2-8 %, net money −2…−15 %: a deferral
+    that overflows in the dark still moves load off the evening peak
+    into the battery hours. (a) is now the rule (`comfortWindowHours`,
+    `maxBacklogHours`): recovered 3.1 % / 2.6 % of load (was 2.9 % /
+    2.2 %), biogas −4…−13 %, net money +6 % / +27 % (seed 7, 160 / 60
+    batteries) and +6 % / +9 % (seed 11), deficit ticks 181 → 45 and
+    226 → 66 on seed 11, 303 → 300 and 395 → 392 on seed 7, mean state
+    of charge unchanged (0.715 → 0.718, 0.772 → 0.774, 0.705 → 0.715,
+    0.737 → 0.736). The comfort share of deferred energy falls from
+    43-54 % to 36-42 %. The cost: the backlog peaks at 500_000 instead
+    of 245_000, and on seed 7 the backlog released around dawn meets a
+    sun that is not up yet, so unserved energy rises from 293_000 to
+    534_000 (334_000 → 570_000 with 60 batteries) at the same number
+    of deficit ticks; on seed 11 it falls from 69_000 to 7_000. The
+    recovery spike bound (`1 + maxDrainShare`) is untouched: the peak
+    stayed at 9_220 / 9_697 against an unshifted 7_198 / 7_186 in
+    every run.
   - **Peaks**: the pool shifts load out of hours _without_ renewable
     surplus and into hours _with_ it, which is not always the midday —
     a windy evening drains the backlog, so the evening peak can be

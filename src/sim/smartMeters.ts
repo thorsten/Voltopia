@@ -96,3 +96,23 @@ function hash01(id: number): number {
 export function isSmartVehicle(state: SimState, id: number): boolean {
   return hash01(id) < meteredCoverage(state);
 }
+
+const HOURS_PER_DAY = 24;
+
+/**
+ * Hours of flexible demand the backlog may hold before comfort wins, at
+ * this time of day. By day the plain `backlogHours`; at night the window
+ * stretches to an hour past the coming sunrise, capped at
+ * `maxBacklogHours`, so load deferred in the evening can reach the
+ * morning sun instead of overflowing in the dark. Never below
+ * `backlogHours`.
+ */
+export function comfortWindowHours(
+  timeOfDay: number,
+  season: { sunrise: number; sunset: number },
+): number {
+  const { backlogHours, maxBacklogHours } = BALANCE.smartMeters;
+  if (timeOfDay >= season.sunrise && timeOfDay <= season.sunset) return backlogHours;
+  const hoursUntilSunrise = ((season.sunrise - timeOfDay + 1) % 1) * HOURS_PER_DAY;
+  return Math.min(maxBacklogHours, Math.max(backlogHours, hoursUntilSunrise + 1));
+}

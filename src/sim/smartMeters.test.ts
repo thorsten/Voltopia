@@ -3,6 +3,7 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import {
+  comfortWindowHours,
   countBuildings,
   isSmartVehicle,
   meteredCoverage,
@@ -226,5 +227,32 @@ describe('isSmartVehicle', () => {
     expect(Array.from({ length: 200 }, (_, id) => isSmartVehicle(state, id))).toEqual(half);
     state.smartMeters.metered = 80;
     for (let id = 0; id < 200; id++) if (half[id]) expect(isSmartVehicle(state, id)).toBe(true);
+  });
+});
+
+describe('comfortWindowHours', () => {
+  const { backlogHours, maxBacklogHours } = BALANCE.smartMeters;
+  const season = { sunrise: 0.25, sunset: 0.75 }; // 06:00 - 18:00
+  const hour = (h: number) => h / 24;
+
+  it('is the plain backlog window by day', () => {
+    expect(comfortWindowHours(hour(6), season)).toBe(backlogHours);
+    expect(comfortWindowHours(hour(12), season)).toBe(backlogHours);
+    expect(comfortWindowHours(hour(18), season)).toBe(backlogHours);
+  });
+
+  it('stretches at night to an hour past the coming sunrise, capped', () => {
+    expect(comfortWindowHours(hour(2), season)).toBeCloseTo(5, 9); // 4 h to sunrise + 1
+    expect(comfortWindowHours(hour(20), season)).toBe(maxBacklogHours); // 10 h to sunrise + 1, capped
+    expect(comfortWindowHours(hour(23), season)).toBeCloseTo(8, 9); // across midnight
+  });
+
+  it('never drops below the plain window just before sunrise', () => {
+    expect(comfortWindowHours(hour(5.5), season)).toBe(backlogHours);
+  });
+
+  it("follows the season's sunrise", () => {
+    const winter = { sunrise: 0.33, sunset: 0.67 }; // ~08:00
+    expect(comfortWindowHours(hour(2), winter)).toBeCloseTo(0.33 * 24 - 2 + 1, 9);
   });
 });

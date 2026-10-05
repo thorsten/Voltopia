@@ -4,7 +4,7 @@ import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
 import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
-import { meteredCoverage } from './smartMeters.ts';
+import { comfortWindowHours, meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { coolingDegree, heatingDegree } from '../shared/heating.ts';
@@ -420,7 +420,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const unshifted =
     buildingDemand + heatingDemand + coolingDemand + chargingDemand + heat.pumpPower;
   const coverage = meteredCoverage(state);
-  const { householdFlexShare, heatingFlexShare, backlogHours, maxDrainShare } = BALANCE.smartMeters;
+  const { householdFlexShare, heatingFlexShare, maxDrainShare } = BALANCE.smartMeters;
   const flexible =
     coverage * (householdFlexShare * buildingDemand + heatingFlexShare * heatingDemand);
   const inflexible = unshifted - flexible;
@@ -443,8 +443,10 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const drainCap = maxDrainShare * unshifted;
   recovered = Math.min(recovered, drainCap);
   // Comfort bound: past a few hours of deferred demand the pool is served
-  // regardless of the weather.
-  const backlogCapacity = flexible * backlogHours * (TICKS_PER_DAY / 24);
+  // regardless of the weather — at night, hours enough to reach the
+  // morning sun (see comfortWindowHours).
+  const backlogCapacity =
+    flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
   const overflow = Math.min(
     Math.max(0, state.flexBacklog + deferred - recovered - backlogCapacity),
     Math.max(0, drainCap - recovered),

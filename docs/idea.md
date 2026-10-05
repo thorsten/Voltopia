@@ -205,8 +205,10 @@ Collected 2026-09-24; roughly in the order we want to build them.
   each, so a mid-size city takes about an in-game year to cover and new
   buildings keep costing. Coverage gates smart vehicle charging and
   feeds a flexible load pool (15 % of metered household load, 30 % of
-  metered electric heating) that waits for renewable surplus, carries a backlog of at
-  most four hours before comfort wins, and shows up as a dashed
+  metered electric heating) that waits for renewable surplus, carries a backlog of
+  four hours before comfort wins — at night stretched to an hour past
+  sunrise, at most ten, so an evening's deferral reaches the morning
+  sun — and shows up as a dashed
   unshifted line in the energy graph, shifted-load rows in the energy
   panel and the `flexibleCity` goal.
 - **Disasters/events** (done): storms (warned hours ahead) feather the

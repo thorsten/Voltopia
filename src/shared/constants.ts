@@ -788,6 +788,30 @@ export const BALANCE = {
      */
     backlogHours: 4,
     /**
+     * At night the comfort window stretches to an hour past the coming
+     * sunrise, at most this many hours, so load deferred in the evening
+     * can reach the morning sun instead of overflowing in the dark
+     * (comfortWindowHours in smartMeters.ts). The first probe found
+     * three quarters of all deferred energy served under the 4-hour
+     * comfort rule, because a night is longer than the window. Measured
+     * on the 560-building town at full coverage, 20 days, two seeds, 160
+     * and 60 batteries: against the fixed 4 hours the stretched window
+     * recovers 3.1 % / 2.6 % of load instead of 2.9 % / 2.2 %, burns
+     * 4-13 % less biogas, lifts net money 6-27 % and leaves the mean
+     * state of charge unchanged (0.715 -> 0.718, 0.772 -> 0.774); on
+     * seed 11 deficit ticks fall from 181 to 45 (226 to 66 with 60
+     * batteries). The price: the backlog peaks at twice the old bound
+     * (500_000 against 245_000) and on seed 7, whose park burns biogas
+     * every night, the backlog released at dawn meets a sun that is not
+     * up yet — unserved energy rises from 293_000 to 534_000 at the
+     * same 300 deficit ticks. A rule that never deferred at night
+     * unless sunrise lay within the 4 hours was worse on every figure
+     * (biogas +2-8 %, net -2…-15 %): a deferral that overflows in the
+     * dark still shifts load off the evening peak into the battery
+     * hours. 10 hours reaches sunrise from 21:00 in the default season.
+     */
+    maxBacklogHours: 10,
+    /**
      * Cap on the backlog drained per tick — recovered plus overflow —
      * as a share of the unshifted load, so a shrinking pool empties
      * over several ticks instead of one. The comfort bound scales with
