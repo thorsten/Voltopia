@@ -441,6 +441,9 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
           // Loaded; a shop beside the factory's road is stocked on the spot.
           deliver(state, van);
           van.stops.shift();
+          // Goods are on board now: later discards (e.g. a lost return
+          // leg) must not touch the local/imported ledger.
+          van.pickup = -1;
           routeToNextStop(state, van);
         }
         break;

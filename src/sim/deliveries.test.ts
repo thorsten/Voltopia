@@ -488,6 +488,26 @@ describe('goods pickup', () => {
     expect(firstDelivery).toBeGreaterThan(0);
   });
 
+  it('the pickup is cleared once the van has loaded, so a later discard cannot relabel the tour', () => {
+    const state = factoryTown(1, 2);
+    readyToDispatch(state);
+    // One van only, so the phases are easy to follow.
+    state.vans.length = 1;
+    const van = state.vans[0];
+    let sawLoading = false;
+    let sawDrivingAfterLoading = false;
+    for (let t = 0; t < 600 && !sawDrivingAfterLoading; t++) {
+      deliveriesStep(state, laneOccupancy(state));
+      state.tick++;
+      if (van.phase === VanPhase.Loading) sawLoading = true;
+      if (sawLoading && van.phase === VanPhase.Driving) sawDrivingAfterLoading = true;
+    }
+    expect(sawLoading).toBe(true);
+    expect(sawDrivingAfterLoading).toBe(true);
+    expect(van.pickup).toBe(-1);
+    expect(state.goods.localToursToday).toBe(1);
+  });
+
   it('a pickup that becomes unreachable is skipped and the shops are still served', () => {
     const state = factoryTown(1, 2);
     readyToDispatch(state);

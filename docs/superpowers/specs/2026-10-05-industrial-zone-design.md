@@ -156,9 +156,10 @@ industrialDemand`. Dispatch, call budget, billing and stats are
 - `VanPhase` gains `Loading`. `arrive` enters `Loading` with
   `dwellTicks = loadTicks` when the reached stop is `van.pickup`,
   `Unloading` otherwise. Leaving `Loading` does not call `deliver`.
-  A pickup that becomes unreachable is dropped by `routeToNextStop` like
-  any stop; the tour continues as an imported one (the fee was already
-  paid, no refund).
+  A pickup that becomes unreachable before loading is dropped like any
+  stop and the tour is recounted as imported (no fee: no goods were
+  bought); once the van has loaded, the pickup is cleared and later
+  detours cannot relabel the tour.
 - Vans are not persisted, so `pickup` needs no save handling.
 - `SimState.goods = { localToursToday, importedToursToday, partialDay,
 lastDay }`. At the day boundary `deliveriesStep` copies the day's two
@@ -169,7 +170,9 @@ lastDay }`. At the day boundary `deliveriesStep` copies the day's two
   `localGoods` attempt. Transient, like the other single-day goal
   counters (the `goalProgress` rule in `state.ts`).
 - `DeliveryStats` gains `factories` (count) and `localShare`
-  (`localToursToday / (local + imported)`, 1 when no tour started).
+  (`localToursToday / (local + imported)`; before the first tour of the
+  day it shows yesterday's share, and 1 only when both days had no
+  tour).
   `DepotInfo` gains `factoriesInReach` and `nearestFactoryTiles`
   (route cost, −1 when none).
 

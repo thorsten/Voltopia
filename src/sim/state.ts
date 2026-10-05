@@ -100,7 +100,11 @@ export interface Van {
   phase: VanPhase;
   /** Remaining stops of the tour (road tiles); the last one is depotRoad. */
   stops: number[];
-  /** Road tile of this tour's factory pickup, -1 when the goods were imported. */
+  /**
+   * Road tile of this tour's factory pickup, -1 when the goods were
+   * imported or once the van has loaded (so a later discarded stop can
+   * never relabel the tour).
+   */
   pickup: number;
   /** Road tiles from the current position to stops[0]. */
   path: number[];
