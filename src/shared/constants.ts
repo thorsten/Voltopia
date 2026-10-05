@@ -253,6 +253,8 @@ export const BALANCE = {
       [Zone.Residential]: [0, 2, 4.5, 8],
       [Zone.Commercial]: [0, 3, 6.5, 11],
       [Zone.Retail]: [0, 2.5, 5, 9],
+      /** Factories draw more than offices of the same density. */
+      [Zone.Industrial]: [0, 4, 9, 16],
     } as Record<Zone, number[]>,
     /**
      * Hourly load profile per zone (24 factors, index = hour). Residential
@@ -271,6 +273,13 @@ export const BALANCE = {
       [Zone.Retail]: [
         0.12, 0.1, 0.1, 0.1, 0.12, 0.15, 0.25, 0.45, 0.7, 0.9, 1.0, 1.0, 0.95, 0.95, 1.0, 1.0, 1.0,
         0.95, 0.9, 0.8, 0.6, 0.35, 0.2, 0.15,
+      ],
+      /**
+       * Two-shift plant: 0.7 through the night, ramps at 5 and 22 h, full
+       * load from 6 to 21 h — the only zone with real night-time load.
+       */
+      [Zone.Industrial]: [
+        0.7, 0.7, 0.7, 0.7, 0.7, 0.85, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.85, 0.7,
       ],
     } as Record<Zone, number[]>,
   },
@@ -623,6 +632,8 @@ export const BALANCE = {
       [Zone.Residential]: [0, 0, 0, 0],
       [Zone.Commercial]: [0, 4, 10, 22],
       [Zone.Retail]: [0, 3, 6, 12],
+      /** Floor space per worker is large: fewer jobs per tile than offices. */
+      [Zone.Industrial]: [0, 3, 8, 18],
     } as Record<Zone, number[]>,
     /** Jobs the city can sustain per resident (service jobs etc. abstracted). */
     jobsPerResident: 0.65,
@@ -641,6 +652,8 @@ export const BALANCE = {
     /** Retail floor space supported per resident + per job. */
     retailPerResident: 0.1,
     retailPerJob: 0.08,
+    /** Industrial jobs the city wants per retail job (factories follow the shops they stock). */
+    industrialPerRetailJob: 1.0,
     /** Ticks a building must be fully supplied before it can densify. */
     densifyMinAge: TICKS_PER_DAY / 4,
     /** Chance (0..1) that an eligible growth attempt succeeds. */
@@ -983,6 +996,7 @@ export const BALANCE = {
         [Zone.Residential]: 0.8,
         [Zone.Commercial]: 0.45,
         [Zone.Retail]: 0.45,
+        [Zone.Industrial]: 0.3,
       } as Record<Zone, number>,
       /** Heating multiplier once building insulation is bought. */
       insulationFactor: 0.5,
@@ -996,6 +1010,7 @@ export const BALANCE = {
         [Zone.Residential]: 0.26,
         [Zone.Commercial]: 0.45,
         [Zone.Retail]: 0.45,
+        [Zone.Industrial]: 0.3,
       } as Record<Zone, number>,
       /** Cooling multiplier once building insulation is bought. */
       insulationFactor: 0.5,

@@ -559,7 +559,7 @@ describe('BuildingsMesh', () => {
       windFactor: 0,
       stateOfCharge: 0,
       tideLevel: 0,
-      demand: { residential: 0, commercial: 0, retail: 0 },
+      demand: { residential: 0, commercial: 0, retail: 0, industrial: 0 },
       phase: 0,
       temperature: 15,
       snowCover: 0,

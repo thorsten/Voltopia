@@ -33,6 +33,7 @@ export const Zone = {
   Residential: 1,
   Commercial: 2,
   Retail: 3,
+  Industrial: 4,
 } as const;
 export type Zone = (typeof Zone)[keyof typeof Zone];
 
@@ -289,6 +290,7 @@ export interface DemandStats {
   residential: number;
   commercial: number;
   retail: number;
+  industrial: number;
 }
 
 /**

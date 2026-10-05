@@ -17,7 +17,7 @@ function environment(temperature: number, nightFactor = 0): RenderEnvironment {
     windFactor: 0.3,
     stateOfCharge: 0.5,
     tideLevel: 0,
-    demand: { residential: 0, commercial: 0, retail: 0 },
+    demand: { residential: 0, commercial: 0, retail: 0, industrial: 0 },
     phase: 0.75,
     temperature,
     snowCover: 0,

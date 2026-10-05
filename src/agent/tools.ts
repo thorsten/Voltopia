@@ -540,6 +540,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             residential: round(s.demand.residential, 2),
             commercial: round(s.demand.commercial, 2),
             retail: round(s.demand.retail, 2),
+            industrial: round(s.demand.industrial, 2),
           },
           season: {
             season: s.season.season,

@@ -17,41 +17,64 @@ import {
 /** Number of visual variants per zone the renderer provides. */
 export const BUILDING_VARIANTS = 8;
 
-/** Jobs provided by retail buildings only (used for retail demand). */
-function countRetailJobs(state: SimState): number {
+/** Jobs per business zone (residential provides none). */
+export function countJobsByZone(state: SimState): {
+  commercial: number;
+  retail: number;
+  industrial: number;
+} {
   const { zone, density, tileType } = state.layers;
-  let retailJobs = 0;
+  const table = BALANCE.growth.jobsByZoneAndDensity;
+  const jobs = { commercial: 0, retail: 0, industrial: 0 };
   for (let i = 0; i < zone.length; i++) {
     if (tileType[i] !== TileType.Empty || density[i] === 0) continue;
-    if (zone[i] === Zone.Retail) {
-      retailJobs += BALANCE.growth.jobsByZoneAndDensity[Zone.Retail][density[i]];
-    }
+    const z = zone[i];
+    if (z === Zone.Commercial) jobs.commercial += table[Zone.Commercial][density[i]];
+    else if (z === Zone.Retail) jobs.retail += table[Zone.Retail][density[i]];
+    else if (z === Zone.Industrial) jobs.industrial += table[Zone.Industrial][density[i]];
   }
-  return retailJobs;
+  return jobs;
 }
 
 /**
- * The demand model: residential follows available jobs, commercial follows
- * the workforce, retail follows both. Values are normalized to -1..1.
+ * The demand model: residential follows available jobs (all of them,
+ * factories included), commercial follows the workforce against the
+ * office and shop jobs only, retail follows both, industry follows the
+ * retail jobs it supplies. Values are normalized to -1..1.
  */
 export function computeDemand(state: SimState): DemandStats {
   const { population, jobs } = countPopulationAndJobs(state);
-  const { jobsPerResident, retailPerResident, retailPerJob, pioneerPopulation, demandHeadroom } =
-    BALANCE.growth;
+  const {
+    jobsPerResident,
+    retailPerResident,
+    retailPerJob,
+    industrialPerRetailJob,
+    pioneerPopulation,
+    demandHeadroom,
+  } = BALANCE.growth;
+  const byZone = countJobsByZone(state);
 
   // Each target is scaled by the headroom factor so the two mutually
   // dependent zones always leave at least one demand above the threshold.
   const targetPopulation = (pioneerPopulation + jobs / jobsPerResident) * demandHeadroom;
   const residential = normalize(targetPopulation - population, targetPopulation);
 
+  // Factories must not crowd out offices: the commercial target is
+  // measured against office and shop jobs only.
+  const businessJobs = byZone.commercial + byZone.retail;
   const targetJobs = population * jobsPerResident * demandHeadroom;
-  const commercial = normalize(targetJobs - jobs, Math.max(targetJobs, jobs));
+  const commercial = normalize(targetJobs - businessJobs, Math.max(targetJobs, businessJobs));
 
-  const retailJobs = countRetailJobs(state);
   const targetRetail = (population * retailPerResident + jobs * retailPerJob) * demandHeadroom;
-  const retail = normalize(targetRetail - retailJobs, Math.max(targetRetail, retailJobs));
+  const retail = normalize(targetRetail - byZone.retail, Math.max(targetRetail, byZone.retail));
 
-  return { residential, commercial, retail };
+  const targetIndustrial = byZone.retail * industrialPerRetailJob * demandHeadroom;
+  const industrial = normalize(
+    targetIndustrial - byZone.industrial,
+    Math.max(targetIndustrial, byZone.industrial),
+  );
+
+  return { residential, commercial, retail, industrial };
 }
 
 function normalize(difference: number, scale: number): number {
@@ -67,6 +90,8 @@ export function demandFor(demand: DemandStats, zone: Zone): number {
       return demand.commercial;
     case Zone.Retail:
       return demand.retail;
+    case Zone.Industrial:
+      return demand.industrial;
     default:
       return -1;
   }

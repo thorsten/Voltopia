@@ -13,6 +13,7 @@ import {
   BuildIntent,
   buildRejection,
   collectDiffs,
+  countPopulationAndJobs,
   createSimState,
   deliveryStateOfAge,
   deserializeState,
@@ -665,5 +666,16 @@ describe('ageStageOf (building visuals stage 3)', () => {
     expect(diffs.find((d) => d.index === 10)?.ageStage).toBe(1);
     expect(diffs.find((d) => d.index === 11)?.ageStage).toBe(2);
     expect(diffs.find((d) => d.index === 12)?.ageStage).toBe(0);
+  });
+});
+
+describe('countPopulationAndJobs with industry', () => {
+  it('counts industrial jobs', () => {
+    const state = createSimState(1, 16);
+    state.layers.zone[tileIndex(2, 2, 16)] = Zone.Industrial;
+    state.layers.density[tileIndex(2, 2, 16)] = 3;
+    expect(countPopulationAndJobs(state).jobs).toBe(
+      BALANCE.growth.jobsByZoneAndDensity[Zone.Industrial][3],
+    );
   });
 });

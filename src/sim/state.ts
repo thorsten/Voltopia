@@ -522,7 +522,7 @@ export function createSimState(
     energyHistoryAccum: { generation: 0, consumption: 0, unshifted: 0, soc: 0, price: 0, ticks: 0 },
     dirty: new Set(),
     statsDirty: false,
-    lastDemand: { residential: 0, commercial: 0, retail: 0 },
+    lastDemand: { residential: 0, commercial: 0, retail: 0, industrial: 0 },
     lastServices: { fire: 0, police: 0 },
     lastDeliveries: { suppliedShare: 1, shops: 0, driving: 0, depots: 0 },
     lastTransit: { riderShare: 0, riders: 0, driving: 0, stops: 0, stopsServed: 0, depots: 0 },
@@ -1130,7 +1130,7 @@ export function countPopulationAndJobs(state: SimState): {
     const z = zone[i] as Zone;
     if (z === Zone.Residential) {
       population += BALANCE.growth.populationByDensity[d];
-    } else if (z === Zone.Commercial || z === Zone.Retail) {
+    } else if (z === Zone.Commercial || z === Zone.Retail || z === Zone.Industrial) {
       jobs += BALANCE.growth.jobsByZoneAndDensity[z][d];
     }
   }

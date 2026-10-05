@@ -56,7 +56,7 @@ export interface RenderEnvironment {
   /** Tide water level, -1 (low water) .. 1 (high water). */
   tideLevel: number;
   /** Global zone demand, -1..1 each (drives the demand overlay). */
-  demand: { residential: number; commercial: number; retail: number };
+  demand: { residential: number; commercial: number; retail: number; industrial: number };
   /** Year phase 0..1 (0 = first spring day). */
   phase: number;
   /** Air temperature in °C. */

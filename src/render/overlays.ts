@@ -125,7 +125,7 @@ export class OverlaysMesh implements DiffLayer {
   private readonly gridSize: number;
   private readonly tiles = new Map<number, OverlayTile>();
   private mode: OverlayMode = OverlayMode.None;
-  private demand = { residential: 0, commercial: 0, retail: 0 };
+  private demand = { residential: 0, commercial: 0, retail: 0, industrial: 0 };
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
 
@@ -202,6 +202,8 @@ export class OverlaysMesh implements DiffLayer {
         return this.demand.commercial;
       case Zone.Retail:
         return this.demand.retail;
+      case Zone.Industrial:
+        return this.demand.industrial;
       default:
         return 0;
     }

@@ -184,7 +184,7 @@ describe('inspectTile', () => {
   it('lists why a zoned tile is not growing', () => {
     const state = createSimState(3, SIZE);
     paintZones(state, [at(20, 20)], Zone.Commercial);
-    state.lastDemand = { residential: 0, commercial: -0.5, retail: 0 };
+    state.lastDemand = { residential: 0, commercial: -0.5, retail: 0, industrial: 0 };
     const info = inspectTile(state, at(20, 20))!;
     expect(info.growthBlockers).toContain('noRoad');
     expect(info.growthBlockers).toContain('lowDemand');
@@ -193,11 +193,11 @@ describe('inspectTile', () => {
 
   it('reports no blockers for a ready lot and maxDensity at level 3', () => {
     const ready = cityWithBuilding(0);
-    ready.lastDemand = { residential: 1, commercial: 1, retail: 1 };
+    ready.lastDemand = { residential: 1, commercial: 1, retail: 1, industrial: 1 };
     expect(inspectTile(ready, at(5, 6))!.growthBlockers).toEqual([]);
 
     const full = cityWithBuilding(3);
-    full.lastDemand = { residential: 1, commercial: 1, retail: 1 };
+    full.lastDemand = { residential: 1, commercial: 1, retail: 1, industrial: 1 };
     expect(inspectTile(full, at(5, 6))!.growthBlockers).toContain('maxDensity');
   });
 

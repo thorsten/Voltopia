@@ -111,6 +111,42 @@ describe('computeDemand', () => {
       expect(value).toBeLessThanOrEqual(1);
     }
   });
+
+  it('retail jobs create industrial demand; a city without shops wants no factories', () => {
+    const state = createSimState(1, SIZE);
+    state.layers.zone[at(1, 1)] = Zone.Residential;
+    state.layers.density[at(1, 1)] = 3;
+    expect(computeDemand(state).industrial).toBe(0);
+    state.layers.zone[at(2, 1)] = Zone.Retail;
+    state.layers.density[at(2, 1)] = 3;
+    expect(computeDemand(state).industrial).toBeGreaterThan(0.5);
+  });
+
+  it('industrial demand falls as factories cover the retail jobs', () => {
+    const state = createSimState(1, SIZE);
+    for (let i = 0; i < 2; i++) {
+      state.layers.zone[at(i, 1)] = Zone.Retail;
+      state.layers.density[at(i, 1)] = 3;
+    }
+    const before = computeDemand(state).industrial;
+    for (let i = 0; i < 2; i++) {
+      state.layers.zone[at(i, 3)] = Zone.Industrial;
+      state.layers.density[at(i, 3)] = 3;
+    }
+    const after = computeDemand(state).industrial;
+    expect(after).toBeLessThan(before);
+    expect(after).toBeLessThan(BALANCE.growth.growthDemandThreshold);
+  });
+
+  it('a factory does not lower commercial demand', () => {
+    const state = createSimState(1, SIZE);
+    state.layers.zone[at(1, 1)] = Zone.Residential;
+    state.layers.density[at(1, 1)] = 3;
+    const before = computeDemand(state).commercial;
+    state.layers.zone[at(1, 3)] = Zone.Industrial;
+    state.layers.density[at(1, 3)] = 3;
+    expect(computeDemand(state).commercial).toBeCloseTo(before, 9);
+  });
 });
 
 describe('growthStep', () => {
@@ -282,7 +318,7 @@ describe('fire coverage gate', () => {
 });
 
 describe('delivery gate', () => {
-  const demand = { residential: 1, commercial: 1, retail: 1 };
+  const demand = { residential: 1, commercial: 1, retail: 1, industrial: 1 };
   function shop(age: number) {
     const state = createSimState(3, SIZE);
     buildRoads(state, [at(5, 5), at(6, 5)]);
@@ -354,5 +390,24 @@ describe('age stages (building visuals stage 3)', () => {
     expect(state.layers.buildingAge[index]).toBe(0);
     const diff = collectDiffs(state).find((d) => d.index === index);
     expect(diff?.ageStage).toBe(0);
+  });
+});
+
+describe('industrial growth', () => {
+  it('a zoned industrial lot next to a road grows while shops want goods', () => {
+    const state = cityWithRoad();
+    // Enough shops to want factories; off the road so they stay as they are.
+    for (let i = 0; i < 4; i++) {
+      state.layers.zone[at(i + 2, 12)] = Zone.Retail;
+      state.layers.density[at(i + 2, 12)] = 3;
+    }
+    paintZones(
+      state,
+      Array.from({ length: 10 }, (_, x) => at(x + 2, 4)),
+      Zone.Industrial,
+    );
+    expect(computeDemand(state).industrial).toBeGreaterThan(BALANCE.growth.growthDemandThreshold);
+    runGrowth(state, 200);
+    expect(totalDensity(state, Zone.Industrial)).toBeGreaterThan(0);
   });
 });

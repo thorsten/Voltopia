@@ -54,6 +54,8 @@ const ZONE_LABEL: Record<Zone, TranslationKey | null> = {
   [Zone.Residential]: 'tool.zone-residential',
   [Zone.Commercial]: 'tool.zone-commercial',
   [Zone.Retail]: 'tool.zone-retail',
+  // Industrial zone UI (label, tool, overlay) lands in a later task.
+  [Zone.Industrial]: null,
 };
 
 const BLOCKER_LABEL: Record<GrowthBlocker, TranslationKey> = {

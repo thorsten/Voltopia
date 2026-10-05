@@ -262,7 +262,7 @@ export function vehiclesStep(state: SimState): Map<number, number> {
   );
 
   const homeRoads = roadTilesNextToZones(state, [Zone.Residential]);
-  const workRoads = roadTilesNextToZones(state, [Zone.Commercial, Zone.Retail]);
+  const workRoads = roadTilesNextToZones(state, [Zone.Commercial, Zone.Retail, Zone.Industrial]);
 
   if (homeRoads.length === 0) {
     state.vehicles.length = 0;
