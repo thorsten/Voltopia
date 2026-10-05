@@ -37,6 +37,8 @@ const STREET_WINDOW_GAP = 0.03;
 const SHOPFRONT_HEIGHT_FRACTION = 0.43;
 const SHOPFRONT_CENTER_FRACTION = 0.335;
 const QUARTER_TURN = Math.PI / 2;
+/** Where a foundation samples the ground under its footprint (fractions of the part size). */
+const FOOTPRINT_SAMPLES = [-0.5, 0, 0.5] as const;
 /** Hidden instances: a zero-scale matrix is never rasterised. */
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
@@ -439,15 +441,40 @@ export class BuildingsMesh implements DiffLayer {
     this.touchedKinds.clear();
     for (const p of building.parts) {
       const slot = this.cursor[p.kind]++;
-      this.position.set(cx + p.ox * growth, lift + p.oy * growth, cz + p.oz * growth);
+      let baseY = p.oy;
+      let sizeY = p.sy;
+      if (p.oy === 0 && p.tilt === undefined) {
+        // Foundation: a part that stands on the ground keeps its top but
+        // drops its bottom to the lowest ground under its footprint, so
+        // nothing floats on the downhill side of a sloped tile (the uphill
+        // side simply sinks in). Same rule as plantsMesh.ts.
+        baseY = Math.min(0, this.lowestGroundUnder(cx + p.ox, cz + p.oz, p) - lift);
+        sizeY = p.sy - baseY;
+      }
+      this.position.set(cx + p.ox * growth, lift + baseY * growth, cz + p.oz * growth);
       this.euler.set(p.tilt ?? 0, p.turn * QUARTER_TURN, 0, 'YXZ');
       this.quaternion.setFromEuler(this.euler);
-      this.scale.set(p.sx * growth, p.sy * growth, p.sz * growth);
+      this.scale.set(p.sx * growth, sizeY * growth, p.sz * growth);
       this.matrix.compose(this.position, this.quaternion, this.scale);
       this.layers[p.kind].mesh.setMatrixAt(slot, this.matrix);
       this.touchedKinds.add(p.kind);
     }
     for (const kind of this.touchedKinds) this.touchMatrixRange(kind, building.blocks[kind]);
+  }
+
+  /** Lowest ground height under a part's (turned) footprint, sampled on a 3x3 lattice. */
+  private lowestGroundUnder(x: number, z: number, p: BuildingPart): number {
+    const [fx, fz] = p.turn % 2 === 0 ? [p.sx, p.sz] : [p.sz, p.sx];
+    const max = this.gridSize - 1e-6;
+    let lowest = Infinity;
+    for (const ax of FOOTPRINT_SAMPLES) {
+      for (const az of FOOTPRINT_SAMPLES) {
+        const px = Math.min(max, Math.max(0, x + ax * fx));
+        const pz = Math.min(max, Math.max(0, z + az * fz));
+        lowest = Math.min(lowest, this.elevation.surfaceY(px, pz));
+      }
+    }
+    return lowest;
   }
 
   private writeColors(index: number): void {

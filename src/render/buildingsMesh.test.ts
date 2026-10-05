@@ -788,3 +788,95 @@ describe('BuildingsMesh age stages', () => {
     );
   });
 });
+
+describe('BuildingsMesh foundations on sloped ground', () => {
+  function rampField(): ElevationField {
+    const field = new ElevationField(SIZE);
+    const diffs: TileDiff[] = [];
+    for (let z = 0; z < SIZE; z++) {
+      for (let x = 0; x < SIZE; x++) {
+        diffs.push({ index: z * SIZE + x, elevation: x } as TileDiff);
+      }
+    }
+    field.applyDiffs(diffs);
+    return field;
+  }
+
+  function instances(mesh: THREE.InstancedMesh): { p: THREE.Vector3; s: THREE.Vector3 }[] {
+    return drawn(mesh).map((m) => ({
+      p: new THREE.Vector3().setFromMatrixPosition(m),
+      s: new THREE.Vector3().setFromMatrixScale(m),
+    }));
+  }
+
+  it('drops every ground-standing part to the lowest ground under its footprint and keeps its top', () => {
+    const ramp = rampField();
+    const mesh = new BuildingsMesh(new THREE.Scene(), SIZE, ramp);
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Commercial, 3, 0)]);
+    const lift = ramp.centerY(CENTRE);
+    const cx = 3.5;
+    const cz = 3.5;
+    let grounded = 0;
+    for (const kind of PART_KINDS) {
+      const parts = mesh.partsAt(CENTRE)!.filter((p) => p.kind === kind);
+      const drawnParts = instances(mesh.kindMeshes[kind]);
+      expect(drawnParts).toHaveLength(parts.length);
+      for (const part of parts) {
+        let expectedY = lift + part.oy;
+        let expectedSize = part.sy;
+        if (part.oy === 0 && part.tilt === undefined) {
+          grounded++;
+          const [fx, fz] = part.turn % 2 === 0 ? [part.sx, part.sz] : [part.sz, part.sx];
+          const downhill = ramp.surfaceY(cx + part.ox - fx / 2, cz + part.oz - fz / 2);
+          expect(downhill).toBeLessThan(lift);
+          expectedY = downhill;
+          expectedSize = lift + part.sy - downhill;
+        }
+        const hit = drawnParts.find(
+          (i) =>
+            Math.abs(i.p.x - (cx + part.ox)) < 1e-6 &&
+            Math.abs(i.p.z - (cz + part.oz)) < 1e-6 &&
+            Math.abs(i.p.y - expectedY) < 1e-5 &&
+            Math.abs(i.s.y - expectedSize) < 1e-5,
+        );
+        expect(hit, `${part.kind} at ${part.ox},${part.oy},${part.oz}`).toBeDefined();
+      }
+    }
+    expect(grounded).toBeGreaterThan(0);
+  });
+
+  it('grows a foundation with the building so the top still rises from the tile centre', () => {
+    const ramp = rampField();
+    const mesh = new BuildingsMesh(new THREE.Scene(), SIZE, ramp);
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+    const lift = ramp.centerY(CENTRE);
+    // The main body has the largest footprint of the boxes at every growth stage.
+    const body = () =>
+      instances(mesh.kindMeshes[PartKind.Box]).reduce((best, i) =>
+        i.s.x * i.s.z > best.s.x * best.s.z ? i : best,
+      );
+    const small = body();
+    expect(small.p.y).toBeLessThan(lift);
+    expect(small.p.y + small.s.y).toBeLessThan(lift + main.sy * 0.2);
+    mesh.update(10);
+    const full = body();
+    expect(full.p.y + full.s.y).toBeCloseTo(lift + main.sy, 6);
+  });
+
+  it('changes nothing on flat ground', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([building(CENTRE, Zone.Retail, 2, 0)]);
+    for (const kind of PART_KINDS) {
+      const parts = mesh.partsAt(CENTRE)!.filter((p) => p.kind === kind);
+      const sizes = instances(mesh.kindMeshes[kind])
+        .map((i) => i.s.y)
+        .sort((a, b) => a - b);
+      const expected = parts.map((p) => p.sy).sort((a, b) => a - b);
+      expect(sizes).toHaveLength(expected.length);
+      sizes.forEach((size, i) => expect(size).toBeCloseTo(expected[i], 6));
+    }
+  });
+});
