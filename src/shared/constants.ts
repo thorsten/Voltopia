@@ -128,7 +128,9 @@ export const BALANCE = {
        *   alone in about six weeks: the 240-building island went from
        *   no link to 29_015 (seed 7) and 31_766 (seed 11) of export
        *   revenue a year against 3_000 of capital and 960 of upkeep,
-       *   and it never had to import. Stacked eight deep on the
+       *   for an import bill of 0 on seed 11 and 2_916 on seed 7 (whose
+       *   business island does run 56 deficit ticks a year, against
+       *   none at all on seed 11). Stacked eight deep on the
        *   one-island town the rate held linear (203_767-231_188 a
        *   year, 25_500-28_900 each), so the price is not a quantity
        *   discount either.

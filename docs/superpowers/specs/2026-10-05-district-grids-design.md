@@ -336,8 +336,10 @@ under the single-balance baseline with one substation each, seed 7
 lands above it — but it does move the deficit, which is the point: the
 home island can no longer borrow the business island's midday surplus,
 so its deficit ticks go 85 → 674 (seed 11) and 579 → 1_009 (seed 7)
-while the business island, holding half the park for two thirds of the
-load, never goes short at all and curtails 32-38 million EU beside it.
+while the business island, holding half the park for 44 % of the load
+(1_837 of 4_195 EU/tick), never goes short at all on seed 11 and keeps
+only 44-75 deficit ticks on seed 7, curtailing 32-38 million EU beside
+it.
 A relative deficit target of 10 % is unreachable against a baseline
 that near zero, and should be: the island's own balance has to bite.
 Both islands' figures sum to the city's, as the unit tests require.
