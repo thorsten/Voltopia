@@ -241,6 +241,9 @@ const en = {
   'overlay.heat': 'Heat',
   'overlay.heat.title':
     'District heating: orange roads carry the network, red buildings are served, blue buildings heat themselves',
+  'overlay.grid': 'Grid',
+  'overlay.grid.title':
+    'Grid islands: one colour per island, red-tinted while it is in deficit, dimmed when it has no substation',
 
   'rejection.notEnoughMoney': 'Not enough money',
   'rejection.tileOccupied': 'This tile is already occupied',
@@ -833,6 +836,9 @@ const de: Record<TranslationKey, string> = {
   'overlay.heat': 'Wärme',
   'overlay.heat.title':
     'Fernwärme: orange Straßen tragen das Netz, rote Gebäude sind versorgt, blaue Gebäude heizen selbst',
+  'overlay.grid': 'Netz',
+  'overlay.grid.title':
+    'Netzinseln: eine Farbe je Insel, rot getönt im Defizit, abgedunkelt ohne Umspannwerk',
 
   'rejection.notEnoughMoney': 'Nicht genug Geld',
   'rejection.tileOccupied': 'Dieses Feld ist bereits belegt',

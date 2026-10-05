@@ -82,6 +82,35 @@ export function supplyColor(tile: {
 
 const HEAT_COLORS = { trunk: 0xf4a261, served: 0xe76f51, unserved: 0x5b9bd5 } as const;
 
+/** Eight distinguishable hues for island numbers (cycled by number % length). */
+export const ISLAND_PALETTE = [
+  0x5b9bd5, 0x4cd964, 0xf4d35e, 0xc77dff, 0xff9f68, 0x48cae4, 0xb5e48c, 0xf28482,
+] as const;
+const DEFICIT_TINT = 0xe05263;
+
+/**
+ * Grid overlay colour: one hue per island (cycled through the palette by
+ * island number), tinted toward red while it is in deficit, dimmed when
+ * it has no substation, and desaturated when another island is selected.
+ */
+export function gridColor(
+  tile: { island: number },
+  islands: ReadonlyMap<number, { deficit: boolean; substations: number }>,
+  selected: number,
+): number | null {
+  if (tile.island === 0) return null;
+  const color = new THREE.Color(ISLAND_PALETTE[tile.island % ISLAND_PALETTE.length]);
+  const info = islands.get(tile.island);
+  if (info?.deficit) color.lerp(new THREE.Color(DEFICIT_TINT), 0.6);
+  if (info && info.substations === 0) color.multiplyScalar(0.55);
+  if (selected !== 0 && selected !== tile.island) {
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    color.setHSL(hsl.h, hsl.s * 0.25, hsl.l);
+  }
+  return color.getHex();
+}
+
 /** Overlay colour of a tile in the Heat overlay, null when it shows nothing. */
 export function heatColor(tile: {
   tileType: TileType;
@@ -111,6 +140,7 @@ interface OverlayTile {
   transitCover: number;
   damage: number;
   heated: number;
+  island: number;
 }
 
 /**
@@ -126,6 +156,8 @@ export class OverlaysMesh implements DiffLayer {
   private readonly tiles = new Map<number, OverlayTile>();
   private mode: OverlayMode = OverlayMode.None;
   private demand = { residential: 0, commercial: 0, retail: 0, industrial: 0 };
+  private islands = new Map<number, { deficit: boolean; substations: number }>();
+  private selectedIsland = 0;
   private readonly matrix = new THREE.Matrix4();
   private readonly color = new THREE.Color();
 
@@ -158,7 +190,15 @@ export class OverlaysMesh implements DiffLayer {
 
   setEnvironment(environment: RenderEnvironment): void {
     this.demand = environment.demand;
-    if (this.mode === OverlayMode.Demand) this.rebuild();
+    this.islands = new Map(environment.islands.map((i) => [i.number, i]));
+    if (this.mode === OverlayMode.Demand || this.mode === OverlayMode.Grid) this.rebuild();
+  }
+
+  /** Select an island to highlight in Grid mode (0 = none selected). */
+  setSelection(island: number): void {
+    if (this.selectedIsland === island) return;
+    this.selectedIsland = island;
+    if (this.mode === OverlayMode.Grid) this.rebuild();
   }
 
   applyDiffs(diffs: TileDiff[]): void {
@@ -170,7 +210,8 @@ export class OverlaysMesh implements DiffLayer {
         diff.plantType === PlantType.LogisticsDepot ||
         diff.plantType === PlantType.BusDepot ||
         diff.damage > 0 ||
-        (diff.tileType === TileType.Plant && isSupplySource(diff.plantType))
+        (diff.tileType === TileType.Plant && isSupplySource(diff.plantType)) ||
+        diff.island !== 0
       ) {
         this.tiles.set(diff.index, {
           zone: diff.zone,
@@ -186,6 +227,7 @@ export class OverlaysMesh implements DiffLayer {
           transitCover: diff.transitCover,
           damage: diff.damage,
           heated: diff.heated,
+          island: diff.island,
         });
       } else {
         this.tiles.delete(diff.index);
@@ -287,6 +329,8 @@ export class OverlaysMesh implements DiffLayer {
           }
         } else if (this.mode === OverlayMode.Heat) {
           colorHex = heatColor(tile);
+        } else if (this.mode === OverlayMode.Grid) {
+          colorHex = gridColor(tile, this.islands, this.selectedIsland);
         }
         if (colorHex === null) continue;
         this.matrix.setPosition(

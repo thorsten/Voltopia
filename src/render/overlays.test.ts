@@ -12,7 +12,14 @@ import {
   Zone,
 } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { damageColor, heatColor, OverlaysMesh, supplyColor } from './overlays.ts';
+import {
+  damageColor,
+  gridColor,
+  heatColor,
+  ISLAND_PALETTE,
+  OverlaysMesh,
+  supplyColor,
+} from './overlays.ts';
 
 const SIZE = 8;
 
@@ -116,5 +123,36 @@ describe('OverlaysMesh supply-plant storage', () => {
     expect(mesh.count).toBe(1);
     layer.applyDiffs([isolatedWindTurbine(SupplyStatus.Supplied)]);
     expect(mesh.count).toBe(0);
+  });
+});
+
+const islands = new Map([
+  [1, { deficit: false, substations: 1 }],
+  [2, { deficit: true, substations: 1 }],
+  [3, { deficit: false, substations: 0 }],
+]);
+
+describe('gridColor', () => {
+  it('colours islands from the palette by number and leaves island 0 blank', () => {
+    expect(gridColor({ island: 0 }, islands, 0)).toBeNull();
+    expect(gridColor({ island: 1 }, islands, 0)).toBe(ISLAND_PALETTE[1 % ISLAND_PALETTE.length]);
+    expect(gridColor({ island: 9 }, islands, 0)).toBe(ISLAND_PALETTE[9 % ISLAND_PALETTE.length]);
+  });
+
+  it('blends a deficit island toward red and dims one without a substation', () => {
+    const plain = new THREE.Color(gridColor({ island: 1 }, islands, 0)!);
+    const deficit = new THREE.Color(gridColor({ island: 2 }, islands, 0)!);
+    const noLink = new THREE.Color(gridColor({ island: 3 }, islands, 0)!);
+    expect(deficit.r).toBeGreaterThan(deficit.g);
+    expect(noLink.getHSL({ h: 0, s: 0, l: 0 }).l).toBeLessThan(
+      plain.getHSL({ h: 0, s: 0, l: 0 }).l,
+    );
+  });
+
+  it('desaturates every island but the selected one', () => {
+    const selected = new THREE.Color(gridColor({ island: 1 }, islands, 1)!);
+    const other = new THREE.Color(gridColor({ island: 2 }, islands, 1)!);
+    const hsl = { h: 0, s: 0, l: 0 };
+    expect(other.getHSL(hsl).s).toBeLessThan(selected.getHSL({ h: 0, s: 0, l: 0 }).s);
   });
 });

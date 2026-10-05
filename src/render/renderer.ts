@@ -51,12 +51,12 @@ export interface RenderEnvironment {
   sunFactor: number;
   /** Current wind factor 0..1 (drives rotor speed). */
   windFactor: number;
-  /** Battery state of charge 0..1. */
-  stateOfCharge: number;
   /** Tide water level, -1 (low water) .. 1 (high water). */
   tideLevel: number;
   /** Global zone demand, -1..1 each (drives the demand overlay). */
   demand: { residential: number; commercial: number; retail: number; industrial: number };
+  /** Per-island deficit/substation state, for the Grid overlay. */
+  islands: { number: number; deficit: boolean; substations: number }[];
   /** Year phase 0..1 (0 = first spring day). */
   phase: number;
   /** Air temperature in °C. */
@@ -375,12 +375,13 @@ export class GameRenderer {
       // value or they'd keep spinning flat out through a storm while the
       // plant generates nothing underneath them.
       windFactor: Math.min(1, stats.weather.windSpeed + stats.weather.gust),
-      stateOfCharge:
-        stats.energy.storageCapacity > 0
-          ? stats.energy.storedEnergy / stats.energy.storageCapacity
-          : 0,
       tideLevel: stats.tide.level,
       demand: stats.demand,
+      islands: stats.islands.map((i) => ({
+        number: i.number,
+        deficit: i.deficit > 0,
+        substations: i.substations,
+      })),
       phase: stats.season.phase,
       temperature: stats.season.temperature,
       snowCover: stats.weather.snowpack,
@@ -496,6 +497,11 @@ export class GameRenderer {
 
   setOverlayMode(mode: OverlayMode): void {
     this.overlays.setMode(mode);
+  }
+
+  /** Highlight one island in the Grid overlay (0 = none selected). */
+  setSelectedIsland(n: number): void {
+    this.overlays.setSelection(n);
   }
 
   /** Toggle shadow mapping (quality setting). */

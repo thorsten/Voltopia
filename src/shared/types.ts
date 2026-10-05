@@ -96,6 +96,8 @@ export const OverlayMode = {
   Transit: 6,
   Damage: 7,
   Heat: 8,
+  /** Grid islands: one colour per island, red-tinted in deficit, dimmed without a substation. */
+  Grid: 9,
 } as const;
 export type OverlayMode = (typeof OverlayMode)[keyof typeof OverlayMode];
 
