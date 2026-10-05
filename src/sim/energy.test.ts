@@ -13,17 +13,18 @@ import {
   placePlant,
 } from './energy.ts';
 import { callBudgetTicks } from './demandResponse.ts';
-import { heatStep } from './heat.ts';
+import { heatStep, IDLE_HEAT } from './heat.ts';
 import { poolForIsland, syncIslandPools } from './islandPools.ts';
-import { isSupplySource } from './powerGrid.ts';
+import { islandOf, isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { comfortWindowHours, refreshBuildingCount } from './smartMeters.ts';
 import { spotPriceFactor } from './market.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
 import { buildStats, pendingHistoryPoint, stepTick, timeOfDay } from './tick.ts';
-import { HEATED_SERVED } from '../shared/types.ts';
+import { HEATED_SERVED, type IslandStats } from '../shared/types.ts';
 import {
+  bumpGridVersion,
   createSimState,
   PlantType,
   pumpedHeadAt,
@@ -43,6 +44,16 @@ const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
 
 /**
+ * Charging load on the one island a single-plant town has. Index 0 is
+ * the unconnected bucket, so the load goes into index 1.
+ */
+const oneIsland = (v: number): Float64Array => {
+  const a = new Float64Array(2);
+  a[1] = v;
+  return a;
+};
+
+/**
  * Fill the city's plants of one storage kind to `total`, spread over them
  * in proportion to capacity — what setting the old global pool meant.
  */
@@ -50,6 +61,15 @@ function fillPool(state: SimState, plant: PlantType, total: number): void {
   const tiles = storageTilesOfKind(state, plant);
   for (const tile of tiles) state.layers.stored[tile] = 0;
   chargeTiles(state, tiles, total);
+}
+
+/**
+ * A substation on the island of `tile`: its import and export links.
+ * The cost is refunded first, so a town's money is unchanged.
+ */
+function addSubstation(state: SimState, tile: number): void {
+  state.money += BALANCE.costs.plant[PlantType.Substation];
+  expect(placePlant(state, tile, PlantType.Substation).rejected).toBeUndefined();
 }
 
 function makeState(): SimState {
@@ -200,10 +220,10 @@ describe('energyStep', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     setNoonClearSky(state);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.solar).toBeCloseTo(BALANCE.energy.solarPeakOutput, 3);
     state.tick = 0; // midnight
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.solar).toBe(0);
   });
 
@@ -211,12 +231,12 @@ describe('energyStep', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.WindTurbine);
     state.weather.windSpeed = 0;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.wind).toBe(0);
     // Below the turbine cut-out speed, so full peak output — see
     // storm.test.ts for what happens at and above the cut-out.
     state.weather.windSpeed = 0.9;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.wind).toBeCloseTo(BALANCE.energy.windPeakOutput, 3);
   });
 
@@ -224,8 +244,9 @@ describe('energyStep', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setNoonClearSky(state);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const expectedCharge =
       Math.min(BALANCE.energy.solarPeakOutput, BALANCE.energy.batteryPowerLimit) *
       BALANCE.energy.batteryChargeEfficiency;
@@ -246,9 +267,10 @@ describe('energyStep', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setNoonClearSky(state);
     fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.gridExport).toBeCloseTo(
       Math.min(BALANCE.energy.solarPeakOutput, BALANCE.market.exportCapacity),
       3,
@@ -269,7 +291,7 @@ describe('energyStep', () => {
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
     fillPool(state, PlantType.Battery, 100);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const demand = state.lastEnergy.buildingConsumption;
     const rooftop = state.lastEnergy.rooftop;
     expect(demand).toBeGreaterThan(0);
@@ -285,7 +307,7 @@ describe('energyStep', () => {
     state.tick = TICKS_PER_DAY / 2;
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.biogas).toBeCloseTo(
       state.lastEnergy.buildingConsumption - state.lastEnergy.rooftop,
       3,
@@ -297,6 +319,7 @@ describe('energyStep', () => {
     const state = makeState();
     placePlant(state, at(6, 5), PlantType.WindTurbine); // provides connection
     state.weather.windSpeed = 0; // ...but no output
+    addSubstation(state, at(5, 5)); // the island's import link
     const buildings = 20;
     // 7 columns x 3 rows, all strictly north of the plant's row so none
     // land on the plant tile itself, and all within lineSupplyRadius.
@@ -305,7 +328,7 @@ describe('energyStep', () => {
     }
     state.tick = TICKS_PER_DAY / 2;
     state.weather.cloudCover = 1;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     // The transmission link imports at its capacity; the rest is deficit.
     expect(state.lastEnergy.gridImport).toBeCloseTo(BALANCE.market.importCapacity, 3);
     expect(state.lastEnergy.deficit).toBeCloseTo(
@@ -329,10 +352,11 @@ describe('energyStep', () => {
     const state = makeState();
     placePlant(state, at(6, 5), PlantType.WindTurbine);
     state.weather.windSpeed = 0;
+    addSubstation(state, at(5, 5));
     addBuilding(state, at(8, 5), Zone.Commercial, 3);
     state.tick = TICKS_PER_DAY / 2;
     state.weather.cloudCover = 1;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.deficit).toBe(0);
     expect(state.lastEnergy.gridImport).toBeGreaterThan(0);
     expect(state.layers.supplied[at(8, 5)]).toBe(SupplyStatus.Supplied);
@@ -345,8 +369,8 @@ describe('energyStep', () => {
     const outside = at(BALANCE.energy.lineSupplyRadius + 2, 0);
     addBuilding(state, inside, Zone.Residential, 1);
     addBuilding(state, outside, Zone.Residential, 1);
-    state.weather.windSpeed = 1; // plenty of power
-    energyStep(state, { chargingDemand: 0 });
+    state.weather.windSpeed = 0.9; // below the cut-out: plenty of power
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.layers.supplied[inside]).toBe(SupplyStatus.Supplied);
     expect(state.layers.supplied[outside]).toBe(SupplyStatus.NotConnected);
     // Unconnected buildings do not draw from the grid.
@@ -361,11 +385,11 @@ describe('energyStep', () => {
     placePlant(state, at(5, 5), PlantType.WindTurbine);
     const building = at(6, 5);
     addBuilding(state, building, Zone.Residential, 1);
-    state.weather.windSpeed = 1;
-    energyStep(state, { chargingDemand: 0 });
+    state.weather.windSpeed = 0.9; // below the cut-out: plenty of power
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.layers.supplied[building]).toBe(SupplyStatus.Supplied);
     bulldozeTiles(state, [at(5, 5)]);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.layers.supplied[building]).toBe(SupplyStatus.NotConnected);
   });
 
@@ -374,23 +398,24 @@ describe('energyStep', () => {
     placePlant(state, at(0, 0), PlantType.WindTurbine);
     const far = at(12, 0);
     addBuilding(state, far, Zone.Residential, 1);
-    state.weather.windSpeed = 1;
-    energyStep(state, { chargingDemand: 0 });
+    state.weather.windSpeed = 0.9; // below the cut-out: plenty of power
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.layers.supplied[far]).toBe(SupplyStatus.NotConnected);
     state.money = 1e9;
     buildPowerLines(
       state,
       Array.from({ length: 9 }, (_, i) => at(1 + i, 0)),
     ); // x 1..9
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.layers.supplied[far]).toBe(SupplyStatus.Supplied);
   });
 
   it('serves charging demand and accounts it separately', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.WindTurbine);
+    addSubstation(state, at(4, 5));
     state.weather.windSpeed = 0.9; // below the cut-out: full peak output
-    energyStep(state, { chargingDemand: 10 });
+    energyStep(state, { chargingByIsland: oneIsland(10) });
     expect(state.lastEnergy.chargingConsumption).toBe(10);
     const surplus = BALANCE.energy.windPeakOutput - 10;
     expect(state.lastEnergy.gridExport).toBeCloseTo(
@@ -409,11 +434,11 @@ describe('energyStep', () => {
     addBuilding(state, at(7, 5), Zone.Residential, 3);
     addBuilding(state, at(8, 5), Zone.Residential, 1); // no rooftop yet
     setNoonClearSky(state);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.rooftop).toBeCloseTo(BALANCE.energy.rooftopSolarPeakByDensity[3], 3);
     // At night there is no rooftop feed-in.
     state.tick = 0;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.rooftop).toBe(0);
   });
 
@@ -423,7 +448,7 @@ describe('energyStep', () => {
     const outside = at(BALANCE.energy.lineSupplyRadius + 3, 20);
     addBuilding(state, outside, Zone.Residential, 3);
     setNoonClearSky(state);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.rooftop).toBe(0);
   });
 
@@ -443,7 +468,7 @@ describe('energyStep', () => {
     const perTick: number[] = [];
     for (let i = 0; i < TICKS_PER_HISTORY_SAMPLE; i++) {
       state.tick++;
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
       perTick.push(tickGeneration(state));
     }
     expect(new Set(perTick).size).toBeGreaterThan(1);
@@ -464,7 +489,7 @@ describe('energyStep', () => {
     const partial = 5;
     for (let i = 0; i < partial; i++) {
       state.tick++;
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
       perTick.push(tickGeneration(state));
     }
     const mean = perTick.reduce((sum, v) => sum + v, 0) / partial;
@@ -472,7 +497,7 @@ describe('energyStep', () => {
 
     for (let i = partial; i < TICKS_PER_HISTORY_SAMPLE; i++) {
       state.tick++;
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
     }
     // Flush tick: nothing accumulated yet, so pending sits on the fresh sample.
     expect(pendingHistoryPoint(state)).toEqual(state.energyHistory[state.energyHistory.length - 1]);
@@ -491,7 +516,7 @@ describe('energyStep', () => {
     placePlant(state, at(5, 5), PlantType.WindTurbine);
     for (let i = 0; i < 200; i++) {
       state.tick++;
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
     }
     expect(state.energyHistory.length).toBeGreaterThan(0);
     for (const point of state.energyHistory) {
@@ -517,10 +542,10 @@ describe('hydro and pumped storage', () => {
     const state = riverState();
     placePlant(state, at(5, 5), PlantType.RunOfRiver);
     state.weather.riverFlow = 1;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.hydro).toBeCloseTo(BALANCE.energy.hydroPeakOutput, 6);
     state.weather.riverFlow = 0;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.hydro).toBeCloseTo(
       BALANCE.energy.hydroPeakOutput * BALANCE.water.minFlowFactor,
       6,
@@ -535,7 +560,7 @@ describe('hydro and pumped storage', () => {
     state.weather.riverFlow = 1;
     state.money = 1e9;
     // Batteries take up to their power limit first.
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const hydro = BALANCE.energy.hydroPeakOutput;
     const batteryTake = Math.min(hydro, BALANCE.energy.batteryPowerLimit);
     // Precision 3, not 6: a tile's level is a Float32, so a few thousand
@@ -551,7 +576,7 @@ describe('hydro and pumped storage', () => {
     // Fill the battery; the pumped pool absorbs the whole surplus next.
     fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
     const pumpedBefore = storedByKind(state, PlantType.PumpedStorage);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(storedByKind(state, PlantType.PumpedStorage)).toBeCloseTo(
       pumpedBefore + hydro * BALANCE.energy.pumpedStorageChargeEfficiency,
       3,
@@ -568,7 +593,7 @@ describe('hydro and pumped storage', () => {
     addBuilding(state, at(4, 2), Zone.Commercial, 3);
     fillPool(state, PlantType.Battery, 10);
     fillPool(state, PlantType.PumpedStorage, 1_000);
-    energyStep(state, { chargingDemand: 300 });
+    energyStep(state, { chargingByIsland: oneIsland(300) });
     expect(storedByKind(state, PlantType.Battery)).toBe(0);
     expect(storedByKind(state, PlantType.PumpedStorage)).toBeLessThan(1_000);
     expect(storedByKind(state, PlantType.PumpedStorage)).toBeGreaterThanOrEqual(
@@ -583,7 +608,7 @@ describe('hydro and pumped storage', () => {
     // Straight onto the tile: more than it can hold, as a hand-edited
     // save or a shrunken head would leave it.
     state.layers.stored[at(8, 7)] = 1e9;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(storedByKind(state, PlantType.PumpedStorage)).toBeLessThanOrEqual(
       BALANCE.energy.pumpedStorageCapacity,
     );
@@ -606,7 +631,7 @@ describe('hydro and pumped storage', () => {
     fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
     fillPool(state, PlantType.PumpedStorage, 0);
     state.tick = TICKS_PER_DAY; // multiple of the history sample interval, midnight
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const last = state.energyHistory[state.energyHistory.length - 1];
     const combined =
       storedByKind(state, PlantType.Battery) /
@@ -631,7 +656,7 @@ describe('terrain energy bonuses', () => {
     const state = makeState();
     placePlant(state, at(3, 3), PlantType.WindTurbine);
     state.weather.windSpeed = 0.9; // below the cut-out: full peak output
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.wind).toBeCloseTo(BALANCE.energy.windPeakOutput);
   });
 
@@ -643,7 +668,7 @@ describe('terrain energy bonuses', () => {
     for (const n of neighbors4(tile, SIZE)) state.layers.elevation[n] = 7;
     placePlant(state, tile, PlantType.WindTurbine);
     state.weather.windSpeed = 0.9; // below the cut-out: full peak output
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.wind).toBeCloseTo(
       BALANCE.energy.windPeakOutput * (1 + BALANCE.terrain.windBonusPerLevel * 7),
     );
@@ -658,7 +683,7 @@ describe('terrain energy bonuses', () => {
     state.layers.elevation[tile] = 2; // drop of 2 to the downstream tile at 0
     placeDirect(state, tile, PlantType.RunOfRiver);
     state.weather.riverFlow = 1;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.hydro).toBeCloseTo(
       BALANCE.energy.hydroPeakOutput * (1 + BALANCE.terrain.hydroDropBonus * 2),
     );
@@ -680,7 +705,7 @@ describe('terrain energy bonuses', () => {
     state.layers.elevation[seaNeighbor] = 0;
     placeDirect(state, tile, PlantType.RunOfRiver);
     state.weather.riverFlow = 1;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.hydro).toBeCloseTo(BALANCE.energy.hydroPeakOutput);
   });
 
@@ -700,7 +725,7 @@ describe('terrain energy bonuses', () => {
     );
     // The clamp uses the boosted capacity.
     state.layers.stored[shore] = BALANCE.energy.pumpedStorageCapacity * factor + 500;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(storedByKind(state, PlantType.PumpedStorage)).toBeLessThanOrEqual(
       BALANCE.energy.pumpedStorageCapacity * factor,
     );
@@ -755,11 +780,11 @@ describe('tidal plants', () => {
 
     // Slack water at tick 0, strong current a quarter period later.
     state.tick = 0;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.tidal).toBeCloseTo(0, 5);
 
     state.tick = Math.round(TICKS_PER_DAY * (12.42 / 24) * 0.25);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.tidal).toBeGreaterThan(BALANCE.energy.tidalPeakOutput * 0.7);
   });
 
@@ -769,7 +794,7 @@ describe('tidal plants', () => {
     state.money = 1_000_000;
     placePlant(state, tile, PlantType.TidalPlant);
     state.tick = Math.round(TICKS_PER_DAY * (12.42 / 24) * 0.25);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const expected =
       BALANCE.energy.tidalPeakOutput * tidalSiteFactor(state, tile) * tideFactor(state.tick);
     expect(state.lastEnergy.tidal).toBeCloseTo(expected, 5);
@@ -918,9 +943,10 @@ describe('heating load', () => {
     setNoonClearSky(state);
     state.season = { ...state.season, temperature: comfortTemperature - heatingRange };
     placePlant(state, at(5, 5), PlantType.WindTurbine);
+    addSubstation(state, at(4, 5));
     addBuilding(state, at(6, 5), Zone.Residential, 2);
     buildPowerLines(state, [at(6, 6)]);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const heating = state.lastEnergy.heatingConsumption;
     expect(heating).toBeCloseTo(base * weightByZone[Zone.Residential], 6);
     expect(state.lastEnergy.buildingConsumption).toBeCloseTo(
@@ -944,12 +970,12 @@ describe('heating load', () => {
     setNoonClearSky(summer);
     summer.season = { ...summer.season, sunrise: 0.2, sunset: 0.8, solarStrength: 1 };
     placePlant(summer, at(5, 5), PlantType.SolarFarm);
-    energyStep(summer, { chargingDemand: 0 });
+    energyStep(summer, { chargingByIsland: oneIsland(0) });
     const winter = makeState();
     setNoonClearSky(winter);
     winter.season = { ...winter.season, sunrise: 0.3, sunset: 0.7, solarStrength: 0.45 };
     placePlant(winter, at(5, 5), PlantType.SolarFarm);
-    energyStep(winter, { chargingDemand: 0 });
+    energyStep(winter, { chargingByIsland: oneIsland(0) });
     expect(winter.lastEnergy.solar).toBeLessThan(summer.lastEnergy.solar * 0.5);
   });
 });
@@ -990,9 +1016,10 @@ describe('cooling load', () => {
     setNoonClearSky(state);
     state.season = { ...state.season, temperature: comfortTemperature + coolingRange };
     placePlant(state, at(5, 5), PlantType.WindTurbine);
+    addSubstation(state, at(4, 5));
     addBuilding(state, at(6, 5), Zone.Residential, 2);
     buildPowerLines(state, [at(6, 6)]);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const cooling = state.lastEnergy.coolingConsumption;
     expect(cooling).toBeCloseTo(base * weightByZone[Zone.Residential], 6);
     expect(state.lastEnergy.heatingConsumption).toBe(0);
@@ -1044,7 +1071,7 @@ describe('service stations', () => {
     buildRoads(state, [at(6, 7)]);
     placePlant(state, at(5, 5), PlantType.WindTurbine);
     placePlant(state, at(6, 6), PlantType.FireStation); // inside the turbine's own ring
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.buildingConsumption).toBeCloseTo(
       BALANCE.services.stationConsumption,
       6,
@@ -1055,7 +1082,7 @@ describe('service stations', () => {
     buildRoads(far, [at(25, 26)]);
     placePlant(far, at(5, 5), PlantType.WindTurbine);
     placePlant(far, at(25, 25), PlantType.PoliceStation); // far outside any ring
-    energyStep(far, { chargingDemand: 0 });
+    energyStep(far, { chargingByIsland: oneIsland(0) });
     expect(far.lastEnergy.buildingConsumption).toBe(0);
   });
 
@@ -1090,7 +1117,7 @@ describe('hydrogen plants', () => {
     placePlant(state, at(5, 5), PlantType.HydrogenPlant);
     expect(censusPlants(state).hydrogenPlants).toBe(1);
     addBuilding(state, at(6, 5), Zone.Residential, 1);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.layers.supplied[at(6, 5)]).not.toBe(SupplyStatus.NotConnected);
   });
 
@@ -1099,8 +1126,9 @@ describe('hydrogen plants', () => {
     state.money = 1e9;
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.HydrogenPlant);
+    addSubstation(state, at(4, 5));
     setNoonClearSky(state);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     // A stored unit later displaces an import, which beats both sale
     // routes, so the electrolysers get the surplus before the link does.
     const surplus = BALANCE.energy.solarPeakOutput;
@@ -1120,9 +1148,10 @@ describe('hydrogen plants', () => {
     state.money = 1e9;
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.HydrogenPlant);
+    addSubstation(state, at(4, 5));
     setNoonClearSky(state);
     fillPool(state, PlantType.HydrogenPlant, BALANCE.hydrogen.capacity);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     // Clear noon is a cheap hour, so direct sale outbids the link and
     // takes the electrolysers' full input first; the link mops up.
     const soldInput = BALANCE.hydrogen.electrolyserPowerLimit;
@@ -1142,13 +1171,14 @@ describe('hydrogen plants', () => {
     state.money = 1e9;
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.HydrogenPlant);
+    addSubstation(state, at(4, 5));
     setNoonClearSky(state);
     state.weather.windSpeed = 1; // regional abundance drives the spot price down
     fillPool(state, PlantType.HydrogenPlant, BALANCE.hydrogen.capacity); // tanks full: only sales left
     // Trim the surplus to below the electrolyser limit plus the link's
     // capacity, so the order of the two routes actually changes the split.
     const surplus = BALANCE.hydrogen.electrolyserPowerLimit;
-    energyStep(state, { chargingDemand: BALANCE.energy.solarPeakOutput - surplus });
+    energyStep(state, { chargingByIsland: oneIsland(BALANCE.energy.solarPeakOutput - surplus) });
     expect(state.lastEnergy.spotPrice).toBeLessThan(hydrogenSaleBreakEvenSpot());
     expect(state.lastEnergy.electrolysis).toBeCloseTo(surplus, 3);
     expect(state.lastEnergy.hydrogenSold).toBeCloseTo(
@@ -1167,6 +1197,7 @@ describe('hydrogen plants', () => {
     const farms = 5;
     for (let i = 0; i < farms; i++) placePlant(state, at(5 + i, 5), PlantType.SolarFarm);
     placePlant(state, at(5, 6), PlantType.HydrogenPlant);
+    addSubstation(state, at(4, 5));
     state.tick = TICKS_PER_DAY / 2;
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
@@ -1174,7 +1205,7 @@ describe('hydrogen plants', () => {
     fillPool(state, PlantType.HydrogenPlant, BALANCE.hydrogen.capacity); // tanks full: only sales left
     const generation = farms * BALANCE.energy.solarPeakOutput * 0.15; // 0.85 cloud attenuation
     const surplus = BALANCE.hydrogen.electrolyserPowerLimit;
-    energyStep(state, { chargingDemand: generation - surplus });
+    energyStep(state, { chargingByIsland: oneIsland(generation - surplus) });
     expect(state.lastEnergy.spotPrice).toBeGreaterThan(hydrogenSaleBreakEvenSpot());
     expect(state.lastEnergy.gridExport).toBeCloseTo(BALANCE.market.exportCapacity, 3);
     const leftover = surplus - BALANCE.market.exportCapacity;
@@ -1191,8 +1222,9 @@ describe('hydrogen plants', () => {
     state.money = 1e9;
     for (let i = 0; i < 3; i++) placePlant(state, at(5 + i, 5), PlantType.SolarFarm);
     placePlant(state, at(5, 6), PlantType.HydrogenPlant);
+    addSubstation(state, at(4, 5));
     setNoonClearSky(state);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const beyondExport = 3 * BALANCE.energy.solarPeakOutput - BALANCE.market.exportCapacity;
     expect(state.lastEnergy.electrolysis).toBeCloseTo(BALANCE.hydrogen.electrolyserPowerLimit, 3);
     expect(state.lastEnergy.curtailment).toBeCloseTo(
@@ -1211,7 +1243,7 @@ describe('hydrogen plants', () => {
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
     fillPool(state, PlantType.HydrogenPlant, 1_000);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const shortfall = state.lastEnergy.buildingConsumption - state.lastEnergy.rooftop;
     expect(shortfall).toBeGreaterThan(0);
     expect(state.lastEnergy.fuelCell).toBeCloseTo(shortfall, 3);
@@ -1229,7 +1261,7 @@ describe('hydrogen plants', () => {
     state.weather.windSpeed = 0;
     fillPool(state, PlantType.HydrogenPlant, 1_000);
     const demand = BALANCE.hydrogen.fuelCellPowerLimit + 50;
-    energyStep(state, { chargingDemand: demand });
+    energyStep(state, { chargingByIsland: oneIsland(demand) });
     expect(state.lastEnergy.fuelCell).toBeCloseTo(BALANCE.hydrogen.fuelCellPowerLimit, 3);
     expect(state.lastEnergy.biogas).toBeCloseTo(50, 3);
     expect(state.lastEnergy.deficit).toBe(0);
@@ -1256,17 +1288,18 @@ describe('market trading', () => {
 
   it('records the spot price factor every tick', () => {
     const state = makeState();
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.spotPrice).toBeGreaterThan(0);
   });
 
   it('sells stored energy above the reserve floor at scarcity prices', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setScarceEvening(state);
     fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity); // 100%
     state.marketTrading = true;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const sellable =
       BALANCE.energy.batteryCapacity -
       BALANCE.market.trading.sellFloor * BALANCE.energy.batteryCapacity;
@@ -1293,7 +1326,7 @@ describe('market trading', () => {
     // the shortfall, so nothing it holds is spare, however dear the
     // spot price is. Selling here would be raiding the reserve at the
     // start of the very lull it exists for.
-    energyStep(state, { chargingDemand: 50 });
+    energyStep(state, { chargingByIsland: oneIsland(50) });
     expect(state.lastEnergy.spotPrice).toBeGreaterThanOrEqual(BALANCE.market.trading.sellThreshold);
     expect(state.lastEnergy.tradeSell).toBe(0);
     expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(
@@ -1305,6 +1338,7 @@ describe('market trading', () => {
   it('leaves the bulk of the reserve untouched even at the highest price', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setScarceEvening(state);
     fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
     state.marketTrading = true;
@@ -1313,7 +1347,7 @@ describe('market trading', () => {
     // the reserve stays essentially intact — the point of the whole
     // rule, stated here as an absolute rather than in terms of the
     // constant under test.
-    for (let i = 0; i < 10; i++) energyStep(state, { chargingDemand: 0 });
+    for (let i = 0; i < 10; i++) energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(storedByKind(state, PlantType.Battery)).toBeGreaterThan(
       0.9 * BALANCE.energy.batteryCapacity,
     );
@@ -1325,6 +1359,7 @@ describe('market trading', () => {
   it('never sells below the reserve floor', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setScarceEvening(state);
     fillPool(
       state,
@@ -1332,17 +1367,18 @@ describe('market trading', () => {
       BALANCE.market.trading.sellFloor * BALANCE.energy.batteryCapacity,
     );
     state.marketTrading = true;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.tradeSell).toBe(0);
   });
 
   it('buys cheap power into storage up to the buy ceiling', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setCheapNoon(state);
     fillPool(state, PlantType.Battery, 0.2 * BALANCE.energy.batteryCapacity);
     state.marketTrading = true;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const expected = Math.min(
       BALANCE.market.importCapacity,
       BALANCE.energy.batteryPowerLimit,
@@ -1358,17 +1394,19 @@ describe('market trading', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     placePlant(state, at(6, 5), PlantType.SolarFarm);
+    addSubstation(state, at(4, 5));
     setCheapNoon(state);
     // Own solar surplus at noon: the battery charges from it and the rest
     // is exported, so buying on top would be nonsense.
     fillPool(state, PlantType.Battery, 0.2 * BALANCE.energy.batteryCapacity);
     state.marketTrading = true;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.gridExport).toBeGreaterThan(0);
     expect(state.lastEnergy.tradeBuy).toBe(0);
     // And a battery already at the ceiling stays untouched.
     const full = makeState();
     placePlant(full, at(5, 5), PlantType.Battery);
+    addSubstation(full, at(4, 5));
     setCheapNoon(full);
     fillPool(
       full,
@@ -1376,16 +1414,17 @@ describe('market trading', () => {
       BALANCE.market.trading.buyCeiling * BALANCE.energy.batteryCapacity,
     );
     full.marketTrading = true;
-    energyStep(full, { chargingDemand: 0 });
+    energyStep(full, { chargingByIsland: oneIsland(0) });
     expect(full.lastEnergy.tradeBuy).toBe(0);
   });
 
   it('does not trade while the toggle is off', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
+    addSubstation(state, at(4, 5));
     setScarceEvening(state);
     fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.tradeSell).toBe(0);
     expect(state.lastEnergy.tradeBuy).toBe(0);
   });
@@ -1424,7 +1463,7 @@ describe('geothermal generation', () => {
         state.tick = tick;
         state.weather.cloudCover = cloudCover;
         state.weather.windSpeed = cloudCover;
-        energyStep(state, { chargingDemand: 0 });
+        energyStep(state, { chargingByIsland: oneIsland(0) });
         return state.lastEnergy.geothermal;
       }),
     );
@@ -1509,7 +1548,7 @@ describe('heat plants', () => {
     state.season = cold;
     const heat = heatStep(state);
     expect(state.layers.heated[at(4, 9)]).toBe(HEATED_SERVED);
-    energyStep(state, { chargingDemand: 0, heat });
+    energyStep(state, { chargingByIsland: oneIsland(0), heat });
     const e = state.lastEnergy;
     expect(e.heatingConsumption).toBeCloseTo(0, 6);
     expect(e.heatPumpConsumption).toBeCloseTo(heat.demand / heat.cop, 6);
@@ -1525,7 +1564,7 @@ describe('heat plants', () => {
     state.season = { ...state.season, temperature: -20 };
     const heat = heatStep(state);
     expect(heat.fallback).toBeGreaterThan(0);
-    energyStep(state, { chargingDemand: 0, heat });
+    energyStep(state, { chargingByIsland: oneIsland(0), heat });
     expect(state.lastEnergy.heatingConsumption).toBeCloseTo(heat.fallback, 6);
     expect(state.lastEnergy.heatFallback).toBeCloseTo(heat.fallback, 6);
   });
@@ -1534,11 +1573,12 @@ describe('heat plants', () => {
     const state = heatedVillageState(0);
     placePlant(state, at(2, 14), PlantType.HeatStore);
     placePlant(state, at(2, 16), PlantType.Battery);
+    addSubstation(state, at(2, 8));
     for (let i = 0; i < 3; i++) placePlant(state, at(5 + i, 14), PlantType.SolarFarm);
     setNoonClearSky(state);
     state.season = { ...state.season, temperature: 0 }; // cold: the night needs heat
     const heat = heatStep(state);
-    energyStep(state, { chargingDemand: 0, heat });
+    energyStep(state, { chargingByIsland: oneIsland(0), heat });
     const e = state.lastEnergy;
     // Batteries first (their power limit), then the heat store (pump limit), then export.
     expect(e.heatStoreCharge).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 3);
@@ -1561,7 +1601,7 @@ describe('heat plants', () => {
     setNoonClearSky(state);
     state.season = { ...state.season, temperature: 30 };
     const heat = heatStep(state);
-    energyStep(state, { chargingDemand: 0, heat });
+    energyStep(state, { chargingByIsland: oneIsland(0), heat });
     expect(state.lastEnergy.heatStoreCharge).toBe(0);
     expect(storedByKind(state, PlantType.HeatStore)).toBe(0);
   });
@@ -1569,7 +1609,7 @@ describe('heat plants', () => {
   it('runs without a heat input as if there were no district heating', () => {
     const state = heatedVillageState(2);
     state.season = { ...state.season, temperature: 0 };
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.heatPumpConsumption).toBe(0);
     expect(state.lastEnergy.heatingConsumption).toBeGreaterThan(0);
   });
@@ -1578,7 +1618,7 @@ describe('heat plants', () => {
 describe('isolated supply plants', () => {
   /** One energy tick with the same minimal input the rest of this file uses. */
   function tick(state: SimState): void {
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
   }
 
   it('placePlant marks a lone turbine isolated at once and a village turbine not', () => {
@@ -1672,7 +1712,7 @@ describe('flexible load pool (smart meters)', () => {
     const state = meteredTown(PlantType.WindTurbine);
     state.smartMeters.metered = 0;
     for (let t = 0; t < 50; t++) {
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
       expect(state.lastEnergy.flexDeferred).toBe(0);
       expect(state.lastEnergy.flexRecovered).toBe(0);
       expect(poolForIsland(state, 1).flexBacklog).toBe(0);
@@ -1692,8 +1732,8 @@ describe('flexible load pool (smart meters)', () => {
     bare.smartMeters.metered = 0;
     bare.tick = state.tick;
     bare.season = { ...bare.season, temperature: -4 };
-    energyStep(bare, { chargingDemand: 0 });
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(bare, { chargingByIsland: oneIsland(0) });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const e = state.lastEnergy;
     const { householdFlexShare, heatingFlexShare } = BALANCE.smartMeters;
     const flexible =
@@ -1714,7 +1754,7 @@ describe('flexible load pool (smart meters)', () => {
     expect(e.unshifted).toBeCloseTo(bare.lastEnergy.unshifted, 9);
     expect(e.unshifted - served(state)).toBeCloseTo(e.flexDeferred, 9);
     // Keep deferring: the backlog saturates at the comfort window of flexible demand.
-    for (let t = 0; t < TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
+    for (let t = 0; t < TICKS_PER_DAY; t++) energyStep(state, { chargingByIsland: oneIsland(0) });
     const capacity =
       flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
     expect(poolForIsland(state, 1).flexBacklog).toBeLessThanOrEqual(capacity + 1e-6);
@@ -1728,7 +1768,7 @@ describe('flexible load pool (smart meters)', () => {
     state.weather.windSpeed = 0.9;
     syncIslandPools(state);
     poolForIsland(state, 1).flexBacklog = 5;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const e = state.lastEnergy;
     expect(e.flexDeferred).toBe(0);
     expect(e.flexRecovered).toBeGreaterThan(0);
@@ -1740,7 +1780,7 @@ describe('flexible load pool (smart meters)', () => {
   it('serves the overflow and holds the backlog at the comfort bound', () => {
     const state = meteredTown(PlantType.Battery);
     state.tick = Math.round(TICKS_PER_DAY * 0.1); // 02:24, nothing generated
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const flexible = state.lastEnergy.flexDeferred; // no surplus: deferred == flexible
     const capacity =
       flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
@@ -1753,7 +1793,7 @@ describe('flexible load pool (smart meters)', () => {
       BALANCE.smartMeters.maxDrainShare * state.lastEnergy.unshifted,
     );
     poolForIsland(state, 1).flexBacklog = capacity + excess;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.flexOverflow).toBeCloseTo(excess + flexible, 9);
     expect(poolForIsland(state, 1).flexBacklog).toBeCloseTo(capacity, 9);
   });
@@ -1764,7 +1804,8 @@ describe('flexible load pool (smart meters)', () => {
     state.season = { ...state.season, temperature: -4 };
     // Saturate the backlog against the comfort bound of the cold,
     // uninsulated town.
-    for (let t = 0; t < 2 * TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
+    for (let t = 0; t < 2 * TICKS_PER_DAY; t++)
+      energyStep(state, { chargingByIsland: oneIsland(0) });
     const saturated = poolForIsland(state, 1).flexBacklog;
     expect(saturated).toBeGreaterThan(0);
     // Insulation halves the heating load, so the pool — and with it the
@@ -1773,7 +1814,7 @@ describe('flexible load pool (smart meters)', () => {
     state.insulation = true;
     const { maxDrainShare } = BALANCE.smartMeters;
     const windowHours = comfortWindowHours(timeOfDay(state.tick), state.season);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const first = state.lastEnergy;
     // Nothing generated, so the whole pool is deferred: flexDeferred is
     // this tick's `flexible`, hence its comfort bound.
@@ -1791,7 +1832,7 @@ describe('flexible load pool (smart meters)', () => {
     let previous = poolForIsland(state, 1).flexBacklog;
     let settled = false;
     for (let t = 0; t < 2 * TICKS_PER_DAY; t++) {
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
       const e = state.lastEnergy;
       expect(e.flexRecovered + e.flexOverflow).toBeLessThanOrEqual(
         maxDrainShare * e.unshifted + 1e-6,
@@ -1817,7 +1858,7 @@ describe('flexible load pool (smart meters)', () => {
     placePlant(state, at(2, 2), PlantType.WindTurbine);
     syncIslandPools(state);
     poolForIsland(state, 1).flexBacklog = 42;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.unshifted).toBe(0);
     expect(state.lastEnergy.flexOverflow).toBe(0);
     expect(state.lastEnergy.flexRecovered).toBe(0);
@@ -1829,7 +1870,7 @@ describe('flexible load pool (smart meters)', () => {
     syncIslandPools(state);
     for (let t = 0; t < 200; t++) {
       const before = poolForIsland(state, 1).flexBacklog;
-      energyStep(state, { chargingDemand: 0 });
+      energyStep(state, { chargingByIsland: oneIsland(0) });
       const e = state.lastEnergy;
       // consumption actually served this tick = unshifted - deferred + recovered + overflow
       // (the field sum carries heatStoreCharge on top of totalDemand once a
@@ -1861,6 +1902,7 @@ describe('demand response in the cascade', () => {
   function scarceBusinessTown(zone: Zone = Zone.Commercial): SimState {
     const state = makeState();
     placePlant(state, at(6, 5), PlantType.WindTurbine);
+    addSubstation(state, at(5, 5));
     state.weather.windSpeed = 0;
     for (let i = 0; i < 20; i++) {
       addBuilding(state, at(3 + (i % 7), 2 + Math.floor(i / 7)), zone, 3);
@@ -1875,14 +1917,14 @@ describe('demand response in the cascade', () => {
   function businessBase(): number {
     const bare = scarceBusinessTown();
     bare.demandResponse.active = false;
-    energyStep(bare, { chargingDemand: 0 });
+    energyStep(bare, { chargingByIsland: oneIsland(0) });
     return bare.lastEnergy.buildingConsumption;
   }
 
   it('is a no-op with the contract off', () => {
     const state = scarceBusinessTown();
     state.demandResponse.active = false;
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.shed).toBe(0);
     expect(state.lastEnergy.shedPool).toBe(0);
     expect(state.lastEnergy.contractedBuildings).toBe(20);
@@ -1894,7 +1936,7 @@ describe('demand response in the cascade', () => {
     const importPrice = BALANCE.market.importCostPerEnergyUnit * spotPriceFactor(state);
     expect(importPrice).toBeGreaterThanOrEqual(activationPricePerEnergyUnit); // precondition
     const base = businessBase();
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const e = state.lastEnergy;
     expect(e.shedPool).toBeCloseTo(shedShare * base, 6);
     expect(e.shed).toBeCloseTo(e.shedPool, 6);
@@ -1908,7 +1950,7 @@ describe('demand response in the cascade', () => {
 
   it('a residential town has nothing to shed', () => {
     const state = scarceBusinessTown(Zone.Residential);
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.shedPool).toBe(0);
     expect(state.lastEnergy.shed).toBe(0);
     expect(state.lastEnergy.contractedBuildings).toBe(0);
@@ -1935,6 +1977,7 @@ describe('demand response in the cascade', () => {
     // regional wind factor and the spot price would read scarce instead;
     // anything from 0.6 up is already the cap.)
     placePlant(state, at(6, 5), PlantType.Battery);
+    addSubstation(state, at(5, 5));
     fillPool(state, PlantType.Battery, 0);
     setNoonClearSky(state);
     state.tick = (11 * TICKS_PER_DAY) / 24;
@@ -1943,7 +1986,7 @@ describe('demand response in the cascade', () => {
     state.demandResponse.active = true;
     const importPrice = BALANCE.market.importCostPerEnergyUnit * spotPriceFactor(state);
     expect(importPrice).toBeLessThan(activationPricePerEnergyUnit); // precondition
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     expect(state.lastEnergy.shedPool).toBeGreaterThan(0);
     expect(state.lastEnergy.shed).toBe(0);
     expect(state.lastEnergy.gridImport).toBeGreaterThan(0);
@@ -1955,7 +1998,7 @@ describe('demand response in the cascade', () => {
     syncIslandPools(state);
     poolForIsland(state, 1).callBudget = 0;
     const base = businessBase();
-    energyStep(state, { chargingDemand: 0 });
+    energyStep(state, { chargingByIsland: oneIsland(0) });
     const e = state.lastEnergy;
     expect(e.shed).toBe(0);
     expect(e.buildingConsumption).toBeCloseTo(base, 6);
@@ -1976,9 +2019,9 @@ describe('demand response in the cascade', () => {
     };
     const off = scarceBusinessTown();
     off.demandResponse.active = false;
-    energyStep(off, { chargingDemand: 0 });
+    energyStep(off, { chargingByIsland: oneIsland(0) });
     const on = scarceBusinessTown();
-    energyStep(on, { chargingDemand: 0 });
+    energyStep(on, { chargingByIsland: oneIsland(0) });
     expect(count(on)).toBeLessThan(count(off));
   });
 
@@ -2023,5 +2066,81 @@ describe('industrial load', () => {
       BALANCE.energy.consumptionByZoneAndDensity[Zone.Industrial][3] *
       BALANCE.energy.loadProfileByZone[Zone.Industrial][hour];
     expect(e.shedPool).toBeCloseTo(BALANCE.demandResponse.industrialShedShare * base, 6);
+  });
+});
+
+describe('per-island balance', () => {
+  /** Island A: turbine + houses at the west edge; island B: houses at the east edge with a battery and optional substation. */
+  function twoIslandTown(substation: boolean): SimState {
+    const state = makeState();
+    state.money = 1e9;
+    setNoonClearSky(state);
+    // Below the cut-out speed, so the turbine runs at full peak output.
+    state.weather.windSpeed = 0.9;
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    // Density 1: no rooftop PV, so an island without a plant generates
+    // exactly nothing.
+    for (let i = 0; i < 3; i++) addBuilding(state, at(3 + i, 4), Zone.Residential, 1);
+    placePlant(state, at(26, 26), PlantType.Battery);
+    for (let i = 0; i < 3; i++) addBuilding(state, at(27, 23 + i), Zone.Residential, 1);
+    if (substation) placePlant(state, at(24, 26), PlantType.Substation);
+    bumpGridVersion(state);
+    return state;
+  }
+
+  it('an island in deficit gets no help from another island in surplus and cannot import without a substation', () => {
+    const state = twoIslandTown(false);
+    energyStep(state, { chargingByIsland: new Float64Array(8), heat: { ...IDLE_HEAT } });
+    const a = state.lastIslands.find((i) => i.number === islandOf(state, at(2, 2)))!;
+    const b = state.lastIslands.find((i) => i.number === islandOf(state, at(26, 26)))!;
+    expect(a.generation).toBeGreaterThan(a.consumption);
+    expect(a.deficit).toBe(0);
+    expect(b.generation).toBe(0);
+    expect(b.deficit).toBeCloseTo(b.consumption, 6);
+    expect(b.gridImport).toBe(0);
+    expect(state.lastEnergy.deficit).toBeCloseTo(b.deficit, 6);
+    expect(state.lastEnergy.curtailment).toBeCloseTo(a.curtailment, 6);
+  });
+
+  it('a substation lets its island import, and the city sums equal the island sums', () => {
+    const state = twoIslandTown(true);
+    energyStep(state, { chargingByIsland: new Float64Array(8), heat: { ...IDLE_HEAT } });
+    const b = state.lastIslands.find((i) => i.number === islandOf(state, at(26, 26)))!;
+    expect(b.substations).toBe(1);
+    expect(b.gridImport).toBeGreaterThan(0);
+    expect(b.gridImport).toBeLessThanOrEqual(BALANCE.market.importCapacity);
+    const sum = (f: (i: IslandStats) => number) => state.lastIslands.reduce((s, i) => s + f(i), 0);
+    expect(state.lastEnergy.gridImport).toBeCloseTo(
+      sum((i) => i.gridImport),
+      6,
+    );
+    expect(state.lastEnergy.deficit).toBeCloseTo(
+      sum((i) => i.deficit),
+      6,
+    );
+  });
+
+  it("buildings flicker under their own island's deficit, not the other's", () => {
+    const state = twoIslandTown(false);
+    for (let t = 0; t < 20; t++) {
+      state.tick++;
+      energyStep(state, { chargingByIsland: new Float64Array(8), heat: { ...IDLE_HEAT } });
+      for (let i = 0; i < 3; i++) {
+        expect(state.layers.supplied[at(3 + i, 4)]).toBe(SupplyStatus.Supplied);
+      }
+    }
+    const flickered = [0, 1, 2].some(
+      (i) => state.layers.supplied[at(27, 23 + i)] === SupplyStatus.Undersupplied,
+    );
+    expect(flickered).toBe(true);
+  });
+
+  it('storage is charged on the tiles of the island that made the surplus', () => {
+    const state = twoIslandTown(false);
+    placePlant(state, at(6, 2), PlantType.Battery); // on island A, next to the turbine
+    bumpGridVersion(state);
+    energyStep(state, { chargingByIsland: new Float64Array(8), heat: { ...IDLE_HEAT } });
+    expect(state.layers.stored[at(6, 2)]).toBeGreaterThan(0);
+    expect(state.layers.stored[at(26, 26)]).toBe(0);
   });
 });

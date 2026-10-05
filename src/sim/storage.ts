@@ -28,6 +28,46 @@ export function storageTilesOfKind(
   return tiles;
 }
 
+/** The four storage kinds' intact tiles, each bucketed by island number. */
+export interface StorageTilesByIsland {
+  battery: number[][];
+  pumped: number[][];
+  hydrogen: number[][];
+  heatStore: number[][];
+}
+
+/**
+ * Every intact storage tile of every kind, bucketed by island number
+ * (index 0 = not energised), in a single pass over the map — what
+ * `storageTilesOfKind` would return four times per island, which the
+ * per-island balance would otherwise walk the grid for over and over.
+ */
+export function storageTilesByIsland(state: SimState, islands: number): StorageTilesByIsland {
+  const buckets = (): number[][] => Array.from({ length: islands }, (): number[] => []);
+  const out: StorageTilesByIsland = {
+    battery: buckets(),
+    pumped: buckets(),
+    hydrogen: buckets(),
+    heatStore: buckets(),
+  };
+  const { tileType, plantType, damage, island } = state.layers;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant || damage[i] !== 0) continue;
+    const kind =
+      plantType[i] === PlantType.Battery
+        ? out.battery
+        : plantType[i] === PlantType.PumpedStorage
+          ? out.pumped
+          : plantType[i] === PlantType.HydrogenPlant
+            ? out.hydrogen
+            : plantType[i] === PlantType.HeatStore
+              ? out.heatStore
+              : undefined;
+    if (kind) kind[island[i]].push(i);
+  }
+  return out;
+}
+
 /**
  * Stored energy and capacity summed over the given tiles — normally the
  * intact tiles of one kind, as `storageTilesOfKind` returns them.

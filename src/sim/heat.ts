@@ -16,7 +16,7 @@ import { neighbors4 } from '../shared/grid.ts';
 import { HEATED_SERVED, HEATED_TRUNK, PlantType, Zone } from '../shared/types.ts';
 import { censusPlants, heatingConsumption } from './energy.ts';
 import { recomputeGrid } from './powerGrid.ts';
-import { chargeTiles, dischargeTiles, poolOf, scaleTiles, storageTilesOfKind } from './storage.ts';
+import { dischargeTiles, poolOf, scaleTiles, storageTilesOfKind } from './storage.ts';
 import { heatingDegree } from '../shared/heating.ts';
 import { markDirty, TileType, type SimState } from './state.ts';
 
@@ -195,26 +195,4 @@ export function heatStep(state: SimState): HeatTickResult {
  */
 export function nightNeedsHeat(temperature: number): boolean {
   return heatingDegree(temperature - BALANCE.seasons.diurnalAmplitude) > 0;
-}
-
-/**
- * Push surplus electricity into the store through the pumps: one
- * electricity unit stores `cop` heat units, within the pump power left
- * after serving and within the headroom. The heat spreads over `stores`
- * (the store tiles to fill) in proportion to their headroom. Returns the
- * electricity absorbed; mutates the tiles and the result's budgets.
- */
-export function chargeHeatStore(
-  state: SimState,
-  heat: HeatTickResult,
-  surplus: number,
-  stores: readonly number[],
-): number {
-  if (surplus <= 0 || heat.pumpPowerLeft <= 0 || heat.headroom <= 0) return 0;
-  if (!nightNeedsHeat(state.season.temperature)) return 0;
-  const absorbed = Math.max(0, Math.min(surplus, heat.pumpPowerLeft, heat.headroom / heat.cop));
-  chargeTiles(state, stores, absorbed * heat.cop);
-  heat.headroom -= absorbed * heat.cop;
-  heat.pumpPowerLeft -= absorbed;
-  return absorbed;
 }

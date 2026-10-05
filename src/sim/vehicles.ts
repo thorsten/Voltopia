@@ -1,6 +1,7 @@
 import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import { PlantType, RoadClass, Zone } from '../shared/types.ts';
+import { recomputeGrid } from './powerGrid.ts';
 import { findRoadPath } from './routing.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
@@ -291,6 +292,7 @@ export function vehiclesStep(state: SimState): Map<number, number> {
       tripTicks: 0,
       tripFreeFlowTicks: 0,
       charging: false,
+      chargeTile: -1,
       waitTicks: 0,
       riderDay: -1,
     });
@@ -374,7 +376,9 @@ export function vehiclesStep(state: SimState): Map<number, number> {
       }
     }
 
-    vehicle.charging = decideCharging(state, vehicle, hubs, hubLoad, surplus);
+    const chargeTile = decideCharging(state, vehicle, hubs, hubLoad, surplus);
+    vehicle.chargeTile = chargeTile;
+    vehicle.charging = chargeTile >= 0;
     if (vehicle.charging) {
       vehicle.charge = Math.min(1, vehicle.charge + BALANCE.vehicles.chargeRatePerTick);
     }
@@ -384,9 +388,11 @@ export function vehiclesStep(state: SimState): Map<number, number> {
 }
 
 /**
- * Plugged in? At home whenever the battery isn't full (smart charging
- * defers to renewable surplus unless the battery is low); at work only
- * when a charging hub with free capacity is near the workplace.
+ * Plugged in where? Returns the tile the car draws from — its home road
+ * whenever the battery isn't full (smart charging defers to renewable
+ * surplus unless the battery is low), a charging hub with free capacity
+ * near the workplace, or -1 for not charging at all. The tile decides
+ * which island carries the load.
  */
 function decideCharging(
   state: SimState,
@@ -394,12 +400,14 @@ function decideCharging(
   hubs: number[],
   hubLoad: Map<number, number>,
   surplusAvailable: boolean,
-): boolean {
-  if (vehicle.charge >= 1) return false;
+): number {
+  if (vehicle.charge >= 1) return -1;
 
   if (vehicle.phase === VehiclePhase.ParkedHome) {
-    if (!isSmartVehicle(state, vehicle.id)) return true;
-    return surplusAvailable || vehicle.charge < BALANCE.vehicles.smartChargeFloor;
+    if (!isSmartVehicle(state, vehicle.id)) return vehicle.homeRoad;
+    return surplusAvailable || vehicle.charge < BALANCE.vehicles.smartChargeFloor
+      ? vehicle.homeRoad
+      : -1;
   }
 
   if (vehicle.phase === VehiclePhase.ParkedWork && vehicle.workRoad >= 0) {
@@ -414,10 +422,10 @@ function decideCharging(
       const used = hubLoad.get(hub) ?? 0;
       if (used >= BALANCE.vehicles.vehiclesPerHub) continue;
       hubLoad.set(hub, used + 1);
-      return true;
+      return hub;
     }
   }
-  return false;
+  return -1;
 }
 
 /**
@@ -494,4 +502,28 @@ export function chargingDemand(state: SimState): number {
     vans * BALANCE.deliveries.chargingEnergyPerVan +
     buses * BALANCE.transit.chargingEnergyPerBus
   );
+}
+
+/**
+ * Charging demand per island this tick (index = island number, 0 = not
+ * energised): cars at their home road or hub, vans and buses at their
+ * depot tile. Sums to `chargingDemand`, which is the same figure for
+ * the whole city.
+ */
+export function chargingDemandByIsland(state: SimState): Float64Array {
+  recomputeGrid(state);
+  const { island } = state.layers;
+  const out = new Float64Array(state.islandKeys.length);
+  for (const v of state.vehicles) {
+    if (v.charging && v.chargeTile >= 0) {
+      out[island[v.chargeTile]] += BALANCE.vehicles.chargingEnergyPerVehicle;
+    }
+  }
+  for (const van of state.vans) {
+    if (van.charging) out[island[van.depot]] += BALANCE.deliveries.chargingEnergyPerVan;
+  }
+  for (const bus of state.buses) {
+    if (bus.charging) out[island[bus.depot]] += BALANCE.transit.chargingEnergyPerBus;
+  }
+  return out;
 }

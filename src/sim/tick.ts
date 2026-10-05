@@ -21,7 +21,7 @@ import { storedByKind } from './storage.ts';
 import { recomputeServices, serviceCoverage } from './services.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import { transitStep, transitStats } from './transit.ts';
-import { chargingDemand, drivingVehicleCount, vehiclesStep } from './vehicles.ts';
+import { chargingDemandByIsland, drivingVehicleCount, vehiclesStep } from './vehicles.ts';
 import { updateWeather } from './weather.ts';
 import {
   countPopulationAndJobs,
@@ -69,7 +69,7 @@ export function stepTick(state: SimState): void {
   // The heat network before the balance: served buildings leave the
   // heating load, the pumps join it, and the cascade may fill the store.
   const heat = heatStep(state);
-  energyStep(state, { chargingDemand: chargingDemand(state), heat });
+  energyStep(state, { chargingByIsland: chargingDemandByIsland(state), heat });
   recomputeServices(state);
   state.lastServices = serviceCoverage(state);
   state.lastDemand = computeDemand(state);
@@ -235,6 +235,7 @@ export function buildStats(state: SimState): GlobalStats {
       history: state.energyHistory.slice(),
       pending: pendingHistoryPoint(state),
     },
+    islands: state.lastIslands.map((island) => ({ ...island })),
     taxRate: state.taxRate,
     speed: state.speed,
     smartMeters: {

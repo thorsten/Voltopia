@@ -10,6 +10,7 @@ import type {
   DemandStats,
   DeliveryStats,
   DisasterEvent,
+  IslandStats,
   LifetimeSample,
   EnergyHistoryPoint,
   SaveGame,
@@ -77,6 +78,12 @@ export interface Vehicle {
   tripFreeFlowTicks: number;
   /** True while plugged in this tick (drives the charging load). */
   charging: boolean;
+  /**
+   * Tile the car is plugged in at (its home road or a charging hub),
+   * -1 while not charging: the island that carries its load. Not
+   * persisted.
+   */
+  chargeTile: number;
   /** Consecutive ticks spent waiting behind a full lane (gridlock breaker). */
   waitTicks: number;
   /** Day of the last decision to ride the bus instead of driving; -1 = drives. Not persisted. */
@@ -443,6 +450,12 @@ export interface SimState {
   lastEconomy: EconomyBreakdown;
   /** Tile selected in the inspector, -1 when none. */
   inspectedTile: number;
+  /**
+   * Per-island figures of the last energy step, in island order. Set by
+   * `energyStep`, published as `GlobalStats.islands`. Transient: derived
+   * from the tiles every tick, never persisted.
+   */
+  lastIslands: IslandStats[];
   /** Set by the energy step; consumed by growth/happiness. */
   lastEnergy: {
     solar: number;
@@ -646,6 +659,7 @@ export function createSimState(
       busStopUpkeep: 0,
     },
     inspectedTile: -1,
+    lastIslands: [],
     lastEnergy: {
       solar: 0,
       wind: 0,

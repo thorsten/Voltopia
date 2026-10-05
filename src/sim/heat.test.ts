@@ -3,17 +3,9 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { HEATED_NONE, HEATED_SERVED, HEATED_TRUNK } from '../shared/types.ts';
 import { heatingConsumption, placePlant } from './energy.ts';
-import {
-  chargeHeatStore,
-  heatPumpCop,
-  heatStep,
-  IDLE_HEAT,
-  nightNeedsHeat,
-  plantReach,
-  recomputeHeated,
-} from './heat.ts';
+import { heatPumpCop, heatStep, nightNeedsHeat, plantReach, recomputeHeated } from './heat.ts';
 import { buildPowerLines } from './powerLines.ts';
-import { storageTilesOfKind, storedByKind } from './storage.ts';
+import { storedByKind } from './storage.ts';
 import { buildRoads } from './roads.ts';
 import {
   collectDiffs,
@@ -347,67 +339,6 @@ describe('nightNeedsHeat', () => {
   it('closes on a warm day', () => {
     expect(nightNeedsHeat(comfortTemperature + swing)).toBe(false);
     expect(nightNeedsHeat(30)).toBe(false);
-  });
-});
-
-describe('chargeHeatStore', () => {
-  function storeState(temperature: number): {
-    state: SimState;
-    heat: ReturnType<typeof heatStep>;
-    stores: number[];
-  } {
-    const state = freshState();
-    village(state, 0);
-    placePlant(state, at(2, 14), PlantType.HeatStore);
-    state.season = { ...state.season, temperature };
-    return {
-      state,
-      heat: heatStep(state),
-      stores: storageTilesOfKind(state, PlantType.HeatStore),
-    };
-  }
-
-  it('stores cop heat units per electricity unit within pump power and headroom', () => {
-    const { state, heat, stores } = storeState(0);
-    const absorbed = chargeHeatStore(state, heat, 20, stores);
-    expect(absorbed).toBeCloseTo(20, 6);
-    expect(state.layers.stored[at(2, 14)]).toBeCloseTo(20 * heatPumpCop(0), 3);
-    expect(heat.pumpPowerLeft).toBeCloseTo(BALANCE.heat.pumpPowerLimit - 20, 6);
-  });
-
-  it('is capped by the pump power left', () => {
-    const { state, heat, stores } = storeState(0);
-    const absorbed = chargeHeatStore(state, heat, 10_000, stores);
-    expect(absorbed).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 6);
-  });
-
-  it('is capped by the headroom', () => {
-    const { state, heat, stores } = storeState(0);
-    state.layers.stored[at(2, 14)] = BALANCE.heat.storeCapacity - 7;
-    heat.headroom = 7;
-    const absorbed = chargeHeatStore(state, heat, 10_000, stores);
-    expect(absorbed).toBeCloseTo(7 / heatPumpCop(0), 6);
-    expect(state.layers.stored[at(2, 14)]).toBeCloseTo(BALANCE.heat.storeCapacity, 3);
-  });
-
-  it('does nothing while the nights are warm', () => {
-    const { state, heat, stores } = storeState(30);
-    expect(chargeHeatStore(state, heat, 100, stores)).toBe(0);
-    expect(storedByKind(state, PlantType.HeatStore)).toBe(0);
-  });
-
-  it('does nothing without a plant to pump with', () => {
-    const state = freshState();
-    placePlant(state, at(2, 14), PlantType.HeatStore);
-    state.season = { ...state.season, temperature: 0 };
-    const heat = heatStep(state);
-    const stores = storageTilesOfKind(state, PlantType.HeatStore);
-    expect(chargeHeatStore(state, heat, 100, stores)).toBe(0);
-  });
-
-  it('IDLE_HEAT absorbs nothing', () => {
-    const state = freshState();
-    expect(chargeHeatStore(state, { ...IDLE_HEAT }, 100, [])).toBe(0);
   });
 });
 

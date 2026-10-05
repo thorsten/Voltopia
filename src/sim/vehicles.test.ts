@@ -3,6 +3,8 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { PlantType, RoadClass, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
+import { islandOf } from './powerGrid.ts';
+import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
 import { findRoadPath } from './routing.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
@@ -10,6 +12,7 @@ import { createSimState, TileType, VanPhase, VehiclePhase, type SimState } from 
 import { updateTrafficLoad } from './traffic.ts';
 import {
   chargingDemand,
+  chargingDemandByIsland,
   drivingVehicles,
   isRider,
   surplusAvailable,
@@ -369,6 +372,7 @@ describe('congestion', () => {
       tripTicks: 0,
       tripFreeFlowTicks: 0,
       charging: false,
+      chargeTile: -1,
       waitTicks: 0,
       riderDay: -1,
     });
@@ -609,6 +613,7 @@ describe('avenues on the road', () => {
       tripTicks: 0,
       tripFreeFlowTicks: 0,
       charging: false,
+      chargeTile: -1,
       waitTicks: 0,
       riderDay: -1,
     });
@@ -817,5 +822,27 @@ describe('surplusAvailable', () => {
     expect(surplusAvailable(state)).toBe(false);
     state.lastEnergy = { ...state.lastEnergy, wind: 65 };
     expect(surplusAvailable(state)).toBe(true);
+  });
+});
+
+describe('chargingDemandByIsland', () => {
+  it('buckets a car charging at home by the island of its home road, and sums to chargingDemand', () => {
+    const state = commuterTown(11, 200);
+    // One island over the whole town: a plant feeding a line along the
+    // street, so every home road is energised.
+    placePlant(state, at(10, 12), PlantType.SolarFarm);
+    buildPowerLines(
+      state,
+      Array.from({ length: 16 }, (_, x) => at(x + 3, 11)),
+    );
+    vehiclesStep(state);
+    const byIsland = chargingDemandByIsland(state);
+    let total = 0;
+    for (const v of byIsland) total += v;
+    expect(total).toBeCloseTo(chargingDemand(state), 9);
+    const charging = state.vehicles.find((v) => v.charging)!;
+    expect(charging.chargeTile).toBe(charging.homeRoad);
+    expect(islandOf(state, charging.homeRoad)).toBeGreaterThan(0);
+    expect(byIsland[islandOf(state, charging.homeRoad)]).toBeGreaterThan(0);
   });
 });

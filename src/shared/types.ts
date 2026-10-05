@@ -517,6 +517,36 @@ export interface TileInfo {
   terrainBonus: number;
 }
 
+/**
+ * One grid island's figures for the tick that just ran: what it
+ * generated and consumed on its own, what it stored, and what its
+ * substations moved over the links. An island is balanced alone, so
+ * these are the numbers that explain a local blackout the city-wide
+ * sums hide.
+ */
+export interface IslandStats {
+  /** Island number this tick (1.., ascending by lowest tile). */
+  number: number;
+  /** Stable key: the island's lowest tile index. */
+  key: number;
+  /** Energised tiles. */
+  tiles: number;
+  /** Connected buildings. */
+  buildings: number;
+  substations: number;
+  generation: number;
+  consumption: number;
+  stored: number;
+  /** Battery plus pumped-storage capacity. */
+  capacity: number;
+  deficit: number;
+  curtailment: number;
+  gridImport: number;
+  gridExport: number;
+  /** What this island's imports cost this tick (at the current spot price). */
+  importCost: number;
+}
+
 export interface GlobalStats {
   /** World seed (identifies the city, e.g. for per-city UI flags). */
   seed: number;
@@ -535,6 +565,8 @@ export interface GlobalStats {
   weather: Weather;
   season: SeasonState;
   energy: EnergyStats;
+  /** Per-island figures of this tick, one entry per island (1..). */
+  islands: IslandStats[];
   /** Current tax rate, 0..MAX_TAX_RATE. */
   taxRate: number;
   speed: Speed;

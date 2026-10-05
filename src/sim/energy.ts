@@ -1,12 +1,12 @@
-import { BALANCE, TICKS_PER_DAY, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
-import { HEATED_SERVED, PlantType, Terrain, Zone } from '../shared/types.ts';
+import { BALANCE, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
+import { HEATED_SERVED, PlantType, Terrain, Zone, type IslandStats } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
-import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
-import { chargePool, dischargePool } from './islandBalance.ts';
+import { IDLE_HEAT, nightNeedsHeat, type HeatTickResult } from './heat.ts';
+import { balanceIsland, type IslandResult } from './islandBalance.ts';
 import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
-import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.ts';
-import { comfortWindowHours, meteredCoverage } from './smartMeters.ts';
+import { poolForIsland, syncIslandPools } from './islandPools.ts';
+import { meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { coolingDegree, heatingDegree } from '../shared/heating.ts';
@@ -30,9 +30,8 @@ import {
   dischargeTiles,
   poolOf,
   storageCapacityAt,
-  storageTilesOfKind,
+  storageTilesByIsland,
 } from './storage.ts';
-import { callBudgetTicks, dispatchCall } from './demandResponse.ts';
 import { spotPriceFactor } from './market.ts';
 import { timeOfDay } from './tick.ts';
 import { currentSolarFactor, currentWindFactor, riverFlowFactor } from './weather.ts';
@@ -130,11 +129,12 @@ interface PlantCensus {
   geothermalCapacity: number;
   heatPlants: number;
   heatStores: number;
+  /** Substations: each one is an import and an export link for its island. */
+  substations: number;
 }
 
-export function censusPlants(state: SimState): PlantCensus {
-  const { tileType, plantType, geothermal, reservoirHeat, damage } = state.layers;
-  const census: PlantCensus = {
+function emptyCensus(): PlantCensus {
+  return {
     solarFarms: 0,
     windTurbines: 0,
     batteries: 0,
@@ -157,85 +157,116 @@ export function censusPlants(state: SimState): PlantCensus {
     geothermalCapacity: 0,
     heatPlants: 0,
     heatStores: 0,
+    substations: 0,
   };
+}
+
+/** Count one intact plant tile into a census. */
+function countPlantInto(census: PlantCensus, state: SimState, i: number, plant: PlantType): void {
+  const { geothermal, reservoirHeat } = state.layers;
+  switch (plant) {
+    case PlantType.SolarFarm:
+      census.solarFarms++;
+      break;
+    case PlantType.WindTurbine:
+      census.windTurbines++;
+      // Offshore: free wind, no shelter, no height to gain. On land:
+      // height helps, sheltering woods hurt (turbulence and lower wind).
+      census.windCapacity += windTurbineFactor(
+        state,
+        i,
+        (1 + BALANCE.terrain.windBonusPerLevel * state.layers.elevation[i]) *
+          windForestFactor(state, i),
+      );
+      break;
+    case PlantType.Battery:
+      census.batteries++;
+      break;
+    case PlantType.BiogasPlant:
+      census.biogasPlants++;
+      break;
+    case PlantType.ChargingHub:
+      census.chargingHubs++;
+      break;
+    case PlantType.Park:
+      census.parks++;
+      break;
+    case PlantType.RunOfRiver:
+      census.runOfRiverPlants++;
+      census.hydroCapacity += 1 + BALANCE.terrain.hydroDropBonus * riverDropAt(state, i);
+      break;
+    case PlantType.PumpedStorage:
+      census.pumpedStoragePlants++;
+      census.pumpedCapacity += 1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, i);
+      break;
+    case PlantType.FireStation:
+      census.fireStations++;
+      break;
+    case PlantType.PoliceStation:
+      census.policeStations++;
+      break;
+    case PlantType.LogisticsDepot:
+      census.logisticsDepots++;
+      break;
+    case PlantType.BusDepot:
+      census.busDepots++;
+      break;
+    case PlantType.HydrogenPlant:
+      census.hydrogenPlants++;
+      break;
+    case PlantType.TidalPlant:
+      census.tidalPlants++;
+      census.tidalCapacity += tidalSiteFactor(state, i);
+      break;
+    case PlantType.GeothermalPlant:
+      census.geothermalPlants++;
+      // Reads the quantised reservoirHeat layer, not the field's authoritative
+      // float `heat` — the gap is bounded by one step of 1/FULL_HEAT, and it's
+      // deliberate: energy, inspector, agent API and renderer all then agree on
+      // the same number.
+      census.geothermalCapacity +=
+        BALANCE.geothermal.qualityFactor[geothermal[i]] * (reservoirHeat[i] / FULL_HEAT);
+      break;
+    case PlantType.HeatPlant:
+      census.heatPlants++;
+      break;
+    case PlantType.HeatStore:
+      census.heatStores++;
+      break;
+    case PlantType.Substation:
+      census.substations++;
+      break;
+    case PlantType.None:
+      break;
+  }
+}
+
+export function censusPlants(state: SimState): PlantCensus {
+  const { tileType, plantType, damage } = state.layers;
+  const census = emptyCensus();
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant) continue;
     // A damaged plant is out of service: no generation, no storage
     // capacity, no coverage. It heals through repairStep.
     if (damage[i] !== 0) continue;
-    const plant = plantType[i] as PlantType;
-    switch (plant) {
-      case PlantType.SolarFarm:
-        census.solarFarms++;
-        break;
-      case PlantType.WindTurbine:
-        census.windTurbines++;
-        // Offshore: free wind, no shelter, no height to gain. On land:
-        // height helps, sheltering woods hurt (turbulence and lower wind).
-        census.windCapacity += windTurbineFactor(
-          state,
-          i,
-          (1 + BALANCE.terrain.windBonusPerLevel * state.layers.elevation[i]) *
-            windForestFactor(state, i),
-        );
-        break;
-      case PlantType.Battery:
-        census.batteries++;
-        break;
-      case PlantType.BiogasPlant:
-        census.biogasPlants++;
-        break;
-      case PlantType.ChargingHub:
-        census.chargingHubs++;
-        break;
-      case PlantType.Park:
-        census.parks++;
-        break;
-      case PlantType.RunOfRiver:
-        census.runOfRiverPlants++;
-        census.hydroCapacity += 1 + BALANCE.terrain.hydroDropBonus * riverDropAt(state, i);
-        break;
-      case PlantType.PumpedStorage:
-        census.pumpedStoragePlants++;
-        census.pumpedCapacity += 1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, i);
-        break;
-      case PlantType.FireStation:
-        census.fireStations++;
-        break;
-      case PlantType.PoliceStation:
-        census.policeStations++;
-        break;
-      case PlantType.LogisticsDepot:
-        census.logisticsDepots++;
-        break;
-      case PlantType.BusDepot:
-        census.busDepots++;
-        break;
-      case PlantType.HydrogenPlant:
-        census.hydrogenPlants++;
-        break;
-      case PlantType.TidalPlant:
-        census.tidalPlants++;
-        census.tidalCapacity += tidalSiteFactor(state, i);
-        break;
-      case PlantType.GeothermalPlant:
-        census.geothermalPlants++;
-        // Reads the quantised reservoirHeat layer, not the field's authoritative
-        // float `heat` — the gap is bounded by one step of 1/FULL_HEAT, and it's
-        // deliberate: energy, inspector, agent API and renderer all then agree on
-        // the same number.
-        census.geothermalCapacity +=
-          BALANCE.geothermal.qualityFactor[geothermal[i]] * (reservoirHeat[i] / FULL_HEAT);
-        break;
-      case PlantType.HeatPlant:
-        census.heatPlants++;
-        break;
-      case PlantType.HeatStore:
-        census.heatStores++;
-        break;
-      case PlantType.None:
-        break;
-    }
+    countPlantInto(census, state, i, plantType[i] as PlantType);
+  }
+  return census;
+}
+
+/**
+ * One census per island, index 0 holding the plants on no island at all
+ * (a heat store out of any supply ring, a plant on a damaged line), in
+ * a single pass over the map — the per-island balance would otherwise
+ * walk the whole grid once per island.
+ */
+function censusByIsland(state: SimState, islands: number): PlantCensus[] {
+  const { tileType, plantType, damage, island } = state.layers;
+  const census = Array.from({ length: islands }, emptyCensus);
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant) continue;
+    if (damage[i] !== 0) continue;
+    countPlantInto(census[island[i]], state, i, plantType[i] as PlantType);
   }
   return census;
 }
@@ -301,94 +332,70 @@ export function isTileConnected(state: SimState, index: number): boolean {
 }
 
 export interface EnergyTickInput {
-  /** Additional charging consumption (EVs), served after buildings. */
-  chargingDemand: number;
+  /**
+   * Charging load per island this tick (index = island number, 0 = not
+   * energised), served after buildings; see `chargingDemandByIsland`.
+   */
+  chargingByIsland: Float64Array;
   /** This tick's district-heating balance (IDLE_HEAT when absent). */
   heat?: HeatTickResult;
 }
 
-/** Island number with the most energised tiles (a short tile-count scan). */
-function largestIsland(state: SimState): number {
-  const counts = Array.from<number>({ length: state.islandKeys.length }).fill(0);
-  for (const n of state.layers.island) counts[n]++;
-  let best = 1;
-  for (let n = 2; n < counts.length; n++) {
-    if (counts[n] > counts[best]) best = n;
-  }
-  return best;
-}
-
 /**
- * A scratch pool for the no-islands case (an empty map, or one with no
- * supply yet): nothing to balance, so a fresh, unpersisted pool every
- * tick is harmless. Until Task 5 splits the cascade per island, this is
- * also what a multi-island city's balance reads and writes for every
- * island but the largest — a known, documented approximation.
- */
-function freshScratchPool(): IslandPool {
-  return { flexBacklog: 0, callBudget: callBudgetTicks() };
-}
-
-/**
- * One tick of the energy balance:
- * 1. renewable generation (solar + wind + rooftop + hydro + tidal + geothermal) covers
- *    consumption (buildings, heating, cooling, charging),
- * 2. surplus charges batteries, then pumped storage, then the heat store
- *    through the heat pumps (only while the nights are cold), then the
- *    hydrogen tanks — storing beats selling, because a stored unit later
- *    displaces an import priced far above either sale. What the tanks
- *    cannot hold is sold over whichever route pays more at the current
- *    spot price: the export link, or the electrolysers running for
- *    direct sale. Only what neither route can take is curtailed,
- * 3. deficit discharges batteries, then pumped storage, then the
- *    hydrogen fuel cells, then dispatches biogas, then sheds contracted
- *    business load (demand response), then imports over the
- *    transmission link,
- * 4. remaining deficit becomes undersupply: a matching share of connected
- *    (energised) buildings is flagged undersupplied (deterministic flicker).
+ * One tick of the energy balance. Every grid island is balanced on its
+ * own — a plant feeds only the island it stands on, and import, export
+ * and spot trading need a substation there (see `balanceIsland` for the
+ * cascade one island runs). This step is the orchestrator: it labels
+ * demand, charging, heat and the plant census by island, hands each
+ * island its own storage tiles, substations and pool, applies the
+ * storage deltas back onto the tiles, flickers buildings under their
+ * own island's deficit and sums the islands into the city-wide
+ * `state.lastEnergy`. `state.lastIslands` keeps the per-island figures.
  */
 export function energyStep(state: SimState, input: EnergyTickInput): void {
   const { layers } = state;
   recomputeGrid(state);
   syncIslandPools(state);
-  // Still one city-wide balance (per-island balancing is Task 5): read
-  // and write the largest island's pool, or a scratch one with no
-  // islands at all.
-  const pool: IslandPool =
-    state.islandKeys.length > 1 ? poolForIsland(state, largestIsland(state)) : freshScratchPool();
-  const census = censusPlants(state);
+  const islands = state.islandKeys.length; // index 0 = unconnected
   const time = timeOfDay(state.tick);
   const heat = input.heat ?? { ...IDLE_HEAT };
-
-  const solar = census.solarFarms * BALANCE.energy.solarPeakOutput * currentSolarFactor(state);
-  const wind = census.windCapacity * BALANCE.energy.windPeakOutput * currentWindFactor(state);
-  const hydro = census.hydroCapacity * BALANCE.energy.hydroPeakOutput * riverFlowFactor(state);
-  const tidal = census.tidalCapacity * BALANCE.energy.tidalPeakOutput * tideFactor(state.tick);
-  // Baseload: no weather, no daylight, no tide — only the reservoir.
-  const geothermal = census.geothermalCapacity * BALANCE.energy.geothermalPeakOutput;
-
-  // Consumption of all connected buildings, plus their rooftop PV
-  // feed-in (rooftop capacity grows automatically with density).
-  const solarFactorNow = currentSolarFactor(state);
   const temperature = state.season.temperature;
-  let buildingDemand = 0;
-  let heatingDemand = 0;
-  let coolingDemand = 0;
-  let rooftop = 0;
-  // Base load of the connected businesses — the demand-response pool.
-  let businessDemand = 0;
-  let industrialDemand = 0;
-  let contractedBuildings = 0;
+  const solarFactorNow = currentSolarFactor(state);
+  const windFactorNow = currentWindFactor(state);
+  const riverFlowNow = riverFlowFactor(state);
+  const tideNow = tideFactor(state.tick);
+
+  // Per-island accumulators, gathered from the tiles in the two loops
+  // below (index 0 collects whatever is not energised).
+  const census = censusByIsland(state, islands);
+  const storage = storageTilesByIsland(state, islands);
+  const buildingDemand = new Float64Array(islands);
+  const heatingDemand = new Float64Array(islands);
+  const coolingDemand = new Float64Array(islands);
+  const rooftop = new Float64Array(islands);
+  const businessDemand = new Float64Array(islands);
+  const industrialDemand = new Float64Array(islands);
+  const contracted = new Int32Array(islands);
+  // Heat demand of the network-served buildings, per island: the share
+  // of the network's fallback that lands back on their own heating.
+  const servedHeat = new Float64Array(islands);
+  const buildings = new Int32Array(islands);
+  const tileCount = new Int32Array(islands);
+  for (let i = 0; i < layers.island.length; i++) tileCount[layers.island[i]]++;
 
   // Service stations draw a fixed load while connected to the grid.
   for (let i = 0; i < layers.tileType.length; i++) {
     if (layers.tileType[i] !== TileType.Plant) continue;
     if (layers.damage[i] !== 0) continue;
     if (!isStation(layers.plantType[i] as PlantType)) continue;
-    if (layers.energized[i] === 1) buildingDemand += BALANCE.services.stationConsumption;
+    if (layers.energized[i] === 1) {
+      buildingDemand[layers.island[i]] += BALANCE.services.stationConsumption;
+    }
   }
 
-  const connectedBuildings: number[] = [];
+  // Consumption of all connected buildings, plus their rooftop PV
+  // feed-in (rooftop capacity grows automatically with density).
+  const connectedByIsland: number[][] = Array.from({ length: islands }, (): number[] => []);
   for (let i = 0; i < layers.tileType.length; i++) {
     if (layers.tileType[i] !== TileType.Empty || layers.density[i] === 0) continue;
     // A damaged building draws nothing and reads as cut off, so the
@@ -402,25 +409,27 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
       setSupplied(state, i, SupplyStatus.NotConnected);
       continue;
     }
-    connectedBuildings.push(i);
+    const n = layers.island[i];
+    connectedByIsland[n].push(i);
+    buildings[n]++;
     const zone = layers.zone[i] as Zone;
     const density = layers.density[i];
     const base = buildingConsumption(zone, density, time);
-    buildingDemand += base;
+    buildingDemand[n] += base;
     if (zone === Zone.Commercial || zone === Zone.Retail) {
-      businessDemand += base;
-      contractedBuildings++;
+      businessDemand[n] += base;
+      contracted[n]++;
     } else if (zone === Zone.Industrial) {
-      industrialDemand += base;
-      contractedBuildings++;
+      industrialDemand[n] += base;
+      contracted[n]++;
     }
+    const heating = heatingConsumption(zone, density, temperature, state.insulation);
     // A served building gets its heat from the network; its own
     // electric heating only runs for the fallback share (added below).
-    if (layers.heated[i] !== HEATED_SERVED) {
-      heatingDemand += heatingConsumption(zone, density, temperature, state.insulation);
-    }
-    coolingDemand += coolingConsumption(zone, density, temperature, state.insulation);
-    rooftop += (BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0) * solarFactorNow;
+    if (layers.heated[i] === HEATED_SERVED) servedHeat[n] += heating;
+    else heatingDemand[n] += heating;
+    coolingDemand[n] += coolingConsumption(zone, density, temperature, state.insulation);
+    rooftop[n] += (BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0) * solarFactorNow;
   }
 
   // Supply plants: flag the ones that serve nothing (icon + overlay).
@@ -431,342 +440,199 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     setSupplied(state, i, isolated[i] === 1 ? SupplyStatus.NotConnected : SupplyStatus.Supplied);
   }
 
-  // Heat the network could not deliver is heated electrically on site.
-  heatingDemand += heat.fallback;
-
-  const chargingDemand = Math.max(0, input.chargingDemand);
-  const generation = solar + wind + rooftop + hydro + tidal + geothermal;
-
-  // Smart meters: a share of metered household load and on-site electric
-  // heating waits for renewable surplus (see smartMeters.ts). Cooling,
-  // charging and the network pumps stay inflexible. With no coverage
-  // every term is 0 and the step is unchanged.
-  const unshifted =
-    buildingDemand + heatingDemand + coolingDemand + chargingDemand + heat.pumpPower;
-  const coverage = meteredCoverage(state);
-  const { householdFlexShare, heatingFlexShare, maxDrainShare } = BALANCE.smartMeters;
-  const flexible =
-    coverage * (householdFlexShare * buildingDemand + heatingFlexShare * heatingDemand);
-  const inflexible = unshifted - flexible;
-  const renewableSurplus = generation - inflexible;
-  let servedNow = 0;
-  let recovered = 0;
-  let deferred = flexible;
-  if (renewableSurplus > 0) {
-    servedNow = Math.min(flexible, renewableSurplus);
-    recovered = Math.min(pool.flexBacklog, renewableSurplus - servedNow);
-    deferred = flexible - servedNow;
-  }
-  // The backlog may only drain so fast. The comfort bound below scales
-  // with the current pool, so anything that shrinks the pool at once —
-  // insulation halving the heating load, a heat plant coming online,
-  // storm damage, a mass bulldoze — would leave the whole backlog above
-  // the new bound and serve it in a single tick, a city-wide deficit out
-  // of nowhere. Capped, the backlog may sit above the bound for a while
-  // and empties over several ticks instead.
-  const drainCap = maxDrainShare * unshifted;
-  recovered = Math.min(recovered, drainCap);
-  // Comfort bound: past a few hours of deferred demand the pool is served
-  // regardless of the weather — at night, hours enough to reach the
-  // morning sun (see comfortWindowHours).
-  const backlogCapacity =
-    flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
-  const overflow = Math.min(
-    Math.max(0, pool.flexBacklog + deferred - recovered - backlogCapacity),
-    Math.max(0, drainCap - recovered),
-  );
-  pool.flexBacklog = Math.max(0, pool.flexBacklog + deferred - recovered - overflow);
-  // No load at all (an empty city, or every building disconnected): there
-  // is nothing to drain into, and the cap would hold the backlog forever.
-  if (unshifted === 0) pool.flexBacklog = 0;
-  const totalDemand = inflexible + servedNow + recovered + overflow;
-  // Report both lines as what was actually served this tick. The shift is
-  // split in proportion to what each line contributed to the pool —
-  // charging all of it to the household line would print a negative
-  // figure on a cold night, where heating alone is the larger share.
-  const householdFlex = householdFlexShare * buildingDemand;
-  const householdShare =
-    flexible > 0 ? householdFlex / (householdFlex + heatingFlexShare * heatingDemand) : 0;
-  const shift = -deferred + recovered + overflow;
-  buildingDemand += householdShare * shift;
-  heatingDemand += (1 - householdShare) * shift;
-
-  // Storage sits on the plant tiles (see storage.ts). The cascade below is
-  // still one city-wide pool per kind — per-island balancing comes later —
-  // so it reads the summed pool and writes back through the helpers, which
-  // spread the energy over the tiles. `poolOf` also clamps a tile that
-  // holds more than it can, which is what the old `Math.min` did.
-  const batteryTiles = storageTilesOfKind(state, PlantType.Battery);
-  const pumpedTiles = storageTilesOfKind(state, PlantType.PumpedStorage);
-  const hydrogenTiles = storageTilesOfKind(state, PlantType.HydrogenPlant);
-  const heatStoreTiles = storageTilesOfKind(state, PlantType.HeatStore);
-  const batteryPool = poolOf(state, batteryTiles);
-  const pumpedPool = poolOf(state, pumpedTiles);
-  const hydrogenPool = poolOf(state, hydrogenTiles);
-  const powerLimit = census.batteries * BALANCE.energy.batteryPowerLimit;
-  const pumpedPowerLimit = census.pumpedCapacity * BALANCE.energy.pumpedStoragePowerLimit;
-  const electrolyserLimit = census.hydrogenPlants * BALANCE.hydrogen.electrolyserPowerLimit;
-  const fuelCellLimit = census.hydrogenPlants * BALANCE.hydrogen.fuelCellPowerLimit;
-
-  let curtailment = 0;
-  let biogas = 0;
-  let deficit = 0;
-  let gridImport = 0;
-  let gridExport = 0;
-  let electrolysis = 0;
-  let fuelCell = 0;
-  let hydrogenSold = 0;
-  let batteryPowerUsed = 0;
-  let pumpedPowerUsed = 0;
-  let heatStoreCharge = 0;
-  let shed = 0;
-  let shedPool = 0;
+  // The heat network spans islands: its pump power and the heat it could
+  // not deliver are split over them by their share of the heat plants
+  // and of the served heat demand.
+  const heatPlantsTotal = census.reduce((s, c) => s + c.heatPlants, 0);
+  const fallbackShare = heat.demand > 0 ? heat.fallback / heat.demand : 0;
 
   // The spot factor depends only on the state (clock and weather), so
   // reading it before the cascade changes nothing for trading below.
   const spotPrice = spotPriceFactor(state);
-  const net = generation - totalDemand;
-  if (net >= 0) {
-    shedPool = dispatchCall(
-      pool,
-      state.demandResponse.active,
-      businessDemand,
-      industrialDemand,
-      0,
-      spotPrice,
-      BALANCE.market.importCapacity,
-    ).pool;
-    const battery = chargePool(
-      batteryPool.stored,
-      batteryPool.capacity,
-      powerLimit,
-      BALANCE.energy.batteryChargeEfficiency,
-      net,
+  const coverage = meteredCoverage(state);
+  const results: IslandResult[] = [];
+  const perIsland: IslandStats[] = [];
+  let storedTotal = 0;
+  let capacityTotal = 0;
+  for (let n = 1; n < islands; n++) {
+    const c = census[n];
+    const batteryTiles = storage.battery[n];
+    const pumpedTiles = storage.pumped[n];
+    const hydrogenTiles = storage.hydrogen[n];
+    const heatStoreTiles = storage.heatStore[n];
+    // `poolOf` also clamps a tile that holds more than it can.
+    const battery = poolOf(state, batteryTiles);
+    const pumped = poolOf(state, pumpedTiles);
+    const hydrogen = poolOf(state, hydrogenTiles);
+    const heatStore = poolOf(state, heatStoreTiles);
+    const pumpShare = heatPlantsTotal > 0 ? c.heatPlants / heatPlantsTotal : 0;
+    const result = balanceIsland(
+      {
+        timeOfDay: time,
+        season: state.season,
+        spotPrice,
+        marketTrading: state.marketTrading,
+        demandResponseActive: state.demandResponse.active,
+        coverage,
+        generation: {
+          solar: c.solarFarms * BALANCE.energy.solarPeakOutput * solarFactorNow,
+          wind: c.windCapacity * BALANCE.energy.windPeakOutput * windFactorNow,
+          rooftop: rooftop[n],
+          hydro: c.hydroCapacity * BALANCE.energy.hydroPeakOutput * riverFlowNow,
+          tidal: c.tidalCapacity * BALANCE.energy.tidalPeakOutput * tideNow,
+          // Baseload: no weather, no daylight, no tide — only the reservoir.
+          geothermal: c.geothermalCapacity * BALANCE.energy.geothermalPeakOutput,
+        },
+        biogasCapacity: c.biogasPlants * BALANCE.energy.biogasMaxOutput,
+        demand: {
+          buildings: buildingDemand[n],
+          // Heat the network could not deliver is heated electrically
+          // on site, by the buildings it failed on.
+          heating: heatingDemand[n] + servedHeat[n] * fallbackShare,
+          cooling: coolingDemand[n],
+          charging: Math.max(0, input.chargingByIsland[n] ?? 0),
+          heatPumps: heat.pumpPower * pumpShare,
+        },
+        businessDemand: businessDemand[n],
+        industrialDemand: industrialDemand[n],
+        contractedBuildings: contracted[n],
+        battery: {
+          ...battery,
+          powerLimit: c.batteries * BALANCE.energy.batteryPowerLimit,
+          efficiency: BALANCE.energy.batteryChargeEfficiency,
+        },
+        pumped: {
+          ...pumped,
+          powerLimit: c.pumpedCapacity * BALANCE.energy.pumpedStoragePowerLimit,
+          efficiency: BALANCE.energy.pumpedStorageChargeEfficiency,
+        },
+        hydrogen: {
+          ...hydrogen,
+          electrolyserLimit: c.hydrogenPlants * BALANCE.hydrogen.electrolyserPowerLimit,
+          fuelCellLimit: c.hydrogenPlants * BALANCE.hydrogen.fuelCellPowerLimit,
+          efficiency: BALANCE.hydrogen.chargeEfficiency,
+        },
+        heatStore: {
+          headroom: Math.max(0, heatStore.capacity - heatStore.stored),
+          pumpPowerLeft: heat.pumpPowerLeft * pumpShare,
+          cop: heat.cop,
+          nightNeedsHeat: nightNeedsHeat(temperature),
+        },
+        substations: c.substations,
+      },
+      poolForIsland(state, n),
     );
-    chargeTiles(state, batteryTiles, battery.absorbed * BALANCE.energy.batteryChargeEfficiency);
-    batteryPowerUsed = battery.absorbed;
-    const pumped = chargePool(
-      pumpedPool.stored,
-      pumpedPool.capacity,
-      pumpedPowerLimit,
-      BALANCE.energy.pumpedStorageChargeEfficiency,
-      net - battery.absorbed,
-    );
-    chargeTiles(state, pumpedTiles, pumped.absorbed * BALANCE.energy.pumpedStorageChargeEfficiency);
-    pumpedPowerUsed = pumped.absorbed;
-    // The heat store drinks after the electric storages and before the
-    // hydrogen tanks: a cheap one-way sink that shifts the heating peak.
-    heatStoreCharge = chargeHeatStore(
-      state,
-      heat,
-      net - battery.absorbed - pumped.absorbed,
-      heatStoreTiles,
-    );
-    let remaining = net - battery.absorbed - pumped.absorbed - heatStoreCharge;
-    // Filling the tanks comes before either sale: a stored unit is
-    // released 1:1 by the fuel cell later and so displaces an import at
-    // importCostPerEnergyUnit * spot, worth several times what selling
-    // the same surplus now earns.
-    const hydrogen = chargePool(
-      hydrogenPool.stored,
-      hydrogenPool.capacity,
-      electrolyserLimit,
-      BALANCE.hydrogen.chargeEfficiency,
-      remaining,
-    );
-    chargeTiles(state, hydrogenTiles, hydrogen.absorbed * BALANCE.hydrogen.chargeEfficiency);
-    electrolysis = hydrogen.absorbed;
-    remaining -= hydrogen.absorbed;
+    results.push(result);
 
-    // What the tanks cannot hold is sold over the better-paying route
-    // and the other one mops up. The link earns exportRevenue * spot per
-    // energy unit; keeping the electrolysers running for direct sale
-    // earns chargeEfficiency * saleRevenue, independent of the spot
-    // price. Surplus usually falls at a sunny, windy midday — exactly
-    // when the spot price is at its lowest — so this is the common case,
-    // not an edge case.
-    const exportValue = BALANCE.market.exportRevenuePerEnergyUnit * spotPrice;
-    const hydrogenSaleValue =
-      BALANCE.hydrogen.chargeEfficiency * BALANCE.hydrogen.saleRevenuePerEnergyUnit;
-    const sellOverLink = (amount: number): number => {
-      const sold = Math.min(amount, BALANCE.market.exportCapacity - gridExport);
-      gridExport += sold;
-      return sold;
-    };
-    const sellAsHydrogen = (amount: number): number => {
-      const used = Math.min(amount, electrolyserLimit - electrolysis);
-      electrolysis += used;
-      hydrogenSold += used * BALANCE.hydrogen.chargeEfficiency;
-      return used;
-    };
-    const routes =
-      exportValue >= hydrogenSaleValue
-        ? [sellOverLink, sellAsHydrogen]
-        : [sellAsHydrogen, sellOverLink];
-    for (const sell of routes) remaining -= sell(remaining);
-    curtailment = remaining;
-  } else {
-    let shortfall = -net;
-    const battery = dischargePool(batteryPool.stored, powerLimit, shortfall);
-    dischargeTiles(state, batteryTiles, battery.released);
-    shortfall -= battery.released;
-    batteryPowerUsed = battery.released;
-    const pumped = dischargePool(pumpedPool.stored, pumpedPowerLimit, shortfall);
-    dischargeTiles(state, pumpedTiles, pumped.released);
-    shortfall -= pumped.released;
-    pumpedPowerUsed = pumped.released;
-    const hydrogen = dischargePool(hydrogenPool.stored, fuelCellLimit, shortfall);
-    dischargeTiles(state, hydrogenTiles, hydrogen.released);
-    fuelCell = hydrogen.released;
-    shortfall -= fuelCell;
-    biogas = Math.min(shortfall, census.biogasPlants * BALANCE.energy.biogasMaxOutput);
-    shortfall -= biogas;
-    // The demand-response contract sheds business load when a call is
-    // cheaper than importing or the link alone cannot carry the rest.
-    const call = dispatchCall(
-      pool,
-      state.demandResponse.active,
-      businessDemand,
-      industrialDemand,
-      shortfall,
-      spotPrice,
-      BALANCE.market.importCapacity,
-    );
-    shedPool = call.pool;
-    shed = call.shed;
-    shortfall -= shed;
-    // Expensive imports over the limited transmission link come last.
-    gridImport = Math.min(shortfall, BALANCE.market.importCapacity);
-    shortfall -= gridImport;
-    deficit = shortfall;
-  }
+    // Apply the signed storage deltas to this island's tiles: the
+    // balance worked on copies of the pools, the tiles are ours.
+    if (result.batteryDelta > 0) chargeTiles(state, batteryTiles, result.batteryDelta);
+    else dischargeTiles(state, batteryTiles, -result.batteryDelta);
+    if (result.pumpedDelta > 0) chargeTiles(state, pumpedTiles, result.pumpedDelta);
+    else dischargeTiles(state, pumpedTiles, -result.pumpedDelta);
+    if (result.hydrogenDelta > 0) chargeTiles(state, hydrogenTiles, result.hydrogenDelta);
+    else dischargeTiles(state, hydrogenTiles, -result.hydrogenDelta);
+    // The store takes heat, not electricity: one unit in, `cop` out.
+    chargeTiles(state, heatStoreTiles, result.heatStoreCharge * heat.cop);
 
-  // Spot-market trading: with the toggle on, the storage pools work the
-  // link. At scarcity prices they sell the top slice of a nearly full
-  // pool, and only while the city is in surplus, so the slice is refilled
-  // from energy that was headed for the export link or for curtailment:
-  // the sale time-shifts that energy into an expensive hour instead of
-  // eating the reserve a Dunkelflaute will need. At abundance prices they
-  // buy up to a modest ceiling. The bands are disjoint (buyCeiling <
-  // sellFloor), so the same energy can never be bought low and sold high.
-  let tradeSell = 0;
-  let tradeBuy = 0;
-  if (state.marketTrading) {
-    const trading = BALANCE.market.trading;
-    // The cascade above moved energy onto and off the tiles, so the pools
-    // read at its start are stale: take them again.
-    const batteryNow = poolOf(state, batteryTiles);
-    const pumpedNow = poolOf(state, pumpedTiles);
-    if (net >= 0 && spotPrice >= trading.sellThreshold && deficit === 0 && gridImport === 0) {
-      let exportRoom = BALANCE.market.exportCapacity - gridExport;
-      const sellFrom = (stored: number, floor: number, power: number): number => {
-        const sold = Math.min(exportRoom, power, Math.max(0, stored - floor));
-        exportRoom -= sold;
-        return sold;
-      };
-      const fromBattery = sellFrom(
-        batteryNow.stored,
-        trading.sellFloor * batteryNow.capacity,
-        powerLimit - batteryPowerUsed,
-      );
-      dischargeTiles(state, batteryTiles, fromBattery);
-      const fromPumped = sellFrom(
-        pumpedNow.stored,
-        trading.sellFloor * pumpedNow.capacity,
-        pumpedPowerLimit - pumpedPowerUsed,
-      );
-      dischargeTiles(state, pumpedTiles, fromPumped);
-      tradeSell = fromBattery + fromPumped;
-      gridExport += tradeSell;
-    } else if (spotPrice <= trading.buyThreshold && curtailment === 0 && gridExport === 0) {
-      let importRoom = BALANCE.market.importCapacity - gridImport;
-      const buyInto = (stored: number, ceiling: number, power: number, efficiency: number) => {
-        const bought = Math.min(power, importRoom, Math.max(0, (ceiling - stored) / efficiency));
-        importRoom -= bought;
-        return { stored: stored + bought * efficiency, bought };
-      };
-      const battery = buyInto(
-        batteryNow.stored,
-        trading.buyCeiling * batteryNow.capacity,
-        powerLimit - batteryPowerUsed,
-        BALANCE.energy.batteryChargeEfficiency,
-      );
-      chargeTiles(state, batteryTiles, battery.bought * BALANCE.energy.batteryChargeEfficiency);
-      const pumped = buyInto(
-        pumpedNow.stored,
-        trading.buyCeiling * pumpedNow.capacity,
-        pumpedPowerLimit - pumpedPowerUsed,
-        BALANCE.energy.pumpedStorageChargeEfficiency,
-      );
-      chargeTiles(state, pumpedTiles, pumped.bought * BALANCE.energy.pumpedStorageChargeEfficiency);
-      tradeBuy = battery.bought + pumped.bought;
-      gridImport += tradeBuy;
+    const stored = battery.stored + result.batteryDelta + pumped.stored + result.pumpedDelta;
+    const capacity = battery.capacity + pumped.capacity;
+    storedTotal += stored;
+    capacityTotal += capacity;
+    perIsland.push({
+      number: n,
+      key: state.islandKeys[n],
+      tiles: tileCount[n],
+      buildings: buildings[n],
+      substations: c.substations,
+      generation:
+        result.solar +
+        result.wind +
+        result.rooftop +
+        result.hydro +
+        result.tidal +
+        result.geothermal +
+        result.biogas +
+        result.fuelCell,
+      consumption: result.consumptionThisTick,
+      stored,
+      capacity,
+      deficit: result.deficit,
+      curtailment: result.curtailment,
+      gridImport: result.gridImport,
+      gridExport: result.gridExport,
+      importCost: result.gridImport * BALANCE.market.importCostPerEnergyUnit * spotPrice,
+    });
+
+    // Flag a deterministic, tick-varying share of this island's
+    // connected buildings as undersupplied so they visibly flicker
+    // while their own grid is short — a healthy island never flickers
+    // because another one is dark.
+    const deficitShare =
+      result.consumptionThisTick > 0 ? result.deficit / result.consumptionThisTick : 0;
+    for (const index of connectedByIsland[n]) {
+      const undersupplied = deficitShare > 0 && hashTileTick(index, state.tick) < deficitShare;
+      setSupplied(state, index, undersupplied ? SupplyStatus.Undersupplied : SupplyStatus.Supplied);
     }
   }
+  state.lastIslands = perIsland;
 
-  // Shed load was never served: it leaves the businesses' line and the
-  // tick's consumption, so the dashed unshifted curve shows it as a gap.
-  buildingDemand -= shed;
-  const consumptionThisTick = totalDemand - shed;
-
-  // Flag a deterministic, tick-varying share of connected buildings as
-  // undersupplied so they visibly flicker while the grid is short.
-  const deficitShare = consumptionThisTick > 0 ? deficit / consumptionThisTick : 0;
-  for (const index of connectedBuildings) {
-    const undersupplied = deficitShare > 0 && hashTileTick(index, state.tick) < deficitShare;
-    setSupplied(state, index, undersupplied ? SupplyStatus.Undersupplied : SupplyStatus.Supplied);
-  }
-
+  // The city's figures are the islands' sums; only the heat network's
+  // own lines and the spot price are city-wide to begin with.
+  const sum = (field: (r: IslandResult) => number): number =>
+    results.reduce((total, r) => total + field(r), 0);
   state.lastEnergy = {
-    solar,
-    wind,
-    biogas,
-    hydro,
-    tidal,
-    geothermal,
-    rooftop,
-    buildingConsumption: buildingDemand,
-    chargingConsumption: chargingDemand,
-    heatingConsumption: heatingDemand,
-    coolingConsumption: coolingDemand,
-    curtailment,
-    deficit,
-    gridImport,
-    gridExport,
-    electrolysis,
-    fuelCell,
-    hydrogenSold,
-    heatPumpConsumption: heat.pumpPower + heatStoreCharge,
+    solar: sum((r) => r.solar),
+    wind: sum((r) => r.wind),
+    biogas: sum((r) => r.biogas),
+    hydro: sum((r) => r.hydro),
+    tidal: sum((r) => r.tidal),
+    geothermal: sum((r) => r.geothermal),
+    rooftop: sum((r) => r.rooftop),
+    buildingConsumption: sum((r) => r.buildingConsumption),
+    chargingConsumption: sum((r) => r.chargingConsumption),
+    heatingConsumption: sum((r) => r.heatingConsumption),
+    coolingConsumption: sum((r) => r.coolingConsumption),
+    curtailment: sum((r) => r.curtailment),
+    deficit: sum((r) => r.deficit),
+    gridImport: sum((r) => r.gridImport),
+    gridExport: sum((r) => r.gridExport),
+    electrolysis: sum((r) => r.electrolysis),
+    fuelCell: sum((r) => r.fuelCell),
+    hydrogenSold: sum((r) => r.hydrogenSold),
+    heatPumpConsumption: sum((r) => r.heatPumpConsumption),
     networkHeat: heat.networkHeat,
     heatFallback: heat.fallback,
-    heatStoreCharge,
+    heatStoreCharge: sum((r) => r.heatStoreCharge),
     heatCop: heat.cop,
     spotPrice,
-    tradeSell,
-    tradeBuy,
-    flexDeferred: deferred,
-    flexRecovered: recovered,
-    flexBacklog: pool.flexBacklog,
-    flexOverflow: overflow,
-    unshifted,
-    shed,
-    shedPool,
-    contractedBuildings,
+    tradeSell: sum((r) => r.tradeSell),
+    tradeBuy: sum((r) => r.tradeBuy),
+    flexDeferred: sum((r) => r.flexDeferred),
+    flexRecovered: sum((r) => r.flexRecovered),
+    flexBacklog: sum((r) => r.flexBacklog),
+    flexOverflow: sum((r) => r.flexOverflow),
+    unshifted: sum((r) => r.unshifted),
+    shed: sum((r) => r.shed),
+    shedPool: sum((r) => r.shedPool),
+    contractedBuildings: sum((r) => r.contractedBuildings),
   };
 
   // A storage tile's diff carries its level as a share of capacity. Mark
   // it dirty only when that share crosses a 1/64 step: the level moves
   // every tick, and a diff per storage tile per tick would be pure churn.
-  for (const tiles of [batteryTiles, pumpedTiles, hydrogenTiles, heatStoreTiles]) {
-    for (const tile of tiles) {
-      const capacity = storageCapacityAt(state, tile);
-      const step =
-        capacity > 0
-          ? Math.min(SOC_STEPS, Math.floor((SOC_STEPS * layers.stored[tile]) / capacity))
-          : 0;
-      if (step !== layers.lastStoredStep[tile]) {
-        layers.lastStoredStep[tile] = step;
-        markDirty(state, tile);
+  for (const kind of [storage.battery, storage.pumped, storage.hydrogen, storage.heatStore]) {
+    for (const tiles of kind) {
+      for (const tile of tiles) {
+        const capacity = storageCapacityAt(state, tile);
+        const step =
+          capacity > 0
+            ? Math.min(SOC_STEPS, Math.floor((SOC_STEPS * layers.stored[tile]) / capacity))
+            : 0;
+        if (step !== layers.lastStoredStep[tile]) {
+          layers.lastStoredStep[tile] = step;
+          markDirty(state, tile);
+        }
       }
     }
   }
@@ -775,15 +641,13 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   // tick: a single tick can catch a cloud passing or a load spike, which
   // made the day graph noticeably jagged. Averaging is the same running-
   // sums-then-flush pattern as `recordLifetime` in tick.ts.
-  const totalCapacity = batteryPool.capacity + pumpedPool.capacity;
-  const soc =
-    totalCapacity > 0
-      ? (poolOf(state, batteryTiles).stored + poolOf(state, pumpedTiles).stored) / totalCapacity
-      : 0;
+  const soc = capacityTotal > 0 ? storedTotal / capacityTotal : 0;
   const accum = state.energyHistoryAccum;
-  accum.generation += generation + biogas + fuelCell;
-  accum.consumption += consumptionThisTick;
-  accum.unshifted += unshifted;
+  const e = state.lastEnergy;
+  accum.generation +=
+    e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.biogas + e.fuelCell;
+  accum.consumption += sum((r) => r.consumptionThisTick);
+  accum.unshifted += e.unshifted;
   accum.soc += soc;
   accum.price += spotPrice;
   accum.ticks++;
