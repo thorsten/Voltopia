@@ -13,6 +13,7 @@ import {
   recomputeHeated,
 } from './heat.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { storageTilesOfKind, storedByKind } from './storage.ts';
 import { buildRoads } from './roads.ts';
 import {
   collectDiffs,
@@ -241,15 +242,15 @@ describe('heatStep', () => {
     village(state, 4);
     placePlant(state, at(2, 14), PlantType.HeatStore);
     state.season = { ...state.season, temperature: 0 };
-    state.heatStored = 1_000;
+    state.layers.stored[at(2, 14)] = 1_000;
     const heat = heatStep(state);
     expect(heat.fromStore).toBeCloseTo(heat.demand, 6);
     expect(heat.pumpHeat).toBe(0);
     expect(heat.pumpPower).toBe(0);
     // Loss applies after the discharge.
-    expect(state.heatStored).toBeCloseTo(
+    expect(state.layers.stored[at(2, 14)]).toBeCloseTo(
       (1_000 - heat.demand) * (1 - BALANCE.heat.storeLossPerTick),
-      6,
+      3,
     );
   });
 
@@ -260,7 +261,7 @@ describe('heatStep', () => {
     village(state, 80, 3, 2);
     placePlant(state, at(2, 14), PlantType.HeatStore);
     state.season = { ...state.season, temperature: -20 };
-    state.heatStored = BALANCE.heat.storeCapacity;
+    state.layers.stored[at(2, 14)] = BALANCE.heat.storeCapacity;
     const heat = heatStep(state);
     expect(heat.demand).toBeGreaterThan(BALANCE.heat.storeDischargeLimit);
     expect(heat.fromStore).toBeCloseTo(BALANCE.heat.storeDischargeLimit, 6);
@@ -288,11 +289,12 @@ describe('heatStep', () => {
     village(state, 0);
     placePlant(state, at(2, 14), PlantType.HeatStore);
     state.season = { ...state.season, temperature: 20 }; // no demand
-    state.heatStored = BALANCE.heat.storeCapacity * 5;
+    state.layers.stored[at(2, 14)] = BALANCE.heat.storeCapacity * 5;
     const heat = heatStep(state);
     expect(heat.capacity).toBe(BALANCE.heat.storeCapacity);
-    expect(state.heatStored).toBeLessThanOrEqual(BALANCE.heat.storeCapacity);
-    expect(heat.headroom).toBeCloseTo(BALANCE.heat.storeCapacity - state.heatStored, 6);
+    const stored = storedByKind(state, PlantType.HeatStore);
+    expect(stored).toBeLessThanOrEqual(BALANCE.heat.storeCapacity);
+    expect(heat.headroom).toBeCloseTo(BALANCE.heat.storeCapacity - stored, 3);
   });
 
   it('is idle without plants: no demand, full fallback for nobody', () => {
@@ -320,11 +322,16 @@ describe('heatStep', () => {
     placePlant(state, at(2, 14), PlantType.HeatStore);
     placePlant(state, at(2, 16), PlantType.HeatStore);
     state.season = { ...state.season, temperature: 20 };
-    state.heatStored = 2 * BALANCE.heat.storeCapacity;
+    state.layers.stored[at(2, 14)] = BALANCE.heat.storeCapacity;
+    state.layers.stored[at(2, 16)] = BALANCE.heat.storeCapacity;
     state.layers.damage[at(2, 16)] = 40;
     const heat = heatStep(state);
     expect(heat.capacity).toBe(BALANCE.heat.storeCapacity);
-    expect(state.heatStored).toBeLessThanOrEqual(BALANCE.heat.storeCapacity);
+    expect(storedByKind(state, PlantType.HeatStore)).toBeLessThanOrEqual(
+      BALANCE.heat.storeCapacity,
+    );
+    // The wreck's heat is frozen, not drained: it comes back on repair.
+    expect(state.layers.stored[at(2, 16)]).toBe(BALANCE.heat.storeCapacity);
   });
 });
 
@@ -344,41 +351,49 @@ describe('nightNeedsHeat', () => {
 });
 
 describe('chargeHeatStore', () => {
-  function storeState(temperature: number): { state: SimState; heat: ReturnType<typeof heatStep> } {
+  function storeState(temperature: number): {
+    state: SimState;
+    heat: ReturnType<typeof heatStep>;
+    stores: number[];
+  } {
     const state = freshState();
     village(state, 0);
     placePlant(state, at(2, 14), PlantType.HeatStore);
     state.season = { ...state.season, temperature };
-    return { state, heat: heatStep(state) };
+    return {
+      state,
+      heat: heatStep(state),
+      stores: storageTilesOfKind(state, PlantType.HeatStore),
+    };
   }
 
   it('stores cop heat units per electricity unit within pump power and headroom', () => {
-    const { state, heat } = storeState(0);
-    const absorbed = chargeHeatStore(state, heat, 20);
+    const { state, heat, stores } = storeState(0);
+    const absorbed = chargeHeatStore(state, heat, 20, stores);
     expect(absorbed).toBeCloseTo(20, 6);
-    expect(state.heatStored).toBeCloseTo(20 * heatPumpCop(0), 6);
+    expect(state.layers.stored[at(2, 14)]).toBeCloseTo(20 * heatPumpCop(0), 3);
     expect(heat.pumpPowerLeft).toBeCloseTo(BALANCE.heat.pumpPowerLimit - 20, 6);
   });
 
   it('is capped by the pump power left', () => {
-    const { state, heat } = storeState(0);
-    const absorbed = chargeHeatStore(state, heat, 10_000);
+    const { state, heat, stores } = storeState(0);
+    const absorbed = chargeHeatStore(state, heat, 10_000, stores);
     expect(absorbed).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 6);
   });
 
   it('is capped by the headroom', () => {
-    const { state, heat } = storeState(0);
-    state.heatStored = BALANCE.heat.storeCapacity - 7;
+    const { state, heat, stores } = storeState(0);
+    state.layers.stored[at(2, 14)] = BALANCE.heat.storeCapacity - 7;
     heat.headroom = 7;
-    const absorbed = chargeHeatStore(state, heat, 10_000);
+    const absorbed = chargeHeatStore(state, heat, 10_000, stores);
     expect(absorbed).toBeCloseTo(7 / heatPumpCop(0), 6);
-    expect(state.heatStored).toBeCloseTo(BALANCE.heat.storeCapacity, 6);
+    expect(state.layers.stored[at(2, 14)]).toBeCloseTo(BALANCE.heat.storeCapacity, 3);
   });
 
   it('does nothing while the nights are warm', () => {
-    const { state, heat } = storeState(30);
-    expect(chargeHeatStore(state, heat, 100)).toBe(0);
-    expect(state.heatStored).toBe(0);
+    const { state, heat, stores } = storeState(30);
+    expect(chargeHeatStore(state, heat, 100, stores)).toBe(0);
+    expect(storedByKind(state, PlantType.HeatStore)).toBe(0);
   });
 
   it('does nothing without a plant to pump with', () => {
@@ -386,12 +401,13 @@ describe('chargeHeatStore', () => {
     placePlant(state, at(2, 14), PlantType.HeatStore);
     state.season = { ...state.season, temperature: 0 };
     const heat = heatStep(state);
-    expect(chargeHeatStore(state, heat, 100)).toBe(0);
+    const stores = storageTilesOfKind(state, PlantType.HeatStore);
+    expect(chargeHeatStore(state, heat, 100, stores)).toBe(0);
   });
 
   it('IDLE_HEAT absorbs nothing', () => {
     const state = freshState();
-    expect(chargeHeatStore(state, { ...IDLE_HEAT }, 100)).toBe(0);
+    expect(chargeHeatStore(state, { ...IDLE_HEAT }, 100, [])).toBe(0);
   });
 });
 
@@ -428,7 +444,7 @@ describe('district heating is deterministic and survives a reload', () => {
       stepTick(a);
       stepTick(b);
     }
-    expect(a.heatStored).toBe(b.heatStored);
+    expect(storedByKind(a, PlantType.HeatStore)).toBe(storedByKind(b, PlantType.HeatStore));
     expect(a.lastEnergy.networkHeat).toBe(b.lastEnergy.networkHeat);
     expect(Array.from(a.layers.heated)).toEqual(Array.from(b.layers.heated));
     expect(a.lastEnergy.networkHeat).toBeGreaterThan(0);
@@ -439,7 +455,9 @@ describe('district heating is deterministic and survives a reload', () => {
     for (let i = 0; i < TICKS_PER_DAY / 2; i++) stepTick(live);
     const save = serializeState(live);
     const restored = deserializeState(save);
-    expect(restored.heatStored).toBe(live.heatStored);
+    expect(storedByKind(restored, PlantType.HeatStore)).toBe(
+      storedByKind(live, PlantType.HeatStore),
+    );
     // Derived, never saved: empty on load, rebuilt by the first tick.
     expect(restored.layers.heated.every((v) => v === HEATED_NONE)).toBe(true);
     stepTick(restored);

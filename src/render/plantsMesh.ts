@@ -342,15 +342,18 @@ export class PlantsMesh implements DiffLayer {
   readonly parkPads: THREE.InstancedMesh;
   private readonly rotorMesh: THREE.InstancedMesh;
   private readonly domeMesh: THREE.InstancedMesh;
-  private readonly socFillMesh: THREE.InstancedMesh;
+  /** Front bars showing each battery's state of charge (public for tests). */
+  readonly socFillMesh: THREE.InstancedMesh;
   private readonly gridSize: number;
   private readonly plants = new Map<number, PlantType>();
   private readonly terrain: Uint8Array;
   private readonly rotorPositions: THREE.Vector3[] = [];
   private rotorAngle = 0;
   private rotorSpeedFactor = 0;
-  private stateOfCharge = 0;
-  private readonly batteryPositions: THREE.Vector3[] = [];
+  /** Drawn battery cabinets, in instance order, with the tile each stands on. */
+  private readonly batteryPositions: Array<{ position: THREE.Vector3; index: number }> = [];
+  /** Per-tile state of charge 0..1, from the tile diffs. */
+  private readonly stateOfCharge = new Map<number, number>();
   private readonly matrix = new THREE.Matrix4();
   private readonly quaternion = new THREE.Quaternion();
   private readonly scale = new THREE.Vector3();
@@ -431,6 +434,7 @@ export class PlantsMesh implements DiffLayer {
 
   applyDiffs(diffs: TileDiff[]): void {
     let changed = false;
+    let socChanged = false;
     for (const diff of diffs) {
       if (this.terrain[diff.index] !== diff.terrain) {
         this.terrain[diff.index] = diff.terrain;
@@ -443,16 +447,23 @@ export class PlantsMesh implements DiffLayer {
         else this.plants.set(diff.index, plant);
         changed = true;
       }
+      // Every storage plant carries its own level; only batteries draw one.
+      if (plant === PlantType.Battery) {
+        const soc = diff.stored ?? 0;
+        if (this.stateOfCharge.get(diff.index) !== soc) {
+          this.stateOfCharge.set(diff.index, soc);
+          socChanged = true;
+        }
+      } else {
+        this.stateOfCharge.delete(diff.index);
+      }
     }
     if (changed) this.rebuild();
+    else if (socChanged) this.writeSocFills();
   }
 
   setEnvironment(environment: RenderEnvironment): void {
     this.rotorSpeedFactor = environment.windFactor;
-    if (Math.abs(environment.stateOfCharge - this.stateOfCharge) > 0.002) {
-      this.stateOfCharge = environment.stateOfCharge;
-      this.writeSocFills();
-    }
   }
 
   update(deltaSeconds: number): void {
@@ -527,7 +538,7 @@ export class PlantsMesh implements DiffLayer {
         this.matrix.setPosition(cx - 0.12, DOME_BASE + lift, cz - 0.05);
         this.domeMesh.setMatrixAt(domeSlot++, this.matrix);
       } else if (plant === PlantType.Battery) {
-        this.batteryPositions.push(new THREE.Vector3(cx, lift, cz));
+        this.batteryPositions.push({ position: new THREE.Vector3(cx, lift, cz), index });
       }
     }
 
@@ -596,11 +607,11 @@ export class PlantsMesh implements DiffLayer {
     this.rotorMesh.instanceMatrix.needsUpdate = true;
   }
 
-  /** Front bar on each battery cabinet showing the state of charge. */
+  /** Front bar on each battery cabinet showing that battery's state of charge. */
   private writeSocFills(): void {
-    const height = 0.04 + 0.42 * this.stateOfCharge;
     for (let i = 0; i < this.batteryPositions.length; i++) {
-      const p = this.batteryPositions[i];
+      const { position: p, index } = this.batteryPositions[i];
+      const height = 0.04 + 0.42 * (this.stateOfCharge.get(index) ?? 0);
       this.matrix.makeScale(0.1, height, 0.03);
       this.matrix.setPosition(p.x + 0.18, 0.03 + p.y, p.z + 0.2);
       this.socFillMesh.setMatrixAt(i, this.matrix);

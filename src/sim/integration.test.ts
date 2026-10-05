@@ -6,6 +6,7 @@ import { SimEngine } from './engine.ts';
 import { placePlant } from './energy.ts';
 import { buildRoads } from './roads.ts';
 import { createSimState } from './state.ts';
+import { storedByKind } from './storage.ts';
 import { buildStats, stepTick } from './tick.ts';
 
 const SIZE = 32;
@@ -56,7 +57,7 @@ describe('full gameplay integration', () => {
     let sawSolar = false;
     for (let i = 0; i < TICKS_PER_DAY * 4; i++) {
       engine.tick();
-      if (state.storedEnergy > 1) sawStorageCharge = true;
+      if (storedByKind(state, PlantType.Battery) > 1) sawStorageCharge = true;
       if (state.lastEnergy.solar > 0) sawSolar = true;
     }
 

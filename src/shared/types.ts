@@ -707,6 +707,8 @@ export interface TileDiff {
   reservoirHeat: number;
   /** Damage points 0..255 of this tile (0 = intact). */
   damage: number;
+  /** Storage level as a share 0..1 of this tile's capacity (0 off a storage plant). */
+  stored: number;
   /** Visual age stage of a building: 0 = new, 1 = lived-in, 2 = weathered (render only). */
   ageStage: number;
   /** DeliveryState of a retail building (0 elsewhere). */
@@ -741,16 +743,23 @@ export interface SaveGame {
   taxRate: number;
   /** Legacy smart-charging switch; read on load, never written. */
   smartCharging?: boolean;
-  storedEnergy: number;
+  /** Legacy battery pool; read on load, never written (see `stored`). */
+  storedEnergy?: number;
+  /**
+   * Storage per plant tile as [index, value, index, value, …]; only tiles
+   * holding something are listed. Absent in older saves: the legacy pool
+   * fields are spread over the tiles of their kind instead.
+   */
+  stored?: number[];
   /** Achieved goal ids (absent in older saves). */
   goals?: string[];
   /** Daily lifetime statistics (absent in older saves). */
   lifetime?: LifetimeSample[];
   /** River flow 0..1 (absent in older saves → dry baseline). */
   riverFlow?: number;
-  /** Energy stored in pumped storage plants (absent in older saves). */
+  /** Legacy pumped-storage pool; read on load, never written (see `stored`). */
   pumpedStorageEnergy?: number;
-  /** Hydrogen stored in hydrogen plants (absent in older saves). */
+  /** Legacy hydrogen pool; read on load, never written (see `stored`). */
   hydrogenEnergy?: number;
   /** Whether storage trades on the spot market (absent in older saves). */
   marketTrading?: boolean;
@@ -770,7 +779,7 @@ export interface SaveGame {
   wellStockedTicks?: number;
   /** Consecutive modal-shift ticks so far (absent in older saves → 0). */
   transitTicks?: number;
-  /** Heat units in the district-heating store (absent in older saves → 0). */
+  /** Legacy district-heating store pool; read on load, never written (see `stored`). */
   heatStored?: number;
   /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
   warmWinterTicks?: number;

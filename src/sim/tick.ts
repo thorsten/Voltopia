@@ -17,6 +17,7 @@ import { happinessStep } from './happiness.ts';
 import { countPowerLineTiles } from './powerLines.ts';
 import { tideState } from './sea.ts';
 import { seasonState } from './seasons.ts';
+import { storedByKind } from './storage.ts';
 import { recomputeServices, serviceCoverage } from './services.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import { transitStep, transitStats } from './transit.ts';
@@ -210,17 +211,17 @@ export function buildStats(state: SimState): GlobalStats {
         flexBacklog: e.flexBacklog,
         shed: e.shed,
       },
-      storedEnergy: state.storedEnergy,
+      storedEnergy: storedByKind(state, PlantType.Battery),
       storageCapacity: totalStorageCapacity(state),
-      pumpedStoredEnergy: state.pumpedStorageEnergy,
+      pumpedStoredEnergy: storedByKind(state, PlantType.PumpedStorage),
       pumpedCapacity: totalPumpedStorageCapacity(state),
-      hydrogenStoredEnergy: state.hydrogenEnergy,
+      hydrogenStoredEnergy: storedByKind(state, PlantType.HydrogenPlant),
       hydrogenCapacity: totalHydrogenCapacity(state),
       hydrogenSold: e.hydrogenSold,
       networkHeat: e.networkHeat,
       heatFallback: e.heatFallback,
       heatStoreCharge: e.heatStoreCharge,
-      heatStored: state.heatStored,
+      heatStored: storedByKind(state, PlantType.HeatStore),
       heatCapacity: totalHeatCapacity(state),
       heatCop: e.heatCop,
       spotPrice: e.spotPrice,

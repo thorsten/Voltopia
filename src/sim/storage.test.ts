@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+import { BALANCE } from '../shared/constants.ts';
+import { tileIndex } from '../shared/grid.ts';
+import { PlantType } from '../shared/types.ts';
+import { addDamage } from './disasters.ts';
+import { placePlant } from './energy.ts';
+import { createSimState, type SimState } from './state.ts';
+import {
+  chargeTiles,
+  dischargeTiles,
+  poolOf,
+  scaleTiles,
+  storageCapacityAt,
+  storageTilesOfKind,
+  storedByKind,
+} from './storage.ts';
+
+const SIZE = 16;
+const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+function withBatteries(): SimState {
+  const state = createSimState(1, SIZE);
+  state.money = 1e9;
+  placePlant(state, at(2, 2), PlantType.Battery);
+  placePlant(state, at(6, 2), PlantType.Battery);
+  return state;
+}
+
+describe('storage per tile', () => {
+  it('capacity comes from the plant on the tile and is 0 for damaged or other tiles', () => {
+    const state = withBatteries();
+    expect(storageCapacityAt(state, at(2, 2))).toBe(BALANCE.energy.batteryCapacity);
+    expect(storageCapacityAt(state, at(3, 3))).toBe(0);
+    placePlant(state, at(10, 2), PlantType.SolarFarm);
+    expect(storageCapacityAt(state, at(10, 2))).toBe(0);
+    addDamage(state, at(2, 2), 10);
+    expect(storageCapacityAt(state, at(2, 2))).toBe(0);
+  });
+
+  it('charges in proportion to headroom and never past capacity', () => {
+    const state = withBatteries();
+    const tiles = storageTilesOfKind(state, PlantType.Battery);
+    state.layers.stored[at(2, 2)] = 1_000; // headroom 2_000 vs 3_000
+    chargeTiles(state, tiles, 500);
+    expect(state.layers.stored[at(2, 2)]).toBeCloseTo(1_000 + 200, 3);
+    expect(state.layers.stored[at(6, 2)]).toBeCloseTo(300, 3);
+    chargeTiles(state, tiles, 1e9);
+    expect(poolOf(state, tiles).stored).toBeCloseTo(2 * BALANCE.energy.batteryCapacity, 3);
+  });
+
+  it('discharges in proportion to stored energy and never below zero', () => {
+    const state = withBatteries();
+    const tiles = storageTilesOfKind(state, PlantType.Battery);
+    state.layers.stored[at(2, 2)] = 900;
+    state.layers.stored[at(6, 2)] = 300;
+    dischargeTiles(state, tiles, 400);
+    expect(state.layers.stored[at(2, 2)]).toBeCloseTo(600, 3);
+    expect(state.layers.stored[at(6, 2)]).toBeCloseTo(200, 3);
+    dischargeTiles(state, tiles, 1e9);
+    expect(poolOf(state, tiles).stored).toBe(0);
+  });
+
+  it('pool and storedByKind sum the tiles; scaleTiles applies a standing loss', () => {
+    const state = withBatteries();
+    state.layers.stored[at(2, 2)] = 100;
+    state.layers.stored[at(6, 2)] = 50;
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(150, 6);
+    scaleTiles(state, storageTilesOfKind(state, PlantType.Battery), 0.5);
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(75, 6);
+    expect(poolOf(state, []).capacity).toBe(0);
+  });
+});

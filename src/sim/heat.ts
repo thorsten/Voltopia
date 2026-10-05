@@ -16,6 +16,7 @@ import { neighbors4 } from '../shared/grid.ts';
 import { HEATED_SERVED, HEATED_TRUNK, PlantType, Zone } from '../shared/types.ts';
 import { censusPlants, heatingConsumption } from './energy.ts';
 import { recomputeGrid } from './powerGrid.ts';
+import { chargeTiles, dischargeTiles, poolOf, scaleTiles, storageTilesOfKind } from './storage.ts';
 import { heatingDegree } from '../shared/heating.ts';
 import { markDirty, TileType, type SimState } from './state.ts';
 
@@ -146,8 +147,11 @@ export function heatStep(state: SimState): HeatTickResult {
   const cfg = BALANCE.heat;
   const { layers } = state;
   const census = censusPlants(state);
-  const capacity = census.heatStores * cfg.storeCapacity;
-  state.heatStored = Math.min(state.heatStored, capacity);
+  // The heat is held on the store tiles; `poolOf` clamps any tile that
+  // somehow holds more than it can and sums what the city has.
+  const stores = storageTilesOfKind(state, PlantType.HeatStore);
+  const pool = poolOf(state, stores);
+  const capacity = pool.capacity;
 
   const temperature = state.season.temperature;
   let demand = 0;
@@ -162,13 +166,13 @@ export function heatStep(state: SimState): HeatTickResult {
   }
 
   const cop = heatPumpCop(temperature);
-  const fromStore = Math.min(demand, census.heatStores * cfg.storeDischargeLimit, state.heatStored);
-  state.heatStored -= fromStore;
+  const fromStore = Math.min(demand, census.heatStores * cfg.storeDischargeLimit, pool.stored);
+  dischargeTiles(state, stores, fromStore);
   const pumpPowerLimit = census.heatPlants * cfg.pumpPowerLimit;
   const pumpHeat = Math.min(demand - fromStore, pumpPowerLimit * cop);
   const pumpPower = pumpHeat / cop;
   const fallback = demand - fromStore - pumpHeat;
-  state.heatStored *= 1 - cfg.storeLossPerTick;
+  scaleTiles(state, stores, 1 - cfg.storeLossPerTick);
 
   return {
     demand,
@@ -178,7 +182,7 @@ export function heatStep(state: SimState): HeatTickResult {
     fallback,
     pumpPowerLeft: pumpPowerLimit - pumpPower,
     cop,
-    headroom: Math.max(0, capacity - state.heatStored),
+    headroom: Math.max(0, capacity - (pool.stored - fromStore) * (1 - cfg.storeLossPerTick)),
     capacity,
     networkHeat: fromStore + pumpHeat,
   };
@@ -196,14 +200,20 @@ export function nightNeedsHeat(temperature: number): boolean {
 /**
  * Push surplus electricity into the store through the pumps: one
  * electricity unit stores `cop` heat units, within the pump power left
- * after serving and within the headroom. Returns the electricity
- * absorbed; mutates the store and the result's remaining budgets.
+ * after serving and within the headroom. The heat spreads over `stores`
+ * (the store tiles to fill) in proportion to their headroom. Returns the
+ * electricity absorbed; mutates the tiles and the result's budgets.
  */
-export function chargeHeatStore(state: SimState, heat: HeatTickResult, surplus: number): number {
+export function chargeHeatStore(
+  state: SimState,
+  heat: HeatTickResult,
+  surplus: number,
+  stores: readonly number[],
+): number {
   if (surplus <= 0 || heat.pumpPowerLeft <= 0 || heat.headroom <= 0) return 0;
   if (!nightNeedsHeat(state.season.temperature)) return 0;
   const absorbed = Math.max(0, Math.min(surplus, heat.pumpPowerLeft, heat.headroom / heat.cop));
-  state.heatStored += absorbed * heat.cop;
+  chargeTiles(state, stores, absorbed * heat.cop);
   heat.headroom -= absorbed * heat.cop;
   heat.pumpPowerLeft -= absorbed;
   return absorbed;

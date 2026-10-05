@@ -165,3 +165,48 @@ describe('plant foundations on sloped ground', () => {
     }
   });
 });
+
+describe('battery state-of-charge fills', () => {
+  const flat = field(() => 0);
+  const A = 2 * SIZE + 2;
+  const B = 4 * SIZE + 5;
+
+  /** Height of each drawn fill bar, in the batteries' instance order. */
+  function fillHeights(mesh: PlantsMesh): number[] {
+    return instancesOf(mesh.socFillMesh).map((i) => i.s.y);
+  }
+
+  function battery(index: number, stored: number): TileDiff {
+    return { ...plant(index, PlantType.Battery), stored } as TileDiff;
+  }
+
+  it('gives each battery its own fill from the tile diff', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([battery(A, 1), battery(B, 0)]);
+    expect(mesh.socFillMesh.count).toBe(2);
+    const [full, empty] = fillHeights(mesh);
+    expect(full).toBeGreaterThan(empty);
+    expect(empty).toBeCloseTo(0.04, 6);
+    expect(full).toBeCloseTo(0.46, 6);
+  });
+
+  it('follows a later diff for one tile without touching the other', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([battery(A, 1), battery(B, 0)]);
+    const before = fillHeights(mesh);
+    mesh.applyDiffs([battery(B, 0.5)]);
+    const after = fillHeights(mesh);
+    expect(after[0]).toBeCloseTo(before[0], 6);
+    expect(after[1]).toBeCloseTo(0.04 + 0.42 * 0.5, 6);
+  });
+
+  it('drops the fill when the battery is bulldozed', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([battery(A, 1)]);
+    expect(mesh.socFillMesh.count).toBe(1);
+    mesh.applyDiffs([
+      { ...battery(A, 0), tileType: TileType.Empty, plantType: PlantType.None } as TileDiff,
+    ]);
+    expect(mesh.socFillMesh.count).toBe(0);
+  });
+});

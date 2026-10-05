@@ -159,6 +159,8 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.density[index] = 0;
     layers.variant[index] = 0;
     layers.plantType[index] = 0;
+    // Whatever a battery, tank or store held goes with the wreck.
+    layers.stored[index] = 0;
     layers.buildingAge[index] = 0;
     layers.busStop[index] = 0;
     layers.damage[index] = 0;

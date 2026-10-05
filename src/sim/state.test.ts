@@ -7,6 +7,7 @@ import { recomputeGrid } from './powerGrid.ts';
 import { buildRoads } from './roads.ts';
 import { isCoastalSea } from './sea.ts';
 import { generateTerrain } from './terrain.ts';
+import { storedByKind } from './storage.ts';
 import { generateWater } from './water.ts';
 import {
   ageStageOf,
@@ -219,25 +220,41 @@ describe('geothermal build rules', () => {
 describe('save round trip', () => {
   it('persists terrain, river flow and pumped storage', () => {
     const state = makeState();
+    state.money = 1e9;
     state.weather.riverFlow = 0.8;
-    state.pumpedStorageEnergy = 1234;
+    placePlant(state, at(8, 7), PlantType.PumpedStorage);
+    state.layers.stored[at(8, 7)] = 1234;
     const save = serializeState(state);
     const restored = deserializeState(save);
     expect(restored.layers.terrain).toEqual(state.layers.terrain);
     expect(restored.weather.riverFlow).toBe(0.8);
-    expect(restored.pumpedStorageEnergy).toBe(1234);
+    expect(restored.layers.stored[at(8, 7)]).toBeCloseTo(1234, 3);
   });
 
   it('loads older saves without the new fields as dry land', () => {
     const state = makeState();
+    state.money = 1e9;
+    placePlant(state, at(8, 7), PlantType.PumpedStorage);
     const save = serializeState(state);
     delete save.layers.terrain;
     delete save.riverFlow;
+    delete save.stored;
     delete save.pumpedStorageEnergy;
     const restored = deserializeState(save);
     expect(restored.layers.terrain.every((t) => t === Terrain.Land)).toBe(true);
     expect(restored.weather.riverFlow).toBe(BALANCE.water.dryBaselineFlow);
-    expect(restored.pumpedStorageEnergy).toBe(0);
+    expect(storedByKind(restored, PlantType.PumpedStorage)).toBe(0);
+  });
+
+  it('spreads a legacy pumped-storage pool over the plants that held it', () => {
+    const state = makeState();
+    state.money = 1e9;
+    placePlant(state, at(8, 7), PlantType.PumpedStorage);
+    const save = serializeState(state);
+    delete save.stored;
+    save.pumpedStorageEnergy = 1_000;
+    const restored = deserializeState(save);
+    expect(storedByKind(restored, PlantType.PumpedStorage)).toBeCloseTo(1_000, 3);
   });
 
   it('persists the power line layer', () => {
@@ -482,20 +499,25 @@ describe('save round trip', () => {
 
   it('persists the heat store and the warm-winter streak', () => {
     const state = makeState();
-    state.heatStored = 777;
+    state.money = 1e9;
+    placePlant(state, at(3, 3), PlantType.HeatStore);
+    state.layers.stored[at(3, 3)] = 777;
     state.goalProgress.warmWinterTicks = 42;
     const restored = deserializeState(serializeState(state));
-    expect(restored.heatStored).toBe(777);
+    expect(restored.layers.stored[at(3, 3)]).toBeCloseTo(777, 3);
     expect(restored.goalProgress.warmWinterTicks).toBe(42);
   });
 
   it('loads a save without heat fields as an empty tank and a zero streak', () => {
     const state = makeState();
+    state.money = 1e9;
+    placePlant(state, at(3, 3), PlantType.HeatStore);
     const save = serializeState(state);
+    delete save.stored;
     delete save.heatStored;
     delete save.warmWinterTicks;
     const restored = deserializeState(save);
-    expect(restored.heatStored).toBe(0);
+    expect(storedByKind(restored, PlantType.HeatStore)).toBe(0);
     expect(restored.goalProgress.warmWinterTicks).toBe(0);
   });
 });
@@ -688,5 +710,25 @@ describe('countPopulationAndJobs with industry', () => {
     expect(countPopulationAndJobs(state).jobs).toBe(
       BALANCE.growth.jobsByZoneAndDensity[Zone.Industrial][3],
     );
+  });
+});
+
+describe('storage per tile in saves', () => {
+  it('round-trips stored energy per tile and spreads legacy pool fields over the tiles', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.Battery);
+    placePlant(state, at(5, 2), PlantType.Battery);
+    state.layers.stored[at(2, 2)] = 1_234;
+    const loaded = deserializeState(serializeState(state));
+    expect(loaded.layers.stored[at(2, 2)]).toBeCloseTo(1_234, 3);
+    expect(loaded.layers.stored[at(5, 2)]).toBe(0);
+
+    const legacy = serializeState(state);
+    delete legacy.stored;
+    legacy.storedEnergy = 3_000; // one battery's worth across two batteries
+    const migrated = deserializeState(legacy);
+    expect(migrated.layers.stored[at(2, 2)]).toBeCloseTo(1_500, 3);
+    expect(migrated.layers.stored[at(5, 2)]).toBeCloseTo(1_500, 3);
   });
 });

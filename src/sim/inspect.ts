@@ -33,6 +33,7 @@ import {
   pumpedHeadAt,
   riverDropAt,
   slopeAt,
+  storageCapacityAt,
   type SimState,
 } from './state.ts';
 import { laneCapacity } from './traffic.ts';
@@ -107,40 +108,12 @@ function plantGeneration(
   }
 }
 
-/** This plant tile's share of its storage pool. */
-function plantStorage(
-  state: SimState,
-  plant: PlantType,
-  index: number,
-): { stored: number; capacity: number } {
-  const census = censusPlants(state);
-  if (plant === PlantType.Battery && census.batteries > 0) {
-    return {
-      stored: state.storedEnergy / census.batteries,
-      capacity: BALANCE.energy.batteryCapacity,
-    };
-  }
-  if (plant === PlantType.HydrogenPlant && census.hydrogenPlants > 0) {
-    return {
-      stored: state.hydrogenEnergy / census.hydrogenPlants,
-      capacity: BALANCE.hydrogen.capacity,
-    };
-  }
-  if (plant === PlantType.PumpedStorage && census.pumpedStoragePlants > 0) {
-    return {
-      stored: state.pumpedStorageEnergy / census.pumpedStoragePlants,
-      capacity:
-        BALANCE.energy.pumpedStorageCapacity *
-        (1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, index)),
-    };
-  }
-  if (plant === PlantType.HeatStore && census.heatStores > 0) {
-    return {
-      stored: state.heatStored / census.heatStores,
-      capacity: BALANCE.heat.storeCapacity,
-    };
-  }
-  return { stored: 0, capacity: 0 };
+/** What this plant tile holds, straight off the tile (0 unless it stores). */
+function plantStorage(state: SimState, index: number): { stored: number; capacity: number } {
+  const capacity = storageCapacityAt(state, index);
+  return capacity > 0
+    ? { stored: state.layers.stored[index], capacity }
+    : { stored: 0, capacity: 0 };
 }
 
 /** Reasons a zoned tile is not spawning or densifying right now. */
@@ -252,7 +225,7 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
   const plantOutput =
     tileType === TileType.Plant ? plantGeneration(state, plant, index) : { generation: 0, peak: 0 };
   const storage =
-    tileType === TileType.Plant ? plantStorage(state, plant, index) : { stored: 0, capacity: 0 };
+    tileType === TileType.Plant ? plantStorage(state, index) : { stored: 0, capacity: 0 };
 
   const population =
     isBuilding && zone === Zone.Residential ? BALANCE.growth.populationByDensity[density] : 0;

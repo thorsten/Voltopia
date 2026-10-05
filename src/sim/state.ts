@@ -193,6 +193,18 @@ export interface TileLayers {
   reservoirHeat: Uint8Array;
   /** Damage points per tile: 0 = intact, 1..255 = out of service (persisted). */
   damage: Uint8Array;
+  /**
+   * Energy held on a storage plant tile (battery / pumped / hydrogen
+   * energy units, heat units on a heat store); 0 everywhere else.
+   * Persisted.
+   */
+  stored: Float32Array;
+  /**
+   * Last `stored` share reported as a diff, quantised to 1/64 of the
+   * tile's capacity. Derived, not persisted: it only decides when a
+   * storage tile is marked dirty (see energyStep).
+   */
+  lastStoredStep: Uint8Array;
   /** Power line mask per tile (0 = none, else LINE_PRESENT | connection bits). */
   powerLine: Uint8Array;
   /** 1 when the tile is within lineSupplyRadius of an energised line or supply plant. Derived, not persisted. */
@@ -274,13 +286,6 @@ export interface SimState {
   /** Seasonal signal for the current tick, recomputed in stepTick. */
   season: SeasonState;
   happiness: number;
-  storedEnergy: number;
-  /** Energy stored in pumped storage plants (separate pool from batteries). */
-  pumpedStorageEnergy: number;
-  /** Hydrogen stored in hydrogen plants (third pool, filled from surplus). */
-  hydrogenEnergy: number;
-  /** Heat units in the pooled district-heating store (fourth pool; never re-electrified). */
-  heatStored: number;
   /** Incremented whenever plants or power lines change; drives recomputeGrid. */
   gridVersion: number;
   /** gridVersion the energized layer was last computed for (-1 = never). */
@@ -488,6 +493,8 @@ export function createTileLayers(size: number): TileLayers {
     geothermal: new Uint8Array(tiles),
     reservoirHeat: new Uint8Array(tiles),
     damage: new Uint8Array(tiles),
+    stored: new Float32Array(tiles),
+    lastStoredStep: new Uint8Array(tiles),
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
     island: new Uint16Array(tiles),
@@ -528,10 +535,6 @@ export function createSimState(
     seasonOriginDay: 0,
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
     happiness: BALANCE.happiness.base,
-    storedEnergy: 0,
-    pumpedStorageEnergy: 0,
-    hydrogenEnergy: 0,
-    heatStored: 0,
     gridVersion: 0,
     gridComputedVersion: -1,
     islandKeys: [-1],
@@ -693,6 +696,12 @@ export function withNeighbors(state: SimState, tiles: number[]): Set<number> {
   return affected;
 }
 
+/** A storage tile's level as a share 0..1 of its capacity; 0 elsewhere. */
+function storedShareAt(state: SimState, index: number): number {
+  const capacity = storageCapacityAt(state, index);
+  return capacity > 0 ? state.layers.stored[index] / capacity : 0;
+}
+
 /** Collect and clear the pending tile diffs. */
 export function collectDiffs(state: SimState): TileDiff[] {
   const { layers } = state;
@@ -719,6 +728,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       geothermal: layers.geothermal[index],
       reservoirHeat: layers.reservoirHeat[index],
       damage: layers.damage[index],
+      stored: storedShareAt(state, index),
       ageStage: ageStageOf(layers.buildingAge[index]),
       deliveryState: deliveryStateOfAge(layers.deliveryAge[index]),
       busStop: layers.busStop[index],
@@ -856,6 +866,36 @@ export function pumpedHeadAt(state: SimState, index: number): number {
 }
 
 /**
+ * What the storage plant on this tile can hold: 0 unless the tile
+ * carries an intact battery, pumped-storage plant, hydrogen plant or
+ * heat store. A damaged plant has no capacity — its level is frozen
+ * until it is repaired, so no helper ever charges or drains it.
+ *
+ * Lives here rather than in storage.ts because `collectDiffs` needs it
+ * and storage.ts reads it from here (and re-exports it for everyone
+ * else), which keeps the import one-way.
+ */
+export function storageCapacityAt(state: SimState, index: number): number {
+  const { tileType, plantType, damage } = state.layers;
+  if (tileType[index] !== TileType.Plant || damage[index] !== 0) return 0;
+  switch (plantType[index] as PlantType) {
+    case PlantType.Battery:
+      return BALANCE.energy.batteryCapacity;
+    case PlantType.PumpedStorage:
+      return (
+        BALANCE.energy.pumpedStorageCapacity *
+        (1 + BALANCE.terrain.headBonusPerLevel * pumpedHeadAt(state, index))
+      );
+    case PlantType.HydrogenPlant:
+      return BALANCE.hydrogen.capacity;
+    case PlantType.HeatStore:
+      return BALANCE.heat.storeCapacity;
+    default:
+      return 0;
+  }
+}
+
+/**
  * Why a tile cannot be built on with the given intent, or null when it
  * can. Land accepts everything (except run-of-river, which needs the
  * river); river tiles accept bridges and run-of-river plants; lakes
@@ -960,6 +1000,45 @@ function savedEvent(event: DisasterEvent, active: boolean): SavedDisasters['even
   };
 }
 
+/**
+ * The `stored` layer as sparse [index, value, …] pairs. Sparse because
+ * only storage plants hold anything: a 128x128 map would otherwise waste
+ * 16 384 zeroes per save.
+ */
+function storedPairs(state: SimState): number[] {
+  const { stored } = state.layers;
+  const pairs: number[] = [];
+  for (let i = 0; i < stored.length; i++) {
+    if (stored[i] > 0) pairs.push(i, stored[i]);
+  }
+  return pairs;
+}
+
+/**
+ * A save from before `stored` carried one number per storage kind.
+ * Spread it over the intact plants of that kind in proportion to their
+ * capacity: the city reloads with the same total and the same share on
+ * every tile, which is what the old pooled cascade effectively had.
+ *
+ * Walks the layers itself rather than calling storage.ts' identical
+ * `storageTilesOfKind`: storage.ts reads `storageCapacityAt` from here,
+ * and importing it back would close the cycle.
+ */
+function spreadLegacyPool(state: SimState, plant: PlantType, total: number | undefined): void {
+  if (!total || !Number.isFinite(total) || total <= 0) return;
+  const { tileType, plantType, damage } = state.layers;
+  const tiles: number[] = [];
+  let capacity = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] !== TileType.Plant || plantType[i] !== plant || damage[i] !== 0) continue;
+    tiles.push(i);
+    capacity += storageCapacityAt(state, i);
+  }
+  if (capacity <= 0) return;
+  const share = Math.min(1, total / capacity);
+  for (const t of tiles) state.layers.stored[t] = storageCapacityAt(state, t) * share;
+}
+
 export function serializeState(state: SimState): SaveGame {
   const { layers } = state;
   return {
@@ -970,12 +1049,10 @@ export function serializeState(state: SimState): SaveGame {
     money: state.money,
     taxRate: state.taxRate,
     marketTrading: state.marketTrading,
-    storedEnergy: state.storedEnergy,
+    stored: storedPairs(state),
     goals: [...state.goalsAchieved],
     lifetime: state.lifetime.samples.map((sample) => ({ ...sample })),
     riverFlow: state.weather.riverFlow,
-    pumpedStorageEnergy: state.pumpedStorageEnergy,
-    hydrogenEnergy: state.hydrogenEnergy,
     seasonOriginDay: state.seasonOriginDay,
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
@@ -986,7 +1063,6 @@ export function serializeState(state: SimState): SaveGame {
     freeFlowTicks: state.goalProgress.freeFlowTicks,
     wellStockedTicks: state.goalProgress.wellStockedTicks,
     transitTicks: state.goalProgress.transitTicks,
-    heatStored: state.heatStored,
     warmWinterTicks: state.goalProgress.warmWinterTicks,
     flexTicks: state.goalProgress.flexTicks,
     demandResponse: {
@@ -1030,7 +1106,6 @@ export function deserializeState(save: SaveGame): SimState {
   state.money = save.money;
   state.taxRate = save.taxRate;
   state.marketTrading = save.marketTrading ?? false;
-  state.storedEnergy = save.storedEnergy;
   state.goalsAchieved = new Set(save.goals ?? []);
   state.lifetime.samples = (save.lifetime ?? []).map((sample) => ({ ...sample }));
   state.layers.tileType.set(new Uint8Array(save.layers.tileType));
@@ -1040,9 +1115,6 @@ export function deserializeState(save: SaveGame): SimState {
   state.layers.variant.set(new Uint8Array(save.layers.variant));
   state.layers.supplied.set(new Uint8Array(save.layers.supplied));
   state.layers.plantType.set(new Uint8Array(save.layers.plantType));
-  state.pumpedStorageEnergy = save.pumpedStorageEnergy ?? 0;
-  state.hydrogenEnergy = save.hydrogenEnergy ?? 0;
-  state.heatStored = save.heatStored ?? 0;
   state.weather.riverFlow = save.riverFlow ?? BALANCE.water.dryBaselineFlow;
   // Hand-edited JSON exports may hold out-of-range values; keep the
   // season readable (whole days, snow cover 0..1).
@@ -1161,6 +1233,24 @@ export function deserializeState(save: SaveGame): SimState {
   }
   discoverGeothermalFields(state);
   state.lakeLevel = computeLakeLevel(state);
+  // Storage levels last: plantType, damage and the lake level all decide
+  // a tile's capacity, so they must already be restored (a damaged plant
+  // has none, which is why a wreck comes back empty).
+  if (save.stored) {
+    const pairs = save.stored;
+    for (let i = 0; i + 1 < pairs.length; i += 2) {
+      const tile = pairs[i];
+      const value = pairs[i + 1];
+      if (!Number.isInteger(tile) || tile < 0 || tile >= state.layers.stored.length) continue;
+      if (!Number.isFinite(value) || value <= 0) continue;
+      state.layers.stored[tile] = Math.min(value, storageCapacityAt(state, tile));
+    }
+  } else {
+    spreadLegacyPool(state, PlantType.Battery, save.storedEnergy);
+    spreadLegacyPool(state, PlantType.PumpedStorage, save.pumpedStorageEnergy);
+    spreadLegacyPool(state, PlantType.HydrogenPlant, save.hydrogenEnergy);
+    spreadLegacyPool(state, PlantType.HeatStore, save.heatStored);
+  }
   // Advance the RNG deterministically past the founding state so a loaded
   // game does not replay the exact random sequence from tick zero.
   state.rng.setState(save.seed ^ save.tick);

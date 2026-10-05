@@ -23,10 +23,25 @@ import {
   type SimState,
   type UndoEntry,
 } from './state.ts';
+import {
+  chargeTiles,
+  dischargeTiles,
+  poolOf,
+  storageCapacityAt,
+  storageTilesOfKind,
+} from './storage.ts';
 import { dispatchDemandResponse } from './demandResponse.ts';
 import { spotPriceFactor } from './market.ts';
 import { timeOfDay } from './tick.ts';
 import { currentSolarFactor, currentWindFactor, riverFlowFactor } from './weather.ts';
+
+/**
+ * Quantisation of a storage tile's level in its tile diff: the level
+ * moves every tick, so a tile is only re-sent once its share of capacity
+ * crosses one of these steps. Fine enough that the battery fill bar
+ * still rises smoothly, coarse enough that a steady city sends nothing.
+ */
+const SOC_STEPS = 64;
 
 /** True once any power-related plant exists (parks don't count). */
 export function hasPowerInfrastructure(state: SimState): boolean {
@@ -75,6 +90,8 @@ export function placePlant(state: SimState, tile: number, plant: PlantType): Bui
   layers.tileType[tile] = TileType.Plant;
   layers.zone[tile] = Zone.None;
   layers.plantType[tile] = plant;
+  // A fresh plant starts empty, whatever a demolished predecessor held.
+  layers.stored[tile] = 0;
   clearForest(state, tile);
   markDirty(state, tile);
   bumpGridVersion(state);
@@ -467,16 +484,22 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   buildingDemand += householdShare * shift;
   heatingDemand += (1 - householdShare) * shift;
 
-  const storageCapacity = census.batteries * BALANCE.energy.batteryCapacity;
+  // Storage sits on the plant tiles (see storage.ts). The cascade below is
+  // still one city-wide pool per kind — per-island balancing comes later —
+  // so it reads the summed pool and writes back through the helpers, which
+  // spread the energy over the tiles. `poolOf` also clamps a tile that
+  // holds more than it can, which is what the old `Math.min` did.
+  const batteryTiles = storageTilesOfKind(state, PlantType.Battery);
+  const pumpedTiles = storageTilesOfKind(state, PlantType.PumpedStorage);
+  const hydrogenTiles = storageTilesOfKind(state, PlantType.HydrogenPlant);
+  const heatStoreTiles = storageTilesOfKind(state, PlantType.HeatStore);
+  const batteryPool = poolOf(state, batteryTiles);
+  const pumpedPool = poolOf(state, pumpedTiles);
+  const hydrogenPool = poolOf(state, hydrogenTiles);
   const powerLimit = census.batteries * BALANCE.energy.batteryPowerLimit;
-  state.storedEnergy = Math.min(state.storedEnergy, storageCapacity);
-  const pumpedCapacity = census.pumpedCapacity * BALANCE.energy.pumpedStorageCapacity;
   const pumpedPowerLimit = census.pumpedCapacity * BALANCE.energy.pumpedStoragePowerLimit;
-  state.pumpedStorageEnergy = Math.min(state.pumpedStorageEnergy, pumpedCapacity);
-  const hydrogenCapacity = census.hydrogenPlants * BALANCE.hydrogen.capacity;
   const electrolyserLimit = census.hydrogenPlants * BALANCE.hydrogen.electrolyserPowerLimit;
   const fuelCellLimit = census.hydrogenPlants * BALANCE.hydrogen.fuelCellPowerLimit;
-  state.hydrogenEnergy = Math.min(state.hydrogenEnergy, hydrogenCapacity);
 
   let curtailment = 0;
   let biogas = 0;
@@ -499,39 +522,44 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   if (net >= 0) {
     shedPool = dispatchDemandResponse(state, businessDemand, 0, spotPrice, industrialDemand).pool;
     const battery = chargePool(
-      state.storedEnergy,
-      storageCapacity,
+      batteryPool.stored,
+      batteryPool.capacity,
       powerLimit,
       BALANCE.energy.batteryChargeEfficiency,
       net,
     );
-    state.storedEnergy = battery.stored;
+    chargeTiles(state, batteryTiles, battery.absorbed * BALANCE.energy.batteryChargeEfficiency);
     batteryPowerUsed = battery.absorbed;
     const pumped = chargePool(
-      state.pumpedStorageEnergy,
-      pumpedCapacity,
+      pumpedPool.stored,
+      pumpedPool.capacity,
       pumpedPowerLimit,
       BALANCE.energy.pumpedStorageChargeEfficiency,
       net - battery.absorbed,
     );
-    state.pumpedStorageEnergy = pumped.stored;
+    chargeTiles(state, pumpedTiles, pumped.absorbed * BALANCE.energy.pumpedStorageChargeEfficiency);
     pumpedPowerUsed = pumped.absorbed;
     // The heat store drinks after the electric storages and before the
     // hydrogen tanks: a cheap one-way sink that shifts the heating peak.
-    heatStoreCharge = chargeHeatStore(state, heat, net - battery.absorbed - pumped.absorbed);
+    heatStoreCharge = chargeHeatStore(
+      state,
+      heat,
+      net - battery.absorbed - pumped.absorbed,
+      heatStoreTiles,
+    );
     let remaining = net - battery.absorbed - pumped.absorbed - heatStoreCharge;
     // Filling the tanks comes before either sale: a stored unit is
     // released 1:1 by the fuel cell later and so displaces an import at
     // importCostPerEnergyUnit * spot, worth several times what selling
     // the same surplus now earns.
     const hydrogen = chargePool(
-      state.hydrogenEnergy,
-      hydrogenCapacity,
+      hydrogenPool.stored,
+      hydrogenPool.capacity,
       electrolyserLimit,
       BALANCE.hydrogen.chargeEfficiency,
       remaining,
     );
-    state.hydrogenEnergy = hydrogen.stored;
+    chargeTiles(state, hydrogenTiles, hydrogen.absorbed * BALANCE.hydrogen.chargeEfficiency);
     electrolysis = hydrogen.absorbed;
     remaining -= hydrogen.absorbed;
 
@@ -564,16 +592,16 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     curtailment = remaining;
   } else {
     let shortfall = -net;
-    const battery = dischargePool(state.storedEnergy, powerLimit, shortfall);
-    state.storedEnergy = battery.stored;
+    const battery = dischargePool(batteryPool.stored, powerLimit, shortfall);
+    dischargeTiles(state, batteryTiles, battery.released);
     shortfall -= battery.released;
     batteryPowerUsed = battery.released;
-    const pumped = dischargePool(state.pumpedStorageEnergy, pumpedPowerLimit, shortfall);
-    state.pumpedStorageEnergy = pumped.stored;
+    const pumped = dischargePool(pumpedPool.stored, pumpedPowerLimit, shortfall);
+    dischargeTiles(state, pumpedTiles, pumped.released);
     shortfall -= pumped.released;
     pumpedPowerUsed = pumped.released;
-    const hydrogen = dischargePool(state.hydrogenEnergy, fuelCellLimit, shortfall);
-    state.hydrogenEnergy = hydrogen.stored;
+    const hydrogen = dischargePool(hydrogenPool.stored, fuelCellLimit, shortfall);
+    dischargeTiles(state, hydrogenTiles, hydrogen.released);
     fuelCell = hydrogen.released;
     shortfall -= fuelCell;
     biogas = Math.min(shortfall, census.biogasPlants * BALANCE.energy.biogasMaxOutput);
@@ -608,6 +636,10 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   let tradeBuy = 0;
   if (state.marketTrading) {
     const trading = BALANCE.market.trading;
+    // The cascade above moved energy onto and off the tiles, so the pools
+    // read at its start are stale: take them again.
+    const batteryNow = poolOf(state, batteryTiles);
+    const pumpedNow = poolOf(state, pumpedTiles);
     if (net >= 0 && spotPrice >= trading.sellThreshold && deficit === 0 && gridImport === 0) {
       let exportRoom = BALANCE.market.exportCapacity - gridExport;
       const sellFrom = (stored: number, floor: number, power: number): number => {
@@ -616,17 +648,17 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
         return sold;
       };
       const fromBattery = sellFrom(
-        state.storedEnergy,
-        trading.sellFloor * storageCapacity,
+        batteryNow.stored,
+        trading.sellFloor * batteryNow.capacity,
         powerLimit - batteryPowerUsed,
       );
-      state.storedEnergy -= fromBattery;
+      dischargeTiles(state, batteryTiles, fromBattery);
       const fromPumped = sellFrom(
-        state.pumpedStorageEnergy,
-        trading.sellFloor * pumpedCapacity,
+        pumpedNow.stored,
+        trading.sellFloor * pumpedNow.capacity,
         pumpedPowerLimit - pumpedPowerUsed,
       );
-      state.pumpedStorageEnergy -= fromPumped;
+      dischargeTiles(state, pumpedTiles, fromPumped);
       tradeSell = fromBattery + fromPumped;
       gridExport += tradeSell;
     } else if (spotPrice <= trading.buyThreshold && curtailment === 0 && gridExport === 0) {
@@ -637,19 +669,19 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
         return { stored: stored + bought * efficiency, bought };
       };
       const battery = buyInto(
-        state.storedEnergy,
-        trading.buyCeiling * storageCapacity,
+        batteryNow.stored,
+        trading.buyCeiling * batteryNow.capacity,
         powerLimit - batteryPowerUsed,
         BALANCE.energy.batteryChargeEfficiency,
       );
-      state.storedEnergy = battery.stored;
+      chargeTiles(state, batteryTiles, battery.bought * BALANCE.energy.batteryChargeEfficiency);
       const pumped = buyInto(
-        state.pumpedStorageEnergy,
-        trading.buyCeiling * pumpedCapacity,
+        pumpedNow.stored,
+        trading.buyCeiling * pumpedNow.capacity,
         pumpedPowerLimit - pumpedPowerUsed,
         BALANCE.energy.pumpedStorageChargeEfficiency,
       );
-      state.pumpedStorageEnergy = pumped.stored;
+      chargeTiles(state, pumpedTiles, pumped.bought * BALANCE.energy.pumpedStorageChargeEfficiency);
       tradeBuy = battery.bought + pumped.bought;
       gridImport += tradeBuy;
     }
@@ -705,13 +737,32 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     contractedBuildings,
   };
 
+  // A storage tile's diff carries its level as a share of capacity. Mark
+  // it dirty only when that share crosses a 1/64 step: the level moves
+  // every tick, and a diff per storage tile per tick would be pure churn.
+  for (const tiles of [batteryTiles, pumpedTiles, hydrogenTiles, heatStoreTiles]) {
+    for (const tile of tiles) {
+      const capacity = storageCapacityAt(state, tile);
+      const step =
+        capacity > 0
+          ? Math.min(SOC_STEPS, Math.floor((SOC_STEPS * layers.stored[tile]) / capacity))
+          : 0;
+      if (step !== layers.lastStoredStep[tile]) {
+        layers.lastStoredStep[tile] = step;
+        markDirty(state, tile);
+      }
+    }
+  }
+
   // Average across the sample window instead of snapshotting the last
   // tick: a single tick can catch a cloud passing or a load spike, which
   // made the day graph noticeably jagged. Averaging is the same running-
   // sums-then-flush pattern as `recordLifetime` in tick.ts.
-  const totalCapacity = storageCapacity + pumpedCapacity;
+  const totalCapacity = batteryPool.capacity + pumpedPool.capacity;
   const soc =
-    totalCapacity > 0 ? (state.storedEnergy + state.pumpedStorageEnergy) / totalCapacity : 0;
+    totalCapacity > 0
+      ? (poolOf(state, batteryTiles).stored + poolOf(state, pumpedTiles).stored) / totalCapacity
+      : 0;
   const accum = state.energyHistoryAccum;
   accum.generation += generation + biogas + fuelCell;
   accum.consumption += consumptionThisTick;

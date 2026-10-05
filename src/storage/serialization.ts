@@ -10,7 +10,10 @@ interface SaveGameJson {
   money: number;
   taxRate: number;
   smartCharging?: boolean;
-  storedEnergy: number;
+  /** Legacy battery pool; read on load, never written (see `stored`). */
+  storedEnergy?: number;
+  /** Storage per plant tile as [index, value, index, value, …]. */
+  stored?: number[];
   smartMeters?: { active: boolean; metered: number };
   flexBacklog?: number;
   demandResponse?: { active: boolean; callBudget: number };
@@ -56,6 +59,15 @@ function base64ToBuffer(base64: string): ArrayBuffer {
   return bytes.buffer as ArrayBuffer;
 }
 
+/** A `stored` array is only usable whole: even length, all finite numbers. */
+function isStoredPairs(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length % 2 === 0 &&
+    value.every((n) => typeof n === 'number' && Number.isFinite(n))
+  );
+}
+
 /** Serialize a save game to a portable JSON string (for file export). */
 export function saveToJson(save: SaveGame): string {
   const layers: Record<string, string> = {};
@@ -69,7 +81,7 @@ export function saveToJson(save: SaveGame): string {
     tick: save.tick,
     money: save.money,
     taxRate: save.taxRate,
-    storedEnergy: save.storedEnergy,
+    ...(save.stored !== undefined ? { stored: save.stored } : {}),
     ...(save.smartCharging !== undefined ? { smartCharging: save.smartCharging } : {}),
     ...(save.smartMeters !== undefined ? { smartMeters: save.smartMeters } : {}),
     ...(save.flexBacklog !== undefined ? { flexBacklog: save.flexBacklog } : {}),
@@ -219,7 +231,12 @@ export function saveFromJson(text: string): SaveGame {
     tick: parsed.tick,
     money: parsed.money,
     taxRate: typeof parsed.taxRate === 'number' ? parsed.taxRate : 0.1,
-    storedEnergy: typeof parsed.storedEnergy === 'number' ? parsed.storedEnergy : 0,
+    ...(typeof parsed.storedEnergy === 'number' ? { storedEnergy: parsed.storedEnergy } : {}),
+    // Pairs of (tile index, level), taken whole or not at all: dropping a
+    // single bad entry would shift every later pair onto the wrong tile.
+    // The values themselves are checked on load, where the layers that
+    // decide a tile's capacity are in place.
+    ...(isStoredPairs(parsed.stored) ? { stored: parsed.stored } : {}),
     ...(typeof parsed.smartCharging === 'boolean' ? { smartCharging: parsed.smartCharging } : {}),
     ...(isSavedSmartMeters(parsed.smartMeters) ? { smartMeters: parsed.smartMeters } : {}),
     ...(typeof parsed.flexBacklog === 'number' ? { flexBacklog: parsed.flexBacklog } : {}),

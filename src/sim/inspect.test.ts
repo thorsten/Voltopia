@@ -123,14 +123,15 @@ describe('inspectTile', () => {
     expect(inspectTile(state, lot)!.connected).toBe(false);
   });
 
-  it('splits stored energy across battery tiles', () => {
+  it('reports what the battery on this tile holds, not the city average', () => {
     const state = createSimState(1, SIZE);
     placePlant(state, at(8, 8), PlantType.Battery);
     placePlant(state, at(9, 9), PlantType.Battery);
-    state.storedEnergy = 2_000;
+    state.layers.stored[at(8, 8)] = 2_000;
     const info = inspectTile(state, at(8, 8))!;
-    expect(info.storedEnergy).toBeCloseTo(1_000, 6);
+    expect(info.storedEnergy).toBeCloseTo(2_000, 6);
     expect(info.storageCapacity).toBe(BALANCE.energy.batteryCapacity);
+    expect(inspectTile(state, at(9, 9))!.storedEnergy).toBe(0);
   });
 
   it('reports a hydrogen plant tile: tank share and fuel-cell output', () => {
@@ -138,7 +139,7 @@ describe('inspectTile', () => {
     state.money = 1e9;
     placePlant(state, at(8, 8), PlantType.HydrogenPlant);
     placePlant(state, at(10, 10), PlantType.HydrogenPlant);
-    state.hydrogenEnergy = 5_000;
+    state.layers.stored[at(8, 8)] = 2_500;
     state.lastEnergy.fuelCell = 40;
     const info = inspectTile(state, at(8, 8))!;
     expect(info.storedEnergy).toBeCloseTo(2_500, 6);
@@ -504,7 +505,7 @@ describe('district heating', () => {
     state.layers.density[at(4, 9)] = 1;
     state.layers.zone[at(20, 20)] = Zone.Residential;
     state.layers.density[at(20, 20)] = 1;
-    state.heatStored = 1_500;
+    state.layers.stored[at(2, 14)] = 1_500;
     recomputeHeated(state);
     return state;
   }
@@ -532,7 +533,7 @@ describe('district heating', () => {
     expect(inspectTile(state, at(25, 25))!.heatPlant?.reach).toBe(0);
   });
 
-  it('a heat store shows its share of the pool', () => {
+  it('a heat store shows what it holds', () => {
     const state = heatedTown();
     const info = inspectTile(state, at(2, 14))!;
     expect(info.storedEnergy).toBeCloseTo(1_500, 6);

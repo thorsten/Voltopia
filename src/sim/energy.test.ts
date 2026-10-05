@@ -33,12 +33,23 @@ import {
   Zone,
   type SimState,
 } from './state.ts';
+import { chargeTiles, storageTilesOfKind, storedByKind } from './storage.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
 import { SUNRISE, SUNSET } from './weather.ts';
 
 const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+/**
+ * Fill the city's plants of one storage kind to `total`, spread over them
+ * in proportion to capacity — what setting the old global pool meant.
+ */
+function fillPool(state: SimState, plant: PlantType, total: number): void {
+  const tiles = storageTilesOfKind(state, plant);
+  for (const tile of tiles) state.layers.stored[tile] = 0;
+  chargeTiles(state, tiles, total);
+}
 
 function makeState(): SimState {
   const state = createSimState(1, SIZE);
@@ -217,7 +228,7 @@ describe('energyStep', () => {
     const expectedCharge =
       Math.min(BALANCE.energy.solarPeakOutput, BALANCE.energy.batteryPowerLimit) *
       BALANCE.energy.batteryChargeEfficiency;
-    expect(state.storedEnergy).toBeCloseTo(expectedCharge, 3);
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(expectedCharge, 3);
     // Charge rate is limited; the rest is exported, then curtailed.
     const leftover = BALANCE.energy.solarPeakOutput - BALANCE.energy.batteryPowerLimit;
     expect(state.lastEnergy.gridExport).toBeCloseTo(
@@ -235,7 +246,7 @@ describe('energyStep', () => {
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.Battery);
     setNoonClearSky(state);
-    state.storedEnergy = BALANCE.energy.batteryCapacity;
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.gridExport).toBeCloseTo(
       Math.min(BALANCE.energy.solarPeakOutput, BALANCE.market.exportCapacity),
@@ -245,7 +256,7 @@ describe('energyStep', () => {
       Math.max(0, BALANCE.energy.solarPeakOutput - BALANCE.market.exportCapacity),
       3,
     );
-    expect(state.storedEnergy).toBe(BALANCE.energy.batteryCapacity);
+    expect(storedByKind(state, PlantType.Battery)).toBe(BALANCE.energy.batteryCapacity);
   });
 
   it('deficit discharges the battery before dispatching biogas', () => {
@@ -256,12 +267,12 @@ describe('energyStep', () => {
     state.tick = TICKS_PER_DAY / 2; // noon: commercial peak
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
-    state.storedEnergy = 100;
+    fillPool(state, PlantType.Battery, 100);
     energyStep(state, { chargingDemand: 0 });
     const demand = state.lastEnergy.buildingConsumption;
     const rooftop = state.lastEnergy.rooftop;
     expect(demand).toBeGreaterThan(0);
-    expect(state.storedEnergy).toBeCloseTo(100 - (demand - rooftop), 3);
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(100 - (demand - rooftop), 3);
     expect(state.lastEnergy.biogas).toBe(0);
     expect(state.lastEnergy.deficit).toBe(0);
   });
@@ -526,18 +537,23 @@ describe('hydro and pumped storage', () => {
     energyStep(state, { chargingDemand: 0 });
     const hydro = BALANCE.energy.hydroPeakOutput;
     const batteryTake = Math.min(hydro, BALANCE.energy.batteryPowerLimit);
-    expect(state.storedEnergy).toBeCloseTo(batteryTake * BALANCE.energy.batteryChargeEfficiency, 6);
-    expect(state.pumpedStorageEnergy).toBeCloseTo(
+    // Precision 3, not 6: a tile's level is a Float32, so a few thousand
+    // units carry about a thousandth of absolute slack.
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(
+      batteryTake * BALANCE.energy.batteryChargeEfficiency,
+      3,
+    );
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBeCloseTo(
       (hydro - batteryTake) * BALANCE.energy.pumpedStorageChargeEfficiency,
-      6,
+      3,
     );
     // Fill the battery; the pumped pool absorbs the whole surplus next.
-    state.storedEnergy = BALANCE.energy.batteryCapacity;
-    const pumpedBefore = state.pumpedStorageEnergy;
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
+    const pumpedBefore = storedByKind(state, PlantType.PumpedStorage);
     energyStep(state, { chargingDemand: 0 });
-    expect(state.pumpedStorageEnergy).toBeCloseTo(
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBeCloseTo(
       pumpedBefore + hydro * BALANCE.energy.pumpedStorageChargeEfficiency,
-      6,
+      3,
     );
     expect(state.lastEnergy.gridExport).toBe(0);
     expect(state.lastEnergy.curtailment).toBe(0);
@@ -549,12 +565,12 @@ describe('hydro and pumped storage', () => {
     placePlant(state, at(2, 2), PlantType.Battery);
     placePlant(state, at(3, 2), PlantType.BiogasPlant);
     addBuilding(state, at(4, 2), Zone.Commercial, 3);
-    state.storedEnergy = 10;
-    state.pumpedStorageEnergy = 1_000;
+    fillPool(state, PlantType.Battery, 10);
+    fillPool(state, PlantType.PumpedStorage, 1_000);
     energyStep(state, { chargingDemand: 300 });
-    expect(state.storedEnergy).toBe(0);
-    expect(state.pumpedStorageEnergy).toBeLessThan(1_000);
-    expect(state.pumpedStorageEnergy).toBeGreaterThanOrEqual(
+    expect(storedByKind(state, PlantType.Battery)).toBe(0);
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBeLessThan(1_000);
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBeGreaterThanOrEqual(
       1_000 - BALANCE.energy.pumpedStoragePowerLimit,
     );
     expect(state.lastEnergy.biogas).toBeGreaterThan(0);
@@ -563,26 +579,37 @@ describe('hydro and pumped storage', () => {
   it('clamps pumped storage to installed capacity', () => {
     const state = riverState();
     placePlant(state, at(8, 7), PlantType.PumpedStorage);
-    state.pumpedStorageEnergy = 1e9;
+    // Straight onto the tile: more than it can hold, as a hand-edited
+    // save or a shrunken head would leave it.
+    state.layers.stored[at(8, 7)] = 1e9;
     energyStep(state, { chargingDemand: 0 });
-    expect(state.pumpedStorageEnergy).toBeLessThanOrEqual(BALANCE.energy.pumpedStorageCapacity);
-    const noPlants = makeState();
-    noPlants.pumpedStorageEnergy = 500;
-    energyStep(noPlants, { chargingDemand: 0 });
-    expect(noPlants.pumpedStorageEnergy).toBe(0);
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBeLessThanOrEqual(
+      BALANCE.energy.pumpedStorageCapacity,
+    );
+  });
+
+  it('a demolished pumped-storage plant takes its energy with it', () => {
+    const state = riverState();
+    state.money = 1e9;
+    placePlant(state, at(8, 7), PlantType.PumpedStorage);
+    state.layers.stored[at(8, 7)] = 500;
+    bulldozeTiles(state, [at(8, 7)]);
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBe(0);
+    expect(state.layers.stored[at(8, 7)]).toBe(0);
   });
 
   it('history state of charge combines both pools', () => {
     const state = riverState();
     placePlant(state, at(8, 7), PlantType.PumpedStorage);
     placePlant(state, at(2, 2), PlantType.Battery);
-    state.storedEnergy = BALANCE.energy.batteryCapacity;
-    state.pumpedStorageEnergy = 0;
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
+    fillPool(state, PlantType.PumpedStorage, 0);
     state.tick = TICKS_PER_DAY; // multiple of the history sample interval, midnight
     energyStep(state, { chargingDemand: 0 });
     const last = state.energyHistory[state.energyHistory.length - 1];
     const combined =
-      state.storedEnergy / (BALANCE.energy.batteryCapacity + BALANCE.energy.pumpedStorageCapacity);
+      storedByKind(state, PlantType.Battery) /
+      (BALANCE.energy.batteryCapacity + BALANCE.energy.pumpedStorageCapacity);
     expect(last.stateOfCharge).toBeCloseTo(combined, 6);
   });
 });
@@ -671,9 +698,9 @@ describe('terrain energy bonuses', () => {
       BALANCE.energy.pumpedStorageCapacity * factor,
     );
     // The clamp uses the boosted capacity.
-    state.pumpedStorageEnergy = BALANCE.energy.pumpedStorageCapacity * factor + 500;
+    state.layers.stored[shore] = BALANCE.energy.pumpedStorageCapacity * factor + 500;
     energyStep(state, { chargingDemand: 0 });
-    expect(state.pumpedStorageEnergy).toBeLessThanOrEqual(
+    expect(storedByKind(state, PlantType.PumpedStorage)).toBeLessThanOrEqual(
       BALANCE.energy.pumpedStorageCapacity * factor,
     );
   });
@@ -1078,7 +1105,10 @@ describe('hydrogen plants', () => {
     const surplus = BALANCE.energy.solarPeakOutput;
     const stored = BALANCE.hydrogen.electrolyserPowerLimit;
     expect(state.lastEnergy.electrolysis).toBeCloseTo(stored, 3);
-    expect(state.hydrogenEnergy).toBeCloseTo(stored * BALANCE.hydrogen.chargeEfficiency, 3);
+    expect(storedByKind(state, PlantType.HydrogenPlant)).toBeCloseTo(
+      stored * BALANCE.hydrogen.chargeEfficiency,
+      3,
+    );
     expect(state.lastEnergy.gridExport).toBeCloseTo(surplus - stored, 3);
     expect(state.lastEnergy.hydrogenSold).toBe(0);
     expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
@@ -1090,7 +1120,7 @@ describe('hydrogen plants', () => {
     placePlant(state, at(5, 5), PlantType.SolarFarm);
     placePlant(state, at(6, 5), PlantType.HydrogenPlant);
     setNoonClearSky(state);
-    state.hydrogenEnergy = BALANCE.hydrogen.capacity;
+    fillPool(state, PlantType.HydrogenPlant, BALANCE.hydrogen.capacity);
     energyStep(state, { chargingDemand: 0 });
     // Clear noon is a cheap hour, so direct sale outbids the link and
     // takes the electrolysers' full input first; the link mops up.
@@ -1102,7 +1132,7 @@ describe('hydrogen plants', () => {
       3,
     );
     expect(state.lastEnergy.gridExport).toBeCloseTo(BALANCE.energy.solarPeakOutput - soldInput, 3);
-    expect(state.hydrogenEnergy).toBe(BALANCE.hydrogen.capacity);
+    expect(storedByKind(state, PlantType.HydrogenPlant)).toBe(BALANCE.hydrogen.capacity);
     expect(state.lastEnergy.curtailment).toBeCloseTo(0, 3);
   });
 
@@ -1113,7 +1143,7 @@ describe('hydrogen plants', () => {
     placePlant(state, at(6, 5), PlantType.HydrogenPlant);
     setNoonClearSky(state);
     state.weather.windSpeed = 1; // regional abundance drives the spot price down
-    state.hydrogenEnergy = BALANCE.hydrogen.capacity; // tanks full: only sales left
+    fillPool(state, PlantType.HydrogenPlant, BALANCE.hydrogen.capacity); // tanks full: only sales left
     // Trim the surplus to below the electrolyser limit plus the link's
     // capacity, so the order of the two routes actually changes the split.
     const surplus = BALANCE.hydrogen.electrolyserPowerLimit;
@@ -1140,7 +1170,7 @@ describe('hydrogen plants', () => {
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
     state.season = { ...state.season, sunrise: SUNRISE, sunset: SUNSET, solarStrength: 1 };
-    state.hydrogenEnergy = BALANCE.hydrogen.capacity; // tanks full: only sales left
+    fillPool(state, PlantType.HydrogenPlant, BALANCE.hydrogen.capacity); // tanks full: only sales left
     const generation = farms * BALANCE.energy.solarPeakOutput * 0.15; // 0.85 cloud attenuation
     const surplus = BALANCE.hydrogen.electrolyserPowerLimit;
     energyStep(state, { chargingDemand: generation - surplus });
@@ -1179,12 +1209,12 @@ describe('hydrogen plants', () => {
     state.tick = TICKS_PER_DAY / 2;
     state.weather.cloudCover = 1;
     state.weather.windSpeed = 0;
-    state.hydrogenEnergy = 1_000;
+    fillPool(state, PlantType.HydrogenPlant, 1_000);
     energyStep(state, { chargingDemand: 0 });
     const shortfall = state.lastEnergy.buildingConsumption - state.lastEnergy.rooftop;
     expect(shortfall).toBeGreaterThan(0);
     expect(state.lastEnergy.fuelCell).toBeCloseTo(shortfall, 3);
-    expect(state.hydrogenEnergy).toBeCloseTo(1_000 - shortfall, 3);
+    expect(storedByKind(state, PlantType.HydrogenPlant)).toBeCloseTo(1_000 - shortfall, 3);
     expect(state.lastEnergy.biogas).toBe(0);
     expect(state.lastEnergy.deficit).toBe(0);
   });
@@ -1196,7 +1226,7 @@ describe('hydrogen plants', () => {
     placePlant(state, at(6, 5), PlantType.BiogasPlant);
     state.tick = 0; // midnight, no solar
     state.weather.windSpeed = 0;
-    state.hydrogenEnergy = 1_000;
+    fillPool(state, PlantType.HydrogenPlant, 1_000);
     const demand = BALANCE.hydrogen.fuelCellPowerLimit + 50;
     energyStep(state, { chargingDemand: demand });
     expect(state.lastEnergy.fuelCell).toBeCloseTo(BALANCE.hydrogen.fuelCellPowerLimit, 3);
@@ -1233,7 +1263,7 @@ describe('market trading', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     setScarceEvening(state);
-    state.storedEnergy = BALANCE.energy.batteryCapacity; // 100%
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity); // 100%
     state.marketTrading = true;
     energyStep(state, { chargingDemand: 0 });
     const sellable =
@@ -1246,14 +1276,17 @@ describe('market trading', () => {
     );
     expect(state.lastEnergy.tradeSell).toBeCloseTo(expected, 3);
     expect(state.lastEnergy.gridExport).toBeCloseTo(expected, 3);
-    expect(state.storedEnergy).toBeCloseTo(BALANCE.energy.batteryCapacity - expected, 3);
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(
+      BALANCE.energy.batteryCapacity - expected,
+      3,
+    );
   });
 
   it('does not sell while the city is running a deficit', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     setScarceEvening(state);
-    state.storedEnergy = BALANCE.energy.batteryCapacity; // 100%
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity); // 100%
     state.marketTrading = true;
     // A calm, dark evening with a load on it: the battery is covering
     // the shortfall, so nothing it holds is spare, however dear the
@@ -1262,14 +1295,17 @@ describe('market trading', () => {
     energyStep(state, { chargingDemand: 50 });
     expect(state.lastEnergy.spotPrice).toBeGreaterThanOrEqual(BALANCE.market.trading.sellThreshold);
     expect(state.lastEnergy.tradeSell).toBe(0);
-    expect(state.storedEnergy).toBeCloseTo(BALANCE.energy.batteryCapacity - 50, 3);
+    expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(
+      BALANCE.energy.batteryCapacity - 50,
+      3,
+    );
   });
 
   it('leaves the bulk of the reserve untouched even at the highest price', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     setScarceEvening(state);
-    state.storedEnergy = BALANCE.energy.batteryCapacity;
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
     state.marketTrading = true;
     // Ten ticks of standing at a scarcity price. Only the top slice is
     // ever sellable, so the pool leaves the band after a tick or two and
@@ -1277,8 +1313,10 @@ describe('market trading', () => {
     // rule, stated here as an absolute rather than in terms of the
     // constant under test.
     for (let i = 0; i < 10; i++) energyStep(state, { chargingDemand: 0 });
-    expect(state.storedEnergy).toBeGreaterThan(0.9 * BALANCE.energy.batteryCapacity);
-    expect(state.storedEnergy).toBeGreaterThanOrEqual(
+    expect(storedByKind(state, PlantType.Battery)).toBeGreaterThan(
+      0.9 * BALANCE.energy.batteryCapacity,
+    );
+    expect(storedByKind(state, PlantType.Battery)).toBeGreaterThanOrEqual(
       BALANCE.market.trading.sellFloor * BALANCE.energy.batteryCapacity,
     );
   });
@@ -1287,7 +1325,11 @@ describe('market trading', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     setScarceEvening(state);
-    state.storedEnergy = BALANCE.market.trading.sellFloor * BALANCE.energy.batteryCapacity;
+    fillPool(
+      state,
+      PlantType.Battery,
+      BALANCE.market.trading.sellFloor * BALANCE.energy.batteryCapacity,
+    );
     state.marketTrading = true;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.tradeSell).toBe(0);
@@ -1297,13 +1339,14 @@ describe('market trading', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     setCheapNoon(state);
-    state.storedEnergy = 0.2 * BALANCE.energy.batteryCapacity;
+    fillPool(state, PlantType.Battery, 0.2 * BALANCE.energy.batteryCapacity);
     state.marketTrading = true;
     energyStep(state, { chargingDemand: 0 });
     const expected = Math.min(
       BALANCE.market.importCapacity,
       BALANCE.energy.batteryPowerLimit,
-      (BALANCE.market.trading.buyCeiling * BALANCE.energy.batteryCapacity - state.storedEnergy) /
+      (BALANCE.market.trading.buyCeiling * BALANCE.energy.batteryCapacity -
+        storedByKind(state, PlantType.Battery)) /
         BALANCE.energy.batteryChargeEfficiency,
     );
     expect(state.lastEnergy.tradeBuy).toBeCloseTo(expected, 3);
@@ -1317,7 +1360,7 @@ describe('market trading', () => {
     setCheapNoon(state);
     // Own solar surplus at noon: the battery charges from it and the rest
     // is exported, so buying on top would be nonsense.
-    state.storedEnergy = 0.2 * BALANCE.energy.batteryCapacity;
+    fillPool(state, PlantType.Battery, 0.2 * BALANCE.energy.batteryCapacity);
     state.marketTrading = true;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.gridExport).toBeGreaterThan(0);
@@ -1326,7 +1369,11 @@ describe('market trading', () => {
     const full = makeState();
     placePlant(full, at(5, 5), PlantType.Battery);
     setCheapNoon(full);
-    full.storedEnergy = BALANCE.market.trading.buyCeiling * BALANCE.energy.batteryCapacity;
+    fillPool(
+      full,
+      PlantType.Battery,
+      BALANCE.market.trading.buyCeiling * BALANCE.energy.batteryCapacity,
+    );
     full.marketTrading = true;
     energyStep(full, { chargingDemand: 0 });
     expect(full.lastEnergy.tradeBuy).toBe(0);
@@ -1336,7 +1383,7 @@ describe('market trading', () => {
     const state = makeState();
     placePlant(state, at(5, 5), PlantType.Battery);
     setScarceEvening(state);
-    state.storedEnergy = BALANCE.energy.batteryCapacity;
+    fillPool(state, PlantType.Battery, BALANCE.energy.batteryCapacity);
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.tradeSell).toBe(0);
     expect(state.lastEnergy.tradeBuy).toBe(0);
@@ -1494,8 +1541,11 @@ describe('heat plants', () => {
     const e = state.lastEnergy;
     // Batteries first (their power limit), then the heat store (pump limit), then export.
     expect(e.heatStoreCharge).toBeCloseTo(BALANCE.heat.pumpPowerLimit, 3);
-    expect(state.heatStored).toBeCloseTo(BALANCE.heat.pumpPowerLimit * heat.cop, 3);
-    expect(state.storedEnergy).toBeGreaterThan(0);
+    expect(storedByKind(state, PlantType.HeatStore)).toBeCloseTo(
+      BALANCE.heat.pumpPowerLimit * heat.cop,
+      3,
+    );
+    expect(storedByKind(state, PlantType.Battery)).toBeGreaterThan(0);
     const generation = 3 * BALANCE.energy.solarPeakOutput + e.wind;
     const afterStorage = generation - BALANCE.energy.batteryPowerLimit - e.heatStoreCharge;
     expect(e.gridExport).toBeCloseTo(Math.min(afterStorage, BALANCE.market.exportCapacity), 3);
@@ -1512,7 +1562,7 @@ describe('heat plants', () => {
     const heat = heatStep(state);
     energyStep(state, { chargingDemand: 0, heat });
     expect(state.lastEnergy.heatStoreCharge).toBe(0);
-    expect(state.heatStored).toBe(0);
+    expect(storedByKind(state, PlantType.HeatStore)).toBe(0);
   });
 
   it('runs without a heat input as if there were no district heating', () => {
@@ -1872,7 +1922,7 @@ describe('demand response in the cascade', () => {
     // regional wind factor and the spot price would read scarce instead;
     // anything from 0.6 up is already the cap.)
     placePlant(state, at(6, 5), PlantType.Battery);
-    state.storedEnergy = 0;
+    fillPool(state, PlantType.Battery, 0);
     setNoonClearSky(state);
     state.tick = (11 * TICKS_PER_DAY) / 24;
     state.weather.windSpeed = 0.8;
