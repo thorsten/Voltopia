@@ -25,7 +25,7 @@ import {
 import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { heatPumpCop, plantReach } from './heat.ts';
-import { hasLineAttached, isSupplySource } from './powerGrid.ts';
+import { isSupplySource, isTiedToGrid } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -227,11 +227,11 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
   const isBuilding = tileType === TileType.Empty && density > 0;
   // A supply plant always energises its own ring, so the energized layer
   // says nothing about whether it is tied into the network. For those,
-  // "connected" means a power line is attached; every other tile asks
-  // whether the network reaches it.
+  // "connected" means a power line is attached to it or to a plant of
+  // its park; every other tile asks whether the network reaches it.
   const connected =
     tileType === TileType.Plant && isSupplySource(plant)
-      ? hasLineAttached(state, index)
+      ? isTiedToGrid(state, index)
       : isTileConnected(state, index);
 
   const isStationPlant = tileType === TileType.Plant && isStation(plant);

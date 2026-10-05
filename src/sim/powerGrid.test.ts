@@ -3,7 +3,14 @@ import { BALANCE } from '../shared/constants.ts';
 import { chebyshevDistance, LINE_PRESENT, tileIndex } from '../shared/grid.ts';
 import { PlantType } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
-import { hasLineAttached, isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
+import {
+  hasLineAttached,
+  isIsolatedPlant,
+  isSupplySource,
+  isTiedToGrid,
+  isolatedPlants,
+  recomputeGrid,
+} from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
 import { bumpGridVersion, createSimState, TileType, Zone, type SimState } from './state.ts';
@@ -176,6 +183,59 @@ describe('isIsolatedPlant', () => {
     buildPowerLines(state, [at(11, 10), at(12, 10)]);
     expect(hasLineAttached(state, at(10, 10))).toBe(true);
     expect(isIsolatedPlant(state, at(10, 10))).toBe(false);
+  });
+
+  it("counts a plant standing in a lined plant's ring as part of its park, up to the ring edge", () => {
+    const state = lonePlant();
+    buildPowerLines(state, [at(9, 10)]);
+    placePlant(state, at(10 + R, 10), PlantType.SolarFarm);
+    placePlant(state, at(10 + R + 1, 14), PlantType.SolarFarm);
+    expect(hasLineAttached(state, at(10 + R, 10))).toBe(false);
+    expect(isTiedToGrid(state, at(10 + R, 10))).toBe(true);
+    expect(isIsolatedPlant(state, at(10 + R, 10))).toBe(false);
+    // Chebyshev distance R + 1 from every park member: on its own.
+    expect(isTiedToGrid(state, at(10 + R + 1, 14))).toBe(false);
+    expect(isIsolatedPlant(state, at(10 + R + 1, 14))).toBe(true);
+  });
+
+  it('chains through a park: the line may be several plants away', () => {
+    const state = lonePlant();
+    buildPowerLines(state, [at(9, 10)]);
+    placePlant(state, at(10 + R, 10), PlantType.WindTurbine);
+    placePlant(state, at(10 + 2 * R, 10), PlantType.WindTurbine);
+    expect(isIsolatedPlant(state, at(10 + 2 * R, 10))).toBe(false);
+    expect(isTiedToGrid(state, at(10 + 2 * R, 10))).toBe(true);
+  });
+
+  it('a park serves when any member has a building in its ring', () => {
+    const state = lonePlant();
+    placePlant(state, at(10 + R, 10), PlantType.WindTurbine);
+    house(state, at(10 + 2 * R, 10)); // in the second plant's ring only
+    expect(isIsolatedPlant(state, at(10, 10))).toBe(false);
+    expect(isTiedToGrid(state, at(10, 10))).toBe(false); // served, but no line anywhere
+    expect(isIsolatedPlant(state, at(10 + R, 10))).toBe(false);
+  });
+
+  it('isolatedPlants flags every park at once and agrees with isIsolatedPlant', () => {
+    const state = lonePlant();
+    buildPowerLines(state, [at(9, 10)]);
+    placePlant(state, at(10 + R, 10), PlantType.WindTurbine);
+    placePlant(state, at(20, 20), PlantType.SolarFarm);
+    placePlant(state, at(2, 20), PlantType.Battery);
+    house(state, at(3, 21));
+    const flags = isolatedPlants(state);
+    for (const [x, y] of [
+      [10, 10],
+      [10 + R, 10],
+      [20, 20],
+      [2, 20],
+    ]) {
+      expect(flags[at(x, y)] === 1).toBe(isIsolatedPlant(state, at(x, y)));
+    }
+    expect(flags[at(20, 20)]).toBe(1);
+    expect(flags[at(2, 20)]).toBe(0);
+    expect(flags[at(10 + R, 10)]).toBe(0);
+    expect(flags[at(5, 5)]).toBe(0); // empty tile
   });
 
   it('never flags empty tiles or non-supply plants', () => {

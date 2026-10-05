@@ -3,7 +3,7 @@ import { HEATED_SERVED, PlantType, Terrain, Zone } from '../shared/types.ts';
 import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
-import { isIsolatedPlant, isSupplySource, recomputeGrid } from './powerGrid.ts';
+import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -400,9 +400,11 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   }
 
   // Supply plants: flag the ones that serve nothing (icon + overlay).
+  const isolated = isolatedPlants(state);
   for (let i = 0; i < layers.tileType.length; i++) {
     if (layers.tileType[i] !== TileType.Plant) continue;
-    refreshPlantSupply(state, i);
+    if (!isSupplySource(layers.plantType[i] as PlantType)) continue;
+    setSupplied(state, i, isolated[i] === 1 ? SupplyStatus.NotConnected : SupplyStatus.Supplied);
   }
 
   // Heat the network could not deliver is heated electrically on site.
@@ -750,8 +752,10 @@ function setSupplied(state: SimState, index: number, status: SupplyStatus): void
 
 /**
  * A supply plant's `supplied` flag means "serves something": NotConnected
- * when the plant is isolated (no line, no building in its ring), Supplied
- * otherwise. Buildings keep the usual meaning; other plants are untouched.
+ * when the plant is isolated (no line and no building in the ring of any
+ * plant of its park), Supplied otherwise. Buildings keep the usual
+ * meaning; other plants are untouched. The tick refreshes every plant at
+ * once through `isolatedPlants`; this is the single-tile form for placing.
  */
 function refreshPlantSupply(state: SimState, index: number): void {
   if (!isSupplySource(state.layers.plantType[index] as PlantType)) return;

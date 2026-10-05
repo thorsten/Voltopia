@@ -808,9 +808,11 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'capacity. On a heat plant a "heatPlant" field reports its road reach, buildings ' +
         'served, COP and whether it is active; a building reports "heated" (true when the ' +
         'district network heats it). On a supply plant, "supply" is not_connected when the ' +
-        'plant is isolated (no power line attached and no building within the supply radius; ' +
-        'its output still counts — see find_tiles isolated_plant) and connected means a power ' +
-        'line is attached. See get_disasters for the events causing any damage.',
+        'plant is isolated (no power line attached and no building within the supply radius, ' +
+        'neither at the plant nor at any plant of its park — supply plants standing within ' +
+        "each other's supply radius form one park; its output still counts — see find_tiles " +
+        'isolated_plant) and connected means a power line is attached to it or to a plant of ' +
+        'its park. See get_disasters for the events causing any damage.',
       inputSchema: {
         type: 'object',
         properties: { x: { type: 'integer' }, y: { type: 'integer' } },
@@ -842,8 +844,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'lake, for pumped storage), coastal_sea (empty sea tile touching land, for tidal plants), ' +
         'geothermal_hotspot (empty land tile carrying a hotspot, for geothermal plants), ' +
         'road, power_line, plant, zoned_empty, building, not_connected_building, ' +
-        'undersupplied_building, factory (an industrial building), isolated_plant (a supply plant with no power line attached ' +
-        'and no building in its supply ring — its output still counts, nobody nearby uses it), ' +
+        'undersupplied_building, factory (an industrial building), isolated_plant (a supply plant whose park — ' +
+        "supply plants within each other's supply radius — has no power line attached and no building " +
+        'in any of its rings; its output still counts, nobody nearby uses it), ' +
         'bus_stop, damaged (out of service from a storm, fire or flood; ' +
         'see get_disasters). Optionally nearest to a point first.',
       inputSchema: {

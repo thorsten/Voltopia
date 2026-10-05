@@ -16,7 +16,15 @@ building. This feature gives that fact a map marker and clearer words.
 
 A supply plant is **isolated** when no power line touches any of its
 four sides and no building stands within its supply ring
-(`BALANCE.energy.lineSupplyRadius`, Chebyshev). Isolated plants get a
+(`BALANCE.energy.lineSupplyRadius`, Chebyshev) — and the same holds for
+every plant of its **park**: supply plants standing within each
+other's supply ring (transitively) share one verdict, since a plant
+inside another plant's ring sits on the grid the way a building there
+does. (Added 2026-10-05 after a tidal row along the coast and a
+geothermal field flagged every plant but the one with the line stub;
+`isTiedToGrid` gives the inspector's "On the grid" row the same park
+view, and the tick flags all parks in one pass via `isolatedPlants`.)
+Isolated plants get a
 permanent blue-grey bolt above them, a red tint in the Supply overlay,
 a clear inspector line in both languages, and an agent `find_tiles`
 kind. Generation is untouched.

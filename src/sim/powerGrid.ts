@@ -181,15 +181,40 @@ export function hasLineAttached(state: SimState, index: number): boolean {
 }
 
 /**
- * A supply plant that serves nothing: no power line attached and no
- * building anywhere in its supply ring. Pure geometry — damage has its
- * own overlay. Never true for empty tiles or non-supply plants.
+ * Supply plants standing in each other's supply ring form one park: a
+ * plant inside another plant's ring sits on the grid the way a building
+ * there does. Returns every supply plant reachable from `start` that
+ * way, `start` first. Pure geometry — damage has its own overlay.
  */
-export function isIsolatedPlant(state: SimState, index: number): boolean {
-  const { tileType, plantType, density } = state.layers;
-  if (tileType[index] !== TileType.Plant) return false;
-  if (!isSupplySource(plantType[index] as PlantType)) return false;
-  if (hasLineAttached(state, index)) return false;
+function parkOf(state: SimState, start: number): number[] {
+  const { tileType, plantType } = state.layers;
+  const size = state.size;
+  const radius = BALANCE.energy.lineSupplyRadius;
+  const members = [start];
+  const seen = new Set<number>(members);
+  for (let head = 0; head < members.length; head++) {
+    const cx = tileX(members[head], size);
+    const cy = tileY(members[head], size);
+    const x0 = Math.max(0, cx - radius);
+    const x1 = Math.min(size - 1, cx + radius);
+    const y0 = Math.max(0, cy - radius);
+    const y1 = Math.min(size - 1, cy + radius);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const t = tileIndex(x, y, size);
+        if (seen.has(t)) continue;
+        if (tileType[t] !== TileType.Plant || !isSupplySource(plantType[t] as PlantType)) continue;
+        seen.add(t);
+        members.push(t);
+      }
+    }
+  }
+  return members;
+}
+
+/** Whether a building stands inside the supply ring around `index`. */
+function hasBuildingInRing(state: SimState, index: number): boolean {
+  const { tileType, density } = state.layers;
   const size = state.size;
   const radius = BALANCE.energy.lineSupplyRadius;
   const cx = tileX(index, size);
@@ -201,8 +226,56 @@ export function isIsolatedPlant(state: SimState, index: number): boolean {
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const t = tileIndex(x, y, size);
-      if (tileType[t] === TileType.Empty && density[t] > 0) return false;
+      if (tileType[t] === TileType.Empty && density[t] > 0) return true;
     }
   }
-  return true;
+  return false;
+}
+
+function isSupplyPlantTile(state: SimState, index: number): boolean {
+  const { tileType, plantType } = state.layers;
+  return tileType[index] === TileType.Plant && isSupplySource(plantType[index] as PlantType);
+}
+
+/**
+ * A supply plant tied into the network: a power line touches it or
+ * another plant of its park (see `parkOf`). A tidal row along the coast
+ * or a geothermal field needs one line stub, not one per plant.
+ */
+export function isTiedToGrid(state: SimState, index: number): boolean {
+  if (!isSupplyPlantTile(state, index)) return false;
+  return parkOf(state, index).some((member) => hasLineAttached(state, member));
+}
+
+/**
+ * A supply plant that serves nothing: neither it nor any plant of its
+ * park has a power line attached or a building in its supply ring.
+ * Never true for empty tiles or non-supply plants.
+ */
+export function isIsolatedPlant(state: SimState, index: number): boolean {
+  if (!isSupplyPlantTile(state, index)) return false;
+  return !parkOf(state, index).some(
+    (member) => hasLineAttached(state, member) || hasBuildingInRing(state, member),
+  );
+}
+
+/**
+ * `isIsolatedPlant` for the whole map in one pass (1 = isolated): each
+ * park is walked once, so the per-tick refresh stays linear in plants.
+ */
+export function isolatedPlants(state: SimState): Uint8Array {
+  const flags = new Uint8Array(state.size * state.size);
+  const seen = new Uint8Array(flags.length);
+  for (let i = 0; i < flags.length; i++) {
+    if (seen[i] !== 0 || !isSupplyPlantTile(state, i)) continue;
+    const park = parkOf(state, i);
+    const serves = park.some(
+      (member) => hasLineAttached(state, member) || hasBuildingInRing(state, member),
+    );
+    for (const member of park) {
+      seen[member] = 1;
+      if (!serves) flags[member] = 1;
+    }
+  }
+  return flags;
 }
