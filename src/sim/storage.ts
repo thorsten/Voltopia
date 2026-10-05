@@ -8,7 +8,7 @@
  * frozen until repaired), so `storageTilesOfKind` leaves it out.
  */
 import { PlantType, TileType } from '../shared/types.ts';
-import { storageCapacityAt, type SimState } from './state.ts';
+import { installedStorageCapacityAt, storageCapacityAt, type SimState } from './state.ts';
 
 export { storageCapacityAt };
 
@@ -28,7 +28,10 @@ export function storageTilesOfKind(
   return tiles;
 }
 
-/** Stored energy and capacity summed over the given tiles. */
+/**
+ * Stored energy and capacity summed over the given tiles — normally the
+ * intact tiles of one kind, as `storageTilesOfKind` returns them.
+ */
 export function poolOf(
   state: SimState,
   tiles: readonly number[],
@@ -36,11 +39,14 @@ export function poolOf(
   let stored = 0;
   let capacity = 0;
   for (const t of tiles) {
-    const cap = storageCapacityAt(state, t);
-    // Clamp here too: a save edited by hand may hold more than fits.
-    if (state.layers.stored[t] > cap) state.layers.stored[t] = cap;
+    // Clamp here too: a save edited by hand may hold more than fits. The
+    // bound is the installed capacity, so passing a damaged plant would
+    // not empty the level it is frozen at — but it still adds no
+    // capacity, so nothing charges or draws it.
+    const installed = installedStorageCapacityAt(state, t);
+    if (state.layers.stored[t] > installed) state.layers.stored[t] = installed;
     stored += state.layers.stored[t];
-    capacity += cap;
+    capacity += storageCapacityAt(state, t);
   }
   return { stored, capacity };
 }

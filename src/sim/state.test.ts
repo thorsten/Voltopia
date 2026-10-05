@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { LINE_PRESENT, tileIndex } from '../shared/grid.ts';
 import { DeliveryState, RoadClass, StopState, Terrain } from '../shared/types.ts';
+import { addDamage } from './disasters.ts';
 import { placePlant } from './energy.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { buildRoads } from './roads.ts';
@@ -730,5 +731,20 @@ describe('storage per tile in saves', () => {
     const migrated = deserializeState(legacy);
     expect(migrated.layers.stored[at(2, 2)]).toBeCloseTo(1_500, 3);
     expect(migrated.layers.stored[at(5, 2)]).toBeCloseTo(1_500, 3);
+  });
+
+  it('a damaged plant keeps the level it was frozen at across a save', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.Battery);
+    state.layers.stored[at(2, 2)] = 500;
+    addDamage(state, at(2, 2), 40);
+    // Out of the balance while wrecked...
+    expect(storedByKind(state, PlantType.Battery)).toBe(0);
+    const loaded = deserializeState(serializeState(state));
+    // ...but the energy is frozen, not lost: it is there again on repair.
+    expect(loaded.layers.stored[at(2, 2)]).toBe(500);
+    loaded.layers.damage[at(2, 2)] = 0;
+    expect(storedByKind(loaded, PlantType.Battery)).toBe(500);
   });
 });

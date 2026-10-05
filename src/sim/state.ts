@@ -196,7 +196,9 @@ export interface TileLayers {
   /**
    * Energy held on a storage plant tile (battery / pumped / hydrogen
    * energy units, heat units on a heat store); 0 everywhere else.
-   * Persisted.
+   * Persisted. A damaged plant's level is frozen, not lost: it survives
+   * a save and comes back when the plant is repaired. Bulldozing clears
+   * it, and undo rebuilds the plant empty.
    */
   stored: Float32Array;
   /**
@@ -866,18 +868,18 @@ export function pumpedHeadAt(state: SimState, index: number): number {
 }
 
 /**
- * What the storage plant on this tile can hold: 0 unless the tile
- * carries an intact battery, pumped-storage plant, hydrogen plant or
- * heat store. A damaged plant has no capacity — its level is frozen
- * until it is repaired, so no helper ever charges or drains it.
+ * What the storage plant built on this tile can hold, damaged or not:
+ * 0 unless the tile carries a battery, pumped-storage plant, hydrogen
+ * plant or heat store.
  *
- * Lives here rather than in storage.ts because `collectDiffs` needs it
- * and storage.ts reads it from here (and re-exports it for everyone
- * else), which keeps the import one-way.
+ * This is the bound a tile's level is clamped against — a wreck's
+ * contents are frozen, not lost, so clamping against its (zero) working
+ * capacity would empty it. Use `storageCapacityAt` for everything that
+ * decides what the grid can charge, draw or count.
  */
-export function storageCapacityAt(state: SimState, index: number): number {
-  const { tileType, plantType, damage } = state.layers;
-  if (tileType[index] !== TileType.Plant || damage[index] !== 0) return 0;
+export function installedStorageCapacityAt(state: SimState, index: number): number {
+  const { tileType, plantType } = state.layers;
+  if (tileType[index] !== TileType.Plant) return 0;
   switch (plantType[index] as PlantType) {
     case PlantType.Battery:
       return BALANCE.energy.batteryCapacity;
@@ -893,6 +895,21 @@ export function storageCapacityAt(state: SimState, index: number): number {
     default:
       return 0;
   }
+}
+
+/**
+ * What the storage plant on this tile can hold right now: its installed
+ * capacity, or 0 while it is damaged. A damaged plant is out of the
+ * balance entirely — nothing charges it, draws from it or counts it —
+ * and its level stays frozen until it is repaired.
+ *
+ * Lives here rather than in storage.ts because `collectDiffs` needs it
+ * and storage.ts reads it from here (and re-exports it for everyone
+ * else), which keeps the import one-way.
+ */
+export function storageCapacityAt(state: SimState, index: number): number {
+  if (state.layers.damage[index] !== 0) return 0;
+  return installedStorageCapacityAt(state, index);
 }
 
 /**
@@ -1029,14 +1046,16 @@ function spreadLegacyPool(state: SimState, plant: PlantType, total: number | und
   const { tileType, plantType, damage } = state.layers;
   const tiles: number[] = [];
   let capacity = 0;
+  // Intact plants only: the old pool was clamped to the working capacity,
+  // so none of it was ever held by a wreck.
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Plant || plantType[i] !== plant || damage[i] !== 0) continue;
     tiles.push(i);
-    capacity += storageCapacityAt(state, i);
+    capacity += installedStorageCapacityAt(state, i);
   }
   if (capacity <= 0) return;
   const share = Math.min(1, total / capacity);
-  for (const t of tiles) state.layers.stored[t] = storageCapacityAt(state, t) * share;
+  for (const t of tiles) state.layers.stored[t] = installedStorageCapacityAt(state, t) * share;
 }
 
 export function serializeState(state: SimState): SaveGame {
@@ -1233,9 +1252,10 @@ export function deserializeState(save: SaveGame): SimState {
   }
   discoverGeothermalFields(state);
   state.lakeLevel = computeLakeLevel(state);
-  // Storage levels last: plantType, damage and the lake level all decide
-  // a tile's capacity, so they must already be restored (a damaged plant
-  // has none, which is why a wreck comes back empty).
+  // Storage levels last: plantType and the lake level decide what a tile
+  // can hold, so they must already be restored. The bound is the
+  // installed capacity, damage ignored — a wrecked plant keeps the level
+  // it was frozen at and gets it back on repair.
   if (save.stored) {
     const pairs = save.stored;
     for (let i = 0; i + 1 < pairs.length; i += 2) {
@@ -1243,7 +1263,7 @@ export function deserializeState(save: SaveGame): SimState {
       const value = pairs[i + 1];
       if (!Number.isInteger(tile) || tile < 0 || tile >= state.layers.stored.length) continue;
       if (!Number.isFinite(value) || value <= 0) continue;
-      state.layers.stored[tile] = Math.min(value, storageCapacityAt(state, tile));
+      state.layers.stored[tile] = Math.min(value, installedStorageCapacityAt(state, tile));
     }
   } else {
     spreadLegacyPool(state, PlantType.Battery, save.storedEnergy);
