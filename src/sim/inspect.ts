@@ -323,7 +323,11 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     taxPerTick:
       tileTaxFactor *
       state.taxRate *
-      (population * BALANCE.tax.incomePerResident + jobs * BALANCE.tax.incomePerJob),
+      (population * BALANCE.tax.incomePerResident +
+        jobs *
+          (zone === Zone.Industrial
+            ? BALANCE.tax.incomePerIndustrialJob
+            : BALANCE.tax.incomePerJob)),
     consumption,
     peakConsumption,
     loadFactor,

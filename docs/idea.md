@@ -261,9 +261,12 @@ Collected 2026-09-24; roughly in the order we want to build them.
   Probe: with 40 factories in it the contract saves 32-49 % of the
   deficit ticks (452 -> 306, 250 -> 127) where the business pool alone
   saves 27-33 %, though the band's own load still leaves more deficit
-  ticks than a town without it; and the factories spare 6_500 of goods
-  fees over 20 days while their night shift costs 3.3 times their tax
-  in a park not sized for them.
+  ticks than a town without it. A second probe gave industrial jobs
+  a trade tax rate (twice the job rate) and took the load one notch
+  down, so a factory earns like a shop per unit of energy; a band with
+  40 batteries bought for it now breaks even in its first year on a
+  well-stored city and stays a loss on one that burns biogas every
+  night — the park decides.
 - **Per-district grids** (deferred earlier): separate grid islands
   with their own balance, coupled by substations.
 

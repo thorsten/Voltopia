@@ -181,6 +181,21 @@ describe('inspectTile', () => {
     );
   });
 
+  it('taxes a factory tile at the trade rate', () => {
+    const state = createSimState(3, SIZE);
+    const tile = at(20, 20);
+    state.layers.zone[tile] = Zone.Industrial;
+    state.layers.density[tile] = 2;
+    state.taxRate = 0.2;
+    const info = inspectTile(state, tile)!;
+    expect(info.taxPerTick).toBeCloseTo(
+      0.2 *
+        BALANCE.growth.jobsByZoneAndDensity[Zone.Industrial][2] *
+        BALANCE.tax.incomePerIndustrialJob,
+      9,
+    );
+  });
+
   it('lists why a zoned tile is not growing', () => {
     const state = createSimState(3, SIZE);
     paintZones(state, [at(20, 20)], Zone.Commercial);

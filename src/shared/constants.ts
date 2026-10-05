@@ -170,6 +170,23 @@ export const BALANCE = {
     /** Income per tick = rate * (population * perResident + jobs * perJob). */
     incomePerResident: 0.09,
     incomePerJob: 0.12,
+    /**
+     * Income per industrial job: factories pay a trade rate, twice the
+     * job rate. Per unit of energy a factory draws, its tax at the job
+     * rate was the worst in the city — 75 energy units per money of tax
+     * against 61 for a dense home, 37 for a shop and 30 for an office —
+     * so a band was a loss wherever its night shift met biogas. At 0.24
+     * (with the load one notch lower, see consumptionByZoneAndDensity)
+     * a factory earns like a shop per unit: 28 units per money. Measured
+     * in the second industrial probe (2026-10-05, the 560-building town,
+     * 40 density-2 factories, 20 days): the band's year-one balance
+     * against the town without it moved from -179_000 to -66_000 on
+     * seed 11 and from -558_000 to -364_000 on seed 7, whose park burns
+     * biogas every night; with 40 batteries bought for the band (60_000)
+     * seed 11 breaks even in year one (-11_000) and keeps the tax
+     * afterwards. Whether a band pays is still the park's call.
+     */
+    incomePerIndustrialJob: 0.24,
     /** Tax rate above which happiness starts to suffer. */
     happinessNeutralRate: 0.12,
   },
@@ -264,8 +281,17 @@ export const BALANCE = {
        * 178_000 and keeps every level above the offices. No notch makes
        * the band lower deficits: the contract can shed at most 60 % of
        * the load the band adds, and only four hours a day.
+       *
+       * Second probe (2026-10-05, with the trade tax rate, see
+       * tax.incomePerIndustrialJob): one more notch to [3, 6, 11] — the
+       * density-3 level still tops the offices' 11 over the day because
+       * of the night shift — takes the band's extra biogas from 509_000
+       * to 400_000 on seed 7 and 167_000 to 123_000 on seed 11, and its
+       * extra deficit ticks from 767 to 448 and 96 to 58. The contract
+       * still sheds 164_000-190_000 against 77_000-88_000 without the
+       * band: the night pool keeps its bite.
        */
-      [Zone.Industrial]: [0, 3.5, 8, 14],
+      [Zone.Industrial]: [0, 3, 6, 11],
     } as Record<Zone, number[]>,
     /**
      * Hourly load profile per zone (24 factors, index = hour). Residential
@@ -651,7 +677,9 @@ export const BALANCE = {
        * whether a factory band pays: in the probe park its night shift
        * cost 171_000 in extra biogas and import (seed 11), 3.3 times its
        * tax, so the bill depends on the generation the player builds for
-       * it, not on this table. Unchanged by the probe.
+       * it, not on this table. Unchanged by both probes; the second one
+       * raised the rate these jobs are taxed at instead
+       * (tax.incomePerIndustrialJob), which leaves growth untouched.
        */
       [Zone.Industrial]: [0, 3, 8, 18],
     } as Record<Zone, number[]>,

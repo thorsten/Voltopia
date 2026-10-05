@@ -52,17 +52,27 @@ export function policeTaxFactor(police: number, population: number): number {
 }
 
 /**
- * One tick of the city budget: tax income from residents and jobs minus
+ * One tick of the city budget: tax income from residents and jobs
+ * (industrial jobs at their own rate) minus
  * upkeep for roads and plants (biogas additionally pays per energy unit
  * generated — dispatchable but expensive).
  */
-export function economyStep(state: SimState, population: number, jobs: number): EconomyBreakdown {
+export function economyStep(
+  state: SimState,
+  population: number,
+  jobs: number,
+  industrialJobs = 0,
+): EconomyBreakdown {
   const { tileType, plantType, roadClass } = state.layers;
+  const { incomePerResident, incomePerJob, incomePerIndustrialJob } = BALANCE.tax;
 
+  // Industrial jobs (a share of `jobs`) pay the trade rate.
   const taxIncome =
     policeTaxFactor(state.lastServices.police, population) *
     state.taxRate *
-    (population * BALANCE.tax.incomePerResident + jobs * BALANCE.tax.incomePerJob);
+    (population * incomePerResident +
+      (jobs - industrialJobs) * incomePerJob +
+      industrialJobs * incomePerIndustrialJob);
 
   let roadTiles = 0;
   let avenueTiles = 0;

@@ -26,6 +26,23 @@ describe('economyStep', () => {
     expect(state.money).toBeCloseTo(before + expected, 6);
   });
 
+  it('taxes industrial jobs at the trade rate and the rest at the job rate', () => {
+    const state = createSimState(1, SIZE);
+    state.lastServices = { fire: 1, police: 1 };
+    const tax = BALANCE.tax as { incomePerIndustrialJob: number };
+    const saved = tax.incomePerIndustrialJob;
+    tax.incomePerIndustrialJob = 0.3;
+    try {
+      const breakdown = economyStep(state, 100, 50, 20);
+      const expected =
+        state.taxRate *
+        (100 * BALANCE.tax.incomePerResident + 30 * BALANCE.tax.incomePerJob + 20 * 0.3);
+      expect(breakdown.taxIncome).toBeCloseTo(expected, 6);
+    } finally {
+      tax.incomePerIndustrialJob = saved;
+    }
+  });
+
   it('higher tax rate collects more', () => {
     const state = createSimState(1, SIZE);
     state.taxRate = 0.2;

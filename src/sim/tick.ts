@@ -75,7 +75,7 @@ export function stepTick(state: SimState): void {
   growthStep(state, state.lastDemand);
   decayStep(state);
   forestStep(state);
-  const { population, jobs } = countPopulationAndJobs(state);
+  const { population, jobs, industrialJobs } = countPopulationAndJobs(state);
   // After growth and decay, before economy, goals and the stats:
   // smartMetersStep refreshes state.lastBuildingCount (the tick's one
   // building scan) and everything downstream reads coverage off it. The
@@ -84,7 +84,7 @@ export function stepTick(state: SimState): void {
   smartMetersStep(state);
   // The contract bills what the energy step shed this tick.
   demandResponseStep(state);
-  economyStep(state, population, jobs);
+  economyStep(state, population, jobs, industrialJobs);
   // After the income of this tick has landed: repairs are paid out of it.
   repairStep(state);
   happinessStep(state, population);

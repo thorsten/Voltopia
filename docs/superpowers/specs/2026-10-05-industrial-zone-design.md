@@ -331,6 +331,45 @@ industrial jobs `[0, 3, 8, 18]`, `industrialShedShare` 0.6,
 `importFeePerTour` 12, `industryRadius` 4. `goalLocalMinShops` and
 `goalLocalMinFactories` stay at 10 and 3.
 
+**Second probe (2026-10-05).** The "3.3 times its tax" finding asked
+for a second look at whether a band can ever pay. Reproduced on the
+same town (seed 7 off: 390 deficit ticks, 16_697 import, 1_696_666
+tax — the first probe's figures) with two more variants: the band in
+the same park, and the band with 40 batteries bought for it (60_000).
+Per unit of energy a factory draws, its tax at the job rate was the
+worst in the city — 75 energy units per money of tax against 61 for a
+dense home, 37 for a shop and 30 for an office — so wherever the night
+shift met biogas (0.15 per unit) the band lost; and in that park every
+zone loses at the margin at night, a dense home 9 times its tax, a
+factory 11 times. Two levers, both frozen: a **trade tax rate** for
+industrial jobs, `tax.incomePerIndustrialJob` 0.24 (twice
+`incomePerJob`; `countPopulationAndJobs` reports `industrialJobs` and
+`economyStep` taxes them at that rate, growth untouched), and
+**consumption one notch lower**, `[0, 3, 6, 11]` (density 3 still tops
+the offices' 11 over the day because of the night shift). A factory
+now earns like a shop per unit of energy (28 per money).
+
+Band against the town without it, 20 days, after capex:
+
+| seed | variant               | tax      | biogas   | deficit ticks | net      |
+| ---- | --------------------- | -------- | -------- | ------------- | -------- |
+| 7    | same park, old values | +51_610  | +508_731 | +767          | −557_720 |
+| 7    | same park, tuned      | +103_219 | +399_915 | +448          | −363_612 |
+| 7    | +40 batteries, tuned  | +103_219 | +319_380 | +149          | −261_522 |
+| 11   | same park, old values | +51_610  | +167_447 | +96           | −179_350 |
+| 11   | same park, tuned      | +103_219 | +123_009 | +58           | −66_268  |
+| 11   | +40 batteries, tuned  | +103_219 | +45_072  | +40           | −10_961  |
+
+Seed 11 with storage bought for the band breaks even in its first year
+and keeps the 103_000 of tax every year after; seed 7's park burns
+biogas every night regardless, so the band stays a loss there — the
+park decides, as intended, but a well-stored city can now say yes. The
+contract still sheds 164_000-190_000 with the band against
+77_000-88_000 without: the night pool keeps its bite. Happiness
+−0.011…−0.013 (seed 7) and −0.005 (seed 11), the first probe's range.
+The probe also surfaced a `planTour` hang (a pickup leg whose
+cost-bounded road map reached no remaining stop), fixed separately.
+
 ## Out of scope
 
 - A goods quantity, warehouses or stock levels.

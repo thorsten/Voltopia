@@ -1164,11 +1164,15 @@ export function deserializeState(save: SaveGame): SimState {
 /** Count population and jobs from the current building layers. */
 export function countPopulationAndJobs(state: SimState): {
   population: number;
+  /** All jobs, industrial ones included. */
   jobs: number;
+  /** The industrial share of `jobs`: taxed at the trade rate. */
+  industrialJobs: number;
 } {
   const { zone, density, tileType } = state.layers;
   let population = 0;
   let jobs = 0;
+  let industrialJobs = 0;
   for (let i = 0; i < zone.length; i++) {
     if (tileType[i] !== TileType.Empty) continue;
     const d = density[i];
@@ -1177,10 +1181,12 @@ export function countPopulationAndJobs(state: SimState): {
     if (z === Zone.Residential) {
       population += BALANCE.growth.populationByDensity[d];
     } else if (z === Zone.Commercial || z === Zone.Retail || z === Zone.Industrial) {
-      jobs += BALANCE.growth.jobsByZoneAndDensity[z][d];
+      const n = BALANCE.growth.jobsByZoneAndDensity[z][d];
+      jobs += n;
+      if (z === Zone.Industrial) industrialJobs += n;
     }
   }
-  return { population, jobs };
+  return { population, jobs, industrialJobs };
 }
 
 /** Buildings standing on zoned land (density > 0). */
