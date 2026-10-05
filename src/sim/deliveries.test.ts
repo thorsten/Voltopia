@@ -508,6 +508,16 @@ describe('goods pickup', () => {
     expect(state.goods.localToursToday).toBe(1);
   });
 
+  it('a pickup whose road map reaches no stop yields no tour instead of hanging', () => {
+    const state = factoryTown();
+    readyToDispatch(state);
+    // A road island nobody can drive to from the shop street.
+    buildRoads(state, [at(2, 15), at(3, 15), at(4, 15)]);
+    const van = state.vans[0];
+    const tour = planTour(state, van, new Set(), at(3, 15));
+    expect(tour).toEqual([]);
+  });
+
   it('a pickup that becomes unreachable is skipped and the shops are still served', () => {
     const state = factoryTown(1, 2);
     readyToDispatch(state);

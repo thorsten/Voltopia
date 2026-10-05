@@ -249,10 +249,17 @@ export function planTour(
         bestCost = cost;
       }
     }
+    // Nothing left is in reach of this leg (the pickup's road map is
+    // cost-bounded, and a leg through heavy traffic can exceed it): drop
+    // the rest for another tour rather than loop on a stop that never
+    // comes.
+    if (best < 0) break;
     ordered.push(best);
     remaining.delete(best);
     from = roadDistances(state, best, 2 * maxRouteTiles);
   }
+  // A pickup alone is no tour.
+  if (ordered.length === (pickup >= 0 ? 1 : 0)) return [];
   ordered.push(van.depotRoad);
   return ordered;
 }
