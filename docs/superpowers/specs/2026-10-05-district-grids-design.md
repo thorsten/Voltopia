@@ -15,10 +15,11 @@ network real. The map's connected grid components — islands — each
 balance generation, storage, flexible load and demand response on their
 own. A plant serves only its island. Import and export run through a
 new plant, the substation, which is an island's gate to the outer grid;
-an island without one is on its own. A storm that cuts a pylon splits an
-island, and the cut-off part lives on its own balance until the repair
-lands. The player sees islands as a map overlay, a district list in the
-energy panel and a line in the inspector.
+an island without one is on its own. A storm that takes out a stretch of
+line splits an island, and the cut-off part lives on its own balance
+until the repair lands _(softened from "cuts a pylon" — planning
+refinement, 2026-10-05)_. The player sees islands as a map overlay, a
+district list in the energy panel and a line in the inspector.
 
 ## Decisions
 
@@ -77,7 +78,11 @@ every supply plant. It now labels components instead of only marking
   **key**: the stable identity for state that must survive a recompute
   (flex backlog, call budget). `state.islandKeys: number[]` maps number
   → key for the tick.
-- A damaged line tile or plant splits an island as it does today.
+- A damaged line tile or plant splits an island as it does today — but
+  since rings are connections, a dead stretch has to be longer than
+  `2 * lineSupplyRadius` tiles (7) before the two ends stop touching; a
+  single struck pylon leaves the island whole. _(Planning refinement,
+  2026-10-05.)_
 - `PlantType.Substation` is a supply source for the flood (it seeds and
   stamps) but generates nothing; `SUPPLY_SOURCES` in
   `src/shared/plants.ts` gains it. `isIsolatedPlant` therefore treats a
@@ -145,9 +150,10 @@ NotConnected as today.
 `TileLayers.stored: Float32Array`, persisted: the energy held on a
 battery, pumped-storage, hydrogen or heat-store tile, in that plant's
 units. An island's pool is the sum over its storage tiles of one kind;
-charge and discharge are spread over the tiles in proportion to each
-tile's capacity (deterministic, order-free), so a split or merge needs
-no redistribution. `state.storedEnergy`, `pumpedStorageEnergy`,
+charge and discharge are spread over the tiles — charge in proportion
+to headroom, discharge in proportion to stored energy _(planning
+refinement, 2026-10-05)_ — deterministic and order-free, so a split or
+merge needs no redistribution. `state.storedEnergy`, `pumpedStorageEnergy`,
 `hydrogenEnergy` and `heatStored` are removed; the stats and the battery
 SoC fill in `plantsMesh.ts` read the tile (SoC per battery) and the
 island sums. Pumped-storage and run-of-river bonus factors keep scaling
@@ -202,9 +208,8 @@ capacity) so the battery SoC fill is per tile.
 
 - `OverlayMode.Grid = 9`: tile colour from a palette of eight hues by
   `island % 8` (island 0 untouched); an island in deficit this tick is
-  overblended red; an island without a substation gets a dashed border
-  (the overlay mesh gains an edge pass: a tile whose 4-neighbour has a
-  different island or none draws its edge in the dashed style). The
+  overblended red; an island without a substation is dimmed _(changed
+  from a dashed border — planning refinement, 2026-10-05)_. The
   overlay menu's legend lists the three cues.
 - Selection: the UI passes `selectedIsland` (number or 0) to the
   overlay; other islands are drawn at half saturation while one is

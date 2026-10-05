@@ -55,6 +55,12 @@ const STEPS: TutorialStep[] = [
     isComplete: (stats) => stats.counts.powerLineTiles > 0,
   },
   {
+    id: 'substation',
+    title: 'tutorial.substation.title',
+    body: 'tutorial.substation.body',
+    isComplete: (stats) => stats.islands.some((i) => i.substations > 0),
+  },
+  {
     id: 'growth',
     title: 'tutorial.growth.title',
     body: 'tutorial.growth.body',

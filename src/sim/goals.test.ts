@@ -582,3 +582,61 @@ describe('localGoods', () => {
     expect(state.goalsAchieved.has('localGoods')).toBe(false);
   });
 });
+
+describe('districtGrid', () => {
+  function city(substations: number, deficitTicks: number): SimState {
+    const state = createSimState(1, SIZE);
+    state.lastIslands = [
+      {
+        number: 1,
+        key: 0,
+        tiles: 40,
+        buildings: BALANCE.goals.districtGrid.minBuildings,
+        substations,
+        generation: 10,
+        consumption: 5,
+        stored: 0,
+        capacity: 0,
+        deficit: 0,
+        curtailment: 0,
+        gridImport: 0,
+        gridExport: 0,
+        importCost: 0,
+      },
+      {
+        number: 2,
+        key: 300,
+        tiles: 10,
+        buildings: 2,
+        substations: 0,
+        generation: 1,
+        consumption: 1,
+        stored: 0,
+        capacity: 0,
+        deficit: 0,
+        curtailment: 0,
+        gridImport: 0,
+        gridExport: 0,
+        importCost: 0,
+      },
+    ];
+    state.goalProgress.districtDeficitTicks = deficitTicks;
+    state.tick = TICKS_PER_DAY;
+    return state;
+  }
+
+  it('unlocks at the day boundary when every sizeable island has a substation and the day was deficit-free', () => {
+    const state = city(1, 0);
+    goalsStep(state);
+    expect(state.goalsAchieved.has('districtGrid')).toBe(true);
+  });
+
+  it('does not unlock without a substation on a sizeable island, or after a deficit tick', () => {
+    const noLink = city(0, 0);
+    goalsStep(noLink);
+    expect(noLink.goalsAchieved.has('districtGrid')).toBe(false);
+    const hadDeficit = city(1, 1);
+    goalsStep(hadDeficit);
+    expect(hadDeficit.goalsAchieved.has('districtGrid')).toBe(false);
+  });
+});

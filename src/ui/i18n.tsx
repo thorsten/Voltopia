@@ -286,7 +286,10 @@ const en = {
     'Plants supply only what power lines connect to them (see Grid and power lines). Solar peaks at noon and suffers under clouds; wind follows the weather day and night. Batteries store the midday surplus for the evening; the biogas plant is dispatchable backup — reliable but expensive to run, and it only fires when sun, wind, water and storage cannot cover the load, so it usually sits on standby. Dense buildings add rooftop PV automatically. The hydrogen plant electrolyses surplus that batteries and pumped storage cannot absorb — ahead of the export link, because a unit kept in the tank later replaces an expensive import: it fills a large tank, re-electrifies through its fuel cell in a lull, and once the tank is full keeps the electrolysers running to sell hydrogen whenever that pays better than exporting — curtailed energy becomes income. The transmission link trades at a spot price that follows the region: sunny, windy hours are cheap, calm overcast evenings dear — the dashed amber line in the energy graph. With market trading on, your storage sells at scarcity prices — but only the top slice of a nearly full pool, and only while a surplus is refilling it, so the sale shifts energy you were about to export or curtail into an expensive hour and the reserve itself stays for the Dunkelflaute — and buys cheap regional surplus. A tidal plant on the coast is fully predictable — four generation peaks and four slack-water gaps a day, drifting slowly against the clock — so storage is what bridges the slack. The same coast also carries offshore wind turbines and raises the happiness of buildings with a sea view. A geothermal plant only builds on a hotspot and generates the same output day and night in any weather — the one true baseload — but each hotspot sustains only a limited number of wells before its reservoir starts cooling and drags every well on it down. Smart meters are rolled out building by building; metered buildings charge their cars on surplus and defer part of their load and heating until the sun or wind returns — the faint dashed line in the consumption colour shows what consumption would have been without that. A demand-response contract lets your commercial, retail and industrial buildings shed part of their load in a deficit — for a daily retainer plus a premium per unit shed, called automatically when that beats importing or the link is full, a few hours a day at most; shed load widens the gap under the dashed line too.',
   'help.grid.title': 'Grid and power lines',
   'help.grid.body':
-    'Plants only supply buildings connected to them. Draw power lines (⚡, key L) from a plant along your streets — they run over roads and across water. Every energised line tile and every plant connects buildings within three tiles. A line that does not touch a plant carries nothing; the supply overlay shows what is connected. Cities from before power lines got lines along their roads for free.',
+    'Power lines tie plants and buildings into grid islands — a plant supplies only its own island. Draw power lines (⚡, key L) from a plant along your streets — they run over roads and across water. Every energised line tile and every plant connects buildings within three tiles. A line that does not touch a plant carries nothing; the supply overlay shows what is connected. Cities from before power lines got lines along their roads for free.',
+  'help.districts.title': 'Grid islands and substations',
+  'help.districts.body':
+    "Your lines and plants form grid islands — every connected network is one. A plant serves only its island; what it cannot use there is stored, exported or curtailed, never carried to another island. Import and export run through substations (🏗, key X): an island without one is on its own. The Grid overlay colours the islands, the energy drawer lists them, and the inspector names a tile's district. Cities built before districts: your park may now be an island of its own — draw a line to the town and add a substation.",
   'help.water.title': 'Water and hydro',
   'help.water.body':
     'Every map has a river, a lake and a sea along one edge. Roads cross the river as bridges (pricier per tile) but stop at the coast. A run-of-river plant on the river generates day and night — more after rainy spells, less in a drought. Pumped storage on the lake shore is a large but slower store that fills after your batteries.',
@@ -357,6 +360,9 @@ const en = {
   'tutorial.grid.title': 'Connect the grid',
   'tutorial.grid.body':
     'Draw a power line (⚡, key L) from the plant along your road. Buildings within three tiles of a connected line get power.',
+  'tutorial.substation.title': 'Build a substation',
+  'tutorial.substation.body':
+    'Your network is a grid island. Give it a gate to the outer grid: place a substation (🏗, key X) next to your lines so a shortfall can import and a surplus can export.',
   'tutorial.growth.title': 'Watch it grow',
   'tutorial.growth.body':
     'With demand, roads and power in place, the first houses will appear on their own. Give it a moment (▶▶▶ speeds things up).',
@@ -450,6 +456,9 @@ const en = {
   'goal.localGoods.title': 'Made locally',
   'goal.localGoods.body':
     'A whole day in which every delivery tour loaded at your own factories (10+ stocked shops, 3+ factories).',
+  'goal.districtGrid.title': 'Every district on the grid',
+  'goal.districtGrid.body':
+    'Every grid island with at least 20 buildings has a substation, and no island saw a deficit all day.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -890,7 +899,10 @@ const de: Record<TranslationKey, string> = {
     'Anlagen versorgen nur, was Stromleitungen mit ihnen verbinden (siehe Netz und Leitungen). Solar liefert mittags am meisten und leidet unter Wolken; Wind folgt dem Wetter, Tag und Nacht. Batterien speichern den Mittagsüberschuss für den Abend; die Biogasanlage ist regelbare Reserve — zuverlässig, aber teuer im Betrieb, und sie springt nur an, wenn Sonne, Wind, Wasser und Speicher die Last nicht decken; meist steht sie in Bereitschaft. Dichte Gebäude bekommen automatisch Dach-PV. Die Wasserstoffanlage elektrolysiert Überschuss, den Batterien und Pumpspeicher nicht aufnehmen können — noch vor der Netzeinspeisung, denn eine im Tank gehaltene Einheit ersetzt später einen teuren Import: Sie füllt einen großen Tank, verstromt in der Flaute über ihre Brennstoffzelle und lässt bei vollem Tank die Elektrolyseure weiterlaufen, um Wasserstoff zu verkaufen, wann immer das mehr einbringt als der Export — abgeregelte Energie wird zu Einnahmen. Die Netzleitung handelt zum Spotpreis, der der Region folgt: sonnige, windige Stunden sind billig, windstille bedeckte Abende teuer — die gestrichelte bernsteinfarbene Linie im Energie-Graphen. Mit aktiviertem Stromhandel verkaufen deine Speicher zu Knappheitspreisen — aber nur die Spitzenladung eines fast vollen Speichers und nur, solange Überschuss sie nachfüllt, sodass der Verkauf Energie, die du ohnehin exportiert oder abgeregelt hättest, in eine teure Stunde verschiebt und die eigentliche Reserve für die Dunkelflaute erhalten bleibt — und kaufen billigen regionalen Überschuss. Ein Gezeitenkraftwerk an der Küste ist vollständig vorhersagbar — vier Erzeugungsspitzen und vier Stillwasserphasen am Tag, die langsam gegen die Uhr wandern — deshalb überbrückt der Speicher die Flaute. Dieselbe Küste trägt auch Offshore-Windräder und steigert die Zufriedenheit von Gebäuden mit Meerblick. Ein Geothermiekraftwerk baut nur auf einem Hotspot und erzeugt Tag und Nacht bei jedem Wetter dieselbe Menge — die einzige echte Grundlast —, aber jeder Hotspot trägt nur eine begrenzte Zahl Bohrungen, bevor sein Reservoir auszukühlen beginnt und jede Bohrung darauf mit hinunterzieht. Smart Meter werden Gebäude für Gebäude ausgerollt; Gebäude mit Zähler laden ihre Autos bei Überschuss und verschieben einen Teil von Last und Heizung, bis Sonne oder Wind zurück sind — die blasse gestrichelte Linie in der Verbrauchsfarbe zeigt, wie hoch der Verbrauch ohne diese Verschiebung wäre. Ein Demand-Response-Vertrag lässt Gewerbe, Einzelhandel und Industrie im Defizit einen Teil ihrer Last abwerfen — gegen eine tägliche Bereitstellungsprämie plus eine Abrufprämie je Einheit, automatisch abgerufen, wenn das günstiger ist als Import oder die Leitung voll ist, höchstens ein paar Stunden am Tag; abgeworfene Last vergrößert ebenfalls die Lücke unter der gestrichelten Linie.',
   'help.grid.title': 'Netz und Leitungen',
   'help.grid.body':
-    'Anlagen versorgen nur Gebäude, die mit ihnen verbunden sind. Ziehe Stromleitungen (⚡, Taste L) von einer Anlage entlang deiner Straßen — sie laufen über Straßen und über Wasser. Jedes angeschlossene Leitungsfeld und jede Anlage versorgt Gebäude im Umkreis von drei Feldern. Eine Leitung ohne Anlage führt keinen Strom; das Versorgungs-Overlay zeigt, was angeschlossen ist. Städte aus der Zeit vor den Leitungen haben ihre Leitungen entlang der Straßen geschenkt bekommen.',
+    'Stromleitungen verbinden Anlagen und Gebäude zu Netzinseln — eine Anlage versorgt nur ihre eigene Insel. Ziehe Stromleitungen (⚡, Taste L) von einer Anlage entlang deiner Straßen — sie laufen über Straßen und über Wasser. Jedes angeschlossene Leitungsfeld und jede Anlage versorgt Gebäude im Umkreis von drei Feldern. Eine Leitung ohne Anlage führt keinen Strom; das Versorgungs-Overlay zeigt, was angeschlossen ist. Städte aus der Zeit vor den Leitungen haben ihre Leitungen entlang der Straßen geschenkt bekommen.',
+  'help.districts.title': 'Netzinseln und Umspannwerke',
+  'help.districts.body':
+    'Deine Leitungen und Anlagen bilden Netzinseln – jedes zusammenhängende Netz ist eine. Eine Anlage versorgt nur ihre Insel; was dort nicht gebraucht wird, wird gespeichert, exportiert oder abgeregelt, nie in eine andere Insel getragen. Import und Export laufen über Umspannwerke (🏗, Taste X): eine Insel ohne ist auf sich gestellt. Das Overlay „Netz“ färbt die Inseln, die Energie-Schublade listet sie, der Inspektor nennt den Bezirk einer Kachel. Städte von vor den Bezirken: dein Park kann jetzt eine eigene Insel sein – ziehe eine Leitung zur Stadt und setze ein Umspannwerk.',
   'help.water.title': 'Wasser und Wasserkraft',
   'help.water.body':
     'Jede Karte hat einen Fluss, einen See und ein Meer an einem Rand. Straßen überqueren den Fluss als Brücken (teurer pro Feld), enden aber an der Küste. Ein Laufwasserkraftwerk auf dem Fluss erzeugt Tag und Nacht Strom — mehr nach Regenphasen, weniger in Trockenzeiten. Ein Pumpspeicher am Seeufer ist ein großer, aber trägerer Speicher, der sich nach den Batterien füllt.',
@@ -961,6 +973,9 @@ const de: Record<TranslationKey, string> = {
   'tutorial.grid.title': 'Schließe das Netz an',
   'tutorial.grid.body':
     'Ziehe eine Stromleitung (⚡, Taste L) von der Anlage entlang deiner Straße. Gebäude im Umkreis von drei Feldern einer angeschlossenen Leitung bekommen Strom.',
+  'tutorial.substation.title': 'Baue ein Umspannwerk',
+  'tutorial.substation.body':
+    'Dein Netz ist eine Netzinsel. Gib ihr ein Tor zum Außennetz: setze ein Umspannwerk (🏗, Taste X) neben deine Leitungen, damit ein Defizit importieren und ein Überschuss exportieren kann.',
   'tutorial.growth.title': 'Sieh zu, wie es wächst',
   'tutorial.growth.body':
     'Mit Nachfrage, Straßen und Strom entstehen die ersten Häuser von selbst. Gib ihnen einen Moment (▶▶▶ beschleunigt).',
@@ -1057,6 +1072,9 @@ const de: Record<TranslationKey, string> = {
   'goal.localGoods.title': 'Aus eigener Produktion',
   'goal.localGoods.body':
     'Ein ganzer Tag, an dem jede Liefertour in deinen eigenen Fabriken beladen wurde (ab 10 belieferten Läden und 3 Fabriken).',
+  'goal.districtGrid.title': 'Jeder Bezirk am Netz',
+  'goal.districtGrid.body':
+    'Jede Netzinsel mit mindestens 20 Gebäuden hat ein Umspannwerk, und keine Insel hatte den ganzen Tag ein Defizit.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

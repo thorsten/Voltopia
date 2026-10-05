@@ -46,9 +46,12 @@ src/
     growth.ts      # demand model, building spawn/densify/decay, abandonment, age-stage dirty marks
     economy.ts     # taxes, upkeep, construction costs, slope surcharge
     energy.ts      # plants (PV/wind/biogas/hydro/pumped/hydrogen), storage, balance
+    storage.ts     # storage levels per plant tile
     smartMeters.ts # smart-meter rollout: coverage, paced installs, billing, vehicle gate
     market.ts      # spot price (regional weather + demand), storage trading
-    powerGrid.ts   # connectivity: which tiles are energised
+    powerGrid.ts   # connectivity: islands (connected components), energised tiles
+    islandBalance.ts # the pure per-island cascade
+    islandPools.ts # per-island flex backlog and call budget
     powerLines.ts  # pylon placement, water crossings
     weather.ts     # seeded fronts, cloud/wind/rain, Dunkelflaute, day/night clock
     seasons.ts     # season phase, snowpack, river flow
@@ -84,7 +87,7 @@ src/
     vehiclesMesh.ts# instanced cars/vans/buses + headlights, slope pitch
     zoneTilesMesh.ts # zone paint decals
     iconsMesh.ts   # floating status icons
-    overlays.ts    # supply/services/traffic/deliveries overlays
+    overlays.ts    # supply/services/traffic/deliveries/grid overlays
     weatherFx.ts   # rain, snow, cloud shadows
     minimapLayer.ts# minimap texture
     picking.ts     # pointer -> tile: analytic height-field raycast (2D DDA)

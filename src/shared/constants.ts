@@ -1519,4 +1519,11 @@ export const BALANCE = {
     /** Population the free-flow goal requires. */
     goalMinPopulation: 300,
   },
+
+  goals: {
+    districtGrid: {
+      /** Islands with at least this many buildings need a substation for the districtGrid goal. */
+      minBuildings: 20,
+    },
+  },
 } as const;

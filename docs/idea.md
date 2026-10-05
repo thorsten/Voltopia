@@ -269,8 +269,15 @@ Collected 2026-09-24; roughly in the order we want to build them.
   40 batteries bought for it now breaks even in its first year on a
   well-stored city and stays a loss on one that burns biogas every
   night — the park decides.
-- **Per-district grids** (deferred earlier): separate grid islands
-  with their own balance, coupled by substations.
+- **Per-district grids** (done): lines and plants partition the map
+  into grid islands, each balancing its own generation, storage and
+  curtailment instead of sharing one city-wide pool. A substation is
+  the only gate between an island and the outer grid, so an island
+  without one stands entirely on its own. The Grid overlay colours
+  each island and dims the ones with no substation, the energy
+  drawer lists every island's own figures, and the `districtGrid`
+  goal rewards a city where every sizeable island has a substation
+  and no island saw a deficit all day.
 
 ## Way of Working
 

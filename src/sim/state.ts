@@ -426,6 +426,8 @@ export interface SimState {
     flexTicks: number;
     /** Cumulative energy shed under the contract (loadManager); persisted like flexTicks. */
     shedTotal: number;
+    /** Deficit ticks seen today, for the districtGrid goal; persisted like warmWinterTicks. */
+    districtDeficitTicks: number;
   };
   /** Monotonic id source for vehicles (not persisted). */
   nextVehicleId: number;
@@ -635,6 +637,7 @@ export function createSimState(
       warmWinterTicks: 0,
       flexTicks: 0,
       shedTotal: 0,
+      districtDeficitTicks: 0,
     },
     nextVehicleId: 1,
     commuteCongestion: 1,
@@ -1125,6 +1128,7 @@ export function serializeState(state: SimState): SaveGame {
     flexTicks: state.goalProgress.flexTicks,
     demandResponse: { active: state.demandResponse.active },
     shedTotal: state.goalProgress.shedTotal,
+    districtDeficitTicks: state.goalProgress.districtDeficitTicks,
     disasterScale: state.disasterScale,
     disasters: {
       nextId: state.disasters.nextId,
@@ -1223,6 +1227,7 @@ export function deserializeState(save: SaveGame): SimState {
     typeof save.shedTotal === 'number' && Number.isFinite(save.shedTotal)
       ? Math.max(0, save.shedTotal)
       : 0;
+  state.goalProgress.districtDeficitTicks = save.districtDeficitTicks ?? 0;
   state.demandResponse = { active: save.demandResponse?.active === true };
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);

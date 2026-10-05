@@ -27,6 +27,7 @@ export const GOAL_IDS = [
   'flexibleCity',
   'loadManager',
   'localGoods',
+  'districtGrid',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -250,6 +251,22 @@ export function goalsStep(state: SimState): void {
     state.lastDeliveries.factories >= goalLocalMinFactories
   ) {
     achieved.add('localGoods');
+  }
+
+  // Every sizeable island has a substation and the day stayed deficit-free in every island.
+  if (state.lastIslands.some((i) => i.deficit > 0)) progress.districtDeficitTicks++;
+  if (state.tick % TICKS_PER_DAY === 0) {
+    const { minBuildings } = BALANCE.goals.districtGrid;
+    const sizeable = state.lastIslands.filter((i) => i.buildings >= minBuildings);
+    if (
+      !achieved.has('districtGrid') &&
+      sizeable.length > 0 &&
+      sizeable.every((i) => i.substations > 0) &&
+      progress.districtDeficitTicks === 0
+    ) {
+      achieved.add('districtGrid');
+    }
+    progress.districtDeficitTicks = 0;
   }
 }
 

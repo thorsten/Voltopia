@@ -834,6 +834,8 @@ export interface SaveGame {
   heatStored?: number;
   /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
   warmWinterTicks?: number;
+  /** Deficit ticks so far today, for the districtGrid goal (absent in older saves → 0). */
+  districtDeficitTicks?: number;
   /** flexibleCity progress ticks (absent in older saves -> 0). */
   flexTicks?: number;
   /** Smart-meter rollout (absent in older saves: migrated from smartCharging). */
