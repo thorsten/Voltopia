@@ -430,7 +430,7 @@ export interface SimState {
     shed: number;
     /** What the contract could have shed this tick (0 while it is off). */
     shedPool: number;
-    /** Connected commercial and retail buildings (the contract's partners). */
+    /** Connected commercial, retail and industrial buildings (the contract's partners). */
     contractedBuildings: number;
   };
 }

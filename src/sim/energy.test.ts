@@ -1932,3 +1932,29 @@ describe('demand response in the cascade', () => {
     expect(buildStats(state).budget.demandResponse).toBeGreaterThan(0);
   });
 });
+
+describe('industrial load', () => {
+  it('has a two-shift profile with real night load', () => {
+    const profile = BALANCE.energy.loadProfileByZone[Zone.Industrial];
+    expect(profile).toHaveLength(24);
+    expect(Math.min(...profile)).toBeGreaterThanOrEqual(0.6);
+    expect(Math.max(...profile)).toBe(1);
+    expect(BALANCE.energy.consumptionByZoneAndDensity[Zone.Industrial]).toHaveLength(4);
+  });
+
+  it('a connected factory is a contract partner and widens the pool', () => {
+    const state = createSimState(1, SIZE);
+    state.season = { ...state.season, temperature: 18 };
+    placePlant(state, at(5, 5), PlantType.SolarFarm);
+    addBuilding(state, at(6, 5), Zone.Industrial, 3);
+    state.demandResponse.active = true;
+    stepTick(state);
+    const e = state.lastEnergy;
+    expect(e.contractedBuildings).toBe(1);
+    const hour = Math.floor(((state.tick % TICKS_PER_DAY) / TICKS_PER_DAY) * 24);
+    const base =
+      BALANCE.energy.consumptionByZoneAndDensity[Zone.Industrial][3] *
+      BALANCE.energy.loadProfileByZone[Zone.Industrial][hour];
+    expect(e.shedPool).toBeCloseTo(BALANCE.demandResponse.industrialShedShare * base, 6);
+  });
+});

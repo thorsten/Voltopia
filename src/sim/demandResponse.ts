@@ -13,7 +13,11 @@ export function setDemandResponse(state: SimState, active: boolean): void {
 }
 
 export interface DemandResponseCall {
-  /** Energy the contract could shed this tick (shedShare of the business base load, 0 when off). */
+  /**
+   * Energy the contract could shed this tick (shedShare of the business
+   * base load plus industrialShedShare of the industrial base load, 0
+   * when off).
+   */
   pool: number;
   /** Energy actually shed this tick. */
   shed: number;
@@ -36,13 +40,14 @@ export function dispatchDemandResponse(
   businessDemand: number,
   shortfall: number,
   spotPrice: number,
+  industrialDemand = 0,
 ): DemandResponseCall {
   const contract = state.demandResponse;
   if (state.tick % TICKS_PER_DAY === 0) contract.callBudget = callBudgetTicks();
   if (!contract.active) return { pool: 0, shed: 0 };
-  const { shedShare, activationPricePerEnergyUnit } = BALANCE.demandResponse;
+  const { shedShare, industrialShedShare, activationPricePerEnergyUnit } = BALANCE.demandResponse;
   const { importCapacity, importCostPerEnergyUnit } = BALANCE.market;
-  const pool = shedShare * businessDemand;
+  const pool = shedShare * businessDemand + industrialShedShare * industrialDemand;
   if (pool <= 0 || shortfall <= 0) return { pool, shed: 0 };
   const available = pool * Math.min(1, Math.max(0, contract.callBudget));
   const importPrice = importCostPerEnergyUnit * spotPrice;

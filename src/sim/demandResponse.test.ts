@@ -141,6 +141,19 @@ describe('dispatchDemandResponse', () => {
     const state = contracted();
     expect(dispatchDemandResponse(state, 100, 5, breakEven).shed).toBeCloseTo(5, 9);
   });
+
+  it('adds industrialShedShare of the industrial load to the pool', () => {
+    const { shedShare, industrialShedShare } = BALANCE.demandResponse;
+    const pool = dispatchDemandResponse(contracted(), 100, 0, 1, 50).pool;
+    expect(pool).toBeCloseTo(shedShare * 100 + industrialShedShare * 50, 9);
+  });
+
+  it('the industrial pool is available on a dark night when the offices are idle', () => {
+    const { industrialShedShare } = BALANCE.demandResponse;
+    const call = dispatchDemandResponse(contracted(), 0, 40, breakEven + 1, 50);
+    expect(call.pool).toBeCloseTo(industrialShedShare * 50, 9);
+    expect(call.shed).toBeCloseTo(Math.min(40, industrialShedShare * 50), 9);
+  });
 });
 
 describe('demandResponseStep', () => {

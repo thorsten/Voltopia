@@ -811,6 +811,13 @@ export const BALANCE = {
      */
     shedShare: 0.4,
     /**
+     * Share of the industrial base load the contract may shed. Process
+     * load is more flexible than office lighting and IT, and it is the
+     * only load of any size on a dark, calm night — the gap the
+     * commercial pool could not fill. Frozen by the Task 9 probe.
+     */
+    industrialShedShare: 0.6,
+    /**
      * Retainer per contracted business building and in-game day, paid
      * while the contract runs. 96 businesses at 6 is 576 money a day —
      * 2.4 % of the probe city's daily net income, and 11_520 over a year

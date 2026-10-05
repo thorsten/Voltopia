@@ -353,6 +353,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   let rooftop = 0;
   // Base load of the connected businesses — the demand-response pool.
   let businessDemand = 0;
+  let industrialDemand = 0;
   let contractedBuildings = 0;
 
   // Service stations draw a fixed load while connected to the grid.
@@ -384,6 +385,9 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     buildingDemand += base;
     if (zone === Zone.Commercial || zone === Zone.Retail) {
       businessDemand += base;
+      contractedBuildings++;
+    } else if (zone === Zone.Industrial) {
+      industrialDemand += base;
       contractedBuildings++;
     }
     // A served building gets its heat from the network; its own
@@ -489,7 +493,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const spotPrice = spotPriceFactor(state);
   const net = generation - totalDemand;
   if (net >= 0) {
-    shedPool = dispatchDemandResponse(state, businessDemand, 0, spotPrice).pool;
+    shedPool = dispatchDemandResponse(state, businessDemand, 0, spotPrice, industrialDemand).pool;
     const battery = chargePool(
       state.storedEnergy,
       storageCapacity,
@@ -572,7 +576,13 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     shortfall -= biogas;
     // The demand-response contract sheds business load when a call is
     // cheaper than importing or the link alone cannot carry the rest.
-    const call = dispatchDemandResponse(state, businessDemand, shortfall, spotPrice);
+    const call = dispatchDemandResponse(
+      state,
+      businessDemand,
+      shortfall,
+      spotPrice,
+      industrialDemand,
+    );
     shedPool = call.pool;
     shed = call.shed;
     shortfall -= shed;
