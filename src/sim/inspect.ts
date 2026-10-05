@@ -25,7 +25,7 @@ import {
 import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { heatPumpCop, plantReach } from './heat.ts';
-import { isSupplySource, islandOf, isTiedToGrid } from './powerGrid.ts';
+import { isSupplySource, islandKey, islandOf, isTiedToGrid } from './powerGrid.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -264,8 +264,15 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
               : 1
       : 1;
 
+  // `lastIslands` is the numbering of the last energy step, while
+  // `islandOf` renumbers on the spot after a topology change (islands are
+  // numbered ascending by lowest tile, so bulldozing a plant shifts every
+  // number above it). Match on the island's stable key instead, so a
+  // paused build never shows another district's figures — and shows none
+  // at all when the island itself is gone.
   const n = islandOf(state, index);
-  const islandStats = state.lastIslands.find((i) => i.number === n);
+  const key = islandKey(state, n);
+  const islandStats = state.lastIslands.find((i) => i.key === key);
 
   const field = fieldAt(state, index);
   const hotspot = field

@@ -11,6 +11,7 @@ import { discoverGeothermalFields } from './geothermal.ts';
 import { heatPumpCop, recomputeHeated } from './heat.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { islandKey, islandOf } from './powerGrid.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -569,5 +570,38 @@ describe('district grid inspection', () => {
     expect(info.substation!.importCapacity).toBe(BALANCE.market.importCapacity);
     expect(info.substation!.gridImport).toBeGreaterThan(0);
     expect(info.island?.number).toBe(1);
+  });
+
+  it('matches the island figures by key, not by a renumbered island number', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    // Two islands far apart: a solar farm each, one building in the west
+    // one's ring and two in the east one's, so their consumption differs.
+    placePlant(state, at(4, 4), PlantType.SolarFarm);
+    placePlant(state, at(24, 24), PlantType.SolarFarm);
+    state.layers.zone[at(5, 5)] = Zone.Residential;
+    state.layers.density[at(5, 5)] = 2;
+    for (let i = 0; i < 2; i++) {
+      state.layers.zone[at(25, 25 + i)] = Zone.Residential;
+      state.layers.density[at(25, 25 + i)] = 2;
+    }
+    bumpGridVersion(state);
+    state.tick = TICKS_PER_DAY / 2;
+    energyStep(state, { chargingByIsland: new Float64Array(3) });
+    const east = at(24, 24);
+    const eastKey = islandKey(state, islandOf(state, east));
+    const eastStats = state.lastIslands.find((i) => i.key === eastKey)!;
+    expect(islandOf(state, east)).toBe(2);
+
+    // Bulldoze the western plant: its island is gone and the eastern one
+    // is renumbered to 1 — without a new energy step, so lastIslands
+    // still carries the old numbering.
+    bulldozeTiles(state, [at(4, 4)]);
+    expect(islandOf(state, east)).toBe(1);
+
+    const info = inspectTile(state, east)!;
+    expect(info.island?.key).toBe(eastKey);
+    expect(info.island?.consumption).toBeCloseTo(eastStats.consumption, 9);
+    expect(info.island?.consumption).toBeGreaterThan(0);
   });
 });
