@@ -384,6 +384,17 @@ describe('save round trip', () => {
     expect(restored.vans).toEqual([]);
   });
 
+  it('sets goods.partialDay from the saved tick parity', () => {
+    const state = makeState();
+    state.tick = TICKS_PER_DAY + 5;
+    const midday = deserializeState(serializeState(state));
+    expect(midday.goods.partialDay).toBe(true);
+
+    state.tick = TICKS_PER_DAY * 2;
+    const boundary = deserializeState(serializeState(state));
+    expect(boundary.goods.partialDay).toBe(false);
+  });
+
   it('deliveryStateOfAge buckets by the due and supply windows', () => {
     const day = TICKS_PER_DAY;
     expect(deliveryStateOfAge(0)).toBe(DeliveryState.Supplied);

@@ -160,12 +160,14 @@ industrialDemand`. Dispatch, call budget, billing and stats are
   any stop; the tour continues as an imported one (the fee was already
   paid, no refund).
 - Vans are not persisted, so `pickup` needs no save handling.
-- `SimState.goods = { localToursToday, importedToursToday, lastDay }`.
-  At the day boundary `deliveriesStep` copies the day's two counters
-  into `goods.lastDay` and zeros them; `goalsStep` reads `lastDay` on
-  the same tick. Transient, like the other single-day goal counters
-  (the `goalProgress` rule in `state.ts`); a reload mid-day forfeits
-  that day's `localGoods` attempt.
+- `SimState.goods = { localToursToday, importedToursToday, partialDay,
+lastDay }`. At the day boundary `deliveriesStep` copies the day's two
+  counters and `partialDay` into `goods.lastDay` (as `lastDay.partial`)
+  and zeros them; `goalsStep` reads `lastDay` on the same tick and
+  requires `!lastDay.partial`. `deserializeState` sets `partialDay` from
+  the saved tick's parity, so a reload mid-day forfeits that day's
+  `localGoods` attempt. Transient, like the other single-day goal
+  counters (the `goalProgress` rule in `state.ts`).
 - `DeliveryStats` gains `factories` (count) and `localShare`
   (`localToursToday / (local + imported)`, 1 when no tour started).
   `DepotInfo` gains `factoriesInReach` and `nearestFactoryTiles`

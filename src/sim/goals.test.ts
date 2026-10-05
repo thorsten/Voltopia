@@ -544,7 +544,7 @@ describe('localGoods', () => {
       factories: BALANCE.deliveries.goalLocalMinFactories,
       localShare: 1,
     };
-    state.goods.lastDay = { local, imported };
+    state.goods.lastDay = { local, imported, partial: false };
     state.tick = TICKS_PER_DAY;
     return state;
   }
@@ -573,5 +573,12 @@ describe('localGoods', () => {
     const noTours = stockedCity(0, 0);
     goalsStep(noTours);
     expect(noTours.goalsAchieved.has('localGoods')).toBe(false);
+  });
+
+  it('does not unlock when yesterday began from a mid-day reload', () => {
+    const state = stockedCity(5, 0);
+    state.goods.lastDay.partial = true;
+    goalsStep(state);
+    expect(state.goalsAchieved.has('localGoods')).toBe(false);
   });
 });

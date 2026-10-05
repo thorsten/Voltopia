@@ -497,15 +497,26 @@ describe('goods pickup', () => {
     expect(van.pickup).toBe(at(4, 10));
     // Cut the road under the pickup before the van gets there.
     bulldozeTiles(state, [at(4, 10)]);
-    // The depot road is west of the cut; re-lay a bypass so the shops stay reachable.
+    // The depot road is west of the cut; re-lay a bypass so the shops stay
+    // reachable. Routed two rows south of the shop/factory row (y=11) and
+    // rejoining well east of both, so it never becomes a new road
+    // neighbour of the factory or a shop — that would hand a second van a
+    // fresh, unclaimed stop and dispatch an extra tour, muddying the
+    // ledger assertions below.
     buildRoads(state, [
       at(2, 11),
       at(2, 12),
-      at(3, 12),
-      at(4, 12),
-      at(5, 12),
-      at(5, 11),
-      at(5, 10),
+      at(2, 13),
+      at(3, 13),
+      at(4, 13),
+      at(5, 13),
+      at(6, 13),
+      at(7, 13),
+      at(8, 13),
+      at(9, 13),
+      at(9, 12),
+      at(9, 11),
+      at(9, 10),
     ]);
     let delivered = false;
     for (let t = 0; t < 800 && !delivered; t++) {
@@ -514,6 +525,8 @@ describe('goods pickup', () => {
       delivered = state.layers.deliveryAge[at(6, 11)] === 0;
     }
     expect(delivered).toBe(true);
+    expect(state.goods.localToursToday).toBe(0);
+    expect(state.goods.importedToursToday).toBe(1);
   });
 
   it('rolls the day counters over at the day boundary and keeps yesterday for the goal', () => {
@@ -521,11 +534,13 @@ describe('goods pickup', () => {
     syncFleet(state);
     state.goods.localToursToday = 4;
     state.goods.importedToursToday = 1;
+    state.goods.partialDay = true;
     state.tick = TICKS_PER_DAY;
     deliveriesStep(state, laneOccupancy(state));
-    expect(state.goods.lastDay).toEqual({ local: 4, imported: 1 });
+    expect(state.goods.lastDay).toEqual({ local: 4, imported: 1, partial: true });
     expect(state.goods.localToursToday).toBe(0);
     expect(state.goods.importedToursToday).toBe(0);
+    expect(state.goods.partialDay).toBe(false);
   });
 
   it('stats count factories and the local share; the depot reports its goods source', () => {
@@ -541,5 +556,22 @@ describe('goods pickup', () => {
     expect(info.factoriesInReach).toBe(1);
     expect(info.nearestFactoryTiles).toBe(2);
     expect(depotInfo(shopTown(), at(2, 9)).nearestFactoryTiles).toBe(-1);
+  });
+
+  it('localShare falls back to yesterday before any tour starts today', () => {
+    const state = shopTown();
+    state.goods.localToursToday = 0;
+    state.goods.importedToursToday = 0;
+    state.goods.lastDay = { local: 0, imported: 3, partial: false };
+    expect(deliveryStats(state).localShare).toBe(0);
+
+    state.goods.lastDay = { local: 0, imported: 0, partial: false };
+    expect(deliveryStats(state).localShare).toBe(1);
+
+    state.goods.localToursToday = 2;
+    state.goods.importedToursToday = 2;
+    expect(deliveryStats(state).localShare).toBe(0.5);
+    state.goods.lastDay = { local: 0, imported: 3, partial: false };
+    expect(deliveryStats(state).localShare).toBe(0.5);
   });
 });

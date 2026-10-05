@@ -177,11 +177,17 @@ export function ageShops(state: SimState): number {
   return dueSoon;
 }
 
-/** Stops every van is already going to visit (never the depot roads). */
+/**
+ * Stops every van is already going to visit (never the depot roads, nor
+ * an in-flight pickup tile — the dispatch loop never claims it either,
+ * since the shop beside it is stocked as a side effect of loading).
+ */
 export function claimedStops(state: SimState): Set<number> {
   const claimed = new Set<number>();
   for (const van of state.vans) {
-    for (const stop of van.stops) if (stop !== van.depotRoad) claimed.add(stop);
+    for (const stop of van.stops) {
+      if (stop !== van.depotRoad && stop !== van.pickup) claimed.add(stop);
+    }
   }
   return claimed;
 }
@@ -272,6 +278,22 @@ function decideVanCharging(state: SimState, van: Van, surplus: boolean): boolean
 }
 
 /**
+ * Drop stops[0] as unreachable. A discarded pickup never loaded any
+ * goods, so the tour is relabelled imported (no fee: none was charged
+ * when the tour dispatched local, since that only happens for a tour
+ * that imports from the start).
+ */
+function discardStop(state: SimState, van: Van): void {
+  if (van.stops[0] === van.pickup) {
+    state.goods.localToursToday--;
+    state.goods.importedToursToday++;
+    van.pickup = -1;
+    state.statsDirty = true;
+  }
+  van.stops.shift();
+}
+
+/**
  * Route the van to stops[0], skipping stops that became unreachable. A
  * van that cannot even reach its depot is marked lost and removed by the
  * next syncFleet.
@@ -286,7 +308,7 @@ function routeToNextStop(state: SimState, van: Van): void {
       van.phase = VanPhase.Driving;
       return;
     }
-    van.stops.shift();
+    discardStop(state, van);
   }
   van.depot = -1;
   van.path = [];
@@ -334,9 +356,14 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
   state.lastGoodsImportCost = 0;
   if (state.tick % TICKS_PER_DAY === 0) {
     const goods = state.goods;
-    goods.lastDay = { local: goods.localToursToday, imported: goods.importedToursToday };
+    goods.lastDay = {
+      local: goods.localToursToday,
+      imported: goods.importedToursToday,
+      partial: goods.partialDay,
+    };
     goods.localToursToday = 0;
     goods.importedToursToday = 0;
+    goods.partialDay = false;
   }
   syncFleet(state);
   const dueSoon = ageShops(state);
@@ -391,7 +418,10 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
         const result = advanceAlongPath(state, van, step, occupancy);
         if (result === 'arrived') arrive(state, van);
         else if (result === 'lost') {
-          van.stops.shift();
+          // The road under stops[0] vanished mid-trip (e.g. a bulldozed
+          // pickup): same ledger correction as routeToNextStop's own
+          // unreachable-stop loop.
+          discardStop(state, van);
           routeToNextStop(state, van);
         }
         break;
@@ -445,15 +475,24 @@ export function deliveryStats(state: SimState): DeliveryStats {
     shops++;
     if (deliveryAge[i] <= window) supplied++;
   }
-  const { localToursToday, importedToursToday } = state.goods;
+  const { localToursToday, importedToursToday, lastDay } = state.goods;
   const tours = localToursToday + importedToursToday;
+  // Before the delivery window opens today has no tours yet; fall back
+  // to yesterday's split instead of reporting a vacuous 100% local.
+  let localShare: number;
+  if (tours > 0) {
+    localShare = localToursToday / tours;
+  } else {
+    const yesterdayTours = lastDay.local + lastDay.imported;
+    localShare = yesterdayTours > 0 ? lastDay.local / yesterdayTours : 1;
+  }
   return {
     suppliedShare: shops > 0 ? supplied / shops : 1,
     shops,
     driving: drivingVanCount(state),
     depots: depotTiles(state).length,
     factories,
-    localShare: tours > 0 ? localToursToday / tours : 1,
+    localShare,
   };
 }
 

@@ -493,15 +493,17 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
             value={String(info.depot.factoriesInReach)}
             tone={info.depot.factoriesInReach > 0 ? 'positive' : 'muted'}
           />
-          <Row
-            label={t('inspect.depot.goodsSource')}
-            value={
-              info.depot.nearestFactoryTiles >= 0
-                ? t('inspect.depot.goodsLocal', { tiles: info.depot.nearestFactoryTiles })
-                : t('inspect.depot.goodsImported', { fee: BALANCE.deliveries.importFeePerTour })
-            }
-            tone={info.depot.nearestFactoryTiles >= 0 ? 'positive' : 'negative'}
-          />
+          {info.depot.shopsInReach > 0 && (
+            <Row
+              label={t('inspect.depot.goodsSource')}
+              value={
+                info.depot.nearestFactoryTiles >= 0
+                  ? t('inspect.depot.goodsLocal', { tiles: info.depot.nearestFactoryTiles })
+                  : t('inspect.depot.goodsImported', { fee: BALANCE.deliveries.importFeePerTour })
+              }
+              tone={info.depot.nearestFactoryTiles >= 0 ? 'positive' : 'negative'}
+            />
+          )}
         </section>
       )}
 

@@ -242,6 +242,7 @@ export function goalsStep(state: SimState): void {
   if (
     !achieved.has('localGoods') &&
     state.tick % TICKS_PER_DAY === 0 &&
+    !yesterday.partial &&
     yesterday.local > 0 &&
     yesterday.imported === 0 &&
     state.lastDeliveries.shops >= goalLocalMinShops &&

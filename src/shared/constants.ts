@@ -1415,7 +1415,7 @@ export const BALANCE = {
     goalSuppliedShare: 0.95,
     /** Retail buildings the well-stocked goal requires. */
     goalMinShops: 20,
-    /** Supplied shops the localGoods goal requires. */
+    /** Shops the localGoods goal requires, with at least goalSuppliedShare of them supplied. */
     goalLocalMinShops: 10,
     /** Factories the localGoods goal requires. */
     goalLocalMinFactories: 3,

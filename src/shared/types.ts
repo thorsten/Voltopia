@@ -367,7 +367,11 @@ export interface DeliveryStats {
   depots: number;
   /** Industrial buildings (powered or not). */
   factories: number;
-  /** Tours started today that loaded at a factory, over all tours (1 when none started). */
+  /**
+   * Tours started today that loaded at a factory, over all tours; falls
+   * back to yesterday's local share while no tour has started today
+   * (1 when today and yesterday are both empty).
+   */
   localShare: number;
 }
 

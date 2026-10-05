@@ -1064,7 +1064,7 @@ const de: Record<TranslationKey, string> = {
   'inspect.depot.shopsInReach': 'Läden in Reichweite',
   'inspect.depot.factoriesInReach': 'Fabriken in Reichweite',
   'inspect.depot.goodsSource': 'Güter',
-  'inspect.depot.goodsLocal': 'Lokal beladen, nächste Fabrik {tiles} Kacheln',
+  'inspect.depot.goodsLocal': 'Lokal beladen, nächste Fabrik {tiles} Kacheln entfernt',
   'inspect.depot.goodsImported': 'Importiert, {fee} pro Tour',
   'inspect.busStop': 'Haltestelle',
   'inspect.stopState': 'Bedienung',

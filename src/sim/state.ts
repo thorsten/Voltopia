@@ -248,9 +248,9 @@ export interface SimState {
   /** Smart-meter install cost paid last tick (budget line). */
   lastSmartMeterCost: number;
   /**
-   * Demand-response contract with the commercial and retail zones:
-   * whether it is in force, and the ticks of full-pool shedding still
-   * allowed today (fractions for partial calls). The budget is
+   * Demand-response contract with the commercial, retail and industrial
+   * zones: whether it is in force, and the ticks of full-pool shedding
+   * still allowed today (fractions for partial calls). The budget is
    * persisted so a reload cannot refill the day's allowance.
    */
   demandResponse: {
@@ -301,13 +301,21 @@ export interface SimState {
   /**
    * Goods tours of the running day and of the day before (localGoods
    * goal). Single-day counters: transient by the goalProgress rule.
+   * `partialDay` is set from the saved tick's parity on load, so a
+   * reload mid-day forfeits that day's attempt: at the next rollover
+   * it is copied into `lastDay.partial`, which the goal requires to be
+   * false.
    */
   goods: {
     localToursToday: number;
     importedToursToday: number;
+    /** True while today began from a mid-day reload. Not persisted. */
+    partialDay: boolean;
     lastDay: {
       local: number;
       imported: number;
+      /** True when that day began from a mid-day reload. */
+      partial: boolean;
     };
   };
   /** Import fees paid this tick (budget line). */
@@ -532,7 +540,12 @@ export function createSimState(
     lastRepairCost: 0,
     vehicles: [],
     vans: [],
-    goods: { localToursToday: 0, importedToursToday: 0, lastDay: { local: 0, imported: 0 } },
+    goods: {
+      localToursToday: 0,
+      importedToursToday: 0,
+      partialDay: false,
+      lastDay: { local: 0, imported: 0, partial: false },
+    },
     lastGoodsImportCost: 0,
     buses: [],
     undoStack: [],
@@ -1136,6 +1149,10 @@ export function deserializeState(save: SaveGame): SimState {
   // Advance the RNG deterministically past the founding state so a loaded
   // game does not replay the exact random sequence from tick zero.
   state.rng.setState(save.seed ^ save.tick);
+  // A reload lands mid-day whenever the saved tick is not a day boundary;
+  // the morning's imported tours (if any) are gone, so today's localGoods
+  // attempt is tainted (see the `goods` doc comment above).
+  state.goods.partialDay = state.tick % TICKS_PER_DAY !== 0;
   markAllDirty(state);
   return state;
 }
