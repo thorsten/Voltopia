@@ -24,6 +24,12 @@ import {
 } from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
+import { SmallScreenNotice } from './SmallScreenNotice.tsx';
+import {
+  isSmallScreen,
+  rememberSmallScreenNoticeDismissed,
+  wasSmallScreenNoticeDismissed,
+} from './smallScreen.ts';
 import { StatsPage } from './StatsPage.tsx';
 import { loadSettings, persistSettings, type AppSettings } from './settings.ts';
 import { sound } from './sound.ts';
@@ -121,6 +127,11 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   const [detailsOpen, setDetailsOpen] = useState(loadDetailsOpen);
   // The tutorial runs for brand-new cities only (no autosave existed).
   const [showTutorial, setShowTutorial] = useState(() => save === null && !isTutorialDone());
+  // Evaluated once at startup; no resize listener — a phone rotated into
+  // landscape is still a phone.
+  const [showSmallScreenNotice, setShowSmallScreenNotice] = useState(
+    () => isSmallScreen(window.innerWidth, window.innerHeight) && !wasSmallScreenNoticeDismissed(),
+  );
 
   const toggleDetails = (): void => {
     setDetailsOpen((open) => {
@@ -347,6 +358,14 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
         <div className="cost-preview" data-testid="cost-preview">
           {costPreview.tiles} ▦ · {costPreview.cost.toLocaleString('en-US')} ⌁
         </div>
+      )}
+      {showSmallScreenNotice && (
+        <SmallScreenNotice
+          onDismiss={() => {
+            rememberSmallScreenNoticeDismissed();
+            setShowSmallScreenNotice(false);
+          }}
+        />
       )}
       {/* Coach mark, not a HUD island: it floats above the layout for the
           handful of steps it runs, then never comes back. */}

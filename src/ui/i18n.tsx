@@ -322,6 +322,11 @@ const en = {
 
   'modal.close': 'Close',
 
+  'smallScreen.title': 'Voltopia needs a bigger screen',
+  'smallScreen.body':
+    'Voltopia is built for tablets, laptops and desktops. On a phone the map, the build menu and the energy panel do not fit, so building a city is no fun. Please open it on a larger display.',
+  'smallScreen.continue': 'Continue anyway',
+
   'tutorial.welcome.title': 'Welcome to Voltopia!',
   'tutorial.welcome.body':
     'Your city will run entirely on renewable energy. Let’s get the first neighborhood powered up.',
@@ -897,6 +902,11 @@ const de: Record<TranslationKey, string> = {
     'Dies ist ein kostenloses Open-Source-Browserspiel (MIT-Lizenz). Trotz sorgfältiger Prüfung wird keine Haftung für externe Links übernommen; für deren Inhalte sind ausschließlich die jeweiligen Betreiber verantwortlich.',
 
   'modal.close': 'Schließen',
+
+  'smallScreen.title': 'Voltopia braucht einen größeren Bildschirm',
+  'smallScreen.body':
+    'Voltopia ist für Tablets, Laptops und Desktops gebaut. Auf einem Smartphone passen Karte, Baumenü und Energiepanel nicht auf den Schirm, da macht Städtebau keinen Spaß. Bitte öffne es auf einem größeren Display.',
+  'smallScreen.continue': 'Trotzdem fortfahren',
 
   'tutorial.welcome.title': 'Willkommen in Voltopia!',
   'tutorial.welcome.body':

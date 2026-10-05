@@ -78,6 +78,17 @@ test('boots with a running simulation', async ({ page }) => {
   await expect(page.getByTestId('money')).toBeVisible();
   await expect(page.getByTestId('energy-panel')).toBeVisible();
   await expect(page.getByTestId('energy-hydro')).toBeVisible();
+  // Desktop-sized viewport: no small-screen notice.
+  await expect(page.getByTestId('small-screen-notice')).toHaveCount(0);
+});
+
+test('a phone-sized viewport gets the bigger-screen notice', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('small-screen-notice')).toBeVisible();
+  await page.getByTestId('small-screen-continue').click();
+  await expect(page.getByTestId('small-screen-notice')).toHaveCount(0);
 });
 
 test('the HUD detail drawer toggles without moving the rest of the HUD', async ({ page }) => {
