@@ -787,10 +787,12 @@ export interface SaveGame {
   flexTicks?: number;
   /** Smart-meter rollout (absent in older saves: migrated from smartCharging). */
   smartMeters?: { active: boolean; metered: number };
-  /** Deferred flexible energy waiting for surplus (absent → 0). */
+  /** Legacy global flex backlog, read on load onto the largest island (absent → 0). */
   flexBacklog?: number;
-  /** Demand-response contract and the call budget left today (absent in older saves → off, full). */
-  demandResponse?: { active: boolean; callBudget: number };
+  /** Demand-response contract; `callBudget` is a legacy field, read on load onto the largest island. */
+  demandResponse?: { active: boolean; callBudget?: number };
+  /** Per-island pools (flex backlog, call budget) as [key, flexBacklog, callBudget] triplets. */
+  islandPools?: [number, number, number][];
   /** Cumulative energy shed under the contract (absent in older saves → 0). */
   shedTotal?: number;
   /** Disaster intensity of this city (absent in older saves → 0 = off). */

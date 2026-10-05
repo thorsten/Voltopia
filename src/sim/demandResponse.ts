@@ -1,4 +1,5 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
+import type { IslandPool } from './islandPools.ts';
 import type { SimState } from './state.ts';
 
 /** The contract's daily allowance of full-pool shedding, in ticks. */
@@ -25,37 +26,38 @@ export interface DemandResponseCall {
 
 /**
  * One tick of the contract inside the deficit cascade (after biogas,
- * before import). `shortfall` is what is still uncovered, `spotPrice`
- * the tick's spot factor. Two rules, combined with max rather than
- * summed: the economic call sheds whatever the pool can give whenever
- * importing would cost more than the activation premium; the security
- * call only adds, at abundance prices, the part of the shortfall the
- * import link cannot carry. The day's allowance refills on the first
- * tick of every in-game day and is spent in fractions of a full-pool
- * tick, so a partial call costs a partial tick. Shed energy is gone,
- * not deferred.
+ * before import), for a single island's pool. `shortfall` is what is
+ * still uncovered, `spotPrice` the tick's spot factor. Two rules,
+ * combined with max rather than summed: the economic call sheds
+ * whatever the pool can give whenever importing would cost more than
+ * the activation premium; the security call only adds, at abundance
+ * prices, the part of the shortfall the import link cannot carry. The
+ * day's allowance is spent in fractions of a full-pool tick, so a
+ * partial call costs a partial tick. Shed energy is gone, not deferred.
+ * Pure: the caller owns the pool and its daily refill (see
+ * `syncIslandPools`).
  */
-export function dispatchDemandResponse(
-  state: SimState,
+export function dispatchCall(
+  pool: IslandPool,
+  active: boolean,
   businessDemand: number,
+  industrialDemand: number,
   shortfall: number,
   spotPrice: number,
-  industrialDemand = 0,
+  importCapacity: number,
 ): DemandResponseCall {
-  const contract = state.demandResponse;
-  if (state.tick % TICKS_PER_DAY === 0) contract.callBudget = callBudgetTicks();
-  if (!contract.active) return { pool: 0, shed: 0 };
+  if (!active) return { pool: 0, shed: 0 };
   const { shedShare, industrialShedShare, activationPricePerEnergyUnit } = BALANCE.demandResponse;
-  const { importCapacity, importCostPerEnergyUnit } = BALANCE.market;
-  const pool = shedShare * businessDemand + industrialShedShare * industrialDemand;
-  if (pool <= 0 || shortfall <= 0) return { pool, shed: 0 };
-  const available = pool * Math.min(1, Math.max(0, contract.callBudget));
+  const { importCostPerEnergyUnit } = BALANCE.market;
+  const size = shedShare * businessDemand + industrialShedShare * industrialDemand;
+  if (size <= 0 || shortfall <= 0) return { pool: size, shed: 0 };
+  const available = size * Math.min(1, Math.max(0, pool.callBudget));
   const importPrice = importCostPerEnergyUnit * spotPrice;
   const economic = importPrice >= activationPricePerEnergyUnit ? Math.min(shortfall, available) : 0;
   const secure = Math.min(Math.max(0, shortfall - importCapacity), available);
   const shed = Math.max(economic, secure);
-  contract.callBudget = Math.max(0, contract.callBudget - shed / pool);
-  return { pool, shed };
+  pool.callBudget = Math.max(0, pool.callBudget - shed / size);
+  return { pool: size, shed };
 }
 
 /**
@@ -83,7 +85,9 @@ export function demandResponseStep(state: SimState): number {
   return spent;
 }
 
-/** Call hours left today, for the HUD. */
+/** Call hours left today, for the HUD: the tightest island, or the full day without any. */
 export function callHoursLeft(state: SimState): number {
-  return (state.demandResponse.callBudget * 24) / TICKS_PER_DAY;
+  let budget = callBudgetTicks();
+  for (const pool of state.islandPools.values()) budget = Math.min(budget, pool.callBudget);
+  return (budget * 24) / TICKS_PER_DAY;
 }

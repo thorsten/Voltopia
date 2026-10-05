@@ -14,6 +14,7 @@ import {
 } from './energy.ts';
 import { callBudgetTicks } from './demandResponse.ts';
 import { heatStep } from './heat.ts';
+import { poolForIsland, syncIslandPools } from './islandPools.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
@@ -1674,7 +1675,7 @@ describe('flexible load pool (smart meters)', () => {
       energyStep(state, { chargingDemand: 0 });
       expect(state.lastEnergy.flexDeferred).toBe(0);
       expect(state.lastEnergy.flexRecovered).toBe(0);
-      expect(state.flexBacklog).toBe(0);
+      expect(poolForIsland(state, 1).flexBacklog).toBe(0);
       expect(state.lastEnergy.unshifted).toBeCloseTo(served(state), 9);
     }
   });
@@ -1716,8 +1717,8 @@ describe('flexible load pool (smart meters)', () => {
     for (let t = 0; t < TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
     const capacity =
       flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
-    expect(state.flexBacklog).toBeLessThanOrEqual(capacity + 1e-6);
-    expect(state.flexBacklog).toBeGreaterThan(capacity * 0.5);
+    expect(poolForIsland(state, 1).flexBacklog).toBeLessThanOrEqual(capacity + 1e-6);
+    expect(poolForIsland(state, 1).flexBacklog).toBeGreaterThan(capacity * 0.5);
   });
 
   it('serves the flexible share and drains the backlog when renewables exceed the inflexible load', () => {
@@ -1725,14 +1726,15 @@ describe('flexible load pool (smart meters)', () => {
     placePlant(state, at(3, 3), PlantType.WindTurbine);
     placePlant(state, at(4, 3), PlantType.WindTurbine);
     state.weather.windSpeed = 0.9;
-    state.flexBacklog = 5;
+    syncIslandPools(state);
+    poolForIsland(state, 1).flexBacklog = 5;
     energyStep(state, { chargingDemand: 0 });
     const e = state.lastEnergy;
     expect(e.flexDeferred).toBe(0);
     expect(e.flexRecovered).toBeGreaterThan(0);
     expect(e.flexRecovered).toBeLessThanOrEqual(5);
-    expect(state.flexBacklog).toBeCloseTo(5 - e.flexRecovered, 9);
-    expect(state.flexBacklog).toBeGreaterThanOrEqual(0);
+    expect(poolForIsland(state, 1).flexBacklog).toBeCloseTo(5 - e.flexRecovered, 9);
+    expect(poolForIsland(state, 1).flexBacklog).toBeGreaterThanOrEqual(0);
   });
 
   it('serves the overflow and holds the backlog at the comfort bound', () => {
@@ -1750,10 +1752,10 @@ describe('flexible load pool (smart meters)', () => {
     expect(excess + flexible).toBeLessThan(
       BALANCE.smartMeters.maxDrainShare * state.lastEnergy.unshifted,
     );
-    state.flexBacklog = capacity + excess;
+    poolForIsland(state, 1).flexBacklog = capacity + excess;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.flexOverflow).toBeCloseTo(excess + flexible, 9);
-    expect(state.flexBacklog).toBeCloseTo(capacity, 9);
+    expect(poolForIsland(state, 1).flexBacklog).toBeCloseTo(capacity, 9);
   });
 
   it('caps the drained backlog per tick when the pool shrinks', () => {
@@ -1763,7 +1765,7 @@ describe('flexible load pool (smart meters)', () => {
     // Saturate the backlog against the comfort bound of the cold,
     // uninsulated town.
     for (let t = 0; t < 2 * TICKS_PER_DAY; t++) energyStep(state, { chargingDemand: 0 });
-    const saturated = state.flexBacklog;
+    const saturated = poolForIsland(state, 1).flexBacklog;
     expect(saturated).toBeGreaterThan(0);
     // Insulation halves the heating load, so the pool — and with it the
     // comfort bound — shrinks in one tick. The backlog is now far above
@@ -1783,10 +1785,10 @@ describe('flexible load pool (smart meters)', () => {
       maxDrainShare * first.unshifted,
       9,
     );
-    expect(state.flexBacklog).toBeGreaterThan(capacity);
-    expect(first.flexOverflow).toBeLessThan(state.flexBacklog - capacity);
+    expect(poolForIsland(state, 1).flexBacklog).toBeGreaterThan(capacity);
+    expect(first.flexOverflow).toBeLessThan(poolForIsland(state, 1).flexBacklog - capacity);
     // From here it drains tick by tick until it reaches the new bound.
-    let previous = state.flexBacklog;
+    let previous = poolForIsland(state, 1).flexBacklog;
     let settled = false;
     for (let t = 0; t < 2 * TICKS_PER_DAY; t++) {
       energyStep(state, { chargingDemand: 0 });
@@ -1794,42 +1796,53 @@ describe('flexible load pool (smart meters)', () => {
       expect(e.flexRecovered + e.flexOverflow).toBeLessThanOrEqual(
         maxDrainShare * e.unshifted + 1e-6,
       );
-      if (state.flexBacklog <= e.flexDeferred * windowHours * (TICKS_PER_DAY / 24) + 1e-6) {
+      if (
+        poolForIsland(state, 1).flexBacklog <=
+        e.flexDeferred * windowHours * (TICKS_PER_DAY / 24) + 1e-6
+      ) {
         settled = true;
         break;
       }
-      expect(state.flexBacklog).toBeLessThan(previous);
-      previous = state.flexBacklog;
+      expect(poolForIsland(state, 1).flexBacklog).toBeLessThan(previous);
+      previous = poolForIsland(state, 1).flexBacklog;
     }
     expect(settled).toBe(true);
-    expect(state.flexBacklog).toBeLessThan(saturated);
+    expect(poolForIsland(state, 1).flexBacklog).toBeLessThan(saturated);
   });
 
   it('clears the backlog when the city has no load at all', () => {
     const state = createSimState(9, SIZE);
-    state.flexBacklog = 42;
+    // A lone plant with no buildings: an island exists, but there is
+    // still nothing to consume (unshifted stays 0).
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    syncIslandPools(state);
+    poolForIsland(state, 1).flexBacklog = 42;
     energyStep(state, { chargingDemand: 0 });
     expect(state.lastEnergy.unshifted).toBe(0);
     expect(state.lastEnergy.flexOverflow).toBe(0);
     expect(state.lastEnergy.flexRecovered).toBe(0);
-    expect(state.flexBacklog).toBe(0);
+    expect(poolForIsland(state, 1).flexBacklog).toBe(0);
   });
 
   it('keeps the identity unshifted - consumption = deferred - recovered - overflow', () => {
     const state = meteredTown(PlantType.WindTurbine);
+    syncIslandPools(state);
     for (let t = 0; t < 200; t++) {
-      const before = state.flexBacklog;
+      const before = poolForIsland(state, 1).flexBacklog;
       energyStep(state, { chargingDemand: 0 });
       const e = state.lastEnergy;
       // consumption actually served this tick = unshifted - deferred + recovered + overflow
       // (the field sum carries heatStoreCharge on top of totalDemand once a
       // heat network exists; this town has none, so the two coincide)
-      const overflow = Math.max(0, before + e.flexDeferred - e.flexRecovered - state.flexBacklog);
+      const overflow = Math.max(
+        0,
+        before + e.flexDeferred - e.flexRecovered - poolForIsland(state, 1).flexBacklog,
+      );
       expect(e.unshifted - e.flexDeferred + e.flexRecovered + overflow).toBeCloseTo(
         served(state),
         6,
       );
-      expect(e.flexBacklog).toBe(state.flexBacklog);
+      expect(e.flexBacklog).toBe(poolForIsland(state, 1).flexBacklog);
       expect(e.flexOverflow).toBeCloseTo(overflow, 9);
       expect(e.buildingConsumption).toBeGreaterThanOrEqual(0);
       expect(e.heatingConsumption).toBeGreaterThanOrEqual(0);
@@ -1873,7 +1886,7 @@ describe('demand response in the cascade', () => {
     expect(state.lastEnergy.shed).toBe(0);
     expect(state.lastEnergy.shedPool).toBe(0);
     expect(state.lastEnergy.contractedBuildings).toBe(20);
-    expect(state.demandResponse.callBudget).toBe(callBudgetTicks());
+    expect(poolForIsland(state, 1).callBudget).toBe(callBudgetTicks());
   });
 
   it('sheds the pool before importing at a scarce price', () => {
@@ -1890,7 +1903,7 @@ describe('demand response in the cascade', () => {
     // The deficit is what the pool and the link together cannot cover.
     expect(e.deficit).toBeCloseTo(base - e.rooftop - e.shed - BALANCE.market.importCapacity, 6);
     expect(e.unshifted - e.buildingConsumption).toBeCloseTo(e.shed, 6);
-    expect(state.demandResponse.callBudget).toBeCloseTo(callBudgetTicks() - 1, 6);
+    expect(poolForIsland(state, 1).callBudget).toBeCloseTo(callBudgetTicks() - 1, 6);
   });
 
   it('a residential town has nothing to shed', () => {
@@ -1939,7 +1952,8 @@ describe('demand response in the cascade', () => {
 
   it("falls through to import and deficit once the day's budget is spent", () => {
     const state = scarceBusinessTown();
-    state.demandResponse.callBudget = 0;
+    syncIslandPools(state);
+    poolForIsland(state, 1).callBudget = 0;
     const base = businessBase();
     energyStep(state, { chargingDemand: 0 });
     const e = state.lastEnergy;

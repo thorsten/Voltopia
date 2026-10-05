@@ -4,6 +4,7 @@ import { clearForest, fellingCost, windForestFactor } from './forest.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { chargeHeatStore, IDLE_HEAT, type HeatTickResult } from './heat.ts';
 import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
+import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.ts';
 import { comfortWindowHours, meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -30,7 +31,7 @@ import {
   storageCapacityAt,
   storageTilesOfKind,
 } from './storage.ts';
-import { dispatchDemandResponse } from './demandResponse.ts';
+import { callBudgetTicks, dispatchCall } from './demandResponse.ts';
 import { spotPriceFactor } from './market.ts';
 import { timeOfDay } from './tick.ts';
 import { currentSolarFactor, currentWindFactor, riverFlowFactor } from './weather.ts';
@@ -328,6 +329,28 @@ function dischargePool(
   return { stored: stored - released, released };
 }
 
+/** Island number with the most energised tiles (a short tile-count scan). */
+function largestIsland(state: SimState): number {
+  const counts = Array.from<number>({ length: state.islandKeys.length }).fill(0);
+  for (const n of state.layers.island) counts[n]++;
+  let best = 1;
+  for (let n = 2; n < counts.length; n++) {
+    if (counts[n] > counts[best]) best = n;
+  }
+  return best;
+}
+
+/**
+ * A scratch pool for the no-islands case (an empty map, or one with no
+ * supply yet): nothing to balance, so a fresh, unpersisted pool every
+ * tick is harmless. Until Task 5 splits the cascade per island, this is
+ * also what a multi-island city's balance reads and writes for every
+ * island but the largest — a known, documented approximation.
+ */
+function freshScratchPool(): IslandPool {
+  return { flexBacklog: 0, callBudget: callBudgetTicks() };
+}
+
 /**
  * One tick of the energy balance:
  * 1. renewable generation (solar + wind + rooftop + hydro + tidal + geothermal) covers
@@ -349,6 +372,12 @@ function dischargePool(
 export function energyStep(state: SimState, input: EnergyTickInput): void {
   const { layers } = state;
   recomputeGrid(state);
+  syncIslandPools(state);
+  // Still one city-wide balance (per-island balancing is Task 5): read
+  // and write the largest island's pool, or a scratch one with no
+  // islands at all.
+  const pool: IslandPool =
+    state.islandKeys.length > 1 ? poolForIsland(state, largestIsland(state)) : freshScratchPool();
   const census = censusPlants(state);
   const time = timeOfDay(state.tick);
   const heat = input.heat ?? { ...IDLE_HEAT };
@@ -447,7 +476,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   let deferred = flexible;
   if (renewableSurplus > 0) {
     servedNow = Math.min(flexible, renewableSurplus);
-    recovered = Math.min(state.flexBacklog, renewableSurplus - servedNow);
+    recovered = Math.min(pool.flexBacklog, renewableSurplus - servedNow);
     deferred = flexible - servedNow;
   }
   // The backlog may only drain so fast. The comfort bound below scales
@@ -465,13 +494,13 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const backlogCapacity =
     flexible * comfortWindowHours(timeOfDay(state.tick), state.season) * (TICKS_PER_DAY / 24);
   const overflow = Math.min(
-    Math.max(0, state.flexBacklog + deferred - recovered - backlogCapacity),
+    Math.max(0, pool.flexBacklog + deferred - recovered - backlogCapacity),
     Math.max(0, drainCap - recovered),
   );
-  state.flexBacklog = Math.max(0, state.flexBacklog + deferred - recovered - overflow);
+  pool.flexBacklog = Math.max(0, pool.flexBacklog + deferred - recovered - overflow);
   // No load at all (an empty city, or every building disconnected): there
   // is nothing to drain into, and the cap would hold the backlog forever.
-  if (unshifted === 0) state.flexBacklog = 0;
+  if (unshifted === 0) pool.flexBacklog = 0;
   const totalDemand = inflexible + servedNow + recovered + overflow;
   // Report both lines as what was actually served this tick. The shift is
   // split in proportion to what each line contributed to the pool —
@@ -520,7 +549,15 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
   const spotPrice = spotPriceFactor(state);
   const net = generation - totalDemand;
   if (net >= 0) {
-    shedPool = dispatchDemandResponse(state, businessDemand, 0, spotPrice, industrialDemand).pool;
+    shedPool = dispatchCall(
+      pool,
+      state.demandResponse.active,
+      businessDemand,
+      industrialDemand,
+      0,
+      spotPrice,
+      BALANCE.market.importCapacity,
+    ).pool;
     const battery = chargePool(
       batteryPool.stored,
       batteryPool.capacity,
@@ -608,12 +645,14 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     shortfall -= biogas;
     // The demand-response contract sheds business load when a call is
     // cheaper than importing or the link alone cannot carry the rest.
-    const call = dispatchDemandResponse(
-      state,
+    const call = dispatchCall(
+      pool,
+      state.demandResponse.active,
       businessDemand,
+      industrialDemand,
       shortfall,
       spotPrice,
-      industrialDemand,
+      BALANCE.market.importCapacity,
     );
     shedPool = call.pool;
     shed = call.shed;
@@ -729,7 +768,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     tradeBuy,
     flexDeferred: deferred,
     flexRecovered: recovered,
-    flexBacklog: state.flexBacklog,
+    flexBacklog: pool.flexBacklog,
     flexOverflow: overflow,
     unshifted,
     shed,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
+import { placePlant } from './energy.ts';
+import { poolForIsland, syncIslandPools } from './islandPools.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import {
   comfortWindowHours,
@@ -11,7 +13,14 @@ import {
   setSmartMeterRollout,
   smartMetersStep,
 } from './smartMeters.ts';
-import { createSimState, deserializeState, serializeState, Zone, type SimState } from './state.ts';
+import {
+  createSimState,
+  deserializeState,
+  PlantType,
+  serializeState,
+  Zone,
+  type SimState,
+} from './state.ts';
 import { stepTick } from './tick.ts';
 
 // 32 (not 16) so town() can lay out enough bands for the isSmartVehicle
@@ -127,26 +136,27 @@ describe('smart-meter rollout', () => {
 
   it('round-trips rollout state and the flexible backlog through a save', () => {
     const state = town(5);
+    placePlant(state, at(0, 0), PlantType.WindTurbine);
     state.smartMeters = { active: true, metered: 3, installCarry: 0.4 };
-    state.flexBacklog = 12.5;
+    syncIslandPools(state);
+    poolForIsland(state, 1).flexBacklog = 12.5;
     const restored = deserializeState(serializeState(state));
     expect(restored.smartMeters.active).toBe(true);
     expect(restored.smartMeters.metered).toBe(3);
-    expect(restored.flexBacklog).toBe(12.5);
+    syncIslandPools(restored);
+    expect(poolForIsland(restored, 1).flexBacklog).toBe(12.5);
   });
 
   it('migrates a legacy save: smart charging on means every building metered', () => {
     const state = town(5);
     const save = serializeState(state);
     delete save.smartMeters;
-    delete save.flexBacklog;
     const on = deserializeState({ ...save, smartCharging: true });
     expect(on.smartMeters.active).toBe(true);
     expect(on.smartMeters.metered).toBe(5);
     const off = deserializeState({ ...save, smartCharging: false });
     expect(off.smartMeters.active).toBe(false);
     expect(off.smartMeters.metered).toBe(0);
-    expect(off.flexBacklog).toBe(0);
   });
 
   it('clamps a saved meter count to the current building count', () => {
@@ -158,14 +168,18 @@ describe('smart-meter rollout', () => {
 
   it('clamps a non-finite or negative restored meter count and backlog to zero', () => {
     const state = town(5);
+    placePlant(state, at(0, 0), PlantType.WindTurbine);
     const save = serializeState(state);
+    // A legacy save: drop the modern pools field so the NaN backlog
+    // below exercises the legacy fallback, not the modern round trip.
+    delete save.islandPools;
     const restored = deserializeState({
       ...save,
       smartMeters: { active: false, metered: -5 },
       flexBacklog: Number.NaN,
     });
     expect(restored.smartMeters.metered).toBe(0);
-    expect(restored.flexBacklog).toBe(0);
+    expect(poolForIsland(restored, 1).flexBacklog).toBe(0);
   });
 
   it('keeps the pacing exact over several days', () => {

@@ -3,8 +3,11 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { LINE_PRESENT, tileIndex } from '../shared/grid.ts';
 import { DeliveryState, RoadClass, StopState, Terrain } from '../shared/types.ts';
 import { addDamage } from './disasters.ts';
+import { callBudgetTicks } from './demandResponse.ts';
 import { placePlant } from './energy.ts';
-import { recomputeGrid } from './powerGrid.ts';
+import { poolForIsland, syncIslandPools } from './islandPools.ts';
+import { buildPowerLines } from './powerLines.ts';
+import { islandOf, recomputeGrid } from './powerGrid.ts';
 import { buildRoads } from './roads.ts';
 import { isCoastalSea } from './sea.ts';
 import { generateTerrain } from './terrain.ts';
@@ -746,5 +749,73 @@ describe('storage per tile in saves', () => {
     expect(loaded.layers.stored[at(2, 2)]).toBe(500);
     loaded.layers.damage[at(2, 2)] = 0;
     expect(storedByKind(loaded, PlantType.Battery)).toBe(500);
+  });
+});
+
+describe('per-island pools in saves', () => {
+  it('round-trips the pools through a save', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    recomputeGrid(state);
+    syncIslandPools(state);
+    poolForIsland(state, 1).flexBacklog = 40;
+    poolForIsland(state, 1).callBudget = 2.5;
+    const restored = deserializeState(serializeState(state));
+    // The modern branch restores islandPools without forcing a grid
+    // recompute (it stays lazy, like islandKeys itself); the caller
+    // resolves it, exactly as a real tick's energyStep would.
+    recomputeGrid(restored);
+    expect(poolForIsland(restored, 1)).toEqual({ flexBacklog: 40, callBudget: 2.5 });
+  });
+
+  it('maps the legacy backlog and call budget onto the largest island', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.WindTurbine); // alone: the smaller island
+    placePlant(state, at(10, 10), PlantType.SolarFarm);
+    buildPowerLines(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(11 + i, 10)),
+    ); // the bigger island
+    recomputeGrid(state);
+    const bigIsland = islandOf(state, at(10, 10));
+    const smallIsland = islandOf(state, at(2, 2));
+    expect(bigIsland).not.toBe(smallIsland);
+
+    const save = serializeState(state);
+    delete save.islandPools;
+    save.flexBacklog = 77;
+    save.demandResponse = { active: false, callBudget: 3 };
+    const restored = deserializeState(save);
+    expect(poolForIsland(restored, bigIsland)).toEqual({ flexBacklog: 77, callBudget: 3 });
+    expect(poolForIsland(restored, smallIsland)).toEqual({
+      flexBacklog: 0,
+      callBudget: callBudgetTicks(),
+    });
+  });
+
+  it('ignores the legacy fields when the map has no islands at all', () => {
+    const state = createSimState(3, SIZE);
+    const save = serializeState(state);
+    delete save.islandPools;
+    save.flexBacklog = 77;
+    const restored = deserializeState(save);
+    expect(restored.islandPools.size).toBe(0);
+  });
+
+  it('skips a non-finite entry in a saved islandPools array', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    recomputeGrid(state);
+    syncIslandPools(state);
+    const key = state.islandKeys[1];
+    const save = serializeState(state);
+    save.islandPools = [[key, Number.NaN, 5]];
+    const restored = deserializeState(save);
+    // The entry was dropped, not defaulted: nothing fills the gap until
+    // the next syncIslandPools (the first tick's energyStep) runs.
+    expect(() => poolForIsland(restored, 1)).toThrow();
   });
 });

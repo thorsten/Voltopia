@@ -38,6 +38,7 @@ import {
   FULL_HEAT,
   type GeothermalField,
 } from './geothermal.ts';
+import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.ts';
 import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
@@ -259,8 +260,6 @@ export interface SimState {
     metered: number;
     installCarry: number;
   };
-  /** Deferred flexible energy waiting for renewable surplus (energy units). */
-  flexBacklog: number;
   /**
    * Buildings counted at the last `refreshBuildingCount` — the coverage
    * denominator for the whole tick. Counting them is a full-grid scan,
@@ -273,13 +272,11 @@ export interface SimState {
   lastSmartMeterCost: number;
   /**
    * Demand-response contract with the commercial, retail and industrial
-   * zones: whether it is in force, and the ticks of full-pool shedding
-   * still allowed today (fractions for partial calls). The budget is
-   * persisted so a reload cannot refill the day's allowance.
+   * zones: whether it is in force. The call budget lives per island, on
+   * `islandPools`.
    */
   demandResponse: {
     active: boolean;
-    callBudget: number;
   };
   /** Retainer plus activation premiums paid last tick (budget line). */
   lastDemandResponseCost: number;
@@ -294,6 +291,15 @@ export interface SimState {
   gridComputedVersion: number;
   /** islandKeys[n] = lowest tile index of island n (its stable key); islandKeys[0] = -1. Rebuilt by recomputeGrid. */
   islandKeys: number[];
+  /**
+   * Per-island pools (flex backlog, demand-response call budget), keyed
+   * by the island's stable key (its lowest tile index). Kept in sync
+   * with the current islands by `syncIslandPools` (see islandPools.ts).
+   * Persisted.
+   */
+  islandPools: Map<number, IslandPool>;
+  /** gridComputedVersion islandPools was last synced for (-1 = never). */
+  poolsSyncedVersion: number;
   weather: Weather;
   /** Elevation of the lake surface (derived; recomputed on load). */
   lakeLevel: number;
@@ -528,11 +534,10 @@ export function createSimState(
     marketTrading: false,
     insulation: false,
     smartMeters: { active: false, metered: 0, installCarry: 0 },
-    flexBacklog: 0,
     // A fresh map has no buildings; stepTick refreshes this every tick.
     lastBuildingCount: 0,
     lastSmartMeterCost: 0,
-    demandResponse: { active: false, callBudget: callBudgetTicks() },
+    demandResponse: { active: false },
     lastDemandResponseCost: 0,
     seasonOriginDay: 0,
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
@@ -540,6 +545,8 @@ export function createSimState(
     gridVersion: 0,
     gridComputedVersion: -1,
     islandKeys: [-1],
+    islandPools: new Map(),
+    poolsSyncedVersion: -1,
     weather: {
       cloudCover: 0.3,
       windSpeed: 0.5,
@@ -1076,7 +1083,7 @@ export function serializeState(state: SimState): SaveGame {
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
     smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
-    flexBacklog: state.flexBacklog,
+    islandPools: [...state.islandPools].map(([key, p]) => [key, p.flexBacklog, p.callBudget]),
     winterTicks: state.goalProgress.winterTicks,
     summerTicks: state.goalProgress.summerTicks,
     freeFlowTicks: state.goalProgress.freeFlowTicks,
@@ -1084,10 +1091,7 @@ export function serializeState(state: SimState): SaveGame {
     transitTicks: state.goalProgress.transitTicks,
     warmWinterTicks: state.goalProgress.warmWinterTicks,
     flexTicks: state.goalProgress.flexTicks,
-    demandResponse: {
-      active: state.demandResponse.active,
-      callBudget: state.demandResponse.callBudget,
-    },
+    demandResponse: { active: state.demandResponse.active },
     shedTotal: state.goalProgress.shedTotal,
     disasterScale: state.disasterScale,
     disasters: {
@@ -1117,6 +1121,18 @@ export function serializeState(state: SimState): SaveGame {
       damage: copyBuffer(layers.damage),
     },
   };
+}
+
+/** Island number with the most energised tiles; 0 when the grid has none. */
+function largestIslandNumber(state: SimState): number {
+  if (state.islandKeys.length <= 1) return 0;
+  const counts = Array.from<number>({ length: state.islandKeys.length }).fill(0);
+  for (const n of state.layers.island) counts[n]++;
+  let best = 1;
+  for (let n = 2; n < counts.length; n++) {
+    if (counts[n] > counts[best]) best = n;
+  }
+  return best;
 }
 
 export function deserializeState(save: SaveGame): SimState {
@@ -1163,10 +1179,6 @@ export function deserializeState(save: SaveGame): SimState {
         installCarry: 0,
       };
     }
-    state.flexBacklog =
-      typeof save.flexBacklog === 'number' && Number.isFinite(save.flexBacklog)
-        ? Math.max(0, save.flexBacklog)
-        : 0;
   }
   state.goalProgress.winterTicks = save.winterTicks ?? 0;
   state.goalProgress.summerTicks = save.summerTicks ?? 0;
@@ -1179,16 +1191,7 @@ export function deserializeState(save: SaveGame): SimState {
     typeof save.shedTotal === 'number' && Number.isFinite(save.shedTotal)
       ? Math.max(0, save.shedTotal)
       : 0;
-  // Clamp into the daily allowance: a hand-edited export must not grant
-  // more call hours than a day has, and NaN would poison the budget.
-  const savedBudget = save.demandResponse?.callBudget;
-  state.demandResponse = {
-    active: save.demandResponse?.active === true,
-    callBudget:
-      typeof savedBudget === 'number' && Number.isFinite(savedBudget)
-        ? Math.min(callBudgetTicks(), Math.max(0, savedBudget))
-        : callBudgetTicks(),
-  };
+  state.demandResponse = { active: save.demandResponse?.active === true };
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.season = seasonState({
@@ -1270,6 +1273,51 @@ export function deserializeState(save: SaveGame): SimState {
     spreadLegacyPool(state, PlantType.PumpedStorage, save.pumpedStorageEnergy);
     spreadLegacyPool(state, PlantType.HydrogenPlant, save.hydrogenEnergy);
     spreadLegacyPool(state, PlantType.HeatStore, save.heatStored);
+  }
+  // Per-island pools, restored last: a save written by this version
+  // carries them directly, keyed by tile index — bad entries are skipped
+  // one at a time, never poisoning the rest, and this branch stays lazy
+  // about the grid (like `islandKeys` itself) rather than forcing a
+  // recompute on every load; the next thing that needs the grid (a real
+  // tick, or a direct recomputeGrid/syncIslandPools call) resolves it.
+  // An older save (or one whose islandPools field was dropped as
+  // malformed by the JSON loader) starts fresh pools for every current
+  // island via `syncIslandPools`, and, if it still carries the legacy
+  // global fields, applies them to the largest island (most tiles) — the
+  // pacing a single-island city had. `poolsSyncedVersion` is deliberately
+  // left stale in the first branch: if a skipped entry left a current
+  // island without a pool, the next `syncIslandPools` (the first tick's
+  // energyStep) fills it in rather than the game crashing on it.
+  if (save.islandPools) {
+    const pools = new Map<number, IslandPool>();
+    for (const [key, flexBacklog, callBudget] of save.islandPools) {
+      if (!Number.isInteger(key) || key < 0) continue;
+      if (!Number.isFinite(flexBacklog) || !Number.isFinite(callBudget)) continue;
+      pools.set(key, {
+        flexBacklog: Math.max(0, flexBacklog),
+        callBudget: Math.min(callBudgetTicks(), Math.max(0, callBudget)),
+      });
+    }
+    state.islandPools = pools;
+  } else {
+    syncIslandPools(state);
+    const legacyBacklog =
+      typeof save.flexBacklog === 'number' && Number.isFinite(save.flexBacklog)
+        ? Math.max(0, save.flexBacklog)
+        : undefined;
+    const legacyBudget = save.demandResponse?.callBudget;
+    const validBudget =
+      typeof legacyBudget === 'number' && Number.isFinite(legacyBudget)
+        ? Math.min(callBudgetTicks(), Math.max(0, legacyBudget))
+        : undefined;
+    if (legacyBacklog !== undefined || validBudget !== undefined) {
+      const n = largestIslandNumber(state);
+      if (n !== 0) {
+        const pool = poolForIsland(state, n);
+        if (legacyBacklog !== undefined) pool.flexBacklog = legacyBacklog;
+        if (validBudget !== undefined) pool.callBudget = validBudget;
+      }
+    }
   }
   // Advance the RNG deterministically past the founding state so a loaded
   // game does not replay the exact random sequence from tick zero.

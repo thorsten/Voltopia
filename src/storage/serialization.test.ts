@@ -132,6 +132,40 @@ describe('save game JSON export/import', () => {
     expect(restored.shedTotal).toBeUndefined();
   });
 
+  it('round-trips the demand-response contract without a call budget', () => {
+    const save = makeSave();
+    save.demandResponse = { active: true };
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.demandResponse).toEqual({ active: true });
+  });
+
+  it('round-trips the per-island pools', () => {
+    const save = makeSave();
+    save.islandPools = [
+      [0, 12.5, 3],
+      [7, 0, 4],
+    ];
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.islandPools).toEqual([
+      [0, 12.5, 3],
+      [7, 0, 4],
+    ]);
+  });
+
+  it('drops a malformed islandPools field whole rather than per entry', () => {
+    const save = makeSave();
+    save.islandPools = [
+      [0, 12.5, 3],
+      [7, Number.NaN, 4],
+    ];
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.islandPools).toBeUndefined();
+  });
+
+  it('accepts an old save without islandPools', () => {
+    expect(saveFromJson(saveToJson(makeSave())).islandPools).toBeUndefined();
+  });
+
   it('round-trips the optional forest layer', () => {
     const save = makeSave();
     const forest = new Uint8Array(save.size * save.size).fill(2);

@@ -1,20 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
+import { tileIndex } from '../shared/grid.ts';
 import {
   callBudgetTicks,
   demandResponseStep,
-  dispatchDemandResponse,
+  dispatchCall,
   setDemandResponse,
 } from './demandResponse.ts';
-import { createSimState, deserializeState, serializeState } from './state.ts';
+import { placePlant } from './energy.ts';
+import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.ts';
+import { recomputeGrid } from './powerGrid.ts';
+import { createSimState, deserializeState, PlantType, serializeState } from './state.ts';
 import { buildStats, stepTick } from './tick.ts';
 
 const SIZE = 16;
+const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+/** A fresh island pool, its budget overridable for a given test. */
+function pool(callBudget: number = callBudgetTicks()): IslandPool {
+  return { flexBacklog: 0, callBudget };
+}
 
 describe('demand-response contract state', () => {
-  it('starts off with a full call budget', () => {
+  it('starts off', () => {
     const state = createSimState(1, SIZE);
-    expect(state.demandResponse).toEqual({ active: false, callBudget: callBudgetTicks() });
+    expect(state.demandResponse).toEqual({ active: false });
     expect(state.lastDemandResponseCost).toBe(0);
     expect(state.goalProgress.shedTotal).toBe(0);
   });
@@ -36,121 +46,102 @@ describe('demand-response contract state', () => {
     expect(state.demandResponse.active).toBe(false);
   });
 
-  it('round-trips the contract, the call budget and the shed total', () => {
+  it('round-trips the contract and the shed total', () => {
     const state = createSimState(1, SIZE);
-    state.demandResponse = { active: true, callBudget: 12.5 };
+    state.demandResponse = { active: true };
     state.goalProgress.shedTotal = 321;
     const restored = deserializeState(serializeState(state));
-    expect(restored.demandResponse).toEqual({ active: true, callBudget: 12.5 });
+    expect(restored.demandResponse).toEqual({ active: true });
     expect(restored.goalProgress.shedTotal).toBe(321);
   });
 
-  it('loads an old save with the contract off and a full budget', () => {
+  it('loads an old save with the contract off', () => {
     const state = createSimState(1, SIZE);
     const save = serializeState(state);
     delete save.demandResponse;
     delete save.shedTotal;
     const restored = deserializeState(save);
-    expect(restored.demandResponse).toEqual({ active: false, callBudget: callBudgetTicks() });
+    expect(restored.demandResponse).toEqual({ active: false });
     expect(restored.goalProgress.shedTotal).toBe(0);
-  });
-
-  it('clamps a hand-edited call budget into the daily allowance', () => {
-    const state = createSimState(1, SIZE);
-    const save = serializeState(state);
-    save.demandResponse = { active: true, callBudget: 1e9 };
-    expect(deserializeState(save).demandResponse.callBudget).toBe(callBudgetTicks());
-    save.demandResponse = { active: true, callBudget: Number.NaN };
-    expect(deserializeState(save).demandResponse.callBudget).toBe(callBudgetTicks());
   });
 });
 
-describe('dispatchDemandResponse', () => {
+describe('dispatchCall', () => {
   const { shedShare, activationPricePerEnergyUnit } = BALANCE.demandResponse;
   const { importCapacity, importCostPerEnergyUnit } = BALANCE.market;
   /** Spot factor at which importing costs exactly the activation premium. */
   const breakEven = activationPricePerEnergyUnit / importCostPerEnergyUnit;
 
-  function contracted(): ReturnType<typeof createSimState> {
-    const state = createSimState(1, SIZE);
-    state.demandResponse.active = true;
-    state.tick = 1; // not a day boundary
-    return state;
-  }
-
   it('sheds nothing with the contract off', () => {
-    const state = createSimState(1, SIZE);
-    const call = dispatchDemandResponse(state, 100, 50, breakEven + 1);
+    const p = pool();
+    const call = dispatchCall(p, false, 100, 0, 50, breakEven + 1, importCapacity);
     expect(call).toEqual({ pool: 0, shed: 0 });
-    expect(state.demandResponse.callBudget).toBe(callBudgetTicks());
+    expect(p.callBudget).toBe(callBudgetTicks());
   });
 
   it('the pool is shedShare of the business base load', () => {
-    const state = contracted();
-    expect(dispatchDemandResponse(state, 100, 0, 1).pool).toBeCloseTo(shedShare * 100, 9);
+    expect(dispatchCall(pool(), true, 100, 0, 0, 1, importCapacity).pool).toBeCloseTo(
+      shedShare * 100,
+      9,
+    );
   });
 
   it('sheds up to the pool when importing is dearer than a call', () => {
-    const state = contracted();
-    const call = dispatchDemandResponse(state, 100, 30, breakEven);
+    const call = dispatchCall(pool(), true, 100, 0, 30, breakEven, importCapacity);
     expect(call.shed).toBeCloseTo(30, 9);
-    const big = dispatchDemandResponse(contracted(), 100, 1000, breakEven);
+    const big = dispatchCall(pool(), true, 100, 0, 1000, breakEven, importCapacity);
     expect(big.shed).toBeCloseTo(shedShare * 100, 9);
   });
 
   it('sheds nothing at abundance prices while the link can carry the shortfall', () => {
-    const state = contracted();
-    const call = dispatchDemandResponse(state, 100, importCapacity, breakEven - 0.01);
+    const p = pool();
+    const call = dispatchCall(p, true, 100, 0, importCapacity, breakEven - 0.01, importCapacity);
     expect(call.shed).toBe(0);
-    expect(state.demandResponse.callBudget).toBe(callBudgetTicks());
+    expect(p.callBudget).toBe(callBudgetTicks());
   });
 
   it('sheds only the excess over the link at abundance prices', () => {
-    const state = contracted();
-    const call = dispatchDemandResponse(state, 100, importCapacity + 10, breakEven - 0.01);
+    const call = dispatchCall(
+      pool(),
+      true,
+      100,
+      0,
+      importCapacity + 10,
+      breakEven - 0.01,
+      importCapacity,
+    );
     expect(call.shed).toBeCloseTo(10, 9);
   });
 
   it('spends the call budget in proportion to the pool used', () => {
-    const state = contracted();
-    dispatchDemandResponse(state, 100, shedShare * 100, breakEven); // a full-pool tick
-    expect(state.demandResponse.callBudget).toBeCloseTo(callBudgetTicks() - 1, 9);
-    dispatchDemandResponse(state, 100, shedShare * 50, breakEven); // half the pool
-    expect(state.demandResponse.callBudget).toBeCloseTo(callBudgetTicks() - 1.5, 9);
+    const p = pool();
+    dispatchCall(p, true, 100, 0, shedShare * 100, breakEven, importCapacity); // a full-pool tick
+    expect(p.callBudget).toBeCloseTo(callBudgetTicks() - 1, 9);
+    dispatchCall(p, true, 100, 0, shedShare * 50, breakEven, importCapacity); // half the pool
+    expect(p.callBudget).toBeCloseTo(callBudgetTicks() - 1.5, 9);
   });
 
   it('runs the budget down to a partial last call and then nothing', () => {
-    const state = contracted();
-    state.demandResponse.callBudget = 0.25;
-    const partial = dispatchDemandResponse(state, 100, 1000, breakEven);
+    const p = pool(0.25);
+    const partial = dispatchCall(p, true, 100, 0, 1000, breakEven, importCapacity);
     expect(partial.shed).toBeCloseTo(0.25 * shedShare * 100, 9);
-    expect(state.demandResponse.callBudget).toBeCloseTo(0, 9);
-    expect(dispatchDemandResponse(state, 100, 1000, breakEven).shed).toBe(0);
-  });
-
-  it('refills the budget at the start of a day', () => {
-    const state = contracted();
-    state.demandResponse.callBudget = 0;
-    state.tick = TICKS_PER_DAY;
-    const call = dispatchDemandResponse(state, 100, 1000, breakEven);
-    expect(call.shed).toBeCloseTo(shedShare * 100, 9);
-    expect(state.demandResponse.callBudget).toBeCloseTo(callBudgetTicks() - 1, 9);
+    expect(p.callBudget).toBeCloseTo(0, 9);
+    expect(dispatchCall(p, true, 100, 0, 1000, breakEven, importCapacity).shed).toBe(0);
   });
 
   it('never sheds more than the shortfall', () => {
-    const state = contracted();
-    expect(dispatchDemandResponse(state, 100, 5, breakEven).shed).toBeCloseTo(5, 9);
+    expect(dispatchCall(pool(), true, 100, 0, 5, breakEven, importCapacity).shed).toBeCloseTo(5, 9);
   });
 
   it('adds industrialShedShare of the industrial load to the pool', () => {
     const { shedShare, industrialShedShare } = BALANCE.demandResponse;
-    const pool = dispatchDemandResponse(contracted(), 100, 0, 1, 50).pool;
-    expect(pool).toBeCloseTo(shedShare * 100 + industrialShedShare * 50, 9);
+    const call = dispatchCall(pool(), true, 100, 50, 0, 1, importCapacity).pool;
+    expect(call).toBeCloseTo(shedShare * 100 + industrialShedShare * 50, 9);
   });
 
   it('the industrial pool is available on a dark night when the offices are idle', () => {
     const { industrialShedShare } = BALANCE.demandResponse;
-    const call = dispatchDemandResponse(contracted(), 0, 40, breakEven + 1, 50);
+    const call = dispatchCall(pool(), true, 0, 50, 40, breakEven + 1, importCapacity);
     expect(call.pool).toBeCloseTo(industrialShedShare * 50, 9);
     expect(call.shed).toBeCloseTo(Math.min(40, industrialShedShare * 50), 9);
   });
@@ -202,8 +193,12 @@ describe('demandResponseStep', () => {
 
   it('reaches the stats and the budget line', () => {
     const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    recomputeGrid(state);
+    syncIslandPools(state);
     state.demandResponse.active = true;
-    state.demandResponse.callBudget = callBudgetTicks() / 2;
+    poolForIsland(state, 1).callBudget = callBudgetTicks() / 2;
     state.lastEnergy.contractedBuildings = 4;
     state.lastEnergy.shed = 2;
     state.lastEnergy.shedPool = 8;

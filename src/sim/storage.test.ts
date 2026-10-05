@@ -69,4 +69,22 @@ describe('storage per tile', () => {
     expect(storedByKind(state, PlantType.Battery)).toBeCloseTo(75, 6);
     expect(poolOf(state, []).capacity).toBe(0);
   });
+
+  it("a damaged battery's frozen level is untouched by charge, discharge and scale", () => {
+    const state = withBatteries();
+    const damaged = at(2, 2);
+    const intact = at(6, 2);
+    state.layers.stored[damaged] = 500;
+    state.layers.stored[intact] = 500;
+    addDamage(state, damaged, 10);
+    // Bypass storageTilesOfKind's own filter: the tiles list here still
+    // includes the damaged tile, as a caller composing its own list might.
+    const tiles = [damaged, intact];
+    chargeTiles(state, tiles, 1_000);
+    expect(state.layers.stored[damaged]).toBe(500);
+    dischargeTiles(state, tiles, 1_000);
+    expect(state.layers.stored[damaged]).toBe(500);
+    scaleTiles(state, tiles, 0.5);
+    expect(state.layers.stored[damaged]).toBe(500);
+  });
 });

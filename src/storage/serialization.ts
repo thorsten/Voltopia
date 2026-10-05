@@ -16,7 +16,9 @@ interface SaveGameJson {
   stored?: number[];
   smartMeters?: { active: boolean; metered: number };
   flexBacklog?: number;
-  demandResponse?: { active: boolean; callBudget: number };
+  demandResponse?: { active: boolean; callBudget?: number };
+  /** Per-island pools as [key, flexBacklog, callBudget] triplets. */
+  islandPools?: [number, number, number][];
   shedTotal?: number;
   goals?: string[];
   lifetime?: LifetimeSample[];
@@ -85,6 +87,7 @@ export function saveToJson(save: SaveGame): string {
     ...(save.smartCharging !== undefined ? { smartCharging: save.smartCharging } : {}),
     ...(save.smartMeters !== undefined ? { smartMeters: save.smartMeters } : {}),
     ...(save.flexBacklog !== undefined ? { flexBacklog: save.flexBacklog } : {}),
+    ...(save.islandPools !== undefined ? { islandPools: save.islandPools } : {}),
     ...(save.goals ? { goals: save.goals } : {}),
     ...(save.lifetime ? { lifetime: save.lifetime } : {}),
     ...(save.riverFlow !== undefined ? { riverFlow: save.riverFlow } : {}),
@@ -159,10 +162,29 @@ function isSavedSmartMeters(value: unknown): value is { active: boolean; metered
   return typeof m.active === 'boolean' && typeof m.metered === 'number';
 }
 
-function isSavedDemandResponse(value: unknown): value is { active: boolean; callBudget: number } {
+function isSavedDemandResponse(value: unknown): value is { active: boolean; callBudget?: number } {
   if (typeof value !== 'object' || value === null) return false;
   const d = value as Partial<{ active: boolean; callBudget: number }>;
-  return typeof d.active === 'boolean' && typeof d.callBudget === 'number';
+  if (typeof d.active !== 'boolean') return false;
+  return d.callBudget === undefined || typeof d.callBudget === 'number';
+}
+
+/**
+ * An `islandPools` array is only usable whole: even one entry with a
+ * non-finite number invalidates the whole field, the same as
+ * `isStoredPairs` — dropping just the bad entry would leave the rest
+ * keyed correctly but the caller has no way to tell which survived.
+ */
+function isSavedIslandPools(value: unknown): value is [number, number, number][] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 3 &&
+        entry.every((n) => typeof n === 'number' && Number.isFinite(n)),
+    )
+  );
 }
 
 /**
@@ -240,6 +262,7 @@ export function saveFromJson(text: string): SaveGame {
     ...(typeof parsed.smartCharging === 'boolean' ? { smartCharging: parsed.smartCharging } : {}),
     ...(isSavedSmartMeters(parsed.smartMeters) ? { smartMeters: parsed.smartMeters } : {}),
     ...(typeof parsed.flexBacklog === 'number' ? { flexBacklog: parsed.flexBacklog } : {}),
+    ...(isSavedIslandPools(parsed.islandPools) ? { islandPools: parsed.islandPools } : {}),
     ...(Array.isArray(parsed.goals)
       ? { goals: parsed.goals.filter((g): g is string => typeof g === 'string') }
       : {}),

@@ -51,32 +51,45 @@ export function poolOf(
   return { stored, capacity };
 }
 
-/** Absorb `energy` into the tiles in proportion to headroom, up to capacity. */
+/**
+ * Absorb `energy` into the tiles in proportion to headroom, up to
+ * capacity. A damaged tile has 0 capacity but a nonzero (frozen) level,
+ * so it is excluded up front — otherwise its "headroom" would read
+ * negative and the share computed from the rest would drain it.
+ */
 export function chargeTiles(state: SimState, tiles: readonly number[], energy: number): void {
   if (energy <= 0) return;
+  const chargeable = tiles.filter((t) => storageCapacityAt(state, t) > 0);
   let headroom = 0;
-  for (const t of tiles) headroom += storageCapacityAt(state, t) - state.layers.stored[t];
+  for (const t of chargeable) headroom += storageCapacityAt(state, t) - state.layers.stored[t];
   if (headroom <= 0) return;
   const share = Math.min(1, energy / headroom);
-  for (const t of tiles) {
+  for (const t of chargeable) {
     const room = storageCapacityAt(state, t) - state.layers.stored[t];
     state.layers.stored[t] += room * share;
   }
 }
 
-/** Release `energy` from the tiles in proportion to what each holds. */
+/**
+ * Release `energy` from the tiles in proportion to what each holds. A
+ * damaged tile is excluded up front: its frozen level must stay frozen.
+ */
 export function dischargeTiles(state: SimState, tiles: readonly number[], energy: number): void {
   if (energy <= 0) return;
+  const dischargeable = tiles.filter((t) => storageCapacityAt(state, t) > 0);
   let stored = 0;
-  for (const t of tiles) stored += state.layers.stored[t];
+  for (const t of dischargeable) stored += state.layers.stored[t];
   if (stored <= 0) return;
   const share = Math.min(1, energy / stored);
-  for (const t of tiles) state.layers.stored[t] -= state.layers.stored[t] * share;
+  for (const t of dischargeable) state.layers.stored[t] -= state.layers.stored[t] * share;
 }
 
-/** Multiply every tile's level by `factor` (standing losses). */
+/** Multiply every tile's level by `factor` (standing losses). A damaged tile's frozen level is skipped. */
 export function scaleTiles(state: SimState, tiles: readonly number[], factor: number): void {
-  for (const t of tiles) state.layers.stored[t] *= factor;
+  for (const t of tiles) {
+    if (storageCapacityAt(state, t) <= 0) continue;
+    state.layers.stored[t] *= factor;
+  }
 }
 
 /** Everything the city's intact plants of one storage kind hold. */
