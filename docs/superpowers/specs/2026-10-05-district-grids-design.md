@@ -1,0 +1,315 @@
+# Per-District Grids — Design
+
+Date: 2026-10-05
+Status: approved for planning
+Backlog entry: `docs/idea.md` "Future Ideas" → **Per-district grids**:
+separate grid islands with their own balance, coupled by substations.
+
+## Goal
+
+The city has one energy balance. Every intact plant feeds it, whether or
+not a line ties it to anyone, and one abstract transmission link imports
+and exports for the whole map. That made power lines a formality: they
+only extend the supply ring to consumers. Per-district grids make the
+network real. The map's connected grid components — islands — each
+balance generation, storage, flexible load and demand response on their
+own. A plant serves only its island. Import and export run through a
+new plant, the substation, which is an island's gate to the outer grid;
+an island without one is on its own. A storm that cuts a pylon splits an
+island, and the cut-off part lives on its own balance until the repair
+lands. The player sees islands as a map overlay, a district list in the
+energy panel and a line in the inspector.
+
+## Decisions
+
+Made with the user during brainstorming:
+
+- **Strictly per island.** A plant with no path to consumers generates
+  for nobody. Old saves whose park is not wired to the town get deficits
+  until the player draws lines; no legacy global mode. The isolated-plant
+  marker (2026-10-04) already tells the player which plants those are.
+- **The substation is the gate to the outer grid.** Import and export
+  capacity are per island: the number of substations on it times the
+  old link's figures. Islands couple only indirectly through the market
+  (one exports, another imports, at the spot price). A substation does
+  not bridge islands by itself; lines merge islands outright, as they
+  always did. Rejected: a capacity-limited bridge between islands (a
+  second distribution path next to the market), and "both".
+- **Overlay plus district list.** A Grid overlay colours islands, the
+  energy panel lists them under the city total, clicking a row
+  highlights that island, the inspector names a tile's district. The
+  HUD keeps the city sum and adds a "districts in deficit" note.
+  Rejected: inspector-only, and a panel that follows the mouse.
+- **Islands derive from topology; no named districts** (YAGNI): the
+  player cannot draw or name a district, and a district is exactly a
+  connected grid component.
+- **Approach A — island loop over the existing cascade**: the cascade
+  becomes a pure function run once per island; storage state moves from
+  three global numbers to a per-tile layer so islands split and merge
+  without special handling. Rejected: a global balance that only counts
+  connected generation (no district balances), and explicit district
+  objects.
+
+## Architecture
+
+### Islands (`src/sim/powerGrid.ts`)
+
+`recomputeGrid` already floods from every supply plant over 4-connected,
+undamaged line tiles and stamps a Chebyshev ring of
+`BALANCE.energy.lineSupplyRadius` around every reached line tile and
+every supply plant. It now labels components instead of only marking
+`energized`:
+
+- `TileLayers.island: Uint16Array`, derived, never persisted (like
+  `energized`); 0 = no island. `energized[i] === 1` iff
+  `island[i] !== 0`, so `isTileConnected` and every consumer of
+  `energized` keep their meaning.
+- Two supply plants share an island when their line floods touch or
+  when one stands inside the other's ring (the park rule of
+  `parkOf`, now for the balance). A building, station, depot, charging
+  hub or heat plant belongs to the island whose ring stamps its tile.
+  Where rings of two islands overlap, the islands merge — rings are
+  connections, never borders — so every tile has at most one island.
+  Implementation: union-find over the stamp pass; a tile stamped twice
+  unites the two labels; a final pass relabels to canonical numbers.
+- Island numbers are assigned per recompute, ascending by the island's
+  lowest tile index. The lowest tile index itself is the island's
+  **key**: the stable identity for state that must survive a recompute
+  (flex backlog, call budget). `state.islandKeys: number[]` maps number
+  → key for the tick.
+- A damaged line tile or plant splits an island as it does today.
+- `PlantType.Substation` is a supply source for the flood (it seeds and
+  stamps) but generates nothing; `SUPPLY_SOURCES` in
+  `src/shared/plants.ts` gains it. `isIsolatedPlant` therefore treats a
+  substation like any supply plant.
+
+Exposed helpers: `islandOf(state, index)` (number, 0 if none),
+`islandKey(state, number)`, `recomputeGrid` as today.
+
+### Per-island balance (`src/sim/energy.ts`, new `src/sim/islandBalance.ts`)
+
+The cascade moves out of `energyStep` into a pure function:
+
+```ts
+export interface IslandInput {
+  key: number;
+  tiles: number;
+  generation: { solar; wind; rooftop; hydro; tidal; geothermal };  // energy units this tick
+  biogasCapacity: number;             // dispatchable ceiling
+  demand: { buildings; heating; cooling; charging; heatPumps; stations };
+  businessDemand: number;             // demand-response pools
+  industrialDemand: number;
+  flexible: number;                   // smart-meter pool (coverage already applied)
+  unshifted: number;
+  storage: { battery; pumped; hydrogen; heatStore };  // { stored, capacity, powerLimit }
+  substations: number;
+  spotPrice: number;
+  heat: HeatTickResult;               // the island's share, see below
+}
+export interface IslandResult { ...every figure EnergyStats carries today, per island, plus
+  importCapacity, exportCapacity, storage after the tick, flexBacklog after, callBudget after }
+export function balanceIsland(input: IslandInput, pools: IslandPools, tick: number): IslandResult;
+```
+
+`IslandPools` is the island's mutable per-tick state: `flexBacklog`,
+`callBudget`. The order of the cascade is unchanged: surplus charges
+battery, pumped storage, heat store, hydrogen, then exports or sells
+hydrogen, the rest is curtailed; a deficit discharges battery, pumped
+storage, fuel cell, biogas, demand response, import, the rest is
+unserved. Market trading of storage (sell above the floor, buy below
+the ceiling) runs only with a substation. Hydrogen sale stays
+island-independent (a product, not power). The spot price is city-wide.
+
+`energyStep` becomes the orchestrator:
+
+1. `recomputeGrid`; census per island (one pass over plant tiles,
+   bucketed by `island`); demand per island (one pass over building
+   tiles; `chargingDemandByIsland` from `vehicles.ts` buckets each
+   vehicle's charging tile; heat plants' pump power and fallback by
+   the plant's / building's island; stations by tile).
+2. For each island: assemble `IslandInput`, call `balanceIsland`,
+   write storage back to the tiles (below), keep the pools.
+3. Sum the results into `state.lastEnergy` (unchanged shape), set
+   `state.lastIslands: IslandStats[]` (number, key, tiles, generation,
+   consumption, stored, capacity, substations, deficit, curtailment,
+   gridImport, gridExport, importCost), and flag buildings: a building
+   flickers under its island's deficit share with the same hash rule
+   as today.
+
+Tiles with no island (zoned land outside every ring, plants nobody
+reaches) draw nothing and generate nothing; their `supplied` stays
+NotConnected as today.
+
+### Storage per tile
+
+`TileLayers.stored: Float32Array`, persisted: the energy held on a
+battery, pumped-storage, hydrogen or heat-store tile, in that plant's
+units. An island's pool is the sum over its storage tiles of one kind;
+charge and discharge are spread over the tiles in proportion to each
+tile's capacity (deterministic, order-free), so a split or merge needs
+no redistribution. `state.storedEnergy`, `pumpedStorageEnergy`,
+`hydrogenEnergy` and `heatStored` are removed; the stats and the battery
+SoC fill in `plantsMesh.ts` read the tile (SoC per battery) and the
+island sums. Pumped-storage and run-of-river bonus factors keep scaling
+capacity per tile as today.
+
+Heat stores are the one exception on the _heat_ side: the heat network
+follows roads, not lines, and is already a city-wide pool, so
+`heatStep` keeps discharging all heat stores together (proportional to
+their levels). Only the _electricity_ that charges them is per island:
+`chargeHeatStore` runs inside `balanceIsland` with the pump power left
+on that island's heat plants, and the heat lands on the heat-store
+tiles of that island (proportional to headroom). A heat store on an
+island with no heat plant is never charged.
+
+### Per-island pools
+
+`state.islandPools: Map<number, { flexBacklog: number; callBudget: number }>`
+keyed by island key. On a merge the surviving key (the lower one, by
+construction) adds the other's backlog and takes the minimum of the two
+call budgets; the other entry is dropped. On a split the surviving key
+keeps everything and the new key starts at zero backlog and a full
+budget. Entries whose key no longer exists are pruned each tick. The
+daily budget refill runs per entry at `tick % TICKS_PER_DAY === 0`.
+`demandResponse.active` and `smartMeters` stay city-wide switches.
+
+### Save games (`src/sim/state.ts`)
+
+`SAVE_VERSION` stays 1; everything new is optional:
+
+- `stored: number[]` (sparse: `[index, value]` pairs) replaces the three
+  global numbers in new saves. Loading a save without it distributes
+  `storedEnergy` / `pumpedStorageEnergy` / `hydrogenEnergy` (and the
+  heat store level) over the matching plant tiles in proportion to
+  capacity; a save with both prefers `stored`.
+- `islandPools: [key, flexBacklog, callBudget][]`; absent → every island
+  starts at zero backlog and a full budget. The old `flexBacklog` and
+  `demandResponse.callBudget` fields are read once into the largest
+  island's entry on load and no longer written.
+- Old cities have no substation, so no link, and unwired parks feed
+  nothing: the deliberate break from the first decision, explained in
+  the help page and pointed at by the `districtGrid` goal.
+
+### Worker protocol (`src/shared/types.ts`)
+
+`TileDiff.island` (number; the renderer colours the Grid overlay and the
+inspector names it). `GlobalStats.islands: IslandStats[]`;
+`GlobalStats.energy` keeps its shape as the city sum. `stored` travels
+in the diff only for storage plant tiles as `stored` (0..1 share of
+capacity) so the battery SoC fill is per tile.
+
+### Rendering (`src/render/`)
+
+- `OverlayMode.Grid = 9`: tile colour from a palette of eight hues by
+  `island % 8` (island 0 untouched); an island in deficit this tick is
+  overblended red; an island without a substation gets a dashed border
+  (the overlay mesh gains an edge pass: a tile whose 4-neighbour has a
+  different island or none draws its edge in the dashed style). The
+  overlay menu's legend lists the three cues.
+- Selection: the UI passes `selectedIsland` (number or 0) to the
+  overlay; other islands are drawn at half saturation while one is
+  selected.
+- `plantsMesh.ts`: substation recipe — a fenced yard (thin posts on
+  four corners, rails), a transformer box with two insulator cylinders
+  on top, a small night lamp (emissive quad, lit by the existing
+  night-window logic); foundation by the slope rule like every plant.
+
+### UI (`src/ui/`)
+
+- Build bar: substation tool, hotkey `n`, beside the power-line tool;
+  tooltip with cost and the one-sentence rule.
+- Energy panel: after the city figures, a "Districts" section — one row
+  per island sorted by tile count: number, tiles, generation,
+  consumption, stored-energy bar (share of capacity), substation count,
+  status (ok / deficit / curtailing). Click toggles selection, which
+  switches the overlay to Grid and highlights the island; selection
+  state lives in the panel's React state and reaches the renderer
+  through the existing overlay prop path.
+- Inspector: every tile with an island shows "District n" and its three
+  figures; a substation shows its island's import, export and link
+  capacity this tick.
+- HUD: next to the energy balance, "n districts in deficit" whenever at
+  least one island is in deficit (hidden at 0).
+- Help page: a paragraph on district grids and substations, including
+  the note for old cities. Tutorial: a step "build a substation" after
+  the first power line.
+- i18n: all of the above in EN and DE.
+
+### Agent (`src/agent/`)
+
+- `overview`: `islands` (count) and `islandsInDeficit`.
+- `energy_report`: after the city total, one entry per island with the
+  panel's fields plus `key`.
+- `inspect_tile`: `island: { number, key }` on any tile with one; on a
+  substation also `gridImport`, `gridExport`, `importCapacity`,
+  `exportCapacity`.
+- `find_tiles`: kinds `substation` and `island_without_substation` (one
+  representative tile per island, nearest first); `plant` includes the
+  new type.
+- `place_plant` accepts `substation`; the ASCII map uses `N`.
+- Tool descriptions and `docs/agent-tools.md` updated; the
+  `supply`/`connected` wording names the island.
+
+## Balance (`src/shared/constants.ts`)
+
+Starting values, frozen by the probe:
+
+```ts
+costs.plant[PlantType.Substation]: 3_000,      // between heat plant 2_800 and wind 4_500
+upkeepPerTick.plant[PlantType.Substation]: 0.05,
+market.importCapacity: 60,                     // now per substation
+market.exportCapacity: 80,                     // now per substation
+goals.districtGrid: { minBuildings: 20 },      // islands this size need a substation
+```
+
+Goal `districtGrid`: reached at a day boundary when every island with
+at least `minBuildings` buildings has a substation and no island had a
+deficit tick that day. Title and description in both languages.
+
+The tutorial's starting money stays; the probe confirms the starter
+town can afford its first substation after the first plant.
+
+## Testing
+
+Unit tests, colocated:
+
+- `powerGrid.test.ts`: island numbers for two separate networks; merge
+  through a line, through overlapping rings, through a plant in a
+  ring; split by a damaged line tile; keys stable across a recompute
+  that changes nothing; a substation seeds the flood.
+- `islandBalance.test.ts`: the cascade cases that `energy.test.ts`
+  covers today, against the pure function; no import without a
+  substation; two substations double the link; trading only with a
+  substation.
+- `energy.test.ts`: two islands, one in surplus and one in deficit, the
+  deficit island gets no help without a substation and imports with
+  one; storage charged proportionally across tiles; a building flickers
+  under its own island's deficit, not the other's; backlog and budget
+  on merge and split; the city sums equal the island sums.
+- `state.test.ts` / `serialization.test.ts`: `stored` and `islandPools`
+  round-trip; a save without them distributes the globals and starts
+  pools fresh.
+- `vehicles.test.ts`: `chargingDemandByIsland` buckets by charging
+  tile.
+- `goals.test.ts`: `districtGrid`.
+- `tools.test.ts`: overview fields, `energy_report` islands,
+  `find_tiles` kinds, `place_plant substation`, ASCII `N`.
+- UI tests: panel district list and selection; inspector line; HUD
+  note. e2e: the substation tool is on the build bar; the Grid overlay
+  toggles.
+
+Pacing probe (temporary, deleted after use): the 560-building probe
+town laid as two islands with the river between them, each with its own
+park, with and without substations, 20 days, seeds 7 and 11. Measured
+against the single-balance baseline: deficit ticks, import cost, net
+money, curtailment per island. Freezes the substation cost and upkeep
+and confirms the 60/80 per-substation link. Results recorded here and
+in the constants' comments.
+
+## Out of scope
+
+- Transfer limits inside an island (a line's capacity).
+- Named or player-drawn districts; a per-island history graph; minimap
+  colouring.
+- Bridging two islands without the market.
+- Railways (next backlog item; districts give them regions to connect).
