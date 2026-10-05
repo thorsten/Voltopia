@@ -10,20 +10,9 @@ micromanagement.
 
 ## Screenshots
 
-<!--
-Drop captures into docs/screenshots/ and uncomment:
-  city-day.png    — a grown city at noon (rooftop PV, plants, traffic)
-  city-night.png  — the same view at night (window lights, streetlamps)
-  rush-hour.png   — the morning commute queue
-  energy-panel.png — the energy panel during a Dunkelflaute
-
 <p align="center">
-  <img src="docs/screenshots/city-day.png" width="49%" alt="Voltopia by day" />
-  <img src="docs/screenshots/city-night.png" width="49%" alt="Voltopia at night" />
+  <img src="docs/screenshots/Voltopia.png" width="100%" alt="A grown Voltopia city at dusk: dense blocks with rooftop PV, wind turbines between the houses, woodland, the river and lit windows along the streets" />
 </p>
--->
-
-_Screenshots coming soon — run `pnpm dev`, build a city, and snap away._
 
 ## Gameplay
 
