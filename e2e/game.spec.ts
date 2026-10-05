@@ -232,7 +232,7 @@ test('Escape deselects the inspected tile and closes the inspector (needs WebGL)
   await expect(page.getByTestId('tile-inspector')).toHaveCount(0);
 });
 
-test('tax slider and smart charging are interactive', async ({ page }) => {
+test('tax slider, smart charging and demand response are interactive', async ({ page }) => {
   const slider = page.getByTestId('tax-slider').locator('input');
   await slider.fill('25');
   await expect(page.getByTestId('tax-slider')).toContainText('25%');
@@ -242,6 +242,10 @@ test('tax slider and smart charging are interactive', async ({ page }) => {
   const smartCharging = page.getByTestId('smart-charging').locator('input');
   await smartCharging.click();
   await expect(smartCharging).toBeChecked({ timeout: 5_000 });
+
+  const demandResponse = page.getByTestId('demand-response').locator('input');
+  await demandResponse.click();
+  await expect(demandResponse).toBeChecked({ timeout: 5_000 });
 });
 
 test('overlay toggle switches modes', async ({ page }) => {

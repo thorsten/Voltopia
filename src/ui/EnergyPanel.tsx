@@ -76,10 +76,12 @@ export function EnergyPanel({
   energy,
   riverFlow,
   smartMeters,
+  demandResponse,
 }: {
   energy: EnergyStats;
   riverFlow: number;
   smartMeters: GlobalStats['smartMeters'];
+  demandResponse: GlobalStats['demandResponse'];
 }) {
   const { t } = useI18n();
   const totalGeneration =
@@ -204,6 +206,13 @@ export function EnergyPanel({
               testId="detail-energy-flex-backlog"
             />
           </>
+        )}
+        {(demandResponse.active || energy.consumption.shed > 0) && (
+          <Row
+            label={t('energy.shed')}
+            value={energy.consumption.shed}
+            testId="detail-energy-shed"
+          />
         )}
         <div
           className={`energy-row balance ${balance >= 0 ? 'positive' : 'negative'}`}

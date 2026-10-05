@@ -18,6 +18,7 @@ export function HudConsole({
   onToggleDetails,
   onSetTaxRate,
   onSetSmartMeterRollout,
+  onSetDemandResponse,
   onSetMarketTrading,
   onBuyInsulation,
 }: {
@@ -26,6 +27,7 @@ export function HudConsole({
   onToggleDetails: () => void;
   onSetTaxRate: (rate: number) => void;
   onSetSmartMeterRollout: (active: boolean) => void;
+  onSetDemandResponse: (active: boolean) => void;
   onSetMarketTrading: (enabled: boolean) => void;
   onBuyInsulation: () => void;
 }) {
@@ -55,6 +57,7 @@ export function HudConsole({
             energy={stats.energy}
             riverFlow={stats.weather.riverFlow}
             smartMeters={stats.smartMeters}
+            demandResponse={stats.demandResponse}
           />
           <BudgetPanel budget={stats.budget} />
           <section className="hud-section">
@@ -79,6 +82,29 @@ export function HudConsole({
                   percent: Math.round(stats.smartMeters.coverage * 100),
                   metered: stats.smartMeters.metered,
                   buildings: stats.smartMeters.buildings,
+                })}
+              </span>
+            </label>
+            <label
+              className="smart-charging-toggle smart-meters"
+              data-testid="demand-response"
+              title={t('demandResponse.title', {
+                share: Math.round(BALANCE.demandResponse.shedShare * 100),
+                retainer: BALANCE.demandResponse.retainerPerBuildingPerDay,
+                price: BALANCE.demandResponse.activationPricePerEnergyUnit,
+                hours: BALANCE.demandResponse.maxCallHoursPerDay,
+              })}
+            >
+              <input
+                type="checkbox"
+                checked={stats.demandResponse.active}
+                onChange={(e) => onSetDemandResponse(e.target.checked)}
+              />
+              <span>{t('demandResponse.label')}</span>
+              <span className="smart-meters-coverage" data-testid="demand-response-figure">
+                {t('demandResponse.figure', {
+                  pool: Math.round(stats.demandResponse.pool),
+                  hours: stats.demandResponse.callHoursLeft.toFixed(1),
                 })}
               </span>
             </label>

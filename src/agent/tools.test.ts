@@ -144,6 +144,7 @@ describe('agent tools: reading', () => {
       'set_speed',
       'set_tax_rate',
       'set_smart_meter_rollout',
+      'set_demand_response',
       'plant_forest',
       'set_market_trading',
       'buy_insulation',
@@ -434,6 +435,7 @@ describe('agent tools: building', () => {
     expect(await call('set_speed', { speed: 2 })).toMatchObject({ ok: false });
     expect(await call('set_tax_rate', { rate: 'high' })).toMatchObject({ ok: false });
     expect(await call('set_smart_meter_rollout', { active: 'yes' })).toMatchObject({ ok: false });
+    expect(await call('set_demand_response', { active: 'yes' })).toMatchObject({ ok: false });
     expect(await call('advance_time', {})).toMatchObject({ ok: false });
     expect(await call('advance_time', { days: MAX_ADVANCE_DAYS + 1 })).toMatchObject({ ok: false });
     expect(await call('start_new_city', { size: 50 })).toMatchObject({ ok: false });
@@ -470,10 +472,18 @@ describe('agent tools: building', () => {
     const overview = await call('get_game_overview');
     expect(overview.smartMeters).toMatchObject({ active: true });
     expect(overview).not.toHaveProperty('smartCharging');
+    expect(await call('set_demand_response', { active: true })).toMatchObject({ ok: true });
+    expect(engine.state.demandResponse.active).toBe(true);
+    const contracted = await call('get_game_overview');
+    expect(contracted.demandResponse).toMatchObject({ active: true, contractedBuildings: 0 });
+    expect((contracted.demandResponse as Record<string, unknown>).callHoursLeft).toBe(
+      BALANCE.demandResponse.maxCallHoursPerDay,
+    );
     // Advance one history-sample window so a sample exists to inspect.
     await call('advance_time', { ticks: TICKS_PER_HISTORY_SAMPLE });
     const report = await call('get_energy_report');
     expect((report.history as Array<Record<string, unknown>>)[0]).toHaveProperty('unshifted');
+    expect(report.consumption).toHaveProperty('shed');
     expect(await call('set_market_trading', { enabled: true })).toMatchObject({ ok: true });
     expect(engine.state.marketTrading).toBe(true);
     const wood = findLand(engine, 12);

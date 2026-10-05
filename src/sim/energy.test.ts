@@ -12,13 +12,15 @@ import {
   loadProfileFactor,
   placePlant,
 } from './energy.ts';
+import { callBudgetTicks } from './demandResponse.ts';
 import { heatStep } from './heat.ts';
 import { isSupplySource } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
+import { spotPriceFactor } from './market.ts';
 import { isCoastalSea, tideFactor, tidalSiteFactor } from './sea.ts';
-import { pendingHistoryPoint } from './tick.ts';
+import { buildStats, pendingHistoryPoint, stepTick, timeOfDay } from './tick.ts';
 import { HEATED_SERVED } from '../shared/types.ts';
 import {
   createSimState,
@@ -33,7 +35,6 @@ import {
 } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 import { generateWater } from './water.ts';
-import { timeOfDay } from './tick.ts';
 import { SUNRISE, SUNSET } from './weather.ts';
 
 const SIZE = 32;
@@ -1681,5 +1682,154 @@ describe('flexible load pool (smart meters)', () => {
       expect(e.buildingConsumption).toBeGreaterThanOrEqual(0);
       expect(e.heatingConsumption).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe('demand response in the cascade', () => {
+  const { shedShare, activationPricePerEnergyUnit } = BALANCE.demandResponse;
+
+  /**
+   * Twenty dense business buildings next to a wind turbine that stands
+   * still: a scarce noon (clouds, no wind → high spot price) with a
+   * shortfall far beyond the import link.
+   */
+  function scarceBusinessTown(zone: Zone = Zone.Commercial): SimState {
+    const state = makeState();
+    placePlant(state, at(6, 5), PlantType.WindTurbine);
+    state.weather.windSpeed = 0;
+    for (let i = 0; i < 20; i++) {
+      addBuilding(state, at(3 + (i % 7), 2 + Math.floor(i / 7)), zone, 3);
+    }
+    state.tick = TICKS_PER_DAY / 2 + 1; // noon, not a day boundary
+    state.weather.cloudCover = 1;
+    state.demandResponse.active = true;
+    return state;
+  }
+
+  /** Businesses' base load this tick, before any shedding (same town, contract off). */
+  function businessBase(): number {
+    const bare = scarceBusinessTown();
+    bare.demandResponse.active = false;
+    energyStep(bare, { chargingDemand: 0 });
+    return bare.lastEnergy.buildingConsumption;
+  }
+
+  it('is a no-op with the contract off', () => {
+    const state = scarceBusinessTown();
+    state.demandResponse.active = false;
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.shed).toBe(0);
+    expect(state.lastEnergy.shedPool).toBe(0);
+    expect(state.lastEnergy.contractedBuildings).toBe(20);
+    expect(state.demandResponse.callBudget).toBe(callBudgetTicks());
+  });
+
+  it('sheds the pool before importing at a scarce price', () => {
+    const state = scarceBusinessTown();
+    const importPrice = BALANCE.market.importCostPerEnergyUnit * spotPriceFactor(state);
+    expect(importPrice).toBeGreaterThanOrEqual(activationPricePerEnergyUnit); // precondition
+    const base = businessBase();
+    energyStep(state, { chargingDemand: 0 });
+    const e = state.lastEnergy;
+    expect(e.shedPool).toBeCloseTo(shedShare * base, 6);
+    expect(e.shed).toBeCloseTo(e.shedPool, 6);
+    expect(e.buildingConsumption).toBeCloseTo(base - e.shed, 6);
+    expect(e.gridImport).toBeCloseTo(BALANCE.market.importCapacity, 6);
+    // The deficit is what the pool and the link together cannot cover.
+    expect(e.deficit).toBeCloseTo(base - e.rooftop - e.shed - BALANCE.market.importCapacity, 6);
+    expect(e.unshifted - e.buildingConsumption).toBeCloseTo(e.shed, 6);
+    expect(state.demandResponse.callBudget).toBeCloseTo(callBudgetTicks() - 1, 6);
+  });
+
+  it('a residential town has nothing to shed', () => {
+    const state = scarceBusinessTown(Zone.Residential);
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.shedPool).toBe(0);
+    expect(state.lastEnergy.shed).toBe(0);
+    expect(state.lastEnergy.contractedBuildings).toBe(0);
+  });
+
+  it('a small shortfall at an abundance price imports instead of shedding', () => {
+    const state = makeState();
+    // A battery (empty) connects the building, and the city has no
+    // generation of its own beyond the building's roof. 11 am on a
+    // sunny, windy day is close to the cheapest the regional link ever
+    // gets in this model: regional demand sits in its daylight trough
+    // (the residential profile's 0.45) while supply is all but complete
+    // (0.55 x 0.966 solar + 0.45 x 1 wind = 0.981), so the spot factor
+    // is 1 + 1.2 x (0.45 - 0.981) = 0.3625 and the import price 0.145 on
+    // this test's fixed 12-hour day. Season moves the floor a little:
+    // under the longest summer day it is ≈0.355 (price ≈0.142), and the
+    // structural floor this same reasoning gives is ≈0.34 — all well
+    // under the 0.2 activation premium, which is what this test needs.
+    // Note it never reaches market.spotMin (0.25): that would want
+    // demand - supply <= -0.625, and supply caps at 1.0 while the
+    // profile never dips below 0.45 in daylight. Noon is dearer (0.16),
+    // because regional demand is already climbing again.
+    // (windSpeed 0.8, not 1: at 1 the turbines' cut-out speed zeroes the
+    // regional wind factor and the spot price would read scarce instead;
+    // anything from 0.6 up is already the cap.)
+    placePlant(state, at(6, 5), PlantType.Battery);
+    state.storedEnergy = 0;
+    setNoonClearSky(state);
+    state.tick = (11 * TICKS_PER_DAY) / 24;
+    state.weather.windSpeed = 0.8;
+    addBuilding(state, at(8, 5), Zone.Retail, 3);
+    state.demandResponse.active = true;
+    const importPrice = BALANCE.market.importCostPerEnergyUnit * spotPriceFactor(state);
+    expect(importPrice).toBeLessThan(activationPricePerEnergyUnit); // precondition
+    energyStep(state, { chargingDemand: 0 });
+    expect(state.lastEnergy.shedPool).toBeGreaterThan(0);
+    expect(state.lastEnergy.shed).toBe(0);
+    expect(state.lastEnergy.gridImport).toBeGreaterThan(0);
+    expect(state.lastEnergy.deficit).toBe(0);
+  });
+
+  it("falls through to import and deficit once the day's budget is spent", () => {
+    const state = scarceBusinessTown();
+    state.demandResponse.callBudget = 0;
+    const base = businessBase();
+    energyStep(state, { chargingDemand: 0 });
+    const e = state.lastEnergy;
+    expect(e.shed).toBe(0);
+    expect(e.buildingConsumption).toBeCloseTo(base, 6);
+    expect(e.deficit).toBeCloseTo(base - e.rooftop - BALANCE.market.importCapacity, 6);
+  });
+
+  it('flickers fewer buildings into undersupply when the contract sheds', () => {
+    const count = (state: SimState): number => {
+      let n = 0;
+      for (let i = 0; i < 20; i++) {
+        if (
+          state.layers.supplied[at(3 + (i % 7), 2 + Math.floor(i / 7))] ===
+          SupplyStatus.Undersupplied
+        )
+          n++;
+      }
+      return n;
+    };
+    const off = scarceBusinessTown();
+    off.demandResponse.active = false;
+    energyStep(off, { chargingDemand: 0 });
+    const on = scarceBusinessTown();
+    energyStep(on, { chargingDemand: 0 });
+    expect(count(on)).toBeLessThan(count(off));
+  });
+
+  it('bills the contract when stepTick runs the whole cascade', () => {
+    // Guards the wiring in tick.ts: energyStep alone never calls
+    // demandResponseStep, so only a real stepTick can exercise it.
+    // stepTick increments the tick before anything else runs, so the
+    // fixture's tick lands one past noon — still a scarce daytime tick.
+    const state = scarceBusinessTown();
+    stepTick(state);
+    const { contractedBuildings, shed } = state.lastEnergy;
+    expect(shed).toBeGreaterThan(0); // precondition: the premium term is exercised
+    expect(state.lastDemandResponseCost).toBeGreaterThan(0);
+    const expectedCost =
+      (contractedBuildings * BALANCE.demandResponse.retainerPerBuildingPerDay) / TICKS_PER_DAY +
+      shed * activationPricePerEnergyUnit;
+    expect(state.lastDemandResponseCost).toBeCloseTo(expectedCost, 6);
+    expect(buildStats(state).budget.demandResponse).toBeGreaterThan(0);
   });
 });

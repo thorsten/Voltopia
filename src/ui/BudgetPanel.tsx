@@ -55,6 +55,7 @@ const EXPENSE_COLORS: Record<string, string> = {
   fuel: '#d98f54',
   repair: '#c47a9e',
   smartMeters: '#8fb3c9',
+  demandResponse: '#c9a58f',
   import: 'var(--hud-negative)',
 };
 
@@ -198,6 +199,12 @@ export function BudgetPanel({ budget }: { budget: BudgetStats }) {
       label: t('budget.smartMeters'),
       value: perDay(budget.smartMeters),
       color: EXPENSE_COLORS.smartMeters,
+    },
+    {
+      key: 'demandResponse',
+      label: t('budget.demandResponse'),
+      value: perDay(budget.demandResponse),
+      color: EXPENSE_COLORS.demandResponse,
     },
     {
       key: 'import',

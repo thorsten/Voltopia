@@ -117,6 +117,21 @@ describe('save game JSON export/import', () => {
     expect(restored.flexBacklog).toBeUndefined();
   });
 
+  it('round-trips the demand-response contract and the shed total', () => {
+    const save = makeSave();
+    save.demandResponse = { active: true, callBudget: 7.5 };
+    save.shedTotal = 456;
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.demandResponse).toEqual({ active: true, callBudget: 7.5 });
+    expect(restored.shedTotal).toBe(456);
+  });
+
+  it('accepts an old save without demandResponse or shedTotal', () => {
+    const restored = saveFromJson(saveToJson(makeSave()));
+    expect(restored.demandResponse).toBeUndefined();
+    expect(restored.shedTotal).toBeUndefined();
+  });
+
   it('round-trips the optional forest layer', () => {
     const save = makeSave();
     const forest = new Uint8Array(save.size * save.size).fill(2);

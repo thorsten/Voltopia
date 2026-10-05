@@ -1,6 +1,7 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { PlantType, RoadClass } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
+import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
@@ -81,6 +82,8 @@ export function stepTick(state: SimState): void {
   // steps above — vehicles and the energy balance — read last tick's
   // count, one tick of lag the mechanic does not notice.
   smartMetersStep(state);
+  // The contract bills what the energy step shed this tick.
+  demandResponseStep(state);
   economyStep(state, population, jobs);
   // After the income of this tick has landed: repairs are paid out of it.
   repairStep(state);
@@ -205,6 +208,7 @@ export function buildStats(state: SimState): GlobalStats {
         flexDeferred: e.flexDeferred,
         flexRecovered: e.flexRecovered,
         flexBacklog: e.flexBacklog,
+        shed: e.shed,
       },
       storedEnergy: state.storedEnergy,
       storageCapacity: totalStorageCapacity(state),
@@ -238,6 +242,15 @@ export function buildStats(state: SimState): GlobalStats {
       buildings: state.lastBuildingCount,
       coverage: meteredCoverage(state),
       costPerMeter: BALANCE.smartMeters.costPerMeter,
+    },
+    demandResponse: {
+      active: state.demandResponse.active,
+      pool: e.shedPool,
+      shed: e.shed,
+      callHoursLeft: callHoursLeft(state),
+      contractedBuildings: e.contractedBuildings,
+      retainerPerBuildingPerDay: BALANCE.demandResponse.retainerPerBuildingPerDay,
+      activationPrice: BALANCE.demandResponse.activationPricePerEnergyUnit,
     },
     marketTrading: state.marketTrading,
     insulation: state.insulation,
@@ -300,6 +313,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     biogasFuelCost: b.biogasFuelCost,
     repair: state.lastRepairCost,
     smartMeters: state.lastSmartMeterCost,
+    demandResponse: state.lastDemandResponseCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +
@@ -310,6 +324,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       b.biogasFuelCost -
       b.gridImportCost -
       state.lastRepairCost -
-      state.lastSmartMeterCost,
+      state.lastSmartMeterCost -
+      state.lastDemandResponseCost,
   };
 }

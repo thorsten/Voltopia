@@ -13,6 +13,8 @@ interface SaveGameJson {
   storedEnergy: number;
   smartMeters?: { active: boolean; metered: number };
   flexBacklog?: number;
+  demandResponse?: { active: boolean; callBudget: number };
+  shedTotal?: number;
   goals?: string[];
   lifetime?: LifetimeSample[];
   riverFlow?: number;
@@ -90,6 +92,8 @@ export function saveToJson(save: SaveGame): string {
     ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
     ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
     ...(save.flexTicks !== undefined ? { flexTicks: save.flexTicks } : {}),
+    ...(save.demandResponse !== undefined ? { demandResponse: save.demandResponse } : {}),
+    ...(save.shedTotal !== undefined ? { shedTotal: save.shedTotal } : {}),
     ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
     ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
     layers,
@@ -141,6 +145,12 @@ function isSavedSmartMeters(value: unknown): value is { active: boolean; metered
   if (typeof value !== 'object' || value === null) return false;
   const m = value as Partial<{ active: boolean; metered: number }>;
   return typeof m.active === 'boolean' && typeof m.metered === 'number';
+}
+
+function isSavedDemandResponse(value: unknown): value is { active: boolean; callBudget: number } {
+  if (typeof value !== 'object' || value === null) return false;
+  const d = value as Partial<{ active: boolean; callBudget: number }>;
+  return typeof d.active === 'boolean' && typeof d.callBudget === 'number';
 }
 
 /**
@@ -250,6 +260,12 @@ export function saveFromJson(text: string): SaveGame {
     // poison a cumulative counter for good (the goal could never be met).
     ...(typeof parsed.flexTicks === 'number' && Number.isFinite(parsed.flexTicks)
       ? { flexTicks: parsed.flexTicks }
+      : {}),
+    ...(isSavedDemandResponse(parsed.demandResponse)
+      ? { demandResponse: parsed.demandResponse }
+      : {}),
+    ...(typeof parsed.shedTotal === 'number' && Number.isFinite(parsed.shedTotal)
+      ? { shedTotal: parsed.shedTotal }
       : {}),
     ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
     ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),
