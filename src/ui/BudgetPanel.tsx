@@ -33,6 +33,7 @@ const PLANT_LABEL: Record<PlantType, TranslationKey | null> = {
   [PlantType.GeothermalPlant]: 'tool.plant-geothermal',
   [PlantType.HeatPlant]: 'tool.plant-heat',
   [PlantType.HeatStore]: 'tool.plant-heatstore',
+  [PlantType.Substation]: 'tool.plant-substation',
 };
 
 /** Distinct colors per expense slice (also used for the row bullets). */

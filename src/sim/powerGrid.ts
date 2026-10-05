@@ -15,62 +15,133 @@ import type { SimState } from './state.ts';
 
 export { isSupplySource };
 
-/** Mark every tile within a Chebyshev radius of `index`, clipped to the map. */
-function stampRadius(target: Uint8Array, index: number, size: number, radius: number): void {
-  const cx = tileX(index, size);
-  const cy = tileY(index, size);
-  const x0 = Math.max(0, cx - radius);
-  const x1 = Math.min(size - 1, cx + radius);
-  const y0 = Math.max(0, cy - radius);
-  const y1 = Math.min(size - 1, cy + radius);
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) target[tileIndex(x, y, size)] = 1;
+/** Union-find over tile indices (parent[i] === -1: not in any set yet). */
+function findRoot(parent: Int32Array, i: number): number {
+  let root = i;
+  while (parent[root] !== root) root = parent[root];
+  while (parent[i] !== root) {
+    const next = parent[i];
+    parent[i] = root;
+    i = next;
   }
+  return root;
+}
+function unite(parent: Int32Array, a: number, b: number): void {
+  const ra = findRoot(parent, a);
+  const rb = findRoot(parent, b);
+  if (ra === rb) return;
+  // The lower root wins so the final numbering by lowest tile is stable.
+  if (ra < rb) parent[rb] = ra;
+  else parent[ra] = rb;
 }
 
 /**
- * Rebuild the energized layer when plants or lines changed: flood-fill
- * from every supply plant over 4-connected line tiles, then stamp the
- * connection radius around every energised line tile and every supply
- * plant. Line tiles the fill never reaches are dead.
+ * Rebuild the energized and island layers when plants or lines changed:
+ * flood-fill from every supply plant over 4-connected, undamaged line
+ * tiles, then stamp the connection radius around every energised line
+ * tile and every supply plant. Tiles stamped from two components unite
+ * them (rings are connections, never borders), so every energised tile
+ * belongs to exactly one island. Islands are numbered 1.. ascending by
+ * their lowest tile index, which is also the island's key.
  */
 export function recomputeGrid(state: SimState): void {
   if (state.gridComputedVersion === state.gridVersion) return;
   const { layers } = state;
   const size = state.size;
-  const { powerLine, energized, tileType, plantType, damage } = layers;
+  const { powerLine, energized, island, tileType, plantType, damage } = layers;
   const radius = BALANCE.energy.lineSupplyRadius;
+  const tiles = size * size;
 
-  const reached = new Uint8Array(size * size);
+  // 1. Components of sources and the line tiles they reach.
+  const parent = new Int32Array(tiles).fill(-1);
+  const reached = new Uint8Array(tiles);
   const queue: number[] = [];
-  const sources: number[] = [];
-  for (let i = 0; i < tileType.length; i++) {
+  const stamps: number[] = []; // every source and reached line tile
+  for (let i = 0; i < tiles; i++) {
     if (tileType[i] !== TileType.Plant || !isSupplySource(plantType[i] as PlantType)) continue;
     if (damage[i] !== 0) continue; // a damaged plant feeds nothing
-    sources.push(i);
+    parent[i] = i;
+    stamps.push(i);
     for (const n of neighbors4(i, size)) {
-      if (powerLine[n] !== 0 && damage[n] === 0 && reached[n] === 0) {
+      if (powerLine[n] === 0 || damage[n] !== 0) continue;
+      if (reached[n] === 0) {
         reached[n] = 1;
+        parent[n] = n;
+        stamps.push(n);
         queue.push(n);
       }
+      unite(parent, i, n);
     }
   }
   while (queue.length > 0) {
     const index = queue.pop()!;
     for (const n of neighbors4(index, size)) {
-      if (powerLine[n] !== 0 && damage[n] === 0 && reached[n] === 0) {
+      if (powerLine[n] === 0 || damage[n] !== 0) continue;
+      if (reached[n] === 0) {
         reached[n] = 1;
+        parent[n] = n;
+        stamps.push(n);
         queue.push(n);
+      }
+      unite(parent, index, n);
+    }
+  }
+
+  // 2. Stamp rings; a tile in two rings unites their components.
+  const stampedBy = new Int32Array(tiles).fill(-1);
+  for (const source of stamps) {
+    const cx = tileX(source, size);
+    const cy = tileY(source, size);
+    const x0 = Math.max(0, cx - radius);
+    const x1 = Math.min(size - 1, cx + radius);
+    const y0 = Math.max(0, cy - radius);
+    const y1 = Math.min(size - 1, cy + radius);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const t = tileIndex(x, y, size);
+        if (stampedBy[t] === -1) stampedBy[t] = source;
+        else unite(parent, stampedBy[t], source);
       }
     }
   }
 
+  // 3. Number islands ascending by lowest tile; the lowest tile is the key.
   energized.fill(0);
-  for (const source of sources) stampRadius(energized, source, size, radius);
-  for (let i = 0; i < reached.length; i++) {
-    if (reached[i] === 1) stampRadius(energized, i, size, radius);
+  island.fill(0);
+  const numberOfRoot = new Map<number, number>();
+  const keys: number[] = [-1];
+  for (let t = 0; t < tiles; t++) {
+    if (stampedBy[t] === -1) continue;
+    const root = findRoot(parent, stampedBy[t]);
+    let n = numberOfRoot.get(root);
+    if (n === undefined) {
+      n = keys.length;
+      numberOfRoot.set(root, n);
+      keys.push(t); // first tile in index order == lowest tile of the island
+    }
+    island[t] = n;
+    energized[t] = 1;
   }
+  state.islandKeys = keys;
   state.gridComputedVersion = state.gridVersion;
+}
+
+/** Island number of a tile (0 = not energised). Recomputes the grid if stale. */
+export function islandOf(state: SimState, index: number): number {
+  recomputeGrid(state);
+  return state.layers.island[index];
+}
+
+/** Stable key (lowest tile index) of island `number`; -1 for 0 or unknown. */
+export function islandKey(state: SimState, number: number): number {
+  recomputeGrid(state);
+  return state.islandKeys[number] ?? -1;
+}
+
+/** Number of islands on the map. */
+export function islandCount(state: SimState): number {
+  recomputeGrid(state);
+  return state.islandKeys.length - 1;
 }
 
 /**

@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { chebyshevDistance, LINE_PRESENT, tileIndex } from '../shared/grid.ts';
 import { PlantType } from '../shared/types.ts';
+import { addDamage } from './disasters.ts';
 import { placePlant } from './energy.ts';
 import {
   hasLineAttached,
   isIsolatedPlant,
+  islandCount,
+  islandKey,
+  islandOf,
   isSupplySource,
   isTiedToGrid,
   isolatedPlants,
@@ -244,5 +248,92 @@ describe('isIsolatedPlant', () => {
     buildRoads(state, [at(2, 3)]); // stations need a road 4-neighbour
     expect(placePlant(state, at(3, 3), PlantType.FireStation)).toEqual({});
     expect(isIsolatedPlant(state, at(3, 3))).toBe(false);
+  });
+});
+
+describe('islands', () => {
+  function town(): SimState {
+    const state = makeState();
+    // Island A: a turbine with a line east; island B: a solar farm far away.
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    buildPowerLines(state, [at(3, 2), at(4, 2), at(5, 2)]);
+    placePlant(state, at(20, 20), PlantType.SolarFarm);
+    return state;
+  }
+
+  it('numbers separate networks ascending by their lowest tile and keys them by it', () => {
+    const state = town();
+    recomputeGrid(state);
+    expect(islandCount(state)).toBe(2);
+    expect(islandOf(state, at(2, 2))).toBe(1);
+    expect(islandOf(state, at(5, 2))).toBe(1);
+    expect(islandOf(state, at(20, 20))).toBe(2);
+    expect(islandOf(state, at(12, 12))).toBe(0);
+    expect(islandKey(state, 1)).toBe(at(0, 0)); // top-left of the turbine's ring, clipped to the map
+    expect(islandKey(state, 2)).toBe(at(20 - R, 20 - R));
+  });
+
+  it('energized is exactly island !== 0', () => {
+    const state = town();
+    recomputeGrid(state);
+    const { energized, island } = state.layers;
+    for (let i = 0; i < island.length; i++) expect(energized[i] === 1).toBe(island[i] !== 0);
+  });
+
+  it('merges islands through a line, through overlapping rings and through a plant in a ring', () => {
+    const byLine = town();
+    buildPowerLines(
+      byLine,
+      Array.from({ length: 14 }, (_, i) => at(6 + i, 2)),
+    );
+    buildPowerLines(
+      byLine,
+      Array.from({ length: 18 }, (_, i) => at(19, 3 + i)),
+    );
+    recomputeGrid(byLine);
+    expect(islandCount(byLine)).toBe(1);
+
+    const byRing = makeState();
+    placePlant(byRing, at(5, 5), PlantType.WindTurbine);
+    placePlant(byRing, at(5 + 2 * R, 5), PlantType.SolarFarm); // rings overlap on x = 5 + R
+    recomputeGrid(byRing);
+    expect(islandCount(byRing)).toBe(1);
+
+    const byPlant = makeState();
+    placePlant(byPlant, at(5, 5), PlantType.WindTurbine);
+    placePlant(byPlant, at(5 + R, 5), PlantType.Battery); // inside the turbine's ring
+    recomputeGrid(byPlant);
+    expect(islandCount(byPlant)).toBe(1);
+    expect(islandOf(byPlant, at(5 + R, 5))).toBe(1);
+  });
+
+  it('a damaged line stretch longer than two rings splits an island and the lower key survives', () => {
+    const state = makeState();
+    placePlant(state, at(2, 2), PlantType.WindTurbine);
+    buildPowerLines(
+      state,
+      Array.from({ length: 12 }, (_, i) => at(3 + i, 2)),
+    );
+    placePlant(state, at(15, 2), PlantType.SolarFarm);
+    recomputeGrid(state);
+    expect(islandCount(state)).toBe(1);
+    const keyBefore = islandKey(state, 1);
+    // Rings are connections: one dead tile leaves the rings of both ends
+    // overlapping, so the gap has to exceed 2 * R tiles (7 here) to split.
+    for (let x = 6; x <= 12; x++) addDamage(state, at(x, 2), 10);
+    bumpGridVersion(state);
+    recomputeGrid(state);
+    expect(islandCount(state)).toBe(2);
+    expect(islandKey(state, 1)).toBe(keyBefore);
+    expect(islandOf(state, at(15, 2))).toBe(2);
+  });
+
+  it('a substation seeds the flood and belongs to its island', () => {
+    const state = makeState();
+    placePlant(state, at(8, 8), PlantType.Substation);
+    buildPowerLines(state, [at(9, 8), at(10, 8)]);
+    recomputeGrid(state);
+    expect(islandCount(state)).toBe(1);
+    expect(islandOf(state, at(10 + R, 8))).toBe(1);
   });
 });

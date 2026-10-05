@@ -58,6 +58,8 @@ export const PlantType = {
   HeatPlant: 16,
   /** Hot-water store charged through the heat plants from surplus. */
   HeatStore: 17,
+  /** Gate of a grid island to the outer grid: carries import and export. Generates nothing. */
+  Substation: 18,
 } as const;
 export type PlantType = (typeof PlantType)[keyof typeof PlantType];
 
@@ -691,6 +693,8 @@ export interface TileDiff {
   services: number;
   /** District heating: 0 = none, 1 = network road (trunk), 2 = served building. */
   heated: number;
+  /** Grid island number (1..) this tile belongs to, 0 when not energised. */
+  island: number;
   plantType: PlantType;
   terrain: Terrain;
   /** Elevation level 0..7 (immutable after map generation). */

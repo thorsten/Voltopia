@@ -197,6 +197,12 @@ export interface TileLayers {
   powerLine: Uint8Array;
   /** 1 when the tile is within lineSupplyRadius of an energised line or supply plant. Derived, not persisted. */
   energized: Uint8Array;
+  /**
+   * Island number 1.. of the grid component this tile is energised by;
+   * 0 = none. Derived, not persisted. Uint16Array caps islands at 65 535,
+   * far above any 128x128 map's possible components.
+   */
+  island: Uint16Array;
   /** Service coverage bitmask (SERVICE_FIRE | SERVICE_POLICE). Derived, not persisted. */
   services: Uint8Array;
   /** District heating: HEATED_NONE / HEATED_TRUNK / HEATED_SERVED. Derived, not persisted. */
@@ -279,6 +285,8 @@ export interface SimState {
   gridVersion: number;
   /** gridVersion the energized layer was last computed for (-1 = never). */
   gridComputedVersion: number;
+  /** islandKeys[n] = lowest tile index of island n (its stable key); islandKeys[0] = -1. Rebuilt by recomputeGrid. */
+  islandKeys: number[];
   weather: Weather;
   /** Elevation of the lake surface (derived; recomputed on load). */
   lakeLevel: number;
@@ -482,6 +490,7 @@ export function createTileLayers(size: number): TileLayers {
     damage: new Uint8Array(tiles),
     powerLine: new Uint8Array(tiles),
     energized: new Uint8Array(tiles),
+    island: new Uint16Array(tiles),
     services: new Uint8Array(tiles),
     heated: new Uint8Array(tiles),
     buildingAge: new Uint32Array(tiles),
@@ -525,6 +534,7 @@ export function createSimState(
     heatStored: 0,
     gridVersion: 0,
     gridComputedVersion: -1,
+    islandKeys: [-1],
     weather: {
       cloudCover: 0.3,
       windSpeed: 0.5,
@@ -701,6 +711,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       supplied: layers.supplied[index] as TileDiff['supplied'],
       services: layers.services[index],
       heated: layers.heated[index],
+      island: layers.island[index],
       plantType: layers.plantType[index] as TileDiff['plantType'],
       terrain: layers.terrain[index] as TileDiff['terrain'],
       elevation: layers.elevation[index],

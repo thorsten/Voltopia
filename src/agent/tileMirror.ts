@@ -31,6 +31,7 @@ export interface MirroredTile {
   transitCover: number;
   geothermal: number;
   damage: number;
+  island: number;
 }
 
 export class TileMirror {
@@ -50,6 +51,8 @@ export class TileMirror {
   readonly geothermal: Uint8Array;
   /** Damage points 0..255 per tile (0 = intact); see disasters.ts. */
   readonly damage: Uint8Array;
+  /** Grid island number (1..) this tile belongs to, 0 when not energised. */
+  readonly island: Uint16Array;
   /** Number of diffs applied so far (0 = nothing received yet). */
   updates = 0;
 
@@ -69,6 +72,7 @@ export class TileMirror {
     this.transitCover = new Uint8Array(count);
     this.geothermal = new Uint8Array(count);
     this.damage = new Uint8Array(count);
+    this.island = new Uint16Array(count);
   }
 
   applyDiffs(diffs: TileDiff[]): void {
@@ -88,6 +92,7 @@ export class TileMirror {
       this.transitCover[i] = diff.transitCover;
       this.geothermal[i] = diff.geothermal;
       this.damage[i] = diff.damage;
+      this.island[i] = diff.island;
     }
     this.updates += diffs.length;
   }
@@ -115,6 +120,7 @@ export class TileMirror {
       transitCover: this.transitCover[index],
       geothermal: this.geothermal[index],
       damage: this.damage[index],
+      island: this.island[index],
     };
   }
 }
