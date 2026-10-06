@@ -166,13 +166,11 @@ export function EnergyPanel({
           value={energy.consumption.charging}
           testId="detail-energy-charging"
         />
-        {energy.consumption.traction > 0 && (
-          <Row
-            label={t('energy.traction')}
-            value={energy.consumption.traction}
-            testId="detail-energy-traction"
-          />
-        )}
+        <Row
+          label={t('energy.traction')}
+          value={energy.consumption.traction}
+          testId="detail-energy-traction"
+        />
         <Row
           label={t('energy.heating')}
           value={energy.consumption.heating}

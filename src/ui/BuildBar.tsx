@@ -99,7 +99,7 @@ const CATEGORIES: Category[] = [
       { id: 'plant-depot', icon: '🚚', cost: BALANCE.costs.plant[PlantType.LogisticsDepot] },
       { id: 'plant-busdepot', icon: '🚌', cost: BALANCE.costs.plant[PlantType.BusDepot] },
       { id: 'plant-station', icon: '🚉', cost: BALANCE.costs.plant[PlantType.TrainStation] },
-      { id: 'plant-terminal', icon: '🏗', cost: BALANCE.costs.plant[PlantType.FreightTerminal] },
+      { id: 'plant-terminal', icon: '📦', cost: BALANCE.costs.plant[PlantType.FreightTerminal] },
       { id: 'plant-railyard', icon: '🚆', cost: BALANCE.costs.plant[PlantType.RailYard] },
     ],
   },
