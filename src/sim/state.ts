@@ -426,6 +426,12 @@ export interface SimState {
   railComputedVersion: number;
   /** railNetworkKeys[n] = lowest tile index of network n; railNetworkKeys[0] = -1. */
   railNetworkKeys: number[];
+  /**
+   * Road tiles with `railStation >= 0` after the last `updateRailCover`.
+   * Derived, not persisted: lets a city with no served station skip the
+   * cover rebuild (and its two full-grid allocations) every tick.
+   */
+  railCoveredRoads: number;
   undoStack: UndoEntry[];
   energyHistory: EnergyHistoryPoint[];
   /** Running sums since the last history sample (not persisted). */
@@ -679,6 +685,7 @@ export function createSimState(
     railVersion: 0,
     railComputedVersion: -1,
     railNetworkKeys: [-1],
+    railCoveredRoads: 0,
     undoStack: [],
     energyHistory: [],
     energyHistoryAccum: { generation: 0, consumption: 0, unshifted: 0, soc: 0, price: 0, ticks: 0 },

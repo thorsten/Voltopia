@@ -234,6 +234,28 @@ describe('rail plants', () => {
     expect(state.dirty.has(at(5, 8))).toBe(true);
   });
 
+  it('updateRailCover clears the cover when the last station falls out of service, then idles', () => {
+    const state = corridor();
+    placePlant(state, at(5, 9), PlantType.TrainStation);
+    state.layers.stationAge[at(5, 9)] = 0;
+    updateRailCover(state);
+    const covered = state.layers.railStation.filter((s) => s >= 0).length;
+    expect(covered).toBeGreaterThan(0);
+    expect(state.railCoveredRoads).toBe(covered);
+    // Unserved: the cover is cleared even though no station is served any more.
+    state.layers.stationAge[at(5, 9)] = stationServiceTicks() + 1;
+    state.dirty.clear();
+    updateRailCover(state);
+    expect(state.layers.railStation.every((s) => s === -1)).toBe(true);
+    expect(state.railCoveredRoads).toBe(0);
+    expect(state.dirty.size).toBe(covered);
+    // Nothing served, nothing covered: a further call changes nothing.
+    state.dirty.clear();
+    updateRailCover(state);
+    expect(state.dirty.size).toBe(0);
+    expect(state.railCoveredRoads).toBe(0);
+  });
+
   it('a terminal loads beside a powered factory and unloads beside a depot', () => {
     const state = corridor();
     placePlant(state, at(7, 11), PlantType.FreightTerminal);

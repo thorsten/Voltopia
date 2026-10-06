@@ -305,13 +305,17 @@ export function ageRailPlants(state: SimState): { stationsDue: number; terminals
  */
 export function updateRailCover(state: SimState): void {
   const { layers, size } = state;
+  const served = stationTiles(state).filter((station) => isStationServed(state, station));
+  // The common case — no served station and nothing covered — must cost
+  // one plant scan and no allocation: a city without a railway runs this
+  // every tick too.
+  if (served.length === 0 && state.railCoveredRoads === 0) return;
   const next = new Int32Array(layers.railStation.length).fill(-1);
   // A plain array: Int32Array.fill(Number.MAX_SAFE_INTEGER) truncates to -1,
   // which would make every real distance look larger and never win.
   const best: number[] = Array.from({ length: layers.railStation.length }, () => Infinity);
   const r = BALANCE.rail.stationRadius;
-  for (const station of stationTiles(state)) {
-    if (!isStationServed(state, station)) continue;
+  for (const station of served) {
     const cx = tileX(station, size);
     const cy = tileY(station, size);
     for (let y = Math.max(0, cy - r); y <= Math.min(size - 1, cy + r); y++) {
@@ -327,11 +331,14 @@ export function updateRailCover(state: SimState): void {
       }
     }
   }
+  let covered = 0;
   for (let i = 0; i < next.length; i++) {
+    if (next[i] >= 0) covered++;
     if (next[i] === layers.railStation[i]) continue;
     layers.railStation[i] = next[i];
     markDirty(state, i);
   }
+  state.railCoveredRoads = covered;
 }
 
 /** A factory tile that can load goods: a powered factory (see `isFactory`), and intact. */
@@ -386,15 +393,33 @@ export function stationState(state: SimState, tile: number): StopState {
 /** City-wide railway figures for stats, HUD and the goal. */
 export function railStats(state: SimState): RailStats {
   recomputeRailNetworks(state);
+  // One pass over the grid for every count: this runs every tick, in
+  // cities without a railway too.
+  const { tileType, plantType, rail } = state.layers;
+  let trackTiles = 0;
+  let stations = 0;
   let stationsServed = 0;
-  const stations = stationTiles(state);
-  for (const s of stations) if (isStationServed(state, s)) stationsServed++;
-  const terminals = terminalTiles(state);
+  let terminals = 0;
   let terminalsLoading = 0;
   let terminalsUnloading = 0;
-  for (const t of terminals) {
-    if (terminalLoads(state, t)) terminalsLoading++;
-    if (terminalUnloads(state, t)) terminalsUnloading++;
+  let yards = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    if (rail[i] !== 0) trackTiles++;
+    if (tileType[i] !== TileType.Plant) continue;
+    switch (plantType[i]) {
+      case PlantType.TrainStation:
+        stations++;
+        if (isStationServed(state, i)) stationsServed++;
+        break;
+      case PlantType.FreightTerminal:
+        terminals++;
+        if (terminalLoads(state, i)) terminalsLoading++;
+        if (terminalUnloads(state, i)) terminalsUnloading++;
+        break;
+      case PlantType.RailYard:
+        yards++;
+        break;
+    }
   }
   let trainsRunning = 0;
   let trainsStalled = 0;
@@ -404,13 +429,13 @@ export function railStats(state: SimState): RailStats {
   }
   return {
     networks: state.railNetworkKeys.length - 1,
-    trackTiles: countRailTiles(state),
-    stations: stations.length,
+    trackTiles,
+    stations,
     stationsServed,
-    terminals: terminals.length,
+    terminals,
     terminalsLoading,
     terminalsUnloading,
-    yards: yardTiles(state).length,
+    yards,
     trainsRunning,
     trainsStalled,
   };
