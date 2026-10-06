@@ -3,7 +3,7 @@ import { LINE_PRESENT } from '../shared/grid.ts';
 import { buildRoads } from '../sim/roads.ts';
 import { createSimState, serializeState } from '../sim/state.ts';
 import { SAVE_VERSION } from '../shared/constants.ts';
-import type { SaveGame } from '../shared/types.ts';
+import type { SavedTrain, SaveGame } from '../shared/types.ts';
 import { saveFromJson, saveToJson } from './serialization.ts';
 
 /** Build a minimal, valid save game for size 4 to use as a test fixture. */
@@ -303,6 +303,63 @@ describe('save game JSON export/import', () => {
     const plain = saveFromJson(saveToJson(makeSave()));
     expect(plain.transitTicks).toBeUndefined();
     expect(plain.layers.busStop).toBeUndefined();
+  });
+
+  it('round-trips railTicks, the rail layer and a train', () => {
+    const save = makeSave();
+    save.railTicks = 42;
+    save.layers.rail = new Uint8Array(save.size * save.size).fill(17).buffer as ArrayBuffer;
+    const train: SavedTrain = {
+      id: 7,
+      kind: 1,
+      yard: 40,
+      yardTrack: 41,
+      x: 5.5,
+      y: 0.5,
+      angle: 1,
+      phase: 1,
+      stops: [6, 41],
+      pickup: 6,
+      path: [5, 6],
+      pathIndex: 1,
+      dwellTicks: 0,
+    };
+    save.trains = [train];
+    const restored = saveFromJson(saveToJson(save));
+    expect(restored.railTicks).toBe(42);
+    expect(new Uint8Array(restored.layers.rail!)).toEqual(new Uint8Array(save.layers.rail));
+    expect(restored.trains).toEqual([train]);
+  });
+
+  it('parses a save without railTicks, trains or the rail layer without those keys', () => {
+    const restored = saveFromJson(saveToJson(makeSave()));
+    expect('railTicks' in restored).toBe(false);
+    expect('trains' in restored).toBe(false);
+    expect(restored.layers.rail).toBeUndefined();
+  });
+
+  it('drops only the malformed train record from a hand-edited export', () => {
+    const save = makeSave();
+    const goodTrain: SavedTrain = {
+      id: 1,
+      kind: 0,
+      yard: 2,
+      yardTrack: 3,
+      x: 0,
+      y: 0,
+      angle: 0,
+      phase: 0,
+      stops: [],
+      pickup: -1,
+      path: [],
+      pathIndex: 0,
+      dwellTicks: 0,
+    };
+    save.trains = [goodTrain];
+    const json = JSON.parse(saveToJson(save));
+    json.trains.push({ id: 2 }); // missing every other field
+    const restored = saveFromJson(JSON.stringify(json));
+    expect(restored.trains).toEqual([goodTrain]);
   });
 
   it('round-trips the damage layer, intensity and events in flight', () => {

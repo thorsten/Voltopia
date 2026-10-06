@@ -1,5 +1,5 @@
 import { SAVE_VERSION } from '../shared/constants.ts';
-import type { LifetimeSample, SaveGame, SavedDisasters } from '../shared/types.ts';
+import type { LifetimeSample, SaveGame, SavedDisasters, SavedTrain } from '../shared/types.ts';
 
 /** JSON-friendly form of a save game (ArrayBuffers as base64). */
 interface SaveGameJson {
@@ -34,6 +34,9 @@ interface SaveGameJson {
   freeFlowTicks?: number;
   wellStockedTicks?: number;
   transitTicks?: number;
+  railTicks?: number;
+  /** Trains in flight (absent in saves from before railways). */
+  trains?: SavedTrain[];
   heatStored?: number;
   warmWinterTicks?: number;
   districtDeficitTicks?: number;
@@ -105,6 +108,8 @@ export function saveToJson(save: SaveGame): string {
     ...(save.freeFlowTicks !== undefined ? { freeFlowTicks: save.freeFlowTicks } : {}),
     ...(save.wellStockedTicks !== undefined ? { wellStockedTicks: save.wellStockedTicks } : {}),
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
+    ...(save.railTicks !== undefined ? { railTicks: save.railTicks } : {}),
+    ...(save.trains !== undefined ? { trains: save.trains } : {}),
     ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
     ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
     ...(save.districtDeficitTicks !== undefined
@@ -156,6 +161,29 @@ function isSavedDisasters(value: unknown): value is SavedDisasters {
     typeof candidate.cooldownTicks === 'number' &&
     Array.isArray(candidate.events) &&
     candidate.events.every(isSavedDisasterEvent)
+  );
+}
+
+/** Shallow shape check: a hand-edited export must not break the loader. */
+function isSavedTrain(value: unknown): value is SavedTrain {
+  if (typeof value !== 'object' || value === null) return false;
+  const t = value as Partial<SavedTrain>;
+  return (
+    typeof t.id === 'number' &&
+    typeof t.kind === 'number' &&
+    typeof t.yard === 'number' &&
+    typeof t.yardTrack === 'number' &&
+    typeof t.x === 'number' &&
+    typeof t.y === 'number' &&
+    typeof t.angle === 'number' &&
+    typeof t.phase === 'number' &&
+    Array.isArray(t.stops) &&
+    t.stops.every((n) => typeof n === 'number') &&
+    typeof t.pickup === 'number' &&
+    Array.isArray(t.path) &&
+    t.path.every((n) => typeof n === 'number') &&
+    typeof t.pathIndex === 'number' &&
+    typeof t.dwellTicks === 'number'
   );
 }
 
@@ -240,6 +268,7 @@ export function saveFromJson(text: string): SaveGame {
     'geothermal',
     'reservoirHeat',
     'damage',
+    'rail',
   ] as const;
   for (const name of optionalLayers) {
     const encoded = parsed.layers[name];
@@ -296,6 +325,14 @@ export function saveFromJson(text: string): SaveGame {
       ? { wellStockedTicks: parsed.wellStockedTicks }
       : {}),
     ...(typeof parsed.transitTicks === 'number' ? { transitTicks: parsed.transitTicks } : {}),
+    // Finite, not just a number: a persisted streak counter must not be
+    // poisoned by a hand-edited export's NaN (same reasoning as flexTicks).
+    ...(typeof parsed.railTicks === 'number' && Number.isFinite(parsed.railTicks)
+      ? { railTicks: parsed.railTicks }
+      : {}),
+    // Dropped one train at a time, not the whole fleet: a bad record from
+    // a hand-edited export should not cost every other train.
+    ...(Array.isArray(parsed.trains) ? { trains: parsed.trains.filter(isSavedTrain) } : {}),
     ...(typeof parsed.heatStored === 'number' ? { heatStored: parsed.heatStored } : {}),
     ...(typeof parsed.warmWinterTicks === 'number'
       ? { warmWinterTicks: parsed.warmWinterTicks }
