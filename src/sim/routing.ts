@@ -125,3 +125,38 @@ export function railDistances(
 ): Map<number, number> {
   return distances(state, from, isTrack(state), flat, maxCost);
 }
+
+/**
+ * Nearest-neighbour tour order: repeatedly take the unvisited tile of
+ * `remaining` cheapest from the current position (ties: lower tile
+ * index), then recompute the distance map from it via `distancesFrom`
+ * for the next leg. `initial` is the distance map for the first leg —
+ * callers that already have it (e.g. the map from the tour's start)
+ * pass it in rather than recomputing it. Stops early, dropping the
+ * rest, when nothing left in `remaining` is reachable. Mutates
+ * `remaining`; shared by the bus, delivery and train tour planners.
+ */
+export function nearestNeighbourOrder(
+  remaining: Set<number>,
+  distancesFrom: (tile: number) => Map<number, number>,
+  initial: Map<number, number>,
+): number[] {
+  const ordered: number[] = [];
+  let from = initial;
+  while (remaining.size > 0) {
+    let best = -1;
+    let bestCost = Infinity;
+    for (const tile of remaining) {
+      const cost = from.get(tile) ?? Infinity;
+      if (cost < bestCost || (cost === bestCost && tile < best)) {
+        best = tile;
+        bestCost = cost;
+      }
+    }
+    if (best < 0) break;
+    ordered.push(best);
+    remaining.delete(best);
+    from = distancesFrom(best);
+  }
+  return ordered;
+}

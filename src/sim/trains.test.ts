@@ -123,6 +123,20 @@ describe('advanceTrain', () => {
     bulldozeTiles(state, [at(5, 10)]);
     expect(advanceTrain(state, train, 0.5)).toBe('lost');
   });
+
+  it('carries the leftover step across tile centres, so it covers the full configured speed', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const train = state.trains[0];
+    const startX = train.x;
+    // path[0] is the train's own tile (zero distance) — exactly what
+    // routeToNextHalt hands a freshly-dispatched train.
+    train.path = [at(4, 10), at(5, 10), at(6, 10), at(7, 10), at(8, 10), at(9, 10)];
+    train.pathIndex = 0;
+    const step = 0.8;
+    for (let i = 0; i < 5; i++) expect(advanceTrain(state, train, step)).toBe('moving');
+    expect(train.x - startX).toBeCloseTo(4.0);
+  });
 });
 
 describe('tour planning', () => {
@@ -171,14 +185,14 @@ describe('trainsStep', () => {
   it('runs tours inside the window, serves stations and supplies the depot', () => {
     const state = railTown();
     setHour(state, BALANCE.rail.windowStartHour);
-    // Both stations and the depot are served well inside this run (around
-    // tick 13-70), but the single due tour per vehicle parks everything by
-    // tick ~115 and the fleet then sits idle until stations are due again
-    // around tick ~181 (dueAfterDays/2 after being served) — neither the
+    // Both stations and the depot are served well inside this run (by
+    // tick ~40), but the single due tour per vehicle parks everything by
+    // tick ~80 and the fleet then sits idle until stations are due again
+    // around tick ~191 (dueAfterDays/2 after being served) — neither the
     // brief's (3 * TICKS_PER_DAY) / 24 (120 ticks) nor its 160-tick fallback
-    // land outside that idle gap. 90 ticks keeps both trains mid-tour while
+    // land outside that idle gap. 50 ticks keeps both trains mid-tour while
     // everything downstream is already served.
-    runTicks(state, 90);
+    runTicks(state, 50);
     expect(runningTrains(state).length).toBeGreaterThan(0);
     expect(isStationServed(state, at(10, 9))).toBe(true);
     expect(isStationServed(state, at(24, 9))).toBe(true);
@@ -204,7 +218,9 @@ describe('trainsStep', () => {
   it('a lost train is re-parked at the yard and the tour dropped', () => {
     const state = railTown();
     setHour(state, BALANCE.rail.windowStartHour);
-    runTicks(state, 12);
+    // Before the first halt (~tick 8 at the real train speed), so the
+    // picked train is still Running with a real tile ahead to bulldoze.
+    runTicks(state, 6);
     const train = runningTrains(state)[0];
     expect(train).toBeDefined();
     bulldozeTiles(state, [train.path[train.pathIndex]]);
@@ -231,7 +247,9 @@ describe('traction and stalling', () => {
   it('books the traction load of running, unstalled trains on the yard island', () => {
     const state = railTown();
     setHour(state, BALANCE.rail.windowStartHour);
-    runTicks(state, 12);
+    // Before the first halt (~tick 8), so both trains are still Running
+    // rather than one already Dwelling at a halt.
+    runTicks(state, 6);
     const running = runningTrains(state);
     expect(running.length).toBeGreaterThan(0);
     const demand = tractionDemandByIsland(state);

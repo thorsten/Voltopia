@@ -3,7 +3,7 @@ import { neighbors4, tileX, tileY } from '../shared/grid.ts';
 import { DeliveryState, MAX_DELIVERY_AGE, PlantType, Zone } from '../shared/types.ts';
 import type { DeliveryStats, DepotInfo } from '../shared/types.ts';
 import { isTileConnected } from './energy.ts';
-import { findRoadPath, roadDistances } from './routing.ts';
+import { findRoadPath, nearestNeighbourOrder, roadDistances } from './routing.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import { advanceAlongPath, surplusAvailable, ticksAtHour, vehicleTile } from './vehicles.ts';
 import {
@@ -233,31 +233,22 @@ export function planTour(
   const remaining = new Set(candidates.slice(0, stopsPerTour).map((c) => c.tile));
   if (remaining.size === 0) return [];
 
-  const ordered: number[] = pickup >= 0 ? [pickup] : [];
   // Every stop lies within maxRouteTiles of the depot road, and so does
   // the pickup, so twice that bound covers every hop (triangle
   // inequality). The first hop reuses the depot's map when there is no
-  // pickup.
-  let from = pickup >= 0 ? roadDistances(state, pickup, 2 * maxRouteTiles) : reach;
-  while (remaining.size > 0) {
-    let best = -1;
-    let bestCost = Infinity;
-    for (const tile of remaining) {
-      const cost = from.get(tile) ?? Infinity;
-      if (cost < bestCost || (cost === bestCost && tile < best)) {
-        best = tile;
-        bestCost = cost;
-      }
-    }
-    // Nothing left is in reach of this leg (the pickup's road map is
-    // cost-bounded, and a leg through heavy traffic can exceed it): drop
-    // the rest for another tour rather than loop on a stop that never
-    // comes.
-    if (best < 0) break;
-    ordered.push(best);
-    remaining.delete(best);
-    from = roadDistances(state, best, 2 * maxRouteTiles);
-  }
+  // pickup. Nothing left in reach of a leg (the pickup's road map is
+  // cost-bounded, and a leg through heavy traffic can exceed it) drops
+  // the rest for another tour rather than looping on a stop that never
+  // comes.
+  const initial = pickup >= 0 ? roadDistances(state, pickup, 2 * maxRouteTiles) : reach;
+  const ordered = [
+    ...(pickup >= 0 ? [pickup] : []),
+    ...nearestNeighbourOrder(
+      remaining,
+      (tile) => roadDistances(state, tile, 2 * maxRouteTiles),
+      initial,
+    ),
+  ];
   // A pickup alone is no tour.
   if (ordered.length === (pickup >= 0 ? 1 : 0)) return [];
   ordered.push(van.depotRoad);

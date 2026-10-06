@@ -4,7 +4,7 @@ import { MAX_STOP_AGE, PlantType, StopState } from '../shared/types.ts';
 import type { BusDepotInfo, TransitStats } from '../shared/types.ts';
 import { depotRoadTile } from './deliveries.ts';
 import { isTileConnected } from './energy.ts';
-import { findRoadPath, roadDistances } from './routing.ts';
+import { findRoadPath, nearestNeighbourOrder, roadDistances } from './routing.ts';
 import type { BuildResult } from './roads.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
@@ -247,24 +247,13 @@ export function planBusTour(state: SimState, bus: Bus, claimed: Set<number>): nu
   const remaining = new Set(candidates.slice(0, stopsPerTour).map((c) => c.tile));
   if (remaining.size === 0) return [];
 
-  const ordered: number[] = [];
-  let from = distances;
-  while (remaining.size > 0) {
-    let best = -1;
-    let bestCost = Infinity;
-    for (const tile of remaining) {
-      const cost = from.get(tile) ?? Infinity;
-      if (cost < bestCost || (cost === bestCost && tile < best)) {
-        best = tile;
-        bestCost = cost;
-      }
-    }
-    ordered.push(best);
-    remaining.delete(best);
-    // Every stop lies within maxRouteTiles of the depot road, so twice
-    // that bound covers every later hop (triangle inequality).
-    from = roadDistances(state, best, 2 * maxRouteTiles);
-  }
+  // Every stop lies within maxRouteTiles of the depot road, so twice
+  // that bound covers every later hop (triangle inequality).
+  const ordered = nearestNeighbourOrder(
+    remaining,
+    (tile) => roadDistances(state, tile, 2 * maxRouteTiles),
+    distances,
+  );
   ordered.push(bus.depotRoad);
   return ordered;
 }

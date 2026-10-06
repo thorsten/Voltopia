@@ -19,7 +19,7 @@ import {
   updateRailCover,
   yardTiles,
 } from './rail.ts';
-import { findRailPath, railDistances } from './routing.ts';
+import { findRailPath, nearestNeighbourOrder, railDistances } from './routing.ts';
 import {
   markDirty,
   stationDueTicks,
@@ -92,37 +92,47 @@ function trainTile(state: SimState, train: Train): number {
 }
 
 /**
- * Move one tick along the path at `step` tiles. No lanes, no battery:
- * trains neither queue nor charge. 'lost' when the next path tile lost
- * its track; 'arrived' after the last tile, with the path cleared.
+ * Move one tick along the path, covering up to `step` tiles total. No
+ * lanes, no battery: trains neither queue nor charge. Unlike cars (see
+ * `advanceAlongPath`), a train carries the remainder of its step across
+ * tile centres within the same call, so reaching a centre — including
+ * the zero-distance first hop to the train's own tile — never burns a
+ * tick: the leftover step keeps driving the next leg. 'lost' when a
+ * tile reached mid-step lost its track; 'arrived' after the last tile,
+ * with the path cleared.
  */
 export function advanceTrain(
   state: SimState,
   train: Train,
   step: number,
 ): 'moving' | 'arrived' | 'lost' {
-  const target = train.path[train.pathIndex];
-  if (target === undefined || state.layers.rail[target] === 0) return 'lost';
-  const targetX = tileX(target, state.size) + 0.5;
-  const targetY = tileY(target, state.size) + 0.5;
-  const dx = targetX - train.x;
-  const dy = targetY - train.y;
-  const distance = Math.hypot(dx, dy);
-  if (distance <= step) {
-    train.x = targetX;
-    train.y = targetY;
-    if (distance > 1e-9) train.angle = Math.atan2(dy, dx);
-    train.pathIndex++;
-    if (train.pathIndex >= train.path.length) {
-      train.path = [];
-      train.pathIndex = 0;
-      return 'arrived';
+  let remaining = step;
+  while (remaining > 0) {
+    const target = train.path[train.pathIndex];
+    if (target === undefined || state.layers.rail[target] === 0) return 'lost';
+    const targetX = tileX(target, state.size) + 0.5;
+    const targetY = tileY(target, state.size) + 0.5;
+    const dx = targetX - train.x;
+    const dy = targetY - train.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= remaining) {
+      train.x = targetX;
+      train.y = targetY;
+      if (distance > 1e-9) train.angle = Math.atan2(dy, dx);
+      remaining -= distance;
+      train.pathIndex++;
+      if (train.pathIndex >= train.path.length) {
+        train.path = [];
+        train.pathIndex = 0;
+        return 'arrived';
+      }
+      continue;
     }
-    return 'moving';
+    train.x += (dx / distance) * remaining;
+    train.y += (dy / distance) * remaining;
+    train.angle = Math.atan2(dy, dx);
+    remaining = 0;
   }
-  train.x += (dx / distance) * step;
-  train.y += (dy / distance) * step;
-  train.angle = Math.atan2(dy, dx);
   return 'moving';
 }
 
@@ -133,31 +143,22 @@ function claimedHalts(state: SimState): Set<number> {
   return claimed;
 }
 
-/** Nearest-neighbour order over rail distances from `start`, then the yard track. */
+/**
+ * Nearest-neighbour order starting from `initial`'s source (the
+ * caller's own distance map — never recomputed here), then the yard
+ * track.
+ */
 function orderTour(
   state: SimState,
-  start: number,
   remaining: Set<number>,
   yardTrack: number,
   head: number[],
+  initial: Map<number, number>,
 ): number[] {
-  const ordered = [...head];
-  let from = railDistances(state, start);
-  while (remaining.size > 0) {
-    let best = -1;
-    let bestCost = Infinity;
-    for (const tile of remaining) {
-      const cost = from.get(tile) ?? Infinity;
-      if (cost < bestCost || (cost === bestCost && tile < best)) {
-        best = tile;
-        bestCost = cost;
-      }
-    }
-    if (best < 0) break; // unreachable on this network after all
-    ordered.push(best);
-    remaining.delete(best);
-    from = railDistances(state, best);
-  }
+  const ordered = [
+    ...head,
+    ...nearestNeighbourOrder(remaining, (tile) => railDistances(state, tile), initial),
+  ];
   ordered.push(yardTrack);
   return ordered;
 }
@@ -168,26 +169,33 @@ function orderTour(
  * `stationAge >= stationDueTicks() / 2`, not claimed, oldest first
  * (ties: nearer by rail from the yard, then lower index), ordered
  * nearest-neighbour and closed by the yard track. Empty when nothing
- * qualifies, so an idle fleet does not circle.
+ * qualifies, so an idle fleet does not circle — checked before the
+ * network-wide Dijkstra, so a train with nothing due costs none.
  */
 export function planPassengerTour(state: SimState, train: Train, claimed: Set<number>): number[] {
   const network = railNetworkOf(state, train.yardTrack);
   if (network === 0) return [];
   const minAge = Math.floor(stationDueTicks() / 2);
-  const fromYard = railDistances(state, train.yardTrack);
-  const candidates: Array<{ halt: number; age: number; distance: number }> = [];
+  const qualifying: Array<{ halt: number; age: number }> = [];
   for (const station of stationTiles(state)) {
     if (plantNetwork(state, station) !== network) continue;
     const halt = plantTrack(state, station);
     if (halt < 0 || claimed.has(halt) || halt === train.yardTrack) continue;
     const age = state.layers.stationAge[station];
     if (age < minAge) continue;
-    candidates.push({ halt, age, distance: fromYard.get(halt) ?? Infinity });
+    qualifying.push({ halt, age });
   }
+  if (qualifying.length === 0) return [];
+  const fromYard = railDistances(state, train.yardTrack);
+  const candidates = qualifying.map(({ halt, age }) => ({
+    halt,
+    age,
+    distance: fromYard.get(halt) ?? Infinity,
+  }));
   candidates.sort((a, b) => b.age - a.age || a.distance - b.distance || a.halt - b.halt);
   const remaining = new Set(candidates.slice(0, BALANCE.rail.stationsPerTour).map((c) => c.halt));
   if (remaining.size === 0) return [];
-  return orderTour(state, train.yardTrack, remaining, train.yardTrack, []);
+  return orderTour(state, remaining, train.yardTrack, [], fromYard);
 }
 
 /**
@@ -195,12 +203,31 @@ export function planPassengerTour(state: SimState, train: Train, claimed: Set<nu
  * (ties: lower index) first, then up to terminalsPerTour unloading
  * terminals with `terminalAge >= stationDueTicks() / 2`, oldest first,
  * nearest-neighbour from the loading halt, closed by the yard track.
- * Empty without a loading terminal or without a due unloading one.
+ * Empty without a loading terminal or without a due unloading one —
+ * checked with a plain scan before either Dijkstra, so a train with
+ * nothing to haul costs none.
  */
 export function planFreightTour(state: SimState, train: Train, claimed: Set<number>): number[] {
   const network = railNetworkOf(state, train.yardTrack);
   if (network === 0) return [];
   const minAge = Math.floor(stationDueTicks() / 2);
+  let hasLoading = false;
+  let hasDueUnloading = false;
+  for (const terminal of terminalTiles(state)) {
+    if (plantNetwork(state, terminal) !== network) continue;
+    const halt = plantTrack(state, terminal);
+    if (halt < 0 || halt === train.yardTrack) continue;
+    if (terminalLoads(state, terminal)) hasLoading = true;
+    if (
+      terminalUnloads(state, terminal) &&
+      !claimed.has(halt) &&
+      state.layers.terminalAge[terminal] >= minAge
+    ) {
+      hasDueUnloading = true;
+    }
+  }
+  if (!hasLoading || !hasDueUnloading) return [];
+
   const fromYard = railDistances(state, train.yardTrack);
   let pickup = -1;
   let pickupCost = Infinity;
@@ -231,7 +258,8 @@ export function planFreightTour(state: SimState, train: Train, claimed: Set<numb
       .filter((halt) => halt !== pickup),
   );
   if (remaining.size === 0) return [];
-  return orderTour(state, pickup, remaining, train.yardTrack, [pickup]);
+  const fromPickup = railDistances(state, pickup);
+  return orderTour(state, remaining, train.yardTrack, [pickup], fromPickup);
 }
 
 /** Route the train to stops[0], skipping halts that became unreachable; park it when the yard is unreachable. */

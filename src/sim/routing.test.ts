@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { tileIndex } from '../shared/grid.ts';
-import { findRoadPath, roadDistances, findRailPath, railDistances } from './routing.ts';
+import {
+  findRoadPath,
+  roadDistances,
+  findRailPath,
+  railDistances,
+  nearestNeighbourOrder,
+} from './routing.ts';
 import { buildRoads } from './roads.ts';
 import { buildRail } from './rail.ts';
 import { createSimState } from './state.ts';
@@ -89,5 +95,35 @@ describe('rail routing', () => {
   it('findRoadPath still refuses track-only tiles', () => {
     const state = rails();
     expect(findRoadPath(state, at(6, 4), at(2, 5))).toBeNull();
+  });
+});
+
+describe('nearestNeighbourOrder', () => {
+  it('breaks a cost tie by the lower tile index and recomputes the map from each pick', () => {
+    const a = at(1, 0);
+    const b = at(2, 0);
+    const c = at(3, 0);
+    const remaining = new Set([b, c, a]);
+    const initial = new Map([
+      [a, 5],
+      [b, 5], // tied with a; a wins on the lower tile index
+      [c, 8],
+    ]);
+    const fromA = new Map([
+      [b, 2],
+      [c, 100],
+    ]);
+    const fromB = new Map([[c, 1]]);
+    const distancesFrom = (tile: number) => (tile === a ? fromA : fromB);
+    expect(nearestNeighbourOrder(remaining, distancesFrom, initial)).toEqual([a, b, c]);
+    expect(remaining.size).toBe(0);
+  });
+
+  it('stops and leaves the rest in `remaining` once nothing left is reachable', () => {
+    const a = at(1, 0);
+    const b = at(2, 0);
+    const remaining = new Set([a, b]);
+    expect(nearestNeighbourOrder(remaining, () => new Map(), new Map())).toEqual([]);
+    expect(remaining.size).toBe(2);
   });
 });

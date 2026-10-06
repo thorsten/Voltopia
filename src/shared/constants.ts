@@ -1601,7 +1601,15 @@ export const BALANCE = {
     /** Ticks a freight train halts to load / unload. */
     loadTicks: 12,
     unloadTicks: 12,
-    /** Tiles per second at 1× speed: twice the car speed (1.6). */
+    /**
+     * Tiles per second at 1x speed. Trains carry the remainder of a
+     * tick's step across tile centres (see `advanceTrain`), so this is
+     * the real train speed. Cars snap at each tile centre and lose the
+     * remainder instead (see `advanceAlongPath`), so they effectively
+     * run about 0.33 tiles/tick at 1x even though
+     * `BALANCE.vehicles.speedTilesPerSecond` is 1.6 — making the train
+     * about 2.4x faster than a car in practice, not exactly twice.
+     */
     speedTilesPerSecond: 3.2,
     /** A station counts as served for this long after a train halted there. */
     serviceWindowDays: 0.5,
