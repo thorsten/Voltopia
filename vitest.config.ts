@@ -4,10 +4,12 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
-    // The multi-day simulation integration tests take a few seconds
-    // locally and 2-3x that on shared CI runners — the 5s default
-    // timeout is too tight.
-    testTimeout: 30_000,
+    // The multi-day simulation suites (heat, integration) take 6-8 s
+    // locally under coverage and 2-3x that on shared CI runners, which
+    // also starve vitest's worker threads — at 30 s they timed out once
+    // the railways landed. Keep per-tick costs down (gate steps whose
+    // feature is absent) rather than leaning on this value.
+    testTimeout: 60_000,
     coverage: {
       provider: 'v8',
       include: ['src/sim/**/*.ts', 'src/shared/**/*.ts'],
