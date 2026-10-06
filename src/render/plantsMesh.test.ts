@@ -3,9 +3,11 @@ import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { PlantType, Terrain, TileType } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { PlantsMesh, plantHeight } from './plantsMesh.ts';
+import { orientToTrack, PlantsMesh, plantHeight } from './plantsMesh.ts';
+import { LINE_PRESENT } from '../shared/grid.ts';
 
 const SIZE = 8;
+const at = (x: number, z: number) => z * SIZE + x;
 
 function field(levelOf: (x: number, z: number) => number): ElevationField {
   const f = new ElevationField(SIZE);
@@ -227,4 +229,58 @@ it('gives the rail plants a footprint and a height', () => {
   for (const plant of [PlantType.TrainStation, PlantType.FreightTerminal, PlantType.RailYard]) {
     expect(plantHeight(plant)).toBeGreaterThan(0.2);
   }
+});
+
+describe('rail plants face their track', () => {
+  const flat = field(() => 0);
+  const track = (index: number): TileDiff =>
+    ({
+      index,
+      tileType: TileType.Empty,
+      plantType: PlantType.None,
+      terrain: Terrain.Land,
+      density: 0,
+      elevation: 0,
+      rail: LINE_PRESENT,
+    }) as TileDiff;
+  /** Centre of the widest box (the platform) relative to the tile centre. */
+  function platformOffset(diffs: TileDiff[]): { dx: number; dz: number } {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs(diffs);
+    const widest = instancesOf(mesh.boxMesh).reduce((a, b) =>
+      b.s.x * b.s.z > a.s.x * a.s.z ? b : a,
+    );
+    return { dx: widest.p.x - 3.5, dz: widest.p.z - 3.5 };
+  }
+
+  it('orientToTrack turns parts drawn with the track at +z toward any side', () => {
+    const part = { sx: 0.9, sy: 0.1, sz: 0.4, ox: 0.2, oy: 0, oz: 0.3, color: 0 };
+    expect(orientToTrack([part], 0, 1)[0]).toEqual(part);
+    expect(orientToTrack([part], 0, 0)[0]).toEqual(part);
+    expect(orientToTrack([part], 0, -1)[0]).toMatchObject({ sx: 0.9, sz: 0.4, ox: -0.2, oz: -0.3 });
+    expect(orientToTrack([part], 1, 0)[0]).toMatchObject({ sx: 0.4, sz: 0.9, ox: 0.3, oz: -0.2 });
+    expect(orientToTrack([part], -1, 0)[0]).toMatchObject({ sx: 0.4, sz: 0.9, ox: -0.3, oz: 0.2 });
+  });
+
+  it('puts the station platform on the side of the track, whichever side that is', () => {
+    const station = plant(at(3, 3), PlantType.TrainStation);
+    expect(platformOffset([station, track(at(3, 4))]).dz).toBeGreaterThan(0.05); // track south
+    expect(platformOffset([station, track(at(3, 2))]).dz).toBeLessThan(-0.05); // track north
+    expect(platformOffset([station, track(at(4, 3))]).dx).toBeGreaterThan(0.05); // track east
+    expect(platformOffset([station, track(at(2, 3))]).dx).toBeLessThan(-0.05); // track west
+  });
+
+  it('turns an existing station when track is laid beside it later', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([plant(at(3, 3), PlantType.TrainStation)]);
+    const before = instancesOf(mesh.boxMesh).reduce((a, b) =>
+      b.s.x * b.s.z > a.s.x * a.s.z ? b : a,
+    );
+    mesh.applyDiffs([track(at(2, 3))]);
+    const after = instancesOf(mesh.boxMesh).reduce((a, b) =>
+      b.s.x * b.s.z > a.s.x * a.s.z ? b : a,
+    );
+    expect(before.p.z - 3.5).toBeGreaterThan(0.05); // default: track side +z
+    expect(after.p.x - 3.5).toBeLessThan(-0.05); // now facing west
+  });
 });

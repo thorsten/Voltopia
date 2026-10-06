@@ -17,7 +17,7 @@ const BIOGAS_DOME_TOP = DOME_BASE + DOME_RADIUS * DOME_SQUASH;
 const PARK_PAD_SIZE = 0.94;
 const PARK_PAD_HEIGHT = 0.03;
 
-interface BoxPart {
+export interface BoxPart {
   sx: number;
   sy: number;
   sz: number;
@@ -97,6 +97,26 @@ interface PlantSite {
   /** Direction to the nearest lake neighbour (0,0 when none). */
   lakeDx: number;
   lakeDz: number;
+  /**
+   * Direction to the track a rail plant halts at (0,0 when none): the
+   * lowest-index track neighbour, as `plantTrack` in the sim picks it.
+   */
+  trackDx: number;
+  trackDz: number;
+}
+
+/**
+ * Turn parts drawn with their track side at +z toward the track at
+ * (dx, dz): a quarter turn swaps the footprints and permutes the
+ * offsets, a half turn mirrors them. No track leaves them as drawn.
+ */
+export function orientToTrack(parts: BoxPart[], dx: number, dz: number): BoxPart[] {
+  if (dz === 1 || (dx === 0 && dz === 0)) return parts;
+  return parts.map((p) => {
+    if (dz === -1) return { ...p, ox: -p.ox, oz: -p.oz };
+    if (dx === 1) return { ...p, sx: p.sz, sz: p.sx, ox: p.oz, oz: -p.ox };
+    return { ...p, sx: p.sz, sz: p.sx, ox: -p.oz, oz: p.ox };
+  });
 }
 
 /** Static box parts per plant type (rotors/domes/fills are separate). */
@@ -339,30 +359,44 @@ function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
           color: COLORS.substationInsulator,
         },
       ];
+    // The three rail plants are drawn with the track at +z and turned
+    // toward the track they actually stand beside.
     case PlantType.TrainStation:
-      return [
-        // Platform slab, two posts and a red roof over the waiting area.
-        { sx: 0.9, sy: 0.08, sz: 0.44, ox: 0, oy: 0, oz: 0.1, color: COLORS.platform },
-        { sx: 0.05, sy: 0.3, sz: 0.05, ox: -0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
-        { sx: 0.05, sy: 0.3, sz: 0.05, ox: 0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
-        { sx: 0.8, sy: 0.04, sz: 0.4, ox: 0, oy: 0.38, oz: 0.1, color: COLORS.stationRoof },
-      ];
+      return orientToTrack(
+        [
+          // Platform slab along the track, two posts and a red roof over the waiting area.
+          { sx: 0.9, sy: 0.08, sz: 0.44, ox: 0, oy: 0, oz: 0.1, color: COLORS.platform },
+          { sx: 0.05, sy: 0.3, sz: 0.05, ox: -0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
+          { sx: 0.05, sy: 0.3, sz: 0.05, ox: 0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
+          { sx: 0.8, sy: 0.04, sz: 0.4, ox: 0, oy: 0.38, oz: 0.1, color: COLORS.stationRoof },
+        ],
+        site.trackDx,
+        site.trackDz,
+      );
     case PlantType.FreightTerminal:
-      return [
-        // Apron, a gantry crane across the tile and a container under it.
-        { sx: 0.9, sy: 0.05, sz: 0.9, ox: 0, oy: 0, oz: 0, color: COLORS.platform },
-        { sx: 0.06, sy: 0.5, sz: 0.06, ox: -0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
-        { sx: 0.06, sy: 0.5, sz: 0.06, ox: 0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
-        { sx: 0.8, sy: 0.06, sz: 0.1, ox: 0, oy: 0.55, oz: 0, color: COLORS.gantry },
-        { sx: 0.4, sy: 0.18, sz: 0.2, ox: 0, oy: 0.05, oz: 0.2, color: COLORS.container },
-      ];
+      return orientToTrack(
+        [
+          // Apron, a gantry crane along the track and a container on the track side.
+          { sx: 0.9, sy: 0.05, sz: 0.9, ox: 0, oy: 0, oz: 0, color: COLORS.platform },
+          { sx: 0.06, sy: 0.5, sz: 0.06, ox: -0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
+          { sx: 0.06, sy: 0.5, sz: 0.06, ox: 0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
+          { sx: 0.8, sy: 0.06, sz: 0.1, ox: 0, oy: 0.55, oz: 0, color: COLORS.gantry },
+          { sx: 0.4, sy: 0.18, sz: 0.2, ox: 0, oy: 0.05, oz: 0.2, color: COLORS.container },
+        ],
+        site.trackDx,
+        site.trackDz,
+      );
     case PlantType.RailYard:
-      return [
-        // Long shed with a pale roof and a wide door toward the track.
-        { sx: 0.9, sy: 0.36, sz: 0.5, ox: 0, oy: 0, oz: 0.1, color: COLORS.yardHall },
-        { sx: 0.94, sy: 0.04, sz: 0.54, ox: 0, oy: 0.36, oz: 0.1, color: COLORS.yardRoof },
-        { sx: 0.5, sy: 0.28, sz: 0.03, ox: 0, oy: 0, oz: -0.16, color: COLORS.busDoor },
-      ];
+      return orientToTrack(
+        [
+          // Long shed with a pale roof and a wide door facing the track.
+          { sx: 0.9, sy: 0.36, sz: 0.5, ox: 0, oy: 0, oz: -0.1, color: COLORS.yardHall },
+          { sx: 0.94, sy: 0.04, sz: 0.54, ox: 0, oy: 0.36, oz: -0.1, color: COLORS.yardRoof },
+          { sx: 0.5, sy: 0.28, sz: 0.03, ox: 0, oy: 0, oz: 0.16, color: COLORS.busDoor },
+        ],
+        site.trackDx,
+        site.trackDz,
+      );
     default:
       return [];
   }
@@ -376,7 +410,7 @@ const ROTOR_RADIUS = 0.42;
  * shapes change orientation with the river/lake, never height.
  */
 export function plantHeight(plant: PlantType): number {
-  const site: PlantSite = { riverAlongZ: false, lakeDx: 0, lakeDz: 0 };
+  const site: PlantSite = { riverAlongZ: false, lakeDx: 0, lakeDz: 0, trackDx: 0, trackDz: 0 };
   let top = 0;
   for (const part of plantBoxParts(plant, site)) top = Math.max(top, part.oy + part.sy);
   // Rotor and dome are separate meshes, so they are not in the box parts.
@@ -416,6 +450,8 @@ export class PlantsMesh implements DiffLayer {
   private readonly gridSize: number;
   private readonly plants = new Map<number, PlantType>();
   private readonly terrain: Uint8Array;
+  /** Track mask per tile, for turning the rail plants toward their halt. */
+  private readonly rail: Uint8Array;
   private readonly rotorPositions: THREE.Vector3[] = [];
   private rotorAngle = 0;
   private rotorSpeedFactor = 0;
@@ -436,6 +472,7 @@ export class PlantsMesh implements DiffLayer {
     this.gridSize = gridSize;
     const capacity = gridSize * gridSize;
     this.terrain = new Uint8Array(capacity);
+    this.rail = new Uint8Array(capacity);
 
     const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
     boxGeometry.translate(0, 0.5, 0);
@@ -507,6 +544,11 @@ export class PlantsMesh implements DiffLayer {
     for (const diff of diffs) {
       if (this.terrain[diff.index] !== diff.terrain) {
         this.terrain[diff.index] = diff.terrain;
+        changed = true;
+      }
+      // Track laid or lifted beside a station turns the station.
+      if (this.rail[diff.index] !== diff.rail) {
+        this.rail[diff.index] = diff.rail;
         changed = true;
       }
       const plant = diff.tileType === TileType.Plant ? diff.plantType : PlantType.None;
@@ -662,7 +704,26 @@ export class PlantsMesh implements DiffLayer {
         break;
       }
     }
-    return { riverAlongZ, lakeDx, lakeDz };
+    // Lowest-index track neighbour first (north, west, east, south), the
+    // order the sim's plantTrack uses, so the plant faces the halt.
+    let trackDx = 0;
+    let trackDz = 0;
+    for (const [dx, dz] of [
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+      [0, 1],
+    ] as const) {
+      const tx = x + dx;
+      const ty = y + dz;
+      if (tx < 0 || ty < 0 || tx >= size || ty >= size) continue;
+      if (this.rail[ty * size + tx] !== 0) {
+        trackDx = dx;
+        trackDz = dz;
+        break;
+      }
+    }
+    return { riverAlongZ, lakeDx, lakeDz, trackDx, trackDz };
   }
 
   private writeRotors(): void {

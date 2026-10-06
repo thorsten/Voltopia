@@ -8,6 +8,10 @@ import type { DiffLayer } from './renderer.ts';
 const BALLAST_COLOR = 0x8a8075;
 const RAIL_COLOR = 0x4a4d52;
 const DECK_COLOR = 0x6b6f75;
+const PARAPET_COLOR = 0xd8d8d0;
+const BARRIER_POST_COLOR = 0xe8e8e2;
+const BARRIER_BAR_COLOR = 0xd84a3a;
+const SIGNAL_COLOR = 0x2b2f33;
 /** Rails sit this far either side of the tile's centre line. */
 const GAUGE = 0.09;
 const RAIL_WIDTH = 0.03;
@@ -17,6 +21,17 @@ const BALLAST_HEIGHT = 0.04;
 /** Rails on a road tile are flush with the asphalt: no ballast, a hair above the road. */
 const CROSSING_LIFT = 0.012;
 const DECK_HEIGHT = 0.08;
+const DECK_WIDTH = 0.5;
+/** Railings along a rail bridge, like the road bridges' (roadsMesh). */
+const PARAPET_HEIGHT = 0.12;
+const PARAPET_THICKNESS = 0.03;
+/** Level-crossing furniture: a white post with a raised red bar and a signal head, per approach. */
+const BARRIER_POST = { sx: 0.06, sy: 0.14, sz: 0.06 } as const;
+const BARRIER_BAR = { sx: 0.04, sy: 0.46, sz: 0.04 } as const;
+const SIGNAL_HEAD = { sx: 0.08, sy: 0.1, sz: 0.05 } as const;
+/** The post stands this far from the tile centre along the road and beside the lane. */
+const BARRIER_ALONG_ROAD = 0.42;
+const BARRIER_BESIDE_LANE = 0.3;
 
 /** Half a tile of track from the centre to one edge, pointing +x. */
 function segmentGeometry(withBallast: boolean): THREE.BufferGeometry {
@@ -42,6 +57,18 @@ function centreGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/** A unit box standing on its base, scaled per instance. */
+function standingBoxGeometry(): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(1, 1, 1);
+  g.translate(0, 0.5, 0);
+  return g;
+}
+
+/**
+ * Yaw per connection bit: rotating +x about +y by +90° gives -z, which
+ * is north (grid y - 1). The direction vector of an angle a is
+ * (cos a, 0, -sin a).
+ */
 const DIRECTION_ANGLE: ReadonlyArray<{ bit: number; angle: number }> = [
   { bit: DIR_E, angle: 0 },
   { bit: DIR_N, angle: Math.PI / 2 },
@@ -51,15 +78,22 @@ const DIRECTION_ANGLE: ReadonlyArray<{ bit: number; angle: number }> = [
 
 /**
  * Tracks: per track tile one half-segment per connection bit (an
- * isolated tile gets an east and a west stub), a centre block, rails
- * without ballast on road tiles (level crossing) and a deck under
- * tiles that bridge the river. Rebuilt from the diffs like the lines.
+ * isolated tile gets an east and a west stub), each pitched from the
+ * tile centre to its edge so a line follows the ground over a slope and
+ * meets its neighbour at the edge; a centre block; rails without
+ * ballast on road tiles (level crossing) with a barrier post, a raised
+ * bar and a signal head per approach; a deck with parapets under tiles
+ * that bridge the river. Rebuilt from the diffs like the lines.
  */
 export class RailMesh implements DiffLayer {
   private readonly segments: THREE.InstancedMesh;
   private readonly crossings: THREE.InstancedMesh;
   private readonly centres: THREE.InstancedMesh;
   private readonly decks: THREE.InstancedMesh;
+  private readonly parapets: THREE.InstancedMesh;
+  private readonly barrierPosts: THREE.InstancedMesh;
+  private readonly barrierBars: THREE.InstancedMesh;
+  private readonly signalHeads: THREE.InstancedMesh;
   private readonly masks: Uint8Array;
   private readonly tileTypes: Uint8Array;
   private readonly terrains: Uint8Array;
@@ -90,7 +124,11 @@ export class RailMesh implements DiffLayer {
     this.segments = make(segmentGeometry(true), BALLAST_COLOR, tiles * 4);
     this.crossings = make(segmentGeometry(false), RAIL_COLOR, tiles * 4);
     this.centres = make(centreGeometry(), BALLAST_COLOR, tiles);
-    this.decks = make(new THREE.BoxGeometry(1, DECK_HEIGHT, 0.5), DECK_COLOR, tiles);
+    this.decks = make(new THREE.BoxGeometry(1, DECK_HEIGHT, DECK_WIDTH), DECK_COLOR, tiles);
+    this.parapets = make(standingBoxGeometry(), PARAPET_COLOR, tiles * 2);
+    this.barrierPosts = make(standingBoxGeometry(), BARRIER_POST_COLOR, tiles * 2);
+    this.barrierBars = make(standingBoxGeometry(), BARRIER_BAR_COLOR, tiles * 2);
+    this.signalHeads = make(standingBoxGeometry(), SIGNAL_COLOR, tiles * 2);
   }
 
   hasRail(index: number): boolean {
@@ -116,10 +154,28 @@ export class RailMesh implements DiffLayer {
     if (changed) this.rebuild();
   }
 
-  private baseY(index: number, x: number, z: number): number {
+  /** Ground under a point of a track tile: the deck top on a river tile, the terrain elsewhere. */
+  private groundY(index: number, x: number, z: number): number {
     return this.terrains[index] === Terrain.River
       ? this.elevation.maxCornerY(index) + DECK_HEIGHT
       : this.elevation.surfaceY(x, z);
+  }
+
+  /** A standing box of the given size at (x, y, z), yawed by `angle`. */
+  private placeBox(
+    mesh: THREE.InstancedMesh,
+    slot: number,
+    x: number,
+    y: number,
+    z: number,
+    size: { readonly sx: number; readonly sy: number; readonly sz: number },
+    angle: number,
+  ): void {
+    this.dummy.position.set(x, y, z);
+    this.dummy.rotation.set(0, angle, 0);
+    this.dummy.scale.set(size.sx, size.sy, size.sz);
+    this.dummy.updateMatrix();
+    mesh.setMatrixAt(slot, this.dummy.matrix);
   }
 
   private rebuild(): void {
@@ -127,45 +183,124 @@ export class RailMesh implements DiffLayer {
     let crossings = 0;
     let centres = 0;
     let decks = 0;
+    let parapets = 0;
+    let barriers = 0;
     for (let index = 0; index < this.masks.length; index++) {
       const mask = this.masks[index];
       if (mask === 0) continue;
       const x = (index % this.gridSize) + 0.5;
       const z = Math.floor(index / this.gridSize) + 0.5;
       const onRoad = this.tileTypes[index] === TileType.Road;
-      const y = this.baseY(index, x, z) + (onRoad ? CROSSING_LIFT : 0);
+      const onRiver = this.terrains[index] === Terrain.River;
+      const lift = onRoad ? CROSSING_LIFT : 0;
+      const centreY = this.groundY(index, x, z) + lift;
       const target = onRoad ? this.crossings : this.segments;
       const bits = mask & (DIR_N | DIR_E | DIR_S | DIR_W);
+      const alongX = (bits & (DIR_E | DIR_W)) !== 0 && (bits & (DIR_N | DIR_S)) === 0;
+      const alongZ = (bits & (DIR_N | DIR_S)) !== 0 && (bits & (DIR_E | DIR_W)) === 0;
       const directions =
         bits === 0
           ? [DIRECTION_ANGLE[0], DIRECTION_ANGLE[2]]
           : DIRECTION_ANGLE.filter((d) => (bits & d.bit) !== 0);
       for (const { angle } of directions) {
-        this.dummy.position.set(x, y, z);
-        this.dummy.rotation.set(0, angle, 0);
-        this.dummy.scale.set(1, 1, 1);
+        // Pitch the half-segment from the centre height to the edge
+        // midpoint's height and stretch it to reach the edge, so track
+        // climbs a slope instead of floating over the downhill half, and
+        // two neighbours meet at the shared edge point.
+        const ex = x + 0.5 * Math.cos(angle);
+        const ez = z - 0.5 * Math.sin(angle);
+        const edgeY = this.groundY(index, ex, ez) + lift;
+        const rise = edgeY - centreY;
+        this.dummy.position.set(x, centreY, z);
+        this.dummy.rotation.set(0, angle, Math.atan2(rise, 0.5));
+        this.dummy.scale.set(Math.hypot(0.5, rise) / 0.5, 1, 1);
         this.dummy.updateMatrix();
         target.setMatrixAt(onRoad ? crossings++ : segments++, this.dummy.matrix);
       }
       if (!onRoad) {
-        this.dummy.position.set(x, y, z);
+        this.dummy.position.set(x, centreY, z);
         this.dummy.rotation.set(0, 0, 0);
+        this.dummy.scale.set(1, 1, 1);
         this.dummy.updateMatrix();
         this.centres.setMatrixAt(centres++, this.dummy.matrix);
       }
-      if (this.terrains[index] === Terrain.River) {
-        const horizontal = (bits & (DIR_E | DIR_W)) !== 0 || bits === 0;
-        this.dummy.position.set(x, this.elevation.maxCornerY(index) + DECK_HEIGHT / 2, z);
+      if (onRiver) {
+        const deckTop = this.elevation.maxCornerY(index) + DECK_HEIGHT;
+        const horizontal = alongX || bits === 0;
+        this.dummy.position.set(x, deckTop - DECK_HEIGHT / 2, z);
         this.dummy.rotation.set(0, horizontal ? 0 : Math.PI / 2, 0);
+        this.dummy.scale.set(1, 1, 1);
         this.dummy.updateMatrix();
         this.decks.setMatrixAt(decks++, this.dummy.matrix);
+        // Parapets along a straight bridge span, one per side of the deck.
+        if (horizontal || alongZ) {
+          const offset = DECK_WIDTH / 2 - PARAPET_THICKNESS / 2;
+          for (const side of [-1, 1]) {
+            const px = horizontal ? x : x + side * offset;
+            const pz = horizontal ? z + side * offset : z;
+            this.placeBox(
+              this.parapets,
+              parapets++,
+              px,
+              deckTop,
+              pz,
+              { sx: 1, sy: PARAPET_HEIGHT, sz: PARAPET_THICKNESS },
+              horizontal ? 0 : Math.PI / 2,
+            );
+          }
+        }
+      }
+      if (onRoad && (alongX || alongZ)) {
+        // A road crossing a straight track: a barrier on the right-hand
+        // side of each approach (traffic keeps right), its bar raised, a
+        // signal head on the post. Decoration — cars and trains ignore
+        // each other.
+        for (const s of [-1, 1]) {
+          const px = alongX ? x + s * BARRIER_BESIDE_LANE : x + s * BARRIER_ALONG_ROAD;
+          const pz = alongX ? z + s * BARRIER_ALONG_ROAD : z - s * BARRIER_BESIDE_LANE;
+          const ground = this.groundY(index, px, pz);
+          const yaw = alongX ? 0 : Math.PI / 2;
+          this.placeBox(this.barrierPosts, barriers, px, ground, pz, BARRIER_POST, yaw);
+          this.placeBox(
+            this.barrierBars,
+            barriers,
+            px,
+            ground + BARRIER_POST.sy,
+            pz,
+            BARRIER_BAR,
+            yaw,
+          );
+          this.placeBox(
+            this.signalHeads,
+            barriers,
+            px,
+            ground + BARRIER_POST.sy + BARRIER_BAR.sy - SIGNAL_HEAD.sy,
+            pz,
+            SIGNAL_HEAD,
+            yaw,
+          );
+          barriers++;
+        }
       }
     }
     this.segments.count = segments;
     this.crossings.count = crossings;
     this.centres.count = centres;
     this.decks.count = decks;
-    for (const mesh of [this.segments, this.crossings, this.centres, this.decks]) {
+    this.parapets.count = parapets;
+    this.barrierPosts.count = barriers;
+    this.barrierBars.count = barriers;
+    this.signalHeads.count = barriers;
+    for (const mesh of [
+      this.segments,
+      this.crossings,
+      this.centres,
+      this.decks,
+      this.parapets,
+      this.barrierPosts,
+      this.barrierBars,
+      this.signalHeads,
+    ]) {
       mesh.instanceMatrix.needsUpdate = true;
     }
   }
