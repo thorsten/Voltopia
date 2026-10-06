@@ -10,7 +10,15 @@ export interface NewGameOptions {
   disasterScale: number;
 }
 
-export const MAP_SIZES = [48, 64, 96] as const;
+/**
+ * Selectable map sizes. 128 is four times the tiles of 64: the
+ * simulation carries it comfortably (measured 23 ms of a tick's 250 ms
+ * budget on a grown city), while the frame cost grows with the map
+ * because the instanced meshes span the whole grid — the diagnostics
+ * panel in the settings is there to show what a given machine makes
+ * of it.
+ */
+export const MAP_SIZES = [48, 64, 96, 128] as const;
 
 export const DIFFICULTIES = [
   { id: 'easy', startingMoney: 40_000 },

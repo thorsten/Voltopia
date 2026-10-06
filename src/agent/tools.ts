@@ -29,7 +29,7 @@ import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
 // cross-layer import as ../ui/i18n.tsx above. Reusing it keeps an agent's
 // disaster levels identical to the new-game dialog's, on purpose: a
 // "harsh" city should mean the same intensity whoever founds it.
-import { DISASTER_LEVELS } from '../ui/newGame.ts';
+import { DISASTER_LEVELS, MAP_SIZES } from '../ui/newGame.ts';
 import type { TileMirror } from './tileMirror.ts';
 
 /** Outcome of a command once the worker has applied it. */
@@ -1386,7 +1386,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       inputSchema: {
         type: 'object',
         properties: {
-          size: { type: 'integer', enum: [48, 64, 96] },
+          size: { type: 'integer', enum: [48, 64, 96, 128] },
           difficulty: { type: 'string', enum: ['easy', 'normal', 'hard'] },
           seed: { type: 'integer', description: 'Fixed world seed; omit for a random map.' },
           disasters: { type: 'string', enum: [...DISASTER_LEVEL_NAMES] },
@@ -1395,8 +1395,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       annotations: { consequentialHint: true },
       async execute(input) {
         const mapSize = readInt(input, 'size', GRID_SIZE);
-        if (![48, 64, 96].includes(mapSize))
-          throw new ToolInputError('"size" must be 48, 64 or 96');
+        if (!MAP_SIZES.includes(mapSize as (typeof MAP_SIZES)[number]))
+          throw new ToolInputError(`"size" must be one of ${MAP_SIZES.join(', ')}`);
         const difficulty = readEnum(
           input,
           'difficulty',

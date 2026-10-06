@@ -3,7 +3,7 @@ import { BALANCE } from '../shared/constants.ts';
 import { createSimState } from './state.ts';
 import { generateTerrain } from './terrain.ts';
 
-const SIZES = [48, 64, 96];
+const SIZES = [48, 64, 96, 128];
 
 function buildableFraction(elevation: Uint8Array, size: number): number {
   let ok = 0;
