@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, Terrain, VehicleKind, Zone } from '../shared/types.ts';
+import {
+  PlantType,
+  SupplyStatus,
+  Terrain,
+  VehicleKind,
+  WAGON_ID_OFFSET,
+  Zone,
+} from '../shared/types.ts';
 import { SimEngine } from './engine.ts';
-import { BusPhase, TileType, VanPhase } from './state.ts';
+import { buildRail } from './rail.ts';
+import { BusPhase, TileType, TrainKind, TrainPhase, VanPhase } from './state.ts';
 import { timeOfDay, dayNumber } from './tick.ts';
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
+import { runningTrains, trailingPoint } from './trains.ts';
+import { ticksAtHour } from './vehicles.ts';
 
 function makeEngine(seed = 42, size = 16): SimEngine {
   return new SimEngine(seed, size);
@@ -312,6 +322,76 @@ describe('SimEngine basics', () => {
     const buses = event.vehicles.filter((v) => v.kind === VehicleKind.Bus);
     expect(buses).toEqual([{ id: 8, x: 2.5, y: 3.5, angle: 0, kind: VehicleKind.Bus }]);
     expect(engine.state.buses).toHaveLength(BALANCE.transit.busesPerDepot);
+  });
+
+  it('sends running trains to the renderer as a locomotive plus a trailing wagon', () => {
+    const engine = new SimEngine(1, 32);
+    const { state } = engine;
+    const at = (x: number, y: number) => tileIndex(x, y, 32);
+    state.money = 1e9;
+    // Same rail town as src/sim/trains.test.ts' railTown fixture: track
+    // along y = 10, a road along y = 8, a powered yard, two stations and
+    // a terminal with a powered factory and one with a depot.
+    buildRail(
+      state,
+      Array.from({ length: 27 }, (_, i) => at(i + 2, 10)),
+    );
+    buildRoads(
+      state,
+      Array.from({ length: 27 }, (_, i) => at(i + 2, 8)),
+    );
+    buildPowerLines(state, [at(4, 12), at(5, 12), at(6, 12)]);
+    placePlant(state, at(7, 12), PlantType.SolarFarm);
+    placePlant(state, at(4, 11), PlantType.RailYard);
+    placePlant(state, at(10, 9), PlantType.TrainStation);
+    placePlant(state, at(24, 9), PlantType.TrainStation);
+    placePlant(state, at(16, 11), PlantType.FreightTerminal);
+    state.layers.zone[at(18, 13)] = Zone.Industrial;
+    state.layers.density[at(18, 13)] = 1;
+    state.layers.supplied[at(18, 13)] = SupplyStatus.Supplied;
+    placePlant(state, at(26, 11), PlantType.FreightTerminal);
+    buildRoads(state, [at(27, 14)]);
+    placePlant(state, at(27, 13), PlantType.LogisticsDepot);
+
+    // Inside the operating window, like trainsStep's own test: both
+    // stations and the depot are served well before tick 50.
+    state.tick =
+      Math.floor(state.tick / TICKS_PER_DAY) * TICKS_PER_DAY +
+      ticksAtHour(BALANCE.rail.windowStartHour);
+
+    let event = engine.tick();
+    for (let i = 1; i < 50 && runningTrains(state).length === 0; i++) {
+      event = engine.tick();
+    }
+    if (event.type !== 'tick') throw new Error('expected tick');
+    const running = runningTrains(state);
+    expect(running.length).toBeGreaterThan(0);
+
+    for (const train of running) {
+      const freight = train.kind === TrainKind.Freight;
+      const locoKind = freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive;
+      const wagonKind = freight ? VehicleKind.FreightWagon : VehicleKind.Wagon;
+      expect(event.vehicles.filter((v) => v.id === train.id)).toEqual([
+        { id: train.id, x: train.x, y: train.y, angle: train.angle, kind: locoKind },
+      ]);
+      const wagon = trailingPoint(state, train, BALANCE.rail.wagonGap);
+      expect(event.vehicles.filter((v) => v.id === train.id + WAGON_ID_OFFSET)).toEqual([
+        {
+          id: train.id + WAGON_ID_OFFSET,
+          x: wagon.x,
+          y: wagon.y,
+          angle: wagon.angle,
+          kind: wagonKind,
+        },
+      ]);
+    }
+
+    // Parked trains (not out of the yard) produce no vehicle entries at all.
+    const parked = state.trains.filter((t) => t.phase === TrainPhase.Parked);
+    for (const train of parked) {
+      expect(event.vehicles.some((v) => v.id === train.id)).toBe(false);
+      expect(event.vehicles.some((v) => v.id === train.id + WAGON_ID_OFFSET)).toBe(false);
+    }
   });
 
   it('reports the cooling load in stats on a hot summer afternoon', () => {
