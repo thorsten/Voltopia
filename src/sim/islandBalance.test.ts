@@ -19,7 +19,7 @@ function input(over: Partial<IslandInput> = {}): IslandInput {
     coverage: 0,
     generation: { solar: 0, wind: 0, rooftop: 0, hydro: 0, tidal: 0, geothermal: 0 },
     biogasCapacity: 0,
-    demand: { buildings: 0, heating: 0, cooling: 0, charging: 0, heatPumps: 0 },
+    demand: { buildings: 0, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
     businessDemand: 0,
     industrialDemand: 0,
     contractedBuildings: 0,
@@ -53,7 +53,7 @@ describe('balanceIsland', () => {
     const r = balanceIsland(
       input({
         generation: { solar: 100, wind: 0, rooftop: 0, hydro: 0, tidal: 0, geothermal: 0 },
-        demand: { buildings: 40, heating: 0, cooling: 0, charging: 0, heatPumps: 0 },
+        demand: { buildings: 40, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
       }),
       pool(),
     );
@@ -65,7 +65,7 @@ describe('balanceIsland', () => {
 
   it('a deficit without a substation cannot import; with one it imports up to the link, two double it', () => {
     const short = input({
-      demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0 },
+      demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
     });
     expect(balanceIsland(short, pool()).gridImport).toBe(0);
     expect(balanceIsland(short, pool()).deficit).toBeCloseTo(100, 9);
@@ -94,7 +94,7 @@ describe('balanceIsland', () => {
     const p = pool();
     const r = balanceIsland(
       input({
-        demand: { buildings: 400, heating: 0, cooling: 0, charging: 0, heatPumps: 0 },
+        demand: { buildings: 400, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
         businessDemand: 200,
         contractedBuildings: 10,
         demandResponseActive: true,
@@ -119,7 +119,7 @@ describe('balanceIsland', () => {
       input({
         timeOfDay: 0.1,
         coverage: 1,
-        demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0 },
+        demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
       }),
       p,
     );
@@ -176,7 +176,7 @@ describe('balanceIsland', () => {
     const surplus = (heatStore: IslandInput['heatStore'], batteryPowerLimit = 100): IslandInput =>
       input({
         generation: { solar: 300, wind: 0, rooftop: 0, hydro: 0, tidal: 0, geothermal: 0 },
-        demand: { buildings: 0, heating: 0, cooling: 0, charging: 0, heatPumps: 5 },
+        demand: { buildings: 0, heating: 0, cooling: 0, charging: 0, heatPumps: 5, traction: 0 },
         battery: { stored: 0, capacity: 10_000, powerLimit: batteryPowerLimit, efficiency: 0.92 },
         heatStore,
       });
@@ -252,7 +252,7 @@ describe('balanceIsland', () => {
   it('discharges battery, then pumped, then the fuel cells, then dispatches biogas', () => {
     const short = (buildings: number): IslandInput =>
       input({
-        demand: { buildings, heating: 0, cooling: 0, charging: 0, heatPumps: 0 },
+        demand: { buildings, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
         battery: { stored: 1_000, capacity: 3_000, powerLimit: 120, efficiency: 0.92 },
         pumped: { stored: 500, capacity: 2_000, powerLimit: 80, efficiency: 0.8 },
         hydrogen: {
@@ -292,7 +292,7 @@ describe('balanceIsland', () => {
     const bound = (time: number) =>
       flexible * comfortWindowHours(time, season) * (TICKS_PER_DAY / 24);
     expect(comfortWindowHours(night, season)).toBeGreaterThan(BALANCE.smartMeters.backlogHours);
-    const load = { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0 };
+    const load = { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 };
     // A backlog just over the daytime bound: by day the excess is served
     // regardless of the weather, and the backlog lands back on the bound.
     const over = bound(0.5) + 10;
@@ -309,7 +309,7 @@ describe('balanceIsland', () => {
   });
 
   it('drains the backlog by at most maxDrainShare of the load per tick', () => {
-    const load = { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0 };
+    const load = { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 };
     const drainCap = BALANCE.smartMeters.maxDrainShare * 100;
     // Dark and calm: the comfort bound alone would serve thousands at
     // once, but the overflow may not exceed the drain cap.
@@ -366,7 +366,10 @@ describe('balanceIsland', () => {
       substations: 1,
     });
     const partial = balanceIsland(
-      { ...base, demand: { buildings: 20, heating: 0, cooling: 0, charging: 0, heatPumps: 0 } },
+      {
+        ...base,
+        demand: { buildings: 20, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
+      },
       pool(),
     );
     expect(partial.tradeBuy).toBeCloseTo(BALANCE.market.importCapacity - 20, 9);
@@ -374,12 +377,29 @@ describe('balanceIsland', () => {
     expect(partial.batteryDelta).toBeCloseTo((BALANCE.market.importCapacity - 20) * 0.92, 9);
     // A deficit deep enough to fill the link leaves no room at all.
     const full = balanceIsland(
-      { ...base, demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0 } },
+      {
+        ...base,
+        demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
+      },
       pool(),
     );
     expect(full.gridImport).toBeCloseTo(BALANCE.market.importCapacity, 9);
     expect(full.tradeBuy).toBe(0);
     expect(full.batteryDelta).toBe(0);
     expect(full.deficit).toBeCloseTo(100 - BALANCE.market.importCapacity, 9);
+  });
+
+  it('traction is an inflexible load that counts toward consumption and the deficit', () => {
+    const quiet = balanceIsland(input(), pool());
+    const loaded = balanceIsland(
+      input({
+        demand: { buildings: 0, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 30 },
+      }),
+      pool(),
+    );
+    expect(loaded.tractionConsumption).toBe(30);
+    expect(loaded.consumptionThisTick).toBeCloseTo(quiet.consumptionThisTick + 30);
+    // No generation, no biogas, no storage in the factory's defaults: the whole load is a deficit.
+    expect(loaded.deficit).toBeCloseTo(quiet.deficit + 30);
   });
 });

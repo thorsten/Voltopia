@@ -41,6 +41,8 @@ export interface IslandInput {
     charging: number;
     /** District-heating pumps: inflexible, and not part of the buildings' line. */
     heatPumps: number;
+    /** Catenary draw of the running trains fed from this island: inflexible. */
+    traction: number;
   };
   /** Pre-flex base load of the contracted businesses (the demand-response pool). */
   businessDemand: number;
@@ -77,6 +79,7 @@ export interface IslandResult {
   rooftop: number;
   buildingConsumption: number;
   chargingConsumption: number;
+  tractionConsumption: number;
   heatingConsumption: number;
   coolingConsumption: number;
   curtailment: number;
@@ -174,12 +177,14 @@ export function balanceIsland(input: IslandInput, pool: IslandPool): IslandResul
   const coolingDemand = input.demand.cooling;
   const chargingDemand = input.demand.charging;
   const pumpPower = input.demand.heatPumps;
+  const tractionDemand = input.demand.traction;
 
   // Smart meters: a share of metered household load and on-site electric
   // heating waits for renewable surplus (see smartMeters.ts). Cooling,
   // charging and the network pumps stay inflexible. With no coverage
   // every term is 0 and the step is unchanged.
-  const unshifted = buildingDemand + heatingDemand + coolingDemand + chargingDemand + pumpPower;
+  const unshifted =
+    buildingDemand + heatingDemand + coolingDemand + chargingDemand + pumpPower + tractionDemand;
   const { householdFlexShare, heatingFlexShare, maxDrainShare } = BALANCE.smartMeters;
   const flexible =
     input.coverage * (householdFlexShare * buildingDemand + heatingFlexShare * heatingDemand);
@@ -443,6 +448,7 @@ export function balanceIsland(input: IslandInput, pool: IslandPool): IslandResul
     rooftop,
     buildingConsumption: buildingDemand,
     chargingConsumption: chargingDemand,
+    tractionConsumption: tractionDemand,
     heatingConsumption: heatingDemand,
     coolingConsumption: coolingDemand,
     curtailment,

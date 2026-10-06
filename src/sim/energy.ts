@@ -337,6 +337,8 @@ export interface EnergyTickInput {
    * energised), served after buildings; see `chargingDemandByIsland`.
    */
   chargingByIsland: Float64Array;
+  /** Traction load per island this tick (index = island number); absent = no trains. */
+  tractionByIsland?: Float64Array;
   /** This tick's district-heating balance (IDLE_HEAT when absent). */
   heat?: HeatTickResult;
 }
@@ -495,6 +497,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
           cooling: coolingDemand[n],
           charging: Math.max(0, input.chargingByIsland[n] ?? 0),
           heatPumps: heat.pumpPower * pumpShare,
+          traction: Math.max(0, input.tractionByIsland?.[n] ?? 0),
         },
         businessDemand: businessDemand[n],
         industrialDemand: industrialDemand[n],
@@ -594,8 +597,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     rooftop: sum((r) => r.rooftop),
     buildingConsumption: sum((r) => r.buildingConsumption),
     chargingConsumption: sum((r) => r.chargingConsumption),
-    // Trains do not run yet (see trains.ts, Task 2): no catenary draw.
-    tractionConsumption: 0,
+    tractionConsumption: sum((r) => r.tractionConsumption),
     heatingConsumption: sum((r) => r.heatingConsumption),
     coolingConsumption: sum((r) => r.coolingConsumption),
     curtailment: sum((r) => r.curtailment),

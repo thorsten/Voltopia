@@ -2163,4 +2163,20 @@ describe('per-island balance', () => {
     expect(state.layers.stored[at(6, 2)]).toBeGreaterThan(0);
     expect(state.layers.stored[at(26, 26)]).toBe(0);
   });
+
+  it('books tractionByIsland on its island and reports it as traction consumption', () => {
+    const state = makeState();
+    placePlant(state, at(5, 5), PlantType.SolarFarm); // one island, number 1
+    recomputeGrid(state);
+    const traction = new Float64Array(state.islandKeys.length);
+    traction[1] = 12;
+    energyStep(state, {
+      chargingByIsland: new Float64Array(state.islandKeys.length),
+      tractionByIsland: traction,
+    });
+    expect(state.lastEnergy.tractionConsumption).toBe(12);
+    expect(state.lastIslands.find((i) => i.number === 1)!.consumption).toBeGreaterThanOrEqual(12);
+    energyStep(state, { chargingByIsland: new Float64Array(state.islandKeys.length) });
+    expect(state.lastEnergy.tractionConsumption).toBe(0);
+  });
 });
