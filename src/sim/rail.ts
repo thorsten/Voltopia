@@ -9,8 +9,9 @@ import {
   tileX,
   tileY,
 } from '../shared/grid.ts';
-import { MAX_RAIL_AGE, PlantType, StopState, SupplyStatus, Zone } from '../shared/types.ts';
+import { MAX_RAIL_AGE, PlantType, StopState } from '../shared/types.ts';
 import type { BuildResult } from './roads.ts';
+import { isFactory } from './deliveries.ts';
 import { clearForest, fellingCost } from './forest.ts';
 import {
   BuildIntent,
@@ -324,16 +325,9 @@ export function updateRailCover(state: SimState): void {
   }
 }
 
-/** A factory tile that can load goods: industrial building, intact, fully supplied. */
+/** A factory tile that can load goods: a powered factory (see `isFactory`), and intact. */
 function isLoadingFactory(state: SimState, tile: number): boolean {
-  const { tileType, zone, density, damage, supplied } = state.layers;
-  return (
-    tileType[tile] === TileType.Empty &&
-    zone[tile] === Zone.Industrial &&
-    density[tile] > 0 &&
-    damage[tile] === 0 &&
-    supplied[tile] === SupplyStatus.Supplied
-  );
+  return isFactory(state, tile) && state.layers.damage[tile] === 0;
 }
 
 function tilesWithin(state: SimState, centre: number, radius: number): number[] {
