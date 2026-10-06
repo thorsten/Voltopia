@@ -137,6 +137,7 @@ describe('agent tools: reading', () => {
       'build_road',
       'build_power_line',
       'build_bus_stop',
+      'build_rail',
       'paint_zone',
       'place_plant',
       'bulldoze',
@@ -914,5 +915,71 @@ describe('district grids', () => {
     const islandNumber = (report.islands as Array<{ number: number }>)[0].number;
     expect(islandNumber).toBeGreaterThan(0);
     expect(ctx.tiles.island[farTile]).toBe(islandNumber);
+  });
+});
+
+describe('railways', () => {
+  function flatHarness() {
+    const h = createHarness();
+    h.engine.state.layers.terrain.fill(Terrain.Land);
+    h.engine.state.layers.elevation.fill(0);
+    h.engine.state.money = 1e9;
+    return h;
+  }
+
+  it('build_rail lays track along the path and reports the spend', async () => {
+    const { call, engine } = flatHarness();
+    const result = await call('build_rail', { from: { x: 2, y: 10 }, to: { x: 12, y: 10 } });
+    expect(result).toMatchObject({ ok: true, tiles: 11 });
+    expect(engine.state.layers.rail[tileIndex(5, 10, SIZE)]).not.toBe(0);
+  });
+
+  it('place_plant knows the three rail plants and rejects a yard without track', async () => {
+    const { call } = flatHarness();
+    await call('build_rail', { from: { x: 2, y: 10 }, to: { x: 12, y: 10 } });
+    await call('build_road', { from: { x: 2, y: 8 }, to: { x: 12, y: 8 } });
+    expect(await call('place_plant', { plant: 'train_station', x: 4, y: 9 })).toMatchObject({
+      ok: true,
+    });
+    expect(await call('place_plant', { plant: 'freight_terminal', x: 6, y: 11 })).toMatchObject({
+      ok: true,
+    });
+    expect(await call('place_plant', { plant: 'rail_yard', x: 8, y: 11 })).toMatchObject({
+      ok: true,
+    });
+    expect(await call('place_plant', { plant: 'rail_yard', x: 20, y: 20 })).toMatchObject({
+      ok: false,
+      error: 'needsRailAccess',
+    });
+  });
+
+  it('the overview carries a rail block, get_map a rail layer and find_tiles the rail kinds', async () => {
+    const { call } = flatHarness();
+    await call('build_rail', { from: { x: 2, y: 10 }, to: { x: 12, y: 10 } });
+    await call('build_road', { from: { x: 2, y: 8 }, to: { x: 12, y: 8 } });
+    await call('place_plant', { plant: 'train_station', x: 4, y: 9 });
+    await call('place_plant', { plant: 'rail_yard', x: 8, y: 11 });
+    await call('advance_time', { ticks: 1 });
+    const overview = await call('get_game_overview');
+    expect(overview.rail).toMatchObject({ networks: 1, stations: 1, stationsServed: 0, yards: 1 });
+    const map = await call('get_map', {
+      layer: 'rail',
+      origin: { x: 2, y: 9 },
+      width: 11,
+      height: 3,
+    });
+    const rows = map.rows as string[];
+    expect(rows[1]).toBe(':::::::::::');
+    expect(rows[0]).toContain('x'); // the unserved station at (4, 9)
+    expect(rows[2]).toContain('R');
+    expect(String(map.legend)).toContain('track');
+    const due = await call('find_tiles', { kind: 'rail_station_due' });
+    expect(due).toMatchObject({ total: 1, tiles: [{ x: 4, y: 9 }] });
+    const dark = await call('find_tiles', { kind: 'rail_yard_without_grid' });
+    expect(dark).toMatchObject({ total: 1, tiles: [{ x: 8, y: 11 }] });
+    const track = await call('find_tiles', { kind: 'rail_track' });
+    expect(track.total).toBe(11);
+    const info = await call('inspect_tile', { x: 8, y: 11 });
+    expect(info.railYard).toMatchObject({ powered: false, stationsInNetwork: 1 });
   });
 });

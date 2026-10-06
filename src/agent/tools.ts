@@ -107,6 +107,9 @@ export const PLANT_NAMES = {
   heat_plant: PlantType.HeatPlant,
   heat_store: PlantType.HeatStore,
   substation: PlantType.Substation,
+  train_station: PlantType.TrainStation,
+  freight_terminal: PlantType.FreightTerminal,
+  rail_yard: PlantType.RailYard,
 } as const;
 export type PlantName = keyof typeof PLANT_NAMES;
 
@@ -176,6 +179,9 @@ const PLANT_TOOL_KEY: Record<PlantName, TranslationKey> = {
   heat_plant: 'tool.plant-heat',
   heat_store: 'tool.plant-heatstore',
   substation: 'tool.plant-substation',
+  train_station: 'tool.plant-station',
+  freight_terminal: 'tool.plant-terminal',
+  rail_yard: 'tool.plant-railyard',
 };
 
 /**
@@ -216,9 +222,23 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
   substation:
     'any empty land tile; the gate of its grid island to the outer grid — import and export need one ' +
     `(${BALANCE.market.importCapacity} in / ${BALANCE.market.exportCapacity} out per substation and tick)`,
+  train_station:
+    'an empty land tile with a track AND a road as direct (4-)neighbours; covers road tiles within stationRadius once served',
+  freight_terminal:
+    'an empty land tile with a track as direct (4-)neighbour; loads from powered factories and unloads to logistics depots within freightRadius',
+  rail_yard:
+    'an empty land tile with a track as direct (4-)neighbour, on a powered grid island (its catenary feed); fields the trains of its track network',
 };
 
-export const MAP_LAYERS = ['overview', 'terrain', 'supply', 'density', 'power', 'transit'] as const;
+export const MAP_LAYERS = [
+  'overview',
+  'terrain',
+  'supply',
+  'density',
+  'power',
+  'transit',
+  'rail',
+] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 export const FIND_KINDS = [
@@ -240,6 +260,9 @@ export const FIND_KINDS = [
   'damaged',
   'substation',
   'island_without_substation',
+  'rail_track',
+  'rail_station_due',
+  'rail_yard_without_grid',
 ] as const;
 export type FindKind = (typeof FIND_KINDS)[number];
 
@@ -386,6 +409,7 @@ function describeTile(ctx: AgentContext, index: number): Record<string, unknown>
     plant: PLANT_NAME_BY_TYPE.get(t.plantType) ?? 'none',
     hasRoad: t.tileType === TileType.Road,
     hasPowerLine: t.powerLine !== 0,
+    hasRail: t.rail !== 0,
     supply: SUPPLY_NAME[t.supplied],
     damage: t.damage,
   };
@@ -427,6 +451,9 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
       heat_plant: 'Q',
       heat_store: 'K',
       substation: 'N',
+      train_station: 'S',
+      freight_terminal: 'L',
+      rail_yard: 'R',
     };
     const name = PLANT_NAME_BY_TYPE.get(tiles.plantType[i] as PlantType);
     return name && name !== 'none' ? glyph[name] : '?';
@@ -434,6 +461,7 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
   if (terrain === Terrain.River) return '~';
   if (terrain === Terrain.Lake) return '#';
   if (terrain === Terrain.Sea) return '%';
+  if (tiles.rail[i] !== 0 && tiles.zone[i] === Zone.None) return ':';
   if (tiles.powerLine[i] !== 0 && tiles.zone[i] === Zone.None) return '=';
   const zone = tiles.zone[i];
   const built = tiles.density[i] > 0;
@@ -447,11 +475,22 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
 const OVERVIEW_LEGEND =
   '. empty land, ~ river, # lake, % sea, + road (or bridge), o road with a bus stop, ' +
   '= power line on empty land, ' +
+  ': track on empty land, ' +
   'r/c/s/i zoned but unbuilt (residential/commercial/retail/industrial), R/C/S/I building, ' +
   'plants: V solar, W wind, B battery, G biogas, H charging hub, P park, ' +
   'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot, ' +
-  'Q heat plant, K heat store, N substation. ' +
+  'Q heat plant, K heat store, N substation, ' +
+  'S train station, L freight terminal, R rail yard. ' +
   'Roads may also carry a power line (see the power layer).';
+
+/** River/lake/sea glyph for a tile, or null when it carries none. */
+function waterGlyph(tiles: TileMirror, i: number): string | null {
+  const terrain = tiles.terrain[i];
+  if (terrain === Terrain.River) return '~';
+  if (terrain === Terrain.Lake) return '#';
+  if (terrain === Terrain.Sea) return '%';
+  return null;
+}
 
 function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
   const terrain = tiles.terrain[i];
@@ -508,6 +547,27 @@ function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
       if (terrain === Terrain.Sea) return '%';
       return '.';
     }
+    case 'rail': {
+      if (tiles.tileType[i] === TileType.Plant) {
+        switch (tiles.plantType[i]) {
+          case PlantType.TrainStation:
+            return tiles.stationState[i] === StopState.Served
+              ? 'S'
+              : tiles.stationState[i] === StopState.Due
+                ? 's'
+                : 'x';
+          case PlantType.FreightTerminal:
+            return 'L';
+          case PlantType.RailYard:
+            return 'R';
+          default:
+            return 'P';
+        }
+      }
+      if (tiles.rail[i] !== 0) return tiles.tileType[i] === TileType.Road ? '=' : ':';
+      if (tiles.tileType[i] === TileType.Road) return tiles.railCover[i] !== 0 ? '+' : '-';
+      return waterGlyph(tiles, i) ?? '.';
+    }
   }
 }
 
@@ -523,6 +583,10 @@ const LAYER_LEGEND: Record<MapLayer, string> = {
   transit:
     'o served bus stop, d stop due for a bus, x unserved stop, + road covered by a served stop, ' +
     '- road not covered, T bus depot, P other plant, ~ river, # lake, % sea, . other',
+  rail:
+    ': track, = track on a road (level crossing), S served station, s station due for a train, ' +
+    'x unserved station, L freight terminal, R rail yard, P other plant, ' +
+    '+ road covered by a served station, - road not covered, ~ river, # lake, % sea, . other',
 };
 
 // ---------------------------------------------------------------------------
@@ -646,10 +710,27 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           transit: {
             riderShare: round(s.transit.riderShare, 2),
             riders: s.transit.riders,
+            busRiders: s.transit.busRiders,
+            railRiders: s.transit.railRiders,
             busesDriving: s.transit.driving,
             stops: s.transit.stops,
             stopsServed: s.transit.stopsServed,
             depots: s.transit.depots,
+          },
+          rail: {
+            networks: s.rail.networks,
+            trackTiles: s.rail.trackTiles,
+            stations: s.rail.stations,
+            stationsServed: s.rail.stationsServed,
+            terminals: s.rail.terminals,
+            terminalsLoading: s.rail.terminalsLoading,
+            terminalsUnloading: s.rail.terminalsUnloading,
+            yards: s.rail.yards,
+            trainsRunning: s.rail.trainsRunning,
+            trainsStalled: s.rail.trainsStalled,
+            railRiders: s.transit.railRiders,
+            depotsRailSupplied: s.deliveries.depotsRailSupplied,
+            tractionLoad: round(s.energy.consumption.traction, 1),
           },
           disasters: {
             intensity: s.disasters.scale,
@@ -723,6 +804,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             'Bus stops marked on roads plus a bus depot put electric buses on the roads; a commuter ' +
               `with a served stop within ${BALANCE.transit.stopRadius} tiles of home and of work ` +
               'leaves the car at home.',
+            'Track is a drag path like power lines; stations need a road too; the rail yard must ' +
+              'stand on a powered island.',
           ],
           costs: {
             roadPerTile: costs.roadPerTile,
@@ -732,12 +815,15 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             zonePerTile: costs.zonePerTile,
             insulation: costs.insulation,
             busStop: costs.busStop,
+            railPerTile: costs.railPerTile,
+            railBridgePerTile: costs.railBridgePerTile,
           },
           upkeepPerTick: {
             roadPerTile: BALANCE.upkeepPerTick.roadPerTile,
             powerLinePerTile: BALANCE.upkeepPerTick.powerLinePerTile,
             biogasFuelCostPerEnergyUnit: BALANCE.upkeepPerTick.biogasFuelCostPerEnergyUnit,
             busStop: BALANCE.upkeepPerTick.busStop,
+            railPerTile: BALANCE.upkeepPerTick.railPerTile,
           },
           plants: (Object.keys(PLANT_NAMES) as PlantName[]).map((name) => {
             const type = PLANT_NAMES[name];
@@ -888,7 +974,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'in any of its rings; its output still counts, nobody nearby uses it), ' +
         'bus_stop, damaged (out of service from a storm, fire or flood; ' +
         "see get_disasters), substation, island_without_substation (one tile — the island's key " +
-        'tile — per grid island that has no substation and so cannot import or export). ' +
+        'tile — per grid island that has no substation and so cannot import or export), ' +
+        'rail_track, rail_station_due (a station not currently served), ' +
+        'rail_yard_without_grid (a rail yard on an island with no power, so it cannot field trains). ' +
         'Optionally nearest to a point first.',
       inputSchema: {
         type: 'object',
@@ -1023,6 +1111,22 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       },
     },
     {
+      name: 'build_rail',
+      description:
+        'Lay railway track along an L-shaped path (or explicit tiles). Track shares tiles with roads ' +
+        '(level crossings) and power lines, bridges the river at a higher price, and is refused on ' +
+        'buildings, plants, lakes, the sea and steep tiles. Tiles that already carry track are kept ' +
+        'and not charged. Stations, freight terminals and the rail yard are placed with place_plant ' +
+        'beside the track; one yard per connected track network fields its trains.',
+      inputSchema: PATH_SCHEMA,
+      async execute(input) {
+        const path = readPathTiles(input, tiles);
+        const before = requireStats(ctx).money;
+        const outcome = await ctx.sendCommand({ type: 'buildRail', tiles: path });
+        return outcomeResult(outcome, { tiles: path.length, ...spent(ctx, before) });
+      },
+    },
+    {
       name: 'paint_zone',
       description:
         'Zone every empty land tile in a rectangle as residential, commercial, retail or industrial. ' +
@@ -1053,7 +1157,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'Place a plant on one tile: solar, wind, battery, biogas, charging_hub, park, ' +
         'run_of_river (river tile), pumped_storage (land tile next to the lake), hydrogen, ' +
         'tidal (coastal sea tile), geothermal (hotspot tile), logistics_depot, bus_depot, ' +
-        'heat_plant, heat_store, substation. ' +
+        'heat_plant, heat_store, substation, train_station (needs a track and a road), ' +
+        'freight_terminal (needs a track; factories/depots within 6 tiles), ' +
+        'rail_yard (needs a track and a powered island). ' +
         'See get_build_catalog for costs and roles.',
       inputSchema: {
         type: 'object',
@@ -1369,6 +1475,20 @@ function plantFigures(type: PlantType): Record<string, number> {
         heatCapacity: BALANCE.heat.storeCapacity,
         dischargeLimitPerTick: BALANCE.heat.storeDischargeLimit,
       };
+    case PlantType.TrainStation:
+      return {
+        stationRadius: BALANCE.rail.stationRadius,
+        serviceWindowDays: BALANCE.rail.serviceWindowDays,
+      };
+    case PlantType.FreightTerminal:
+      return { freightRadius: BALANCE.rail.freightRadius };
+    case PlantType.RailYard:
+      return {
+        passengerTrains: BALANCE.rail.passengerTrainsPerYard,
+        freightTrains: BALANCE.rail.freightTrainsPerYard,
+        tractionLoadPassenger: BALANCE.rail.tractionLoadPassenger,
+        tractionLoadFreight: BALANCE.rail.tractionLoadFreight,
+      };
     default:
       return {};
   }
@@ -1405,6 +1525,10 @@ function liveFigures(info: TileInfo): Record<string, unknown> {
     busDepot: info.busDepot,
     heated: info.heated,
     ...(info.heatPlant ? { heatPlant: info.heatPlant } : {}),
+    rail: info.rail,
+    station: info.station ? { ...info.station, state: STOP_STATE_NAME[info.station.state] } : null,
+    freightTerminal: info.freightTerminal,
+    railYard: info.railYard,
     ...(info.island ? { island: info.island } : {}),
     ...(info.substation ? { substation: info.substation } : {}),
     damage: info.damage,
@@ -1464,6 +1588,20 @@ function matchesKind(
       // the authority on which islands have no substation, not a
       // per-tile layer this matcher would otherwise have to re-derive.
       return keysWithoutSubstation.has(i);
+    case 'rail_track':
+      return tiles.rail[i] !== 0;
+    case 'rail_station_due':
+      return (
+        tiles.tileType[i] === TileType.Plant &&
+        tiles.plantType[i] === PlantType.TrainStation &&
+        tiles.stationState[i] !== StopState.Served
+      );
+    case 'rail_yard_without_grid':
+      return (
+        tiles.tileType[i] === TileType.Plant &&
+        tiles.plantType[i] === PlantType.RailYard &&
+        tiles.island[i] === 0
+      );
   }
 }
 
