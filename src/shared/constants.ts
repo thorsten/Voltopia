@@ -1638,10 +1638,9 @@ export const BALANCE = {
      * run about 0.33 tiles/tick at 1x even though
      * `BALANCE.vehicles.speedTilesPerSecond` is 1.6 — making the train
      * about 2.4x faster than a car in practice, not exactly twice.
-     * Frozen unchanged by the railway probe: at 0.8 tiles a tick a
-     * tour over the probe's 79-tile line serves both districts' stations
-     * well inside the half-day service window, so speed never limited
-     * the rider share there.
+     * 3.2 tiles/s is 0.8 tiles a tick at 1x. The railway probe kept
+     * this value as configured and did not retune or measure it; its
+     * effect on the rider share is untested.
      */
     speedTilesPerSecond: 3.2,
     /** A station counts as served for this long after a train halted there. */
