@@ -1,5 +1,6 @@
 import { BALANCE } from '../shared/constants.ts';
 import {
+  chebyshevDistance,
   DIRECTIONS,
   inBounds,
   LINE_PRESENT,
@@ -8,6 +9,7 @@ import {
   tileX,
   tileY,
 } from '../shared/grid.ts';
+import { MAX_RAIL_AGE, PlantType, StopState, SupplyStatus, Zone } from '../shared/types.ts';
 import type { BuildResult } from './roads.ts';
 import { clearForest, fellingCost } from './forest.ts';
 import {
@@ -17,7 +19,11 @@ import {
   markDirty,
   slopeCostMultiplier,
   snapshotTile,
+  stationDueTicks,
+  stationServiceTicks,
+  stationStateOfAge,
   Terrain,
+  TileType,
   withNeighbors,
   type SimState,
   type UndoEntry,
@@ -176,4 +182,200 @@ export function railNetworkTiles(state: SimState, network: number): number {
   let count = 0;
   for (const n of state.layers.railNetwork) if (n === network) count++;
   return count;
+}
+
+function isPlantOf(state: SimState, tile: number, plant: PlantType): boolean {
+  const { tileType, plantType } = state.layers;
+  return tile >= 0 && tileType[tile] === TileType.Plant && plantType[tile] === plant;
+}
+export function isStation(state: SimState, tile: number): boolean {
+  return isPlantOf(state, tile, PlantType.TrainStation);
+}
+export function isTerminal(state: SimState, tile: number): boolean {
+  return isPlantOf(state, tile, PlantType.FreightTerminal);
+}
+export function isYard(state: SimState, tile: number): boolean {
+  return isPlantOf(state, tile, PlantType.RailYard);
+}
+
+function tilesOf(state: SimState, plant: PlantType): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < state.layers.tileType.length; i++)
+    if (isPlantOf(state, i, plant)) out.push(i);
+  return out;
+}
+export function stationTiles(state: SimState): number[] {
+  return tilesOf(state, PlantType.TrainStation);
+}
+export function terminalTiles(state: SimState): number[] {
+  return tilesOf(state, PlantType.FreightTerminal);
+}
+export function yardTiles(state: SimState): number[] {
+  return tilesOf(state, PlantType.RailYard);
+}
+
+/** The lowest-index track tile next to a rail plant: where its trains halt. -1 when none. */
+export function plantTrack(state: SimState, plant: number): number {
+  let track = -1;
+  for (const n of neighbors4(plant, state.size)) {
+    if (state.layers.rail[n] !== 0 && (track < 0 || n < track)) track = n;
+  }
+  return track;
+}
+
+/** Network of the track a rail plant stands beside (0 when it lost its track). */
+export function plantNetwork(state: SimState, plant: number): number {
+  const track = plantTrack(state, plant);
+  return track < 0 ? 0 : railNetworkOf(state, track);
+}
+
+/** True while the station had a passenger train within the service window. */
+export function isStationServed(state: SimState, station: number): boolean {
+  return isStation(state, station) && state.layers.stationAge[station] <= stationServiceTicks();
+}
+
+/**
+ * Advance the station, terminal and depot-goods ages by one tick
+ * (saturating). Tiles that are not the matching plant sit at
+ * MAX_RAIL_AGE. A station is marked dirty when it crosses into "due" or
+ * "unserved" so the overlay follows. Returns how many stations and
+ * unloading terminals are at least half-way to due — the dispatch
+ * threshold `planPassengerTour` / `planFreightTour` use — so
+ * `trainsStep` can skip planning while nothing qualifies.
+ */
+export function ageRailPlants(state: SimState): { stationsDue: number; terminalsDue: number } {
+  const { layers } = state;
+  const { tileType, plantType, stationAge, terminalAge, railGoodsAge } = layers;
+  const due = stationDueTicks();
+  const window = stationServiceTicks();
+  const minAge = Math.floor(due / 2);
+  let stationsDue = 0;
+  let terminalsDue = 0;
+  for (let i = 0; i < tileType.length; i++) {
+    const isPlant = tileType[i] === TileType.Plant;
+    const plant = isPlant ? plantType[i] : PlantType.None;
+    if (plant === PlantType.TrainStation) {
+      const age = stationAge[i];
+      if (age >= MAX_RAIL_AGE) {
+        stationsDue++;
+      } else {
+        const next = age + 1;
+        stationAge[i] = next;
+        if (next === due + 1 || next === window + 1) markDirty(state, i);
+        if (next >= minAge) stationsDue++;
+      }
+    } else if (stationAge[i] !== MAX_RAIL_AGE) {
+      stationAge[i] = MAX_RAIL_AGE;
+    }
+    if (plant === PlantType.FreightTerminal) {
+      const age = terminalAge[i];
+      if (age >= MAX_RAIL_AGE) {
+        if (terminalUnloads(state, i)) terminalsDue++;
+      } else {
+        const next = age + 1;
+        terminalAge[i] = next;
+        if (next >= minAge && terminalUnloads(state, i)) terminalsDue++;
+      }
+    } else if (terminalAge[i] !== MAX_RAIL_AGE) {
+      terminalAge[i] = MAX_RAIL_AGE;
+    }
+    if (plant === PlantType.LogisticsDepot) {
+      if (railGoodsAge[i] < MAX_RAIL_AGE) railGoodsAge[i]++;
+    } else if (railGoodsAge[i] !== MAX_RAIL_AGE) {
+      railGoodsAge[i] = MAX_RAIL_AGE;
+    }
+  }
+  return { stationsDue, terminalsDue };
+}
+
+/**
+ * Rebuild `railStation`: for every road tile within stationRadius
+ * (chessboard) of a served station, the nearest such station (ties:
+ * lower index); -1 elsewhere. Changed tiles are marked dirty.
+ */
+export function updateRailCover(state: SimState): void {
+  const { layers, size } = state;
+  const next = new Int32Array(layers.railStation.length).fill(-1);
+  // A plain array: Int32Array.fill(Number.MAX_SAFE_INTEGER) truncates to -1,
+  // which would make every real distance look larger and never win.
+  const best: number[] = Array.from({ length: layers.railStation.length }, () => Infinity);
+  const r = BALANCE.rail.stationRadius;
+  for (const station of stationTiles(state)) {
+    if (!isStationServed(state, station)) continue;
+    const cx = tileX(station, size);
+    const cy = tileY(station, size);
+    for (let y = Math.max(0, cy - r); y <= Math.min(size - 1, cy + r); y++) {
+      for (let x = Math.max(0, cx - r); x <= Math.min(size - 1, cx + r); x++) {
+        const tile = tileIndex(x, y, size);
+        if (layers.tileType[tile] !== TileType.Road) continue;
+        const d = chebyshevDistance(tile, station, size);
+        // stationTiles is ascending, so a strict < keeps the lower index on ties.
+        if (d < best[tile]) {
+          best[tile] = d;
+          next[tile] = station;
+        }
+      }
+    }
+  }
+  for (let i = 0; i < next.length; i++) {
+    if (next[i] === layers.railStation[i]) continue;
+    layers.railStation[i] = next[i];
+    markDirty(state, i);
+  }
+}
+
+/** A factory tile that can load goods: industrial building, intact, fully supplied. */
+function isLoadingFactory(state: SimState, tile: number): boolean {
+  const { tileType, zone, density, damage, supplied } = state.layers;
+  return (
+    tileType[tile] === TileType.Empty &&
+    zone[tile] === Zone.Industrial &&
+    density[tile] > 0 &&
+    damage[tile] === 0 &&
+    supplied[tile] === SupplyStatus.Supplied
+  );
+}
+
+function tilesWithin(state: SimState, centre: number, radius: number): number[] {
+  const { size } = state;
+  const cx = tileX(centre, size);
+  const cy = tileY(centre, size);
+  const out: number[] = [];
+  for (let y = Math.max(0, cy - radius); y <= Math.min(size - 1, cy + radius); y++) {
+    for (let x = Math.max(0, cx - radius); x <= Math.min(size - 1, cx + radius); x++) {
+      out.push(tileIndex(x, y, size));
+    }
+  }
+  return out;
+}
+
+/** The terminal has a factory that can load within freightRadius. */
+export function terminalLoads(state: SimState, terminal: number): boolean {
+  return tilesWithin(state, terminal, BALANCE.rail.freightRadius).some((t) =>
+    isLoadingFactory(state, t),
+  );
+}
+
+/** Logistics depots within freightRadius of a terminal, ascending. */
+export function depotsInReach(state: SimState, terminal: number): number[] {
+  return tilesWithin(state, terminal, BALANCE.rail.freightRadius).filter((t) =>
+    isPlantOf(state, t, PlantType.LogisticsDepot),
+  );
+}
+
+/** The terminal has a logistics depot within freightRadius. */
+export function terminalUnloads(state: SimState, terminal: number): boolean {
+  return depotsInReach(state, terminal).length > 0;
+}
+
+/** A freight train unloaded here: the terminal and every depot in reach are supplied right now. */
+export function stampRailGoods(state: SimState, terminal: number): void {
+  state.layers.terminalAge[terminal] = 0;
+  for (const depot of depotsInReach(state, terminal)) state.layers.railGoodsAge[depot] = 0;
+}
+
+/** Service bucket of a station tile; other tiles count as served. */
+export function stationState(state: SimState, tile: number): StopState {
+  if (!isStation(state, tile)) return StopState.Served;
+  return stationStateOfAge(state.layers.stationAge[tile]);
 }

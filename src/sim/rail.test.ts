@@ -1,21 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT, tileIndex } from '../shared/grid.ts';
-import { PlantType, Terrain, Zone } from '../shared/types.ts';
+import { MAX_RAIL_AGE, PlantType, SupplyStatus, Terrain, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import {
+  ageRailPlants,
   buildRail,
   countRailTiles,
+  depotsInReach,
   hasRail,
+  isStationServed,
+  plantNetwork,
+  plantTrack,
   railNetworkOf,
   railNetworkTiles,
   railTileCost,
   recomputeRailNetworks,
+  stampRailGoods,
+  terminalLoads,
+  terminalUnloads,
+  updateRailCover,
 } from './rail.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { paintZones } from './zones.ts';
-import { BuildIntent, buildRejection, createSimState, TileType, type SimState } from './state.ts';
+import {
+  BuildIntent,
+  buildRejection,
+  createSimState,
+  stationServiceTicks,
+  TileType,
+  type SimState,
+} from './state.ts';
 
 export const SIZE = 24;
 export const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -144,5 +160,117 @@ describe('rail networks', () => {
     recomputeRailNetworks(state);
     expect(state.railComputedVersion).toBe(version + 1);
     expect(state.railNetworkKeys).toEqual([-1]);
+  });
+});
+
+describe('rail plants', () => {
+  /** Track along y = 10 from x = 2..20, a road along y = 8 from x = 2..20. */
+  function corridor(): SimState {
+    const state = flat();
+    buildRail(
+      state,
+      Array.from({ length: 19 }, (_, i) => at(i + 2, 10)),
+    );
+    buildRoads(
+      state,
+      Array.from({ length: 19 }, (_, i) => at(i + 2, 8)),
+    );
+    return state;
+  }
+
+  it('a station needs a track and a road as 4-neighbours', () => {
+    const state = corridor();
+    expect(placePlant(state, at(5, 9), PlantType.TrainStation)).toEqual({});
+    expect(placePlant(state, at(5, 12), PlantType.TrainStation)).toEqual({ rejected: 'needsRoad' });
+    expect(placePlant(state, at(5, 7), PlantType.TrainStation)).toEqual({
+      rejected: 'needsRailAccess',
+    });
+    expect(plantTrack(state, at(5, 9))).toBe(at(5, 10));
+  });
+
+  it('a terminal and a yard need a track; neither needs a road', () => {
+    const state = corridor();
+    expect(placePlant(state, at(7, 11), PlantType.FreightTerminal)).toEqual({});
+    expect(placePlant(state, at(9, 11), PlantType.RailYard)).toEqual({});
+    expect(placePlant(state, at(7, 13), PlantType.RailYard)).toEqual({
+      rejected: 'needsRailAccess',
+    });
+    expect(plantNetwork(state, at(9, 11))).toBe(railNetworkOf(state, at(9, 10)));
+  });
+
+  it('stations start due, age per tick and serve for the service window after a halt', () => {
+    const state = corridor();
+    placePlant(state, at(5, 9), PlantType.TrainStation);
+    expect(state.layers.stationAge[at(5, 9)]).toBe(MAX_RAIL_AGE);
+    expect(isStationServed(state, at(5, 9))).toBe(false);
+    expect(ageRailPlants(state).stationsDue).toBe(1);
+    state.layers.stationAge[at(5, 9)] = 0;
+    for (let i = 0; i < stationServiceTicks(); i++) ageRailPlants(state);
+    expect(isStationServed(state, at(5, 9))).toBe(true);
+    ageRailPlants(state);
+    expect(isStationServed(state, at(5, 9))).toBe(false);
+    // Non-station tiles keep the saturated age.
+    expect(state.layers.stationAge[at(6, 9)]).toBe(MAX_RAIL_AGE);
+  });
+
+  it('updateRailCover marks road tiles within stationRadius of a served station with the nearest one', () => {
+    const state = corridor();
+    placePlant(state, at(5, 9), PlantType.TrainStation);
+    placePlant(state, at(15, 9), PlantType.TrainStation);
+    state.layers.stationAge[at(5, 9)] = 0;
+    state.layers.stationAge[at(15, 9)] = 0;
+    updateRailCover(state);
+    expect(state.layers.railStation[at(5, 8)]).toBe(at(5, 9));
+    expect(state.layers.railStation[at(2, 8)]).toBe(at(5, 9));
+    expect(state.layers.railStation[at(15, 8)]).toBe(at(15, 9));
+    expect(state.layers.railStation[at(20, 8)]).toBe(at(15, 9));
+    // Equidistant: the lower station index wins.
+    expect(state.layers.railStation[at(10, 8)]).toBe(at(5, 9));
+    expect(state.layers.railStation[at(5, 10)]).toBe(-1); // a track tile, not a road
+    state.layers.stationAge[at(5, 9)] = stationServiceTicks() + 1;
+    updateRailCover(state);
+    expect(state.layers.railStation[at(5, 8)]).toBe(-1);
+    expect(state.layers.railStation[at(10, 8)]).toBe(at(15, 9));
+    expect(state.dirty.has(at(5, 8))).toBe(true);
+  });
+
+  it('a terminal loads beside a powered factory and unloads beside a depot', () => {
+    const state = corridor();
+    placePlant(state, at(7, 11), PlantType.FreightTerminal);
+    expect(terminalLoads(state, at(7, 11))).toBe(false);
+    expect(terminalUnloads(state, at(7, 11))).toBe(false);
+    // A factory: industrial zone with a building, supplied.
+    state.layers.zone[at(9, 13)] = Zone.Industrial;
+    state.layers.density[at(9, 13)] = 1;
+    state.layers.supplied[at(9, 13)] = SupplyStatus.Supplied;
+    expect(terminalLoads(state, at(7, 11))).toBe(true);
+    state.layers.damage[at(9, 13)] = 5;
+    expect(terminalLoads(state, at(7, 11))).toBe(false);
+    state.layers.damage[at(9, 13)] = 0;
+    state.layers.supplied[at(9, 13)] = SupplyStatus.Undersupplied;
+    expect(terminalLoads(state, at(7, 11))).toBe(false);
+    // A depot in reach.
+    buildRoads(state, [at(3, 14)]);
+    placePlant(state, at(3, 15), PlantType.LogisticsDepot);
+    expect(terminalUnloads(state, at(7, 11))).toBe(true);
+    expect(depotsInReach(state, at(7, 11))).toEqual([at(3, 15)]);
+    // Beyond freightRadius: no customer.
+    buildRoads(state, [at(15, 21)]);
+    expect(placePlant(state, at(15, 20), PlantType.LogisticsDepot)).toEqual({});
+    expect(depotsInReach(state, at(7, 11))).toEqual([at(3, 15)]);
+  });
+
+  it('stampRailGoods resets terminalAge and the railGoodsAge of every depot in reach', () => {
+    const state = corridor();
+    placePlant(state, at(7, 11), PlantType.FreightTerminal);
+    buildRoads(state, [at(3, 14)]);
+    placePlant(state, at(3, 15), PlantType.LogisticsDepot);
+    expect(state.layers.railGoodsAge[at(3, 15)]).toBe(MAX_RAIL_AGE);
+    stampRailGoods(state, at(7, 11));
+    expect(state.layers.terminalAge[at(7, 11)]).toBe(0);
+    expect(state.layers.railGoodsAge[at(3, 15)]).toBe(0);
+    ageRailPlants(state);
+    expect(state.layers.railGoodsAge[at(3, 15)]).toBe(1);
+    expect(state.layers.terminalAge[at(7, 11)]).toBe(1);
   });
 });

@@ -1149,15 +1149,28 @@ export function buildRejection(
   ) {
     return 'needsLakeShore';
   }
+  // Checked before needsRailAccess: a station missing both a road and a
+  // track reports the road first (see rail.test.ts "a station needs a
+  // track and a road as 4-neighbours").
   if (
     intent === BuildIntent.Plant &&
     (plant === PlantType.FireStation ||
       plant === PlantType.PoliceStation ||
       plant === PlantType.LogisticsDepot ||
-      plant === PlantType.BusDepot) &&
+      plant === PlantType.BusDepot ||
+      plant === PlantType.TrainStation) &&
     !neighbors4(index, state.size).some((n) => layers.tileType[n] === TileType.Road)
   ) {
     return 'needsRoad';
+  }
+  if (
+    intent === BuildIntent.Plant &&
+    (plant === PlantType.TrainStation ||
+      plant === PlantType.FreightTerminal ||
+      plant === PlantType.RailYard) &&
+    !neighbors4(index, state.size).some((n) => layers.rail[n] !== 0)
+  ) {
+    return 'needsRailAccess';
   }
   return null;
 }
