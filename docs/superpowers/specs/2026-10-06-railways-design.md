@@ -325,7 +325,7 @@ a save without the fields loads with no railway.
 
 ## Balance (`src/shared/constants.ts`)
 
-Starting values; the probe freezes them.
+Starting values, all frozen unchanged by the probe below.
 
 ```ts
 rail: {
@@ -367,6 +367,96 @@ shifts a clear majority of the cross-town commute, the traction bill
 stays below the import fees and congestion happiness it saves on a
 well-stored island, and a yard on an island that burns biogas at night
 visibly stalls at dusk. Figures go into this spec.
+
+**Probe record (2026-10-06, `scripts/probe-rail.mjs`, deleted after
+use).** Flat 96-tile map, river column at x = 48, disasters off,
+densities written straight to steady state (homes and shops 3,
+factories 2). **West island** (homes and the local shops): streets
+y = 10, 14, 18, 22 from x = 6..30 closed by x = 6 and x = 30, 133
+homes on y = 9..19 and 46 shops on y = 21/23, lines y = 12 and 20
+joined at x = 31, a well-stored park of 48 solar, 32 wind and 100
+batteries plus one substation, the logistics depot at (8, 15). **East
+island** (jobs): streets y = 10, 14, 18 from x = 60..88 closed by x = 60
+and x = 88, 127 offices on y = 9..15 and on y = 17/19 up to x = 71,
+31 factories on y = 17/19 from x = 72, lines y = 12 and 20 joined at
+x = 89, 12 solar, 8 wind, 12 batteries, 4 biogas and one substation —
+an island that burns biogas every night. One road joins the districts
+along y = 14 (bridge at x = 48); the nearest factory is about 68 route
+tiles from the depot, beyond `maxRouteTiles` 60, so without rail every tour
+imports. **Rail**: track y = 16 from x = 8..86 (79 tiles, one bridge),
+stations (13, 17), (25, 15), (66, 15), (80, 15), the yard at (10, 15)
+on the west island; variant 3 adds terminals at (9, 17) (2 tiles from
+the depot) and (80, 17) (beside the factories); variant 4 is variant 2
+with the yard at (84, 15) on the east island. The two islands were
+asserted per run. Weather draws go to a private stream so every variant
+of a seed sees the same weather (otherwise commuters' and vans' draws on
+the shared `Rng` shift the clouds, and import and net money then differ
+by tens of thousands between variants for reasons that have nothing
+to do with rail). One seed-year (20 days × 960 ticks):
+
+| seed | variant              | cross-town riders | rider share | congestion avg / max | evening charging peak | charging EU | traction EU | traction cost | west import | yard-island deficit ticks (17-22 h) | stalled share | goods fees | last day local / imported | net      |
+| ---- | -------------------- | ----------------- | ----------- | -------------------- | --------------------- | ----------- | ----------- | ------------- | ----------- | ----------------------------------- | ------------- | ---------- | ------------------------- | -------- |
+| 7    | 1 no rail            | 0.00              | 0.00        | 1.17 / 1.87          | 132                   | 2_232_309   | 0           | 0             | 45_145      | 1_253 (118)                         | —             | 1_044      | 0 / 3                     | −96_251  |
+| 7    | 2 passenger          | 0.92              | 0.82        | 1.01 / 1.44          | 59                    | 802_170     | 92_460      | 1_398         | 37_403      | 1_041 (118)                         | 0.023         | 1_080      | 0 / 3                     | −92_577  |
+| 7    | 3 passenger+freight  | 0.92              | 0.82        | 1.01 / 1.44          | 59                    | 802_170     | 162_988     | 2_715         | 37_854      | 1_054 (118)                         | 0.028         | 0          | 3 / 0                     | −92_783  |
+| 7    | 4 yard on biogas isl | 0.93              | 0.82        | 1.01 / 1.75          | 65                    | 833_430     | 89_850      | 24_499        | 37_210      | 7_513 (1_885)                       | 0.159         | 1_080      | 0 / 3                     | −98_517  |
+| 11   | 1 no rail            | 0.00              | 0.00        | 1.22 / 1.86          | 104                   | 2_096_166   | 0           | 0             | 46_526      | 1_240 (254)                         | —             | 1_044      | 0 / 3                     | −131_649 |
+| 11   | 2 passenger          | 0.94              | 0.86        | 1.02 / 1.41          | 49                    | 685_704     | 90_995      | 1_413         | 37_201      | 958 (255)                           | 0.040         | 1_080      | 0 / 3                     | −126_406 |
+| 11   | 3 passenger+freight  | 0.94              | 0.86        | 1.02 / 1.41          | 49                    | 685_704     | 160_879     | 2_725         | 37_455      | 965 (255)                           | 0.041         | 0          | 3 / 0                     | −126_390 |
+| 11   | 4 yard on biogas isl | 0.94              | 0.85        | 1.02 / 1.61          | 52                    | 653_645     | 90_165      | 24_577        | 36_323      | 7_693 (1_870)                       | 0.155         | 1_080      | 0 / 3                     | −132_549 |
+
+Columns: _cross-town riders_ is the share of commuters with home and
+work in different districts who left the car at home (164 / 178 such
+commuters a day of 220); _rider share_ is `lastTransit.riderShare`
+(buses none here); congestion is `commuteCongestion` (day-end average
+/ year maximum); the evening peak is the daily maximum of
+`chargingConsumption` between 17 h and 22 h, averaged over the year;
+_traction cost_ attributes the catenary as the island's last load —
+met from import first (at that tick's import price), then from biogas
+(at its fuel cost) — so it is the bill the trains add; _west import_ is
+the whole west island's import cost; _stalled share_ is stalled
+train-ticks over running train-ticks; _net_ is treasury change over
+the year after the build (the town's park is deliberately sized for
+reliability, not profit, so every variant runs at a loss). The east
+island's import is the same in variants 1-3 of a seed to the unit
+(277_089 / 283_423).
+
+Station radius sensitivity, variant 2 with **one** station per district
+((20, 15) and (72, 15)): radius 8 covers 0.41 / 0.38 of the cross-town
+commuters and 0.39 / 0.36 ride (evening peak 121 / 103); radius 10
+covers 0.63 / 0.57 and 0.59 / 0.54 ride (peak 107 / 90).
+
+**Decisions.** All values frozen unchanged.
+
+- _Rider share:_ two stations per district at `stationRadius` 8 shift
+  0.92-0.94 of the cross-town commute — a clear majority. One central
+  station per district covers only 0.38-0.41 of a 25-tile-wide
+  district; radius 10 would make a single station cover a whole
+  district and still only reach a bare majority (0.54-0.59). The radius
+  stays 8 (twice a bus stop's) and the second station, at 2_500 about
+  a third of a year's saving, stays the player's call.
+- _Evening peak and congestion:_ the peak falls 132 → 59 and 104 → 49
+  (−55 % / −53 %), average congestion 1.17 → 1.01 and 1.22 → 1.02, the
+  year's worst commute 1.87 → 1.44 and 1.86 → 1.41. Charging energy
+  falls by 1.4 million EU a year — fifteen times the traction energy.
+- _Traction bill:_ 1_398 / 1_413 a year on the well-stored island
+  against 7_742 / 9_325 of island import saved, so the line earns
+  3_674 / 5_243 a year after its own upkeep (0.25 a tick, ~4_800 a
+  year); the build (~14_000) pays back in about three seed-years.
+  Happiness moves by < 0.01: congestion in this town sat near the
+  1.25 penalty threshold even without rail, so the money-equivalent of
+  the congestion happiness is small here and the import saving alone
+  carries the target.
+- _Freight:_ the depot's import fees go 1_044 → 0 and every tour is
+  local (3 / 0); the freight train adds ~70_000 EU and 1_300 of import a
+  year, which with two terminals' upkeep (768) costs about what the fees
+  saved — net money within 210 of variant 2. Freight is a local-goods
+  lever (and the `localGoods` goal), not a saving.
+- _Biogas island:_ with the yard on the east island the same trains
+  cost 24_500 a year (biogas and import, 17× the well-stored bill),
+  stand stalled in 16 % of their running ticks against 2-4 %, and the
+  yard's island sees 1_870-1_885 deficit ticks between 17 h and 22 h
+  against 118-255 — the designed signal, recorded and not tuned away.
 
 ## Testing
 

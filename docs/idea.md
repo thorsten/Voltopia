@@ -198,8 +198,20 @@ Collected 2026-09-24; roughly in the order we want to build them.
   water and river mouths. The same coast carries offshore wind turbines
   (free, unsheltered wind) and raises the happiness of buildings with a
   sea view.
-- **Railways**: trains connecting villages/districts on large maps;
-  best built after per-district grids so regions mean something.
+- **Railways** (done): trains connecting villages/districts on large
+  maps; best built after per-district grids so regions mean something.
+  Tracks are their own line layer (level crossings, bridges); a rail
+  yard fields passenger trains for the stations with the longest wait
+  and a freight train from factory terminals to depot terminals, and
+  feeds their catenary from its own grid island, so a deficit there
+  stalls them. A commuter with a served station near home and another
+  near work leaves the car at home; a depot supplied by rail stops
+  importing. A two-district probe over an in-game year: two stations
+  per district carry 92-94 % of the cross-town commute, the evening
+  charging peak halves (132 -> 59) and the line earns its upkeep from
+  the import it saves on a well-stored island (traction 1_400 a year
+  against 7_700-9_300 saved), while the same yard on a biogas island
+  pays 17 times the traction bill and stalls its trains at dusk.
 - **Smart-meter rollout** (done): the free smart-charging toggle becomes
   a paced programme — crews install 15 meters an in-game day at 60 money
   each, so a mid-size city takes about an in-game year to cover and new

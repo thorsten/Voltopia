@@ -37,7 +37,14 @@ export const BALANCE = {
     powerLineWaterPerTile: 12,
     /** One bus stop marked on a road tile. */
     busStop: 60,
-    /** One track tile; a rail bridge over the river costs more. Probe-tuned in Task 13. */
+    /**
+     * One track tile; a rail bridge over the river costs more. Frozen
+     * unchanged by the railway probe (scripts/probe-rail.mjs, deleted
+     * after use; two districts 40 tiles apart, one seed-year, seeds 7
+     * and 11): the probe's 79-tile line with one bridge tile cost 840,
+     * under a tenth of its four stations and the yard, so track is
+     * never what decides whether a line is built.
+     */
     railPerTile: 10,
     railBridgePerTile: 60,
     zonePerTile: 5,
@@ -152,11 +159,27 @@ export const BALANCE = {
        * factor of 1.33, and the probe's parks sold through them.
        */
       [PlantType.Substation]: 3_000,
-      /** Platform, roof and a road link: between the bus depot (1_200) and the substation (3_000). */
+      /**
+       * Platform, roof and a road link: between the bus depot (1_200) and
+       * the substation (3_000). Frozen unchanged by the railway probe:
+       * the second station per district that lifts the cross-town rider
+       * share from 0.36-0.39 to 0.92-0.94 (see `rail.stationRadius`)
+       * costs less than the 7_700-9_300 of import a year the line saves.
+       */
       [PlantType.TrainStation]: 2_500,
-      /** Gantry crane and a siding. */
+      /**
+       * Gantry crane and a siding. Frozen unchanged: in the railway probe
+       * two terminals took a depot's import fees from 1_044 a year to 0
+       * (every tour local) for about the same again in traction and
+       * upkeep — freight is a goal and a local-goods lever, not a saving.
+       */
       [PlantType.FreightTerminal]: 2_000,
-      /** Shed for three trains plus the catenary feed. */
+      /**
+       * Shed for three trains plus the catenary feed. Frozen unchanged:
+       * the probe's whole passenger line (yard, four stations, 79 track
+       * tiles, ~14_000) earns 3_700-5_200 a year after its own upkeep
+       * on a well-stored island, a payback of about three seed-years.
+       */
       [PlantType.RailYard]: 3_000,
     } as Record<PlantType, number>,
   },
@@ -215,6 +238,12 @@ export const BALANCE = {
        * short island cannot keep its link (see the cost above).
        */
       [PlantType.Substation]: 0.05,
+      /**
+       * Rail upkeep, frozen unchanged by the railway probe: yard, four
+       * stations and 79 track tiles run 0.25 a tick (4_800 a year),
+       * about half the 7_700-9_300 of import the passenger line saves
+       * on a well-stored island.
+       */
       [PlantType.TrainStation]: 0.02,
       [PlantType.FreightTerminal]: 0.02,
       /** Crews and shed: the biggest service upkeep. */
@@ -1609,17 +1638,46 @@ export const BALANCE = {
      * run about 0.33 tiles/tick at 1x even though
      * `BALANCE.vehicles.speedTilesPerSecond` is 1.6 — making the train
      * about 2.4x faster than a car in practice, not exactly twice.
+     * Frozen unchanged by the railway probe: at 0.8 tiles a tick a
+     * tour over the probe's 79-tile line serves both districts' stations
+     * well inside the half-day service window, so speed never limited
+     * the rider share there.
      */
     speedTilesPerSecond: 3.2,
     /** A station counts as served for this long after a train halted there. */
     serviceWindowDays: 0.5,
     /** The overlay and inspector call a station "due" after this long. */
     dueAfterDays: 0.35,
-    /** Road tiles within this Chebyshev radius of a served station are covered. */
+    /**
+     * Road tiles within this Chebyshev radius of a served station are
+     * covered. Frozen at 8 by the railway probe (two districts 40 tiles
+     * apart, 25x14 and 29x10 tiles, one seed-year, seeds 7 / 11): one
+     * station per district covers 0.41 / 0.38 of the cross-town
+     * commuters and 0.39 / 0.36 ride; radius 10 would lift that to
+     * 0.59 / 0.54, a bare majority, while two stations per district at
+     * radius 8 cover all of them and 0.92 / 0.94 ride. A station stays
+     * a neighbourhood (twice a bus stop's radius) and placing the
+     * second one stays the player's decision.
+     */
     stationRadius: 8,
     /** Factories and depots within this Chebyshev radius of a terminal are its customers. */
     freightRadius: 6,
-    /** Catenary load per running train per tick (compare: a charging bus draws 4). */
+    /**
+     * Catenary load per running train per tick (compare: a charging bus
+     * draws 4). Frozen unchanged by the railway probe: the two passenger
+     * trains drew 90_000-92_000 EU a year, their marginal import 1_400
+     * on a well-stored island, while the commuters they carried left
+     * 1.4 million EU of charging undone and the island's import fell by
+     * 7_700-9_300 (evening charging peak 132 -> 59 and 104 -> 49,
+     * commute congestion 1.17 -> 1.01 and 1.22 -> 1.02). The freight
+     * train adds 70_000 EU and 1_300 of import for the 1_044 of goods
+     * fees it saves. With the yard on the biogas-burning island instead
+     * the same trains cost 24_500 (biogas and import), stand stalled in
+     * 16 % of their running ticks against 2-4 %, and their island
+     * sees 1_870-1_885 deficit ticks between 17 h and 22 h against the
+     * well-stored one's 118-255 — the designed signal to put the yard
+     * on the well-stored island.
+     */
     tractionLoadPassenger: 5,
     tractionLoadFreight: 8,
     /** Distance of the wagon behind the locomotive along the path, in tiles. */
