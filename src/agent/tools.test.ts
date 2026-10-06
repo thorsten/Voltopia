@@ -953,6 +953,23 @@ describe('railways', () => {
     });
   });
 
+  it('a served station shows as J on the rail layer', async () => {
+    const { call, engine } = flatHarness();
+    await call('build_rail', { from: { x: 2, y: 10 }, to: { x: 12, y: 10 } });
+    await call('build_road', { from: { x: 2, y: 8 }, to: { x: 12, y: 8 } });
+    await call('place_plant', { plant: 'train_station', x: 4, y: 9 });
+    engine.state.layers.stationAge[tileIndex(4, 9, SIZE)] = 0;
+    markDirty(engine.state, tileIndex(4, 9, SIZE));
+    await call('advance_time', { ticks: 1 });
+    const map = await call('get_map', {
+      layer: 'rail',
+      origin: { x: 4, y: 9 },
+      width: 1,
+      height: 1,
+    });
+    expect(map.rows).toEqual(['J']);
+  });
+
   it('the overview carries a rail block, get_map a rail layer and find_tiles the rail kinds', async () => {
     const { call } = flatHarness();
     await call('build_rail', { from: { x: 2, y: 10 }, to: { x: 12, y: 10 } });
@@ -971,8 +988,24 @@ describe('railways', () => {
     const rows = map.rows as string[];
     expect(rows[1]).toBe(':::::::::::');
     expect(rows[0]).toContain('x'); // the unserved station at (4, 9)
-    expect(rows[2]).toContain('R');
+    expect(rows[2][6]).toBe('Z'); // the yard at (8, 11)
     expect(String(map.legend)).toContain('track');
+    expect(String(map.legend)).toContain('J served station');
+    expect(String(map.legend)).toContain('Z rail yard');
+    // The overview marks the rail plants with letters no zone uses.
+    const overviewMap = await call('get_map', {
+      layer: 'overview',
+      origin: { x: 2, y: 9 },
+      width: 11,
+      height: 3,
+    });
+    const overviewRows = overviewMap.rows as string[];
+    expect(overviewRows[0][2]).toBe('J');
+    expect(overviewRows[2][6]).toBe('Z');
+    expect(String(overviewMap.legend)).toContain(
+      'J train station, L freight terminal, Z rail yard',
+    );
+    expect(String(overviewMap.legend)).not.toContain('S train station');
     const due = await call('find_tiles', { kind: 'rail_station_due' });
     expect(due).toMatchObject({ total: 1, tiles: [{ x: 4, y: 9 }] });
     const dark = await call('find_tiles', { kind: 'rail_yard_without_grid' });

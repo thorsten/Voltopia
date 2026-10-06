@@ -223,11 +223,15 @@ const PLANT_PLACEMENT: Record<PlantName, string> = {
     'any empty land tile; the gate of its grid island to the outer grid — import and export need one ' +
     `(${BALANCE.market.importCapacity} in / ${BALANCE.market.exportCapacity} out per substation and tick)`,
   train_station:
-    'an empty land tile with a track AND a road as direct (4-)neighbours; covers road tiles within stationRadius once served',
+    'an empty land tile with a track AND a road as direct (4-)neighbours; covers road tiles within ' +
+    `${BALANCE.rail.stationRadius} tiles (stationRadius) once served`,
   freight_terminal:
-    'an empty land tile with a track as direct (4-)neighbour; loads from powered factories and unloads to logistics depots within freightRadius',
+    'an empty land tile with a track as direct (4-)neighbour; loads from powered factories and unloads to ' +
+    `logistics depots within ${BALANCE.rail.freightRadius} tiles (freightRadius)`,
   rail_yard:
-    'an empty land tile with a track as direct (4-)neighbour, on a powered grid island (its catenary feed); fields the trains of its track network',
+    'an empty land tile with a track as direct (4-)neighbour, accepted anywhere beside a track; it fields ' +
+    'the trains of its track network only while its tile is energised (within lineSupplyRadius of an ' +
+    'energised line or supply plant) — use find_tiles rail_yard_without_grid to spot a dark yard',
 };
 
 export const MAP_LAYERS = [
@@ -451,9 +455,9 @@ function overviewGlyph(tiles: TileMirror, i: number): string {
       heat_plant: 'Q',
       heat_store: 'K',
       substation: 'N',
-      train_station: 'S',
+      train_station: 'J',
       freight_terminal: 'L',
-      rail_yard: 'R',
+      rail_yard: 'Z',
     };
     const name = PLANT_NAME_BY_TYPE.get(tiles.plantType[i] as PlantType);
     return name && name !== 'none' ? glyph[name] : '?';
@@ -480,7 +484,7 @@ const OVERVIEW_LEGEND =
   'plants: V solar, W wind, B battery, G biogas, H charging hub, P park, ' +
   'F run-of-river, U pumped storage, X tidal, E geothermal, D logistics depot, T bus depot, ' +
   'Q heat plant, K heat store, N substation, ' +
-  'S train station, L freight terminal, R rail yard. ' +
+  'J train station, L freight terminal, Z rail yard. ' +
   'Roads may also carry a power line (see the power layer).';
 
 /** River/lake/sea glyph for a tile, or null when it carries none. */
@@ -552,14 +556,14 @@ function layerGlyph(tiles: TileMirror, i: number, layer: MapLayer): string {
         switch (tiles.plantType[i]) {
           case PlantType.TrainStation:
             return tiles.stationState[i] === StopState.Served
-              ? 'S'
+              ? 'J'
               : tiles.stationState[i] === StopState.Due
-                ? 's'
+                ? 'j'
                 : 'x';
           case PlantType.FreightTerminal:
             return 'L';
           case PlantType.RailYard:
-            return 'R';
+            return 'Z';
           default:
             return 'P';
         }
@@ -584,8 +588,8 @@ const LAYER_LEGEND: Record<MapLayer, string> = {
     'o served bus stop, d stop due for a bus, x unserved stop, + road covered by a served stop, ' +
     '- road not covered, T bus depot, P other plant, ~ river, # lake, % sea, . other',
   rail:
-    ': track, = track on a road (level crossing), S served station, s station due for a train, ' +
-    'x unserved station, L freight terminal, R rail yard, P other plant, ' +
+    ': track, = track on a road (level crossing), J served station, j station due for a train, ' +
+    'x unserved station, L freight terminal, Z rail yard, P other plant, ' +
     '+ road covered by a served station, - road not covered, ~ river, # lake, % sea, . other',
 };
 
@@ -1157,9 +1161,11 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'Place a plant on one tile: solar, wind, battery, biogas, charging_hub, park, ' +
         'run_of_river (river tile), pumped_storage (land tile next to the lake), hydrogen, ' +
         'tidal (coastal sea tile), geothermal (hotspot tile), logistics_depot, bus_depot, ' +
-        'heat_plant, heat_store, substation, train_station (needs a track and a road), ' +
-        'freight_terminal (needs a track; factories/depots within 6 tiles), ' +
-        'rail_yard (needs a track and a powered island). ' +
+        'heat_plant, heat_store, substation, ' +
+        `train_station (needs a track and a road; covers roads within ${BALANCE.rail.stationRadius} tiles), ` +
+        `freight_terminal (needs a track; factories/depots within ${BALANCE.rail.freightRadius} tiles), ` +
+        'rail_yard (needs a track; accepted anywhere beside one, but fields trains only while its tile ' +
+        'is energised — find_tiles rail_yard_without_grid spots a dark yard). ' +
         'See get_build_catalog for costs and roles.',
       inputSchema: {
         type: 'object',
