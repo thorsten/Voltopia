@@ -131,8 +131,9 @@ export function growthStep(state: SimState, demand: DemandStats): void {
     if (zone === Zone.None) continue;
     if (layers.tileType[index] !== TileType.Empty) continue;
     if (layers.terrain[index] !== Terrain.Land) continue;
-    // Lines may run over zoned land; nothing is ever built on a line tile.
+    // Lines and track may run over zoned land; nothing is ever built on them.
     if (layers.powerLine[index] !== 0) continue;
+    if (layers.rail[index] !== 0) continue;
     if (demandFor(demand, zone) < BALANCE.growth.growthDemandThreshold) continue;
     if (!hasRoadAccess(state, index)) continue;
 

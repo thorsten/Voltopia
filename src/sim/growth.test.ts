@@ -5,6 +5,7 @@ import { computeDemand, decayStep, growthStep } from './growth.ts';
 import { placePlant } from './energy.ts';
 import { PlantType } from '../shared/types.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { buildRail } from './rail.ts';
 import { buildRoads } from './roads.ts';
 import { SERVICE_FIRE } from './services.ts';
 import {
@@ -284,6 +285,20 @@ describe('growthStep', () => {
     buildPowerLines(state, zoned);
     runGrowth(state, 500);
     expect(totalDensity(state, Zone.Residential)).toBe(0);
+  });
+
+  it('never spawns a building on a zoned tile that carries track', () => {
+    const state = cityWithRoad();
+    const lots = [at(4, 4), at(5, 4), at(6, 4), at(7, 4), at(8, 4)];
+    paintZones(state, lots, Zone.Residential);
+    state.money = 1e9;
+    expect(buildRail(state, [at(6, 4)]).rejected).toBeUndefined();
+    expect(state.layers.rail[at(6, 4)]).not.toBe(0);
+    runGrowth(state, 4000);
+    const neighbours = lots.filter((tile) => tile !== at(6, 4));
+    expect(neighbours.some((tile) => state.layers.density[tile] > 0)).toBe(true);
+    expect(state.layers.zone[at(6, 4)]).toBe(Zone.Residential);
+    expect(state.layers.density[at(6, 4)]).toBe(0);
   });
 });
 
