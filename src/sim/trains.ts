@@ -162,11 +162,19 @@ export function advanceTrain(
   return 'moving';
 }
 
-/** Halts every train is already going to visit (never the yard tracks). */
+/**
+ * Halts every train is already going to visit — all but the closing yard
+ * track, where a train only parks. A yard track planned as an
+ * intermediate halt (a station or terminal beside it) is claimed.
+ */
 function claimedHalts(state: SimState): Set<number> {
   const claimed = new Set<number>();
-  for (const t of state.trains) for (const s of t.stops) if (s !== t.yardTrack) claimed.add(s);
+  for (const t of state.trains) claimTour(claimed, t.stops);
   return claimed;
+}
+
+function claimTour(claimed: Set<number>, stops: number[]): void {
+  for (let i = 0; i < stops.length - 1; i++) claimed.add(stops[i]);
 }
 
 /**
@@ -206,7 +214,7 @@ export function planPassengerTour(state: SimState, train: Train, claimed: Set<nu
   for (const station of stationTiles(state)) {
     if (plantNetwork(state, station) !== network) continue;
     const halt = plantTrack(state, station);
-    if (halt < 0 || claimed.has(halt) || halt === train.yardTrack) continue;
+    if (halt < 0 || claimed.has(halt)) continue;
     const age = state.layers.stationAge[station];
     if (age < minAge) continue;
     qualifying.push({ halt, age });
@@ -242,7 +250,7 @@ export function planFreightTour(state: SimState, train: Train, claimed: Set<numb
   for (const terminal of terminalTiles(state)) {
     if (plantNetwork(state, terminal) !== network) continue;
     const halt = plantTrack(state, terminal);
-    if (halt < 0 || halt === train.yardTrack) continue;
+    if (halt < 0) continue;
     if (terminalLoads(state, terminal)) hasLoading = true;
     if (
       terminalUnloads(state, terminal) &&
@@ -261,7 +269,7 @@ export function planFreightTour(state: SimState, train: Train, claimed: Set<numb
   for (const terminal of terminalTiles(state)) {
     if (plantNetwork(state, terminal) !== network) continue;
     const halt = plantTrack(state, terminal);
-    if (halt < 0 || halt === train.yardTrack) continue;
+    if (halt < 0) continue;
     const distance = fromYard.get(halt) ?? Infinity;
     if (
       terminalLoads(state, terminal) &&
@@ -440,7 +448,7 @@ export function trainsStep(state: SimState): void {
               ? planFreightTour(state, train, claimed)
               : planPassengerTour(state, train, claimed);
           if (stops.length === 0) break;
-          for (const s of stops) if (s !== train.yardTrack) claimed.add(s);
+          claimTour(claimed, stops);
           train.stops = stops;
           train.pickup = train.kind === TrainKind.Freight ? stops[0] : -1;
           routeToNextHalt(state, train);

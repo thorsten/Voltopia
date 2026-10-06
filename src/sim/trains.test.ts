@@ -220,6 +220,35 @@ describe('trainsStep', () => {
     expect(stats.networks).toBe(1);
   });
 
+  it('serves a station beside the yard track', () => {
+    const state = railTown();
+    // (4, 9) touches the yard track (4, 10) and the road (4, 8).
+    placePlant(state, at(4, 9), PlantType.TrainStation);
+    expect(isStationServed(state, at(4, 9))).toBe(false);
+    setHour(state, BALANCE.rail.windowStartHour);
+    runTicks(state, ticksAtHour(2));
+    expect(isStationServed(state, at(4, 9))).toBe(true);
+    expect(isStationServed(state, at(10, 9))).toBe(true);
+  });
+
+  it('plans the yard track as an intermediate halt and supplies a terminal beside it', () => {
+    const state = railTown();
+    // A terminal beside the yard track with its own depot in reach.
+    placePlant(state, at(4, 9), PlantType.FreightTerminal);
+    placePlant(state, at(6, 7), PlantType.LogisticsDepot);
+    syncTrainFleet(state);
+    const train = state.trains.find((t) => t.kind === TrainKind.Freight)!;
+    const tour = planFreightTour(state, train, new Set());
+    expect(tour.slice(0, -1)).toContain(at(4, 10));
+    expect(tour.at(-1)).toBe(at(4, 10));
+    setHour(state, BALANCE.rail.windowStartHour);
+    // Load at (16, 10), unload at (26, 10), back west to the yard track
+    // as an intermediate halt (~tick 80), then park on it.
+    runTicks(state, ticksAtHour(3));
+    expect(state.layers.railGoodsAge[at(6, 7)]).toBeLessThan(MAX_RAIL_AGE);
+    expect(state.layers.terminalAge[at(4, 9)]).toBeLessThan(MAX_RAIL_AGE);
+  });
+
   it('dispatches nothing outside the operating window', () => {
     const state = railTown();
     setHour(state, BALANCE.rail.windowEndHour);
