@@ -111,7 +111,20 @@ describe('advanceTrain', () => {
     expect(advanceTrain(state, train, step)).toBe('moving');
     expect(advanceTrain(state, train, step)).toBe('arrived');
     expect(train.x).toBeCloseTo(6.5);
-    expect(train.path).toEqual([]);
+    // The finished leg stays, so the wagon keeps trailing during a dwell.
+    expect(train.path).toEqual([at(4, 10), at(5, 10), at(6, 10)]);
+    expect(train.pathIndex).toBe(3);
+  });
+
+  it('arrives at once on a zero-length path to its own tile', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const train = state.trains[0];
+    train.path = [at(4, 10)];
+    train.pathIndex = 0;
+    expect(advanceTrain(state, train, 0.8)).toBe('arrived');
+    expect(train.x).toBeCloseTo(4.5);
+    expect(train.pathIndex).toBe(1);
   });
 
   it('is lost when the next track tile vanished', () => {
@@ -335,5 +348,40 @@ describe('trailingPoint', () => {
     expect(wagon.y).toBeCloseTo(10.5);
     const fresh: Train = { ...train, pathIndex: 1, x: 4.6 };
     expect(trailingPoint(state, fresh, 1).x).toBeCloseTo(4.5);
+  });
+
+  it('keeps the wagon one tile behind a dwelling train', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const train: Train = {
+      ...state.trains[0],
+      phase: TrainPhase.Dwelling,
+      path: [at(4, 10), at(5, 10), at(6, 10)],
+      pathIndex: 3,
+      x: 6.5,
+      y: 10.5,
+    };
+    const wagon = trailingPoint(state, train, 1);
+    expect(wagon.x).toBeCloseTo(5.5);
+    expect(wagon.y).toBeCloseTo(10.5);
+  });
+
+  it('the wagon trails through the halt as the train departs again', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    let checked = 0;
+    for (let i = 0; i < ticksAtHour(2); i++) {
+      runTicks(state, 1);
+      for (const t of runningTrains(state)) {
+        const wagon = trailingPoint(state, t, BALANCE.rail.wagonGap);
+        const gap = Math.hypot(wagon.x - t.x, wagon.y - t.y);
+        // Away from the yard track the wagon never collapses into the locomotive.
+        if (t.path.length > 0 && Math.abs(t.x - 4.5) > 1.5) {
+          expect(gap).toBeGreaterThan(BALANCE.rail.wagonGap / 2);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

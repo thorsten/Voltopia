@@ -125,8 +125,11 @@ function trainTile(state: SimState, train: Train): number {
  * tile centres within the same call, so reaching a centre — including
  * the zero-distance first hop to the train's own tile — never burns a
  * tick: the leftover step keeps driving the next leg. 'lost' when a
- * tile reached mid-step lost its track; 'arrived' after the last tile,
- * with the path cleared.
+ * tile reached mid-step lost its track; 'arrived' after the last tile.
+ * The finished leg stays on the train (`pathIndex === path.length`) so
+ * the wagon keeps trailing it through the dwell; only `routeToNextHalt`
+ * and `parkAtYard` replace it. Only ever called for a Running train,
+ * whose path always has a tile ahead.
  */
 export function advanceTrain(
   state: SimState,
@@ -148,11 +151,7 @@ export function advanceTrain(
       if (distance > 1e-9) train.angle = Math.atan2(dy, dx);
       remaining -= distance;
       train.pathIndex++;
-      if (train.pathIndex >= train.path.length) {
-        train.path = [];
-        train.pathIndex = 0;
-        return 'arrived';
-      }
+      if (train.pathIndex >= train.path.length) return 'arrived';
       continue;
     }
     train.x += (dx / distance) * remaining;
@@ -289,14 +288,26 @@ export function planFreightTour(state: SimState, train: Train, claimed: Set<numb
   return orderTour(state, remaining, train.yardTrack, [pickup], fromPickup);
 }
 
-/** Route the train to stops[0], skipping halts that became unreachable; park it when the yard is unreachable. */
+/**
+ * Route the train to stops[0], skipping halts that became unreachable;
+ * park it when the yard is unreachable. The new leg keeps the tile the
+ * train came from in front (pathIndex 1), so the wagon trails through
+ * the halt instead of snapping into the locomotive on departure.
+ */
 function routeToNextHalt(state: SimState, train: Train): void {
   const from = trainTile(state, train);
+  const old = train.path;
+  const cameFrom = old.length >= 2 && old[old.length - 1] === from ? old[old.length - 2] : -1;
   while (train.stops.length > 0) {
     const path = findRailPath(state, from, train.stops[0]);
     if (path) {
-      train.path = path;
-      train.pathIndex = 0;
+      if (cameFrom >= 0) {
+        train.path = [cameFrom, ...path];
+        train.pathIndex = 1;
+      } else {
+        train.path = path;
+        train.pathIndex = 0;
+      }
       train.phase = TrainPhase.Running;
       return;
     }
