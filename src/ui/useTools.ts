@@ -12,6 +12,7 @@ export type ToolId =
   | 'avenue'
   | 'power-line'
   | 'bus-stop'
+  | 'rail'
   | 'zone-residential'
   | 'zone-commercial'
   | 'zone-retail'
@@ -34,6 +35,9 @@ export type ToolId =
   | 'plant-heat'
   | 'plant-heatstore'
   | 'plant-substation'
+  | 'plant-station'
+  | 'plant-terminal'
+  | 'plant-railyard'
   | 'plant-forest'
   | 'bulldoze';
 
@@ -75,6 +79,9 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
   k: 'plant-busdepot',
   n: 'zone-industrial',
   x: 'plant-substation',
+  m: 'plant-station',
+  j: 'plant-terminal',
+  z: 'plant-railyard',
 };
 
 export interface DragCostPreview {
@@ -101,6 +108,9 @@ export const PLANT_BY_TOOL: Partial<Record<ToolId, PlantType>> = {
   'plant-heat': PlantType.HeatPlant,
   'plant-heatstore': PlantType.HeatStore,
   'plant-substation': PlantType.Substation,
+  'plant-station': PlantType.TrainStation,
+  'plant-terminal': PlantType.FreightTerminal,
+  'plant-railyard': PlantType.RailYard,
 };
 
 /**
@@ -162,7 +172,13 @@ export function useTools(
     // Mirrors the sim's per-tile pricing (src/sim/roads.ts, powerLines.ts):
     // river tiles are bridges; lines over river or lake are crossings.
     // Falls back to the land price when the renderer isn't mounted yet.
-    const showPathCost = (tiles: number[], line: boolean, avenue: boolean, stop: boolean): void => {
+    const showPathCost = (
+      tiles: number[],
+      line: boolean,
+      avenue: boolean,
+      stop: boolean,
+      rail: boolean,
+    ): void => {
       const renderer = rendererRef.current;
       const cost = tiles.reduce((sum, index) => {
         if (stop) {
@@ -173,6 +189,18 @@ export function useTools(
         }
         const terrain = renderer?.terrainAt(index);
         const factor = slopeFactorAt(index);
+        if (rail) {
+          // Mirrors src/sim/rail.ts: track price (bridge over the river), slope and felling; tiles with track are free.
+          if (renderer?.railAt(index)) return sum;
+          const bridge = terrain === Terrain.River;
+          return (
+            sum +
+            Math.round(
+              (bridge ? BALANCE.costs.railBridgePerTile : BALANCE.costs.railPerTile) * factor,
+            ) +
+            fellingCostAt(index)
+          );
+        }
         if (line) {
           const water = terrain !== undefined && terrain !== Terrain.Land;
           return (
@@ -233,23 +261,25 @@ export function useTools(
       tool === 'road' ||
       tool === 'avenue' ||
       tool === 'power-line' ||
-      tool === 'bus-stop'
+      tool === 'bus-stop' ||
+      tool === 'rail'
     ) {
       const line = tool === 'power-line';
       const avenue = tool === 'avenue';
       const stop = tool === 'bus-stop';
+      const rail = tool === 'rail';
       if (stop) renderer?.setHoverRadius(BALANCE.transit.stopRadius);
       callbacks.onBuildStart = (tile) => {
         anchor = tile;
         path = [tile.index];
         rendererRef.current?.setPreviewTiles(path);
-        showPathCost(path, line, avenue, stop);
+        showPathCost(path, line, avenue, stop, rail);
       };
       callbacks.onBuildDrag = (tile) => {
         if (!anchor) return;
         path = lShapedPath(anchor.x, anchor.y, tile.x, tile.y, gridSize);
         rendererRef.current?.setPreviewTiles(path);
-        showPathCost(path, line, avenue, stop);
+        showPathCost(path, line, avenue, stop, rail);
       };
       callbacks.onBuildEnd = (tile) => {
         if (anchor && tile) {
@@ -257,11 +287,13 @@ export function useTools(
         }
         if (path.length > 0) {
           send(
-            stop
-              ? { type: 'buildBusStop', tiles: path }
-              : line
-                ? { type: 'buildPowerLine', tiles: path }
-                : { type: 'buildRoad', tiles: path, avenue },
+            rail
+              ? { type: 'buildRail', tiles: path }
+              : stop
+                ? { type: 'buildBusStop', tiles: path }
+                : line
+                  ? { type: 'buildPowerLine', tiles: path }
+                  : { type: 'buildRoad', tiles: path, avenue },
           );
           sound.play('build');
         }
@@ -325,6 +357,10 @@ export function useTools(
         renderer?.setHoverRadius(BALANCE.happiness.parkRadius);
       } else if (plant === PlantType.ChargingHub) {
         renderer?.setHoverRadius(BALANCE.vehicles.hubRadius);
+      } else if (plant === PlantType.TrainStation) {
+        renderer?.setHoverRadius(BALANCE.rail.stationRadius);
+      } else if (plant === PlantType.FreightTerminal) {
+        renderer?.setHoverRadius(BALANCE.rail.freightRadius);
       } else {
         renderer?.setHoverRadius(BALANCE.energy.lineSupplyRadius);
       }

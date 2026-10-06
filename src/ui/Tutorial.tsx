@@ -61,6 +61,12 @@ const STEPS: TutorialStep[] = [
     isComplete: (stats) => stats.islands.some((i) => i.substations > 0),
   },
   {
+    id: 'rail',
+    title: 'tutorial.rail.title',
+    body: 'tutorial.rail.body',
+    isComplete: (stats) => stats.rail.stationsServed >= 2,
+  },
+  {
     id: 'growth',
     title: 'tutorial.growth.title',
     body: 'tutorial.growth.body',

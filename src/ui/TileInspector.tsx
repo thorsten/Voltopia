@@ -605,6 +605,105 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
         </section>
       )}
 
+      {info.rail && (
+        <section data-testid="inspect-rail">
+          <h3>{t('inspect.section.rail')}</h3>
+          <Row
+            label={t('inspect.railNetwork')}
+            value={t('inspect.railNetwork.value', {
+              tiles: info.rail.networkTiles,
+              trains: info.rail.trainsInNetwork,
+            })}
+          />
+        </section>
+      )}
+
+      {info.station && (
+        <section data-testid="inspect-station">
+          <h3>{t('inspect.section.rail')}</h3>
+          <Row
+            label={t('inspect.stopState')}
+            value={t(STOP_LABEL[info.station.state])}
+            tone={
+              info.station.state === StopState.Served
+                ? 'positive'
+                : info.station.state === StopState.Due
+                  ? undefined
+                  : 'negative'
+            }
+            testId="inspect-station-state"
+          />
+          <Row
+            label={t('inspect.lastTrain')}
+            value={t('inspect.lastBus.hoursAgo', {
+              hours: ((info.station.ageTicks / TICKS_PER_DAY) * 24).toFixed(1),
+            })}
+            tone="muted"
+          />
+          <Row
+            label={t('inspect.coveredCommuters')}
+            value={String(info.station.coveredCommuters)}
+          />
+          <Row
+            label={t('inspect.railNetwork')}
+            value={t('inspect.railNetwork.tiles', { tiles: info.station.networkTiles })}
+            tone="muted"
+          />
+        </section>
+      )}
+
+      {info.freightTerminal && (
+        <section data-testid="inspect-terminal">
+          <h3>{t('inspect.section.rail')}</h3>
+          <Row
+            label={t('inspect.terminalLoads')}
+            value={t(info.freightTerminal.loads ? 'inspect.yes' : 'inspect.no')}
+            tone={info.freightTerminal.loads ? 'positive' : undefined}
+          />
+          <Row
+            label={t('inspect.terminalUnloads')}
+            value={t(info.freightTerminal.unloads ? 'inspect.yes' : 'inspect.no')}
+            tone={info.freightTerminal.unloads ? 'positive' : undefined}
+          />
+          <Row
+            label={t('inspect.depotsInReach')}
+            value={String(info.freightTerminal.depotsInReach)}
+          />
+          <Row
+            label={t('inspect.depot.factoriesInReach')}
+            value={String(info.freightTerminal.factoriesInReach)}
+          />
+        </section>
+      )}
+
+      {info.railYard && (
+        <section data-testid="inspect-yard">
+          <h3>{t('inspect.section.rail')}</h3>
+          <Row
+            label={t('inspect.trains')}
+            value={t('inspect.trains.value', {
+              passenger: info.railYard.passengerTrains,
+              freight: info.railYard.freightTrains,
+              running: info.railYard.running,
+              stalled: info.railYard.stalled,
+            })}
+          />
+          <Row
+            label={t('inspect.catenary')}
+            value={t(info.railYard.powered ? 'inspect.catenary.fed' : 'inspect.catenary.none')}
+            tone={info.railYard.powered ? 'positive' : 'negative'}
+            testId="inspect-yard-power"
+          />
+          <Row
+            label={t('inspect.inNetwork')}
+            value={t('inspect.inNetwork.value', {
+              stations: info.railYard.stationsInNetwork,
+              terminals: info.railYard.terminalsInNetwork,
+            })}
+          />
+        </section>
+      )}
+
       {(isBuilding || isStation) && (
         <section data-testid="inspect-services">
           <h3>{t('inspect.section.services')}</h3>

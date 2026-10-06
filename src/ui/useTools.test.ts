@@ -43,4 +43,14 @@ describe('tool hotkeys', () => {
     expect(TOOL_HOTKEYS.x).toBe('plant-substation');
     expect(PLANT_BY_TOOL['plant-substation']).toBe(PlantType.Substation);
   });
+
+  it('maps the rail plants to free hotkeys and leaves the rail drag tool toolbar-only', () => {
+    expect(TOOL_HOTKEYS.m).toBe('plant-station');
+    expect(TOOL_HOTKEYS.j).toBe('plant-terminal');
+    expect(TOOL_HOTKEYS.z).toBe('plant-railyard');
+    expect(Object.values(TOOL_HOTKEYS)).not.toContain('rail');
+    expect(PLANT_BY_TOOL['plant-station']).toBe(PlantType.TrainStation);
+    expect(PLANT_BY_TOOL['plant-terminal']).toBe(PlantType.FreightTerminal);
+    expect(PLANT_BY_TOOL['plant-railyard']).toBe(PlantType.RailYard);
+  });
 });

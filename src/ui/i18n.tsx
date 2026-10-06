@@ -18,7 +18,7 @@ const en = {
     "{supplied} of {shops} shops supplied · {vans} vans on the road · {factories} factories · {local} % of today's tours loaded locally",
   'hud.transit': 'transit',
   'hud.transit.title':
-    '{riders} riders · {buses} buses on the road · {served} of {stops} stops served',
+    '{riders} riders ({busRiders} by bus · {railRiders} by train) · {buses} buses and {trains} trains on the move · {served} of {stops} stops served',
   'traffic.flowing': 'flowing',
   'traffic.slow': 'slow',
   'traffic.jammed': 'jammed',
@@ -50,6 +50,7 @@ const en = {
   'tool.avenue': 'Avenue',
   'tool.power-line': 'Power line',
   'tool.bus-stop': 'Bus stop',
+  'tool.rail': 'Track',
   'tool.zone-residential': 'Residential',
   'tool.zone-commercial': 'Commercial',
   'tool.zone-retail': 'Retail',
@@ -99,6 +100,8 @@ const en = {
     'Carries power from plants along roads. Buildings within three tiles of a connected line get supplied.',
   'tool.bus-stop.desc':
     'Mark a stop on a road. Commuters near a served stop at home and at work leave the car at home.',
+  'tool.rail.desc':
+    'Lay railway track. Crosses roads and the river, not lakes or the sea. Stations, terminals and a rail yard go beside it.',
   'tool.zone-residential.desc': 'Homes. Residents move in once the lot has a road and power.',
   'tool.zone-commercial.desc': 'Offices. Provide jobs for your residents.',
   'tool.zone-retail.desc': 'Shops. Keep residents happy and add jobs.',
@@ -141,6 +144,12 @@ const en = {
   'tool.plant-substation.desc':
     'The gate of a grid island to the outer grid. Only an island with a substation can import in a shortfall or export its surplus; each one adds a link of ' +
     '{importCapacity} in and {exportCapacity} out per tick. Islands are the separate networks your lines and plants form — see the Grid overlay.',
+  'tool.plant-station.desc':
+    'Passenger halt beside a track with a road link. Commuters within eight tiles of two served stations on one network leave the car at home.',
+  'tool.plant-terminal.desc':
+    'Freight halt beside a track. Loads from factories within six tiles, unloads to logistics depots within six tiles — a depot supplied by rail imports nothing.',
+  'tool.plant-railyard.desc':
+    "Fields two passenger trains and a freight train for its track network. Running trains draw power from the yard's grid island; a deficit there stalls them.",
   'tool.plant-forest.desc':
     'Plant saplings by the patch. They grow over a few days, raise happiness nearby — and slow the wind for turbines standing in them.',
   'tool.bulldoze.desc': 'Clears roads, zones and plants. Drag to clear an area.',
@@ -157,6 +166,7 @@ const en = {
   'energy.rooftop': '🏠 Rooftop PV',
   'energy.consumption': '🏙 Consumption',
   'energy.charging': '🔌 EV charging',
+  'energy.traction': 'Rail traction',
   'energy.heating': '🔥 Heating',
   'energy.cooling': '❄️ Cooling',
   'energy.surplus': 'Surplus',
@@ -317,6 +327,9 @@ const en = {
   'help.transit.title': 'Transit',
   'help.transit.body':
     'Mark bus stops on your roads and build a bus depot. Three electric buses tour the stops that have waited longest; a stop a bus visited recently counts as served and covers the roads around it. A commuter with a served stop near home and near work leaves the car at home, which eases traffic and the evening charging peak. Too many stops for one depot leave some unserved.',
+  'help.rail.title': 'Railways',
+  'help.rail.body':
+    "Lay track with the Track tool; it may cross roads (level crossings) and the river (bridges). Put a train station beside a track and a road, and a rail yard beside the track: the yard sends two passenger trains to the stations that have waited longest. A commuter whose home and workplace each lie within eight tiles of a different served station on the same network rides the train instead of driving — fewer cars, a smaller evening charging peak. A freight terminal near factories loads goods; one near a logistics depot unloads them, and a depot supplied by rail sends its vans out without the factory leg or the import fee. Trains run on the catenary fed from the yard's grid island: a deficit there slows them, a blackout stops them, so put the yard on a well-supplied island with a substation.",
   'help.services.title': 'City services',
   'help.services.body':
     'Fire and police stations protect every building within their ring, but only while connected to the grid. Buildings need fire cover to reach the highest density; without police cover, happiness and tax income fall once the city has 100 residents. The services overlay shows who is covered.',
@@ -369,6 +382,9 @@ const en = {
   'tutorial.substation.title': 'Build a substation',
   'tutorial.substation.body':
     'Your network is a grid island. Give it a gate to the outer grid: place a substation (🏗, key X) next to your lines so a shortfall can import and a surplus can export.',
+  'tutorial.rail.title': 'Connect two districts by rail',
+  'tutorial.rail.body':
+    'Lay track between two districts, put a station beside the track and a road in each, and a rail yard on a powered island. When both stations are served, their commuters leave the car at home.',
   'tutorial.growth.title': 'Watch it grow',
   'tutorial.growth.body':
     'With demand, roads and power in place, the first houses will appear on their own. Give it a moment (▶▶▶ speeds things up).',
@@ -477,7 +493,7 @@ const en = {
   'budget.tax': 'Taxes',
   'budget.export': 'Grid export',
   'budget.hydrogen': 'Hydrogen sales',
-  'budget.roads': 'Roads & power lines',
+  'budget.roads': 'Roads, lines & tracks',
   'budget.avenues': 'Avenues',
   'budget.busStops': 'Bus stops',
   'budget.biogasFuel': 'Biogas fuel',
@@ -503,6 +519,7 @@ const en = {
   'inspect.section.traffic': 'Traffic',
   'inspect.section.deliveries': 'Deliveries',
   'inspect.section.transit': 'Transit',
+  'inspect.section.rail': 'Railway',
   'inspect.section.goods': 'Goods',
   'inspect.roadClass': 'Road',
   'inspect.street': 'Street',
@@ -537,6 +554,22 @@ const en = {
   'inspect.buses': 'Buses',
   'inspect.buses.value': '{driving} on the road · {charging} charging · {total} total',
   'inspect.stopsInReach': 'Stops in reach',
+  'inspect.railNetwork': 'Network',
+  'inspect.railNetwork.value': '{tiles} tiles of track · {trains} trains',
+  'inspect.railNetwork.tiles': '{tiles} tiles of track',
+  'inspect.lastTrain': 'Last train',
+  'inspect.coveredCommuters': 'Commuters in reach',
+  'inspect.terminalLoads': 'Loads goods',
+  'inspect.terminalUnloads': 'Unloads goods',
+  'inspect.depotsInReach': 'Depots in reach',
+  'inspect.trains': 'Trains',
+  'inspect.trains.value':
+    '{passenger} passenger · {freight} freight · {running} running · {stalled} stalled',
+  'inspect.catenary': 'Catenary',
+  'inspect.catenary.fed': 'fed by the grid',
+  'inspect.catenary.none': 'no grid connection',
+  'inspect.inNetwork': 'In network',
+  'inspect.inNetwork.value': '{stations} stations · {terminals} terminals',
   'inspect.upkeep': 'Upkeep',
   'inspect.tax': 'Tax contribution',
   'inspect.net': 'Net',
@@ -638,7 +671,7 @@ const de: Record<TranslationKey, string> = {
     '{supplied} von {shops} Läden beliefert · {vans} Lieferwagen unterwegs · {factories} Fabriken · {local} % der heutigen Touren lokal beladen',
   'hud.transit': 'ÖPNV',
   'hud.transit.title':
-    '{riders} Fahrgäste · {buses} Busse unterwegs · {served} von {stops} Haltestellen bedient',
+    '{riders} Fahrgäste ({busRiders} Bus · {railRiders} Bahn) · {buses} Busse und {trains} Züge unterwegs · {served} von {stops} Halten bedient',
   'traffic.flowing': 'fließend',
   'traffic.slow': 'zäh',
   'traffic.jammed': 'Stau',
@@ -670,6 +703,7 @@ const de: Record<TranslationKey, string> = {
   'tool.avenue': 'Allee',
   'tool.power-line': 'Stromleitung',
   'tool.bus-stop': 'Haltestelle',
+  'tool.rail': 'Gleis',
   'tool.zone-residential': 'Wohngebiet',
   'tool.zone-commercial': 'Gewerbe',
   'tool.zone-retail': 'Einzelhandel',
@@ -719,6 +753,8 @@ const de: Record<TranslationKey, string> = {
     'Führt Strom von Anlagen entlang der Straßen. Gebäude im Umkreis von drei Feldern einer angeschlossenen Leitung werden versorgt.',
   'tool.bus-stop.desc':
     'Haltestelle auf einer Straße. Pendler mit bedienter Haltestelle nahe Wohnung und Arbeit lassen das Auto stehen.',
+  'tool.rail.desc':
+    'Eisenbahngleis verlegen. Kreuzt Straßen und den Fluss, nicht Seen oder das Meer. Bahnhöfe, Güterbahnhöfe und ein Betriebswerk kommen daneben.',
   'tool.zone-residential.desc': 'Wohnhäuser. Bewohner ziehen ein, sobald Straße und Strom da sind.',
   'tool.zone-commercial.desc': 'Büros. Schaffen Arbeitsplätze für deine Bewohner.',
   'tool.zone-retail.desc': 'Läden. Halten Bewohner zufrieden und schaffen Arbeitsplätze.',
@@ -762,6 +798,12 @@ const de: Record<TranslationKey, string> = {
   'tool.plant-substation.desc':
     'Das Tor einer Netzinsel zum Außennetz. Nur eine Insel mit Umspannwerk kann im Defizit importieren oder Überschuss exportieren; jedes Werk bringt einen Link von ' +
     '{importCapacity} Einheiten hinein und {exportCapacity} hinaus pro Tick. Inseln sind die getrennten Netze, die deine Leitungen und Anlagen bilden – siehe Overlay „Netz“.',
+  'tool.plant-station.desc':
+    'Personenhalt am Gleis mit Straßenanschluss. Pendler im Umkreis von acht Kacheln um zwei bediente Bahnhöfe desselben Netzes lassen das Auto stehen.',
+  'tool.plant-terminal.desc':
+    'Güterhalt am Gleis. Lädt bei Fabriken im Umkreis von sechs Kacheln, entlädt bei Logistikdepots im selben Umkreis — ein per Bahn versorgtes Depot importiert nichts.',
+  'tool.plant-railyard.desc':
+    'Stellt zwei Personenzüge und einen Güterzug für sein Gleisnetz. Fahrende Züge ziehen Strom von der Netzinsel des Werks; ein Defizit dort lässt sie stehen.',
   'tool.plant-forest.desc':
     'Pflanzt Setzlinge flächenweise. Sie wachsen über einige Tage, heben die Zufriedenheit in der Nähe — und bremsen den Wind für Turbinen, die darin stehen.',
   'tool.bulldoze.desc': 'Entfernt Straßen, Gebiete und Anlagen. Ziehen räumt eine Fläche.',
@@ -778,6 +820,7 @@ const de: Record<TranslationKey, string> = {
   'energy.rooftop': '🏠 Dach-PV',
   'energy.consumption': '🏙 Verbrauch',
   'energy.charging': '🔌 E-Auto-Laden',
+  'energy.traction': 'Bahnstrom',
   'energy.heating': '🔥 Heizung',
   'energy.cooling': '❄️ Kühlung',
   'energy.surplus': 'Überschuss',
@@ -939,6 +982,9 @@ const de: Record<TranslationKey, string> = {
   'help.transit.title': 'ÖPNV',
   'help.transit.body':
     'Setze Haltestellen auf deine Straßen und baue ein Busdepot. Drei Elektrobusse fahren die Haltestellen ab, die am längsten warten; eine Haltestelle mit kürzlichem Bushalt gilt als bedient und deckt die Straßen ringsum ab. Pendler mit bedienter Haltestelle nahe Wohnung und Arbeit lassen das Auto stehen, was Verkehr und abendliche Ladespitze entlastet. Zu viele Haltestellen für ein Depot bleiben teils unbedient.',
+  'help.rail.title': 'Eisenbahn',
+  'help.rail.body':
+    'Verlege Gleise mit dem Gleis-Werkzeug; sie dürfen Straßen (Bahnübergänge) und den Fluss (Brücken) kreuzen. Setze einen Bahnhof an Gleis und Straße und ein Betriebswerk ans Gleis: das Werk schickt zwei Personenzüge zu den Bahnhöfen, die am längsten warten. Ein Pendler, dessen Wohnung und Arbeitsplatz je im Umkreis von acht Kacheln um verschiedene bediente Bahnhöfe desselben Netzes liegen, fährt Bahn statt Auto — weniger Verkehr, kleinere Abendladespitze. Ein Güterbahnhof bei Fabriken lädt Güter; einer beim Logistikdepot entlädt sie, und ein per Bahn versorgtes Depot schickt seine Lieferwagen ohne Fabrik-Umweg und ohne Importgebühr los. Züge fahren an der Oberleitung, die die Netzinsel des Betriebswerks speist: ein Defizit dort bremst sie, ein Blackout stoppt sie — also das Werk auf eine gut versorgte Insel mit Umspannwerk.',
   'help.services.title': 'Stadtdienste',
   'help.services.body':
     'Feuerwehr und Polizei schützen jedes Gebäude in ihrem Ring, aber nur mit Netzanschluss. Für die höchste Dichte brauchen Gebäude Feuerwehrschutz; ohne Polizeischutz sinken Zufriedenheit und Steuereinnahmen, sobald die Stadt 100 Einwohner hat. Das Dienste-Overlay zeigt, wer abgedeckt ist.',
@@ -991,6 +1037,9 @@ const de: Record<TranslationKey, string> = {
   'tutorial.substation.title': 'Baue ein Umspannwerk',
   'tutorial.substation.body':
     'Dein Netz ist eine Netzinsel. Gib ihr ein Tor zum Außennetz: setze ein Umspannwerk (🏗, Taste X) neben deine Leitungen, damit ein Defizit importieren und ein Überschuss exportieren kann.',
+  'tutorial.rail.title': 'Verbinde zwei Distrikte per Bahn',
+  'tutorial.rail.body':
+    'Verlege Gleise zwischen zwei Distrikten, setze in jedem einen Bahnhof an Gleis und Straße und ein Betriebswerk auf eine versorgte Insel. Sobald beide Bahnhöfe bedient werden, lassen ihre Pendler das Auto stehen.',
   'tutorial.growth.title': 'Sieh zu, wie es wächst',
   'tutorial.growth.body':
     'Mit Nachfrage, Straßen und Strom entstehen die ersten Häuser von selbst. Gib ihnen einen Moment (▶▶▶ beschleunigt).',
@@ -1102,7 +1151,7 @@ const de: Record<TranslationKey, string> = {
   'budget.tax': 'Steuern',
   'budget.export': 'Netzeinspeisung',
   'budget.hydrogen': 'Wasserstoffverkauf',
-  'budget.roads': 'Straßen & Leitungen',
+  'budget.roads': 'Straßen, Leitungen & Gleise',
   'budget.avenues': 'Alleen',
   'budget.busStops': 'Haltestellen',
   'budget.biogasFuel': 'Biogas-Brennstoff',
@@ -1128,6 +1177,7 @@ const de: Record<TranslationKey, string> = {
   'inspect.section.traffic': 'Verkehr',
   'inspect.section.deliveries': 'Lieferungen',
   'inspect.section.transit': 'ÖPNV',
+  'inspect.section.rail': 'Eisenbahn',
   'inspect.section.goods': 'Güter',
   'inspect.roadClass': 'Straßenart',
   'inspect.street': 'Straße',
@@ -1162,6 +1212,22 @@ const de: Record<TranslationKey, string> = {
   'inspect.buses': 'Busse',
   'inspect.buses.value': '{driving} unterwegs · {charging} laden · {total} gesamt',
   'inspect.stopsInReach': 'Haltestellen in Reichweite',
+  'inspect.railNetwork': 'Netz',
+  'inspect.railNetwork.value': '{tiles} Gleiskacheln · {trains} Züge',
+  'inspect.railNetwork.tiles': '{tiles} Gleiskacheln',
+  'inspect.lastTrain': 'Letzter Zug',
+  'inspect.coveredCommuters': 'Pendler im Einzugsgebiet',
+  'inspect.terminalLoads': 'Lädt Güter',
+  'inspect.terminalUnloads': 'Entlädt Güter',
+  'inspect.depotsInReach': 'Depots in Reichweite',
+  'inspect.trains': 'Züge',
+  'inspect.trains.value':
+    '{passenger} Personen · {freight} Güter · {running} unterwegs · {stalled} stehend',
+  'inspect.catenary': 'Oberleitung',
+  'inspect.catenary.fed': 'vom Netz gespeist',
+  'inspect.catenary.none': 'kein Netzanschluss',
+  'inspect.inNetwork': 'Im Netz',
+  'inspect.inNetwork.value': '{stations} Bahnhöfe · {terminals} Güterbahnhöfe',
   'inspect.upkeep': 'Unterhalt',
   'inspect.tax': 'Steuerbeitrag',
   'inspect.net': 'Saldo',
