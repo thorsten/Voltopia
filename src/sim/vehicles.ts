@@ -1,6 +1,7 @@
 import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import { PlantType, RoadClass, Zone } from '../shared/types.ts';
+import { closedCrossings } from './crossings.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { plantNetwork } from './rail.ts';
 import { findRoadPath } from './routing.ts';
@@ -140,7 +141,12 @@ export function advanceAlongPath(
     const heading = headingOf(currentTile, nextTile, state.size);
     const nextLane = laneKey(nextTile, heading);
     const full = (occupancy.get(nextLane) ?? 0) >= laneCapacity(state, nextTile);
-    if (full && mover.waitTicks < BALANCE.vehicles.maxWaitTicks) {
+    // A level crossing with its barriers down stops road traffic the same
+    // way a full lane does — the gridlock breaker included, so a train
+    // stalled on the crossing for want of power cannot shut a street for
+    // good.
+    const barred = state.closedCrossings.has(nextTile);
+    if ((full || barred) && mover.waitTicks < BALANCE.vehicles.maxWaitTicks) {
       mover.waitTicks++;
       return 'waiting';
     }
@@ -275,6 +281,11 @@ export function vehiclesStep(state: SimState): Map<number, number> {
   // The charging decisions below read the island labels: a car can only
   // draw from a tile that is on a grid island at all.
   recomputeGrid(state);
+  // Where the barriers are down this tick. Cars, vans and buses all pass
+  // through advanceAlongPath, which reads this. The trains move later in
+  // the tick, so the crossings follow them by one tick — a sixteenth of
+  // an in-game minute, which nothing can see.
+  state.closedCrossings = closedCrossings(state);
   const { population, jobs } = countPopulationAndJobs(state);
   const targetCount = Math.min(
     BALANCE.vehicles.maxVehicles,

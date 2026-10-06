@@ -9,7 +9,16 @@ import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import { findRoadPath } from './routing.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
-import { createSimState, TileType, VanPhase, VehiclePhase, type SimState } from './state.ts';
+import {
+  createSimState,
+  TileType,
+  TrainKind,
+  TrainPhase,
+  VanPhase,
+  VehiclePhase,
+  type SimState,
+  type Train,
+} from './state.ts';
 import { transitStats } from './transit.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import {
@@ -937,5 +946,113 @@ describe('chargingDemandByIsland', () => {
     vehiclesStep(lit);
     expect(lit.vehicles.some((v) => v.charging)).toBe(true);
     expect(chargingDemand(lit)).toBeGreaterThan(0);
+  });
+});
+
+describe('level crossings', () => {
+  const ROAD_Y = 5;
+  const CROSSING_X = 6;
+
+  /** An east-west street crossed by a north-south track at (6, 5). */
+  function crossingTown(): SimState {
+    const state = createSimState(1, SIZE);
+    state.money = 1e9;
+    buildRoads(
+      state,
+      Array.from({ length: 6 }, (_, i) => at(i + 3, ROAD_Y)),
+    );
+    buildRail(
+      state,
+      Array.from({ length: 6 }, (_, i) => at(CROSSING_X, i + 2)),
+    );
+    for (let i = 0; i < 4; i++) {
+      state.layers.zone[at(3 + i, ROAD_Y - 1)] = Zone.Residential;
+      state.layers.density[at(3 + i, ROAD_Y - 1)] = 3;
+    }
+    return state;
+  }
+
+  function commuter(state: SimState): void {
+    const home = at(3, ROAD_Y);
+    const work = at(8, ROAD_Y);
+    state.vehicles.push({
+      id: 100,
+      homeRoad: home,
+      workRoad: work,
+      x: 3.5,
+      y: ROAD_Y + 0.5,
+      angle: 0,
+      phase: VehiclePhase.ToWork,
+      path: [at(4, ROAD_Y), at(5, ROAD_Y), at(CROSSING_X, ROAD_Y), at(7, ROAD_Y), work],
+      pathIndex: 0,
+      departureOffset: 0,
+      charge: 0.8,
+      tripTicks: 0,
+      tripFreeFlowTicks: 0,
+      charging: false,
+      chargeTile: -1,
+      waitTicks: 0,
+      riderDay: -1,
+      riderMode: 'bus',
+    });
+  }
+
+  /** A train standing two tiles north of the crossing, heading south. */
+  function trainAbove(state: SimState): Train {
+    const train: Train = {
+      id: 1,
+      kind: TrainKind.Passenger,
+      yard: at(CROSSING_X, 2),
+      yardTrack: at(CROSSING_X, 2),
+      x: CROSSING_X + 0.5,
+      y: ROAD_Y - 2 + 0.5,
+      angle: -Math.PI / 2,
+      phase: TrainPhase.Running,
+      stops: [],
+      pickup: -1,
+      path: [],
+      pathIndex: 0,
+      dwellTicks: 0,
+      stalled: false,
+    };
+    state.trains.push(train);
+    return train;
+  }
+
+  it('holds a car at the crossing while a train is coming and lets it over once clear', () => {
+    const state = crossingTown();
+    commuter(state);
+    trainAbove(state);
+    for (let i = 0; i < 12; i++) stepVehicles(state);
+    const car = state.vehicles[0];
+    expect(car.x).toBeLessThan(CROSSING_X); // waiting at the barrier
+    expect(car.x).toBeGreaterThan(5); // but right up to it
+    state.trains.length = 0;
+    for (let i = 0; i < 8; i++) stepVehicles(state);
+    expect(state.vehicles[0].x).toBeGreaterThan(CROSSING_X);
+  });
+
+  /** Furthest east the car got over `ticks` ticks (it may turn around at the end). */
+  function furthestEast(state: SimState, ticks: number): number {
+    let furthest = state.vehicles[0].x;
+    for (let i = 0; i < ticks; i++) {
+      stepVehicles(state);
+      furthest = Math.max(furthest, state.vehicles[0].x);
+    }
+    return furthest;
+  }
+
+  it('a car never waits forever: a train stalled on the crossing is squeezed past', () => {
+    const state = crossingTown();
+    commuter(state);
+    const train = trainAbove(state);
+    train.stalled = true;
+    expect(furthestEast(state, BALANCE.vehicles.maxWaitTicks + 12)).toBeGreaterThan(CROSSING_X);
+  });
+
+  it('lets traffic run while the track is clear', () => {
+    const state = crossingTown();
+    commuter(state);
+    expect(furthestEast(state, 12)).toBeGreaterThan(CROSSING_X);
   });
 });

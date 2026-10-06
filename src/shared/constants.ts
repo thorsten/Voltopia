@@ -1680,6 +1680,20 @@ export const BALANCE = {
     tractionLoadPassenger: 5,
     tractionLoadFreight: 8,
     /**
+     * A train this far from a level crossing along the track closes it:
+     * the barriers come down (render/railMesh.ts) and road traffic waits
+     * (sim/crossings.ts). Probe on a town whose every commute crosses the
+     * track, two trains running, over two in-game days: at three tiles a
+     * crossing is shut 17-19 % of all ticks and the commute congestion
+     * rises 3-8 % (worst tick 6-15 %) with mean happiness unmoved; at
+     * 1.5 tiles it is 9-11 % of ticks and 2-5 %. Three it is: half that
+     * gives barely a second of warning to watch at 1x speed, and the
+     * measured cost is a nuisance, not a penalty.
+     */
+    crossingApproachTiles: 3,
+    /** … and only while the train is this close to the track's centre line. */
+    crossingLateralTiles: 0.6,
+    /**
      * Distance of the wagon behind the locomotive along the path, centre
      * to centre, in tiles: half a locomotive (0.26) plus half a wagon
      * (0.25) plus a coupler's slack, so the two carriages run coupled

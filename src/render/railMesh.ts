@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DIR_E, DIR_N, DIR_S, DIR_W } from '../shared/grid.ts';
+import { crossingIsClosed, type CrossingTrain } from '../shared/levelCrossing.ts';
 import {
   Terrain,
   TileType,
@@ -37,10 +38,6 @@ const SIGNAL_HEAD = { sx: 0.08, sy: 0.1, sz: 0.05 } as const;
 /** The post stands this far from the tile centre along the road and beside the lane. */
 const BARRIER_ALONG_ROAD = 0.42;
 const BARRIER_BESIDE_LANE = 0.3;
-/** A train within this many tiles of the crossing along the track closes it. */
-const BARRIER_APPROACH_TILES = 3;
-/** … and only while it is this close to the track's centre line (so a train on another line is ignored). */
-const BARRIER_TRACK_LATERAL = 0.6;
 /** Seconds a bar takes to travel between raised and lowered. */
 const BARRIER_SWEEP_SECONDS = 0.6;
 /** The signal head alternates lit/dark over this period while the crossing is closed. */
@@ -137,7 +134,7 @@ export class RailMesh implements DiffLayer {
   private readonly signalHeads: THREE.InstancedMesh;
   private readonly barriers: CrossingBarrier[] = [];
   /** Locomotive positions in world coordinates, from the last tick. */
-  private readonly trains: { x: number; z: number }[] = [];
+  private readonly trains: CrossingTrain[] = [];
   private reducedMotion = false;
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly color = new THREE.Color();
@@ -235,7 +232,7 @@ export class RailMesh implements DiffLayer {
     for (const vehicle of vehicles) {
       if (vehicle.kind !== VehicleKind.Locomotive && vehicle.kind !== VehicleKind.FreightLocomotive)
         continue;
-      this.trains.push({ x: vehicle.x, z: vehicle.y });
+      this.trains.push({ x: vehicle.x, y: vehicle.y });
     }
   }
 
@@ -257,7 +254,7 @@ export class RailMesh implements DiffLayer {
     let changedSignals = false;
     for (let slot = 0; slot < this.barriers.length; slot++) {
       const barrier = this.barriers[slot];
-      const target = this.trainApproaching(barrier) ? 1 : 0;
+      const target = crossingIsClosed(this.trains, barrier.cx, barrier.cz, barrier.alongX) ? 1 : 0;
       const progress =
         target > barrier.progress
           ? Math.min(target, barrier.progress + step)
@@ -277,17 +274,6 @@ export class RailMesh implements DiffLayer {
     if (movedBars) this.barrierBars.instanceMatrix.needsUpdate = true;
     if (changedSignals && this.signalHeads.instanceColor)
       this.signalHeads.instanceColor.needsUpdate = true;
-  }
-
-  /** Is a train within reach of this crossing, on its own track? */
-  private trainApproaching(barrier: CrossingBarrier): boolean {
-    for (const train of this.trains) {
-      const along = barrier.alongX ? train.x - barrier.cx : train.z - barrier.cz;
-      const lateral = barrier.alongX ? train.z - barrier.cz : train.x - barrier.cx;
-      if (Math.abs(along) <= BARRIER_APPROACH_TILES && Math.abs(lateral) <= BARRIER_TRACK_LATERAL)
-        return true;
-    }
-    return false;
   }
 
   /**

@@ -200,7 +200,7 @@ Collected 2026-09-24; roughly in the order we want to build them.
   sea view.
 - **Railways** (done): trains connecting villages/districts on large
   maps; best built after per-district grids so regions mean something.
-  Tracks are their own line layer (level crossings, bridges); a rail
+  Tracks are their own line layer (level crossings whose barriers close for an approaching train and hold road traffic back, bridges); a rail
   yard fields passenger trains for the stations with the longest wait
   and a freight train from factory terminals to depot terminals, and
   feeds their catenary from its own grid island, so a deficit there

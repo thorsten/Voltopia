@@ -461,6 +461,12 @@ export interface SimState {
   /** Figures from the last transitStep; transient. */
   lastTransit: TransitStats;
   lastRail: RailStats;
+  /**
+   * Level crossings closed by an approaching train, as tile indices;
+   * refilled at the start of every vehiclesStep and transient. Road
+   * traffic waits in front of them (see sim/crossings.ts).
+   */
+  closedCrossings: Set<number>;
   /** Achieved goal ids (persisted with the save game). */
   goalsAchieved: Set<string>;
   /**
@@ -725,6 +731,7 @@ export function createSimState(
       trainsRunning: 0,
       trainsStalled: 0,
     },
+    closedCrossings: new Set(),
     goalsAchieved: new Set(),
     goalProgress: {
       cleanDayTicks: 0,
