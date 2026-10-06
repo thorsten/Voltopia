@@ -55,6 +55,15 @@ export type SimEvent =
       diffs: TileDiff[];
       stats: GlobalStats;
       vehicles: VehicleState[];
+      /**
+       * Smoothed wall-clock cost of a tick in milliseconds, measured
+       * around stepTick and the diff collection, for the diagnostics
+       * panel. It rides on the event rather than in GlobalStats: the
+       * stats are a deterministic picture of the city, this is a
+       * measurement of the machine. Absent on snapshots and flushes,
+       * which advance no time.
+       */
+      tickMs?: number;
     }
   | { type: 'saveData'; save: SaveGame }
   | { type: 'lifetimeData'; samples: LifetimeSample[] }

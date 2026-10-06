@@ -133,6 +133,15 @@ export function SettingsPage({
           <span>{t('settings.reducedMotion')}</span>
         </label>
         <label className="settings-row">
+          <input
+            type="checkbox"
+            data-testid="setting-diagnostics"
+            checked={settings.diagnostics}
+            onChange={(e) => update({ diagnostics: e.target.checked })}
+          />
+          <span>{t('settings.diagnostics')}</span>
+        </label>
+        <label className="settings-row">
           <span>{t('settings.theme')}</span>
           <select
             data-testid="setting-theme"

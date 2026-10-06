@@ -35,6 +35,8 @@ import { generateWater } from './water.ts';
  */
 export class SimEngine {
   state: SimState;
+  /** Smoothed cost of a tick in milliseconds (see tick()). */
+  private tickMs = 0;
 
   constructor(seed: number, size: number) {
     this.state = createSimState(seed, size);
@@ -152,13 +154,21 @@ export class SimEngine {
 
   /** Advance one tick and produce the tick event. */
   tick(): SimEvent {
+    const started = performance.now();
     stepTick(this.state);
     this.state.statsDirty = false;
+    const diffs = collectDiffs(this.state);
+    // Smoothed, so the panel shows what a tick costs rather than the
+    // jitter of one. Kept on the engine, not on SimState: the state is
+    // deterministic and serialisable, a stopwatch reading is neither.
+    const elapsed = performance.now() - started;
+    this.tickMs = this.tickMs === 0 ? elapsed : this.tickMs * 0.8 + elapsed * 0.2;
     return {
       type: 'tick',
-      diffs: collectDiffs(this.state),
+      diffs,
       stats: buildStats(this.state),
       vehicles: this.collectVehicles(),
+      tickMs: this.tickMs,
     };
   }
 

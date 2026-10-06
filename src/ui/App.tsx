@@ -3,6 +3,7 @@ import { OverlayMode, type SaveGame } from '../shared/types.ts';
 import { IndexedDbStorage } from '../storage/indexeddb.ts';
 import type { GameRenderer, RendererCallbacks } from '../render/renderer.ts';
 import { CityVitals } from './CityVitals.tsx';
+import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { DisasterBanner } from './DisasterBanner.tsx';
 import { HudConsole } from './HudConsole.tsx';
 import { TimeControls } from './TimeControls.tsx';
@@ -304,6 +305,14 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               disasters={stats.disasters}
               onWarning={() => sound.play('alarm')}
               onStrike={() => sound.play('alarm')}
+            />
+          )}
+          {settings.diagnostics && rendererReady && (
+            <DiagnosticsPanel
+              rendererRef={rendererRef}
+              getTickMs={bridge.getTickMs}
+              stats={stats}
+              gridSize={gridSize}
             />
           )}
         </div>

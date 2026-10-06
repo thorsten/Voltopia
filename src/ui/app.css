@@ -2240,3 +2240,47 @@ body,
     display: none;
   }
 }
+
+/* Diagnostics panel: a measuring instrument, so it reads as an
+   instrument — monospaced figures, no decoration, out of the way of the
+   HUD islands it is there to measure. */
+.diagnostics-panel {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--hud-plate-bg, rgba(16, 20, 26, 0.82));
+  color: var(--hud-text, #e8edf4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.diagnostics-panel h4 {
+  margin: 0 0 0.3rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.diagnostics-panel dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.1rem 0.8rem;
+  margin: 0;
+}
+
+.diagnostics-panel dl > div {
+  display: contents;
+}
+
+.diagnostics-panel dt {
+  opacity: 0.65;
+}
+
+.diagnostics-panel dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}

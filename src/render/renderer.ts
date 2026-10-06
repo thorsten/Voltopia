@@ -352,6 +352,46 @@ export class GameRenderer {
     this.frameListeners.push(listener);
   }
 
+  /** Drop a callback registered with onFrame. */
+  offFrame(listener: (deltaSeconds: number, nowSeconds: number) => void): void {
+    this.frameListeners = this.frameListeners.filter((entry) => entry !== listener);
+  }
+
+  /**
+   * What a frame currently asks of the GPU, for the diagnostics panel.
+   * `instances` counts the instances actually submitted: every instanced
+   * mesh spans the whole grid and runs with frustum culling off, so this
+   * is the number that grows with the map rather than with the view.
+   */
+  renderInfo(): {
+    drawCalls: number;
+    triangles: number;
+    programs: number;
+    geometries: number;
+    textures: number;
+    instances: number;
+    instancedMeshes: number;
+  } {
+    const info = this.webgl.info;
+    let instances = 0;
+    let instancedMeshes = 0;
+    this.scene.traverse((object) => {
+      const mesh = object as THREE.InstancedMesh;
+      if (!mesh.isInstancedMesh || !mesh.visible) return;
+      instancedMeshes++;
+      instances += mesh.count;
+    });
+    return {
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      programs: info.programs?.length ?? 0,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+      instances,
+      instancedMeshes,
+    };
+  }
+
   applyDiffs(diffs: TileDiff[]): void {
     let selectionChanged = false;
     for (const diff of diffs) {

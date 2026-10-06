@@ -23,6 +23,12 @@ export interface SimBridge {
   onTick: (listener: (stats: GlobalStats) => void) => () => void;
   /** Subscribe to command outcomes for commands sent with a `requestId`. */
   onCommandResult: (listener: (requestId: number, rejected?: string) => void) => () => void;
+  /**
+   * Smoothed wall-clock cost of a simulation tick in milliseconds, as
+   * last reported by the worker (0 before the first tick). A getter, so
+   * the figure costs no render — the diagnostics panel samples it.
+   */
+  getTickMs: () => number;
   /** Latest stats without subscribing (null until the first tick). */
   getStats: () => GlobalStats | null;
   /** Most recent rejection reason (e.g. not enough money), transient. */
@@ -56,6 +62,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
   const resultListeners = useRef(new Set<(requestId: number, rejected?: string) => void>());
   const statsRef = useRef<GlobalStats | null>(null);
   const [stats, setStats] = useState<GlobalStats | null>(null);
+  const tickMsRef = useRef(0);
   const [rejection, setRejection] = useState<string | null>(null);
   const rejectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,6 +80,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
             for (const listener of diffListeners.current) listener(event.diffs);
           }
           for (const listener of vehicleListeners.current) listener(event.vehicles);
+          if (event.tickMs !== undefined) tickMsRef.current = event.tickMs;
           statsRef.current = event.stats;
           setStats(event.stats);
           for (const listener of tickListeners.current) listener(event.stats);
@@ -154,6 +162,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
   );
 
   const getStats = useCallback(() => statsRef.current, []);
+  const getTickMs = useCallback(() => tickMsRef.current, []);
 
   return {
     stats,
@@ -165,6 +174,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
     onTick,
     onCommandResult,
     getStats,
+    getTickMs,
     rejection,
   };
 }

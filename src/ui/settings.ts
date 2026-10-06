@@ -8,6 +8,8 @@ export interface AppSettings {
   ambientOcclusion: boolean;
   reducedMotion: boolean;
   theme: HudTheme;
+  /** Show the diagnostics panel (frame time, draw calls, tick cost). */
+  diagnostics: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -17,6 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ambientOcclusion: true,
   reducedMotion: false,
   theme: 'dark',
+  diagnostics: false,
 };
 
 const SETTINGS_STORAGE_KEY = 'voltopia.settings';
@@ -36,6 +39,7 @@ export function loadSettings(): AppSettings {
       ambientOcclusion: parsed.ambientOcclusion ?? DEFAULT_SETTINGS.ambientOcclusion,
       reducedMotion: parsed.reducedMotion ?? DEFAULT_SETTINGS.reducedMotion,
       theme: parsed.theme === 'light' ? 'light' : 'dark',
+      diagnostics: parsed.diagnostics ?? DEFAULT_SETTINGS.diagnostics,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
