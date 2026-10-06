@@ -83,6 +83,11 @@ function isDepot(state: SimState, tile: number): boolean {
   );
 }
 
+/** A freight train unloaded in reach of this depot within the delivery window. */
+export function isDepotRailSupplied(state: SimState, depot: number): boolean {
+  return isDepot(state, depot) && state.layers.railGoodsAge[depot] <= supplyWindowTicks();
+}
+
 /** Tile indices of every logistics depot. */
 export function depotTiles(state: SimState): number[] {
   const { tileType } = state.layers;
@@ -388,7 +393,9 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
         // per tick is wasted work while the fleet has nothing to do.
         if (dueSoon > 0 && van.dwellTicks === 0 && inWindow && van.charge >= d.minTripCharge) {
           const reach = depotReach(state, van.depotRoad);
-          const pickup = planPickup(state, reach);
+          // Goods that came in by rail wait at the depot: no factory leg.
+          const railSupplied = isDepotRailSupplied(state, van.depot);
+          const pickup = railSupplied ? -1 : planPickup(state, reach);
           const stops = planTour(state, van, claimed, pickup, reach);
           if (stops.length > 0) {
             for (const stop of stops) {
@@ -397,7 +404,7 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
             van.stops = stops;
             van.pickup = pickup;
             van.charging = false;
-            if (pickup >= 0) {
+            if (pickup >= 0 || railSupplied) {
               state.goods.localToursToday++;
             } else {
               // No factory in reach: the goods are imported, fee per tour,
@@ -487,6 +494,9 @@ export function deliveryStats(state: SimState): DeliveryStats {
     const yesterdayTours = lastDay.local + lastDay.imported;
     localShare = yesterdayTours > 0 ? lastDay.local / yesterdayTours : 1;
   }
+  let depotsRailSupplied = 0;
+  for (const depot of depotTiles(state))
+    if (isDepotRailSupplied(state, depot)) depotsRailSupplied++;
   return {
     suppliedShare: shops > 0 ? supplied / shops : 1,
     shops,
@@ -494,8 +504,7 @@ export function deliveryStats(state: SimState): DeliveryStats {
     depots: depotTiles(state).length,
     factories,
     localShare,
-    // Freight trains do not run yet (see trains.ts, Task 2).
-    depotsRailSupplied: 0,
+    depotsRailSupplied,
   };
 }
 

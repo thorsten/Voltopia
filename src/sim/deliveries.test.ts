@@ -10,8 +10,10 @@ import {
   deliveryStats,
   depotInfo,
   depotReach,
+  depotTiles,
   drivingVans,
   dueTicks,
+  isDepotRailSupplied,
   isFactory,
   planPickup,
   planTour,
@@ -603,5 +605,47 @@ describe('goods pickup', () => {
     expect(deliveryStats(state).localShare).toBe(0.5);
     state.goods.lastDay = { local: 0, imported: 3, partial: false };
     expect(deliveryStats(state).localShare).toBe(0.5);
+  });
+});
+
+describe('rail-supplied depots', () => {
+  it('a depot stamped by a freight train plans tours without a pickup or an import fee', () => {
+    const state = shopTown(1, 3);
+    const depot = depotTiles(state)[0];
+    expect(isDepotRailSupplied(state, depot)).toBe(false);
+    state.layers.railGoodsAge[depot] = 0;
+    expect(isDepotRailSupplied(state, depot)).toBe(true);
+    readyToDispatch(state);
+    const money = state.money;
+    stepAll(state);
+    stepAll(state);
+    const van = state.vans.find((v) => v.stops.length > 0)!;
+    expect(van).toBeDefined();
+    expect(van.pickup).toBe(-1);
+    expect(state.goods.localToursToday).toBeGreaterThan(0);
+    expect(state.goods.importedToursToday).toBe(0);
+    expect(state.lastGoodsImportCost).toBe(0);
+    expect(state.money).toBe(money);
+    expect(deliveryStats(state).depotsRailSupplied).toBe(1);
+  });
+
+  it('without the stamp the same town imports and pays the fee', () => {
+    const state = shopTown(1, 3);
+    readyToDispatch(state);
+    const money = state.money;
+    stepAll(state);
+    stepAll(state);
+    expect(state.goods.importedToursToday).toBeGreaterThan(0);
+    expect(state.money).toBeLessThan(money);
+  });
+
+  it('the rail supply expires with the delivery window', () => {
+    const state = shopTown(1, 3);
+    const depot = depotTiles(state)[0];
+    state.layers.railGoodsAge[depot] = supplyWindowTicks();
+    expect(isDepotRailSupplied(state, depot)).toBe(true);
+    state.layers.railGoodsAge[depot] = supplyWindowTicks() + 1;
+    expect(isDepotRailSupplied(state, depot)).toBe(false);
+    expect(deliveryStats(state).depotsRailSupplied).toBe(0);
   });
 });
