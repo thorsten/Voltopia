@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { TileDiff, VehicleState } from '../shared/types.ts';
-import { Terrain, VehicleKind } from '../shared/types.ts';
+import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
 import { LANE_OFFSET, VehiclesMesh } from './vehiclesMesh.ts';
 
@@ -136,5 +136,37 @@ describe('vehicles on terrain', () => {
     // Bridge decks are flat: no pitch.
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
     expect(up.y).toBeCloseTo(1, 3);
+  });
+});
+
+describe('trains', () => {
+  it('draws locomotives and wagons on their own meshes, headlights on locomotives only, no lane offset', () => {
+    const scene = new THREE.Scene();
+    const mesh = new VehiclesMesh(
+      scene,
+      field(() => 0),
+      () => Terrain.Land,
+    );
+    mesh.setVehicles(
+      [
+        { id: 1, x: 2.5, y: 2.5, angle: 0, kind: VehicleKind.Locomotive },
+        { id: 1 + WAGON_ID_OFFSET, x: 1.5, y: 2.5, angle: 0, kind: VehicleKind.Wagon },
+        { id: 2, x: 4.5, y: 2.5, angle: 0, kind: VehicleKind.FreightLocomotive },
+      ],
+      1,
+    );
+    mesh.update(10);
+    const used = scene.children.filter(
+      (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && c.count > 0,
+    );
+    // passenger locomotive, passenger wagon, freight locomotive: one each; headlights: two.
+    expect(used.map((m) => m.count).sort()).toEqual([1, 1, 1, 2]);
+    for (const m of used.filter((m) => m.count === 1)) {
+      const matrix = new THREE.Matrix4();
+      m.getMatrixAt(0, matrix);
+      const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+      expect(position.z).toBeCloseTo(2.5, 5); // trains sit on the centre line, cars at ±LANE_OFFSET
+      expect(Math.abs(position.z - 2.5)).toBeLessThan(LANE_OFFSET / 2);
+    }
   });
 });

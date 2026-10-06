@@ -222,3 +222,9 @@ describe('substation yard', () => {
     expect(plantHeight(PlantType.Substation)).toBeGreaterThan(0.3);
   });
 });
+
+it('gives the rail plants a footprint and a height', () => {
+  for (const plant of [PlantType.TrainStation, PlantType.FreightTerminal, PlantType.RailYard]) {
+    expect(plantHeight(plant)).toBeGreaterThan(0.2);
+  }
+});

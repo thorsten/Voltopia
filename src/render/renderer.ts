@@ -10,6 +10,7 @@ import { ElevationField } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
 import { RoadsMesh } from './roadsMesh.ts';
 import { PowerLinesMesh } from './powerLinesMesh.ts';
+import { RailMesh } from './railMesh.ts';
 import { BuildingsMesh } from './buildingsMesh.ts';
 import { BuildingFxMesh } from './buildingFxMesh.ts';
 import { buildingHeight } from './buildings/recipes.ts';
@@ -125,6 +126,7 @@ export class GameRenderer {
   private readonly elevation: ElevationField;
   private readonly groundMesh: GroundMesh;
   private readonly roadsMesh: RoadsMesh;
+  private readonly railMesh: RailMesh;
   /** Per-tile terrain, tracked from diffs so tools can price bridges vs. roads. */
   private readonly terrain: Uint8Array;
   /** Per-tile forest stage, tracked from diffs so tools can price felling. */
@@ -196,6 +198,8 @@ export class GameRenderer {
     this.addDiffLayer(new GeothermalMesh(scene, gridSize, this.elevation));
     this.addDiffLayer(this.roadsMesh);
     this.addDiffLayer(new PowerLinesMesh(scene, gridSize, this.elevation));
+    this.railMesh = new RailMesh(scene, gridSize, this.elevation);
+    this.addDiffLayer(this.railMesh);
     this.addDiffLayer(new ZoneTilesMesh(scene, gridSize, this.elevation));
     const buildingFx = new BuildingFxMesh(scene, gridSize);
     this.addDiffLayer(new BuildingsMesh(scene, gridSize, this.elevation, buildingFx));
@@ -350,6 +354,11 @@ export class GameRenderer {
   /** Whether a bus stop is marked on the tile, for the tool's cost preview. */
   busStopAt(index: number): boolean {
     return this.roadsMesh.hasBusStop(index);
+  }
+
+  /** Whether a track is laid on this tile, for the tool's cost preview. */
+  railAt(index: number): boolean {
+    return this.railMesh.hasRail(index);
   }
 
   /** Elevation level of a tile, tracked from diffs. */

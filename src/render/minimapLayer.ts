@@ -11,6 +11,7 @@ const COLORS = {
   lake: '#3f7fb5',
   sea: '#2f6ea8',
   powerLine: '#e8d76a',
+  rail: '#8a8f99',
   busStop: '#f2d16b',
   /** Same heavy-damage red as the Damage overlay (overlays.ts DAMAGE_COLORS.heavy). */
   damaged: '#e05263',
@@ -44,10 +45,9 @@ const COLORS = {
     [PlantType.GeothermalPlant]: '#b5482f',
     [PlantType.HeatPlant]: '#d9822b',
     [PlantType.HeatStore]: '#c9a227',
-    // Placeholder colour for the three rail plants; Task 10 sets the final ones.
-    [PlantType.TrainStation]: '#8a8f99',
-    [PlantType.FreightTerminal]: '#8a8f99',
-    [PlantType.RailYard]: '#8a8f99',
+    [PlantType.TrainStation]: '#d84a3a',
+    [PlantType.FreightTerminal]: '#d9a441',
+    [PlantType.RailYard]: '#6e5a9e',
   } as Record<number, string>,
 } as const;
 
@@ -107,6 +107,7 @@ export class MinimapLayer implements DiffLayer {
       return COLORS.plant[diff.plantType] ?? COLORS.ground;
     }
     if (diff.density > 0) return COLORS.building[diff.zone] ?? COLORS.ground;
+    if (diff.rail !== 0) return COLORS.rail;
     if (diff.powerLine !== 0) return COLORS.powerLine;
     if (diff.forest > 0) return this.shade(COLORS.forest, this.elevations[diff.index]);
     if (diff.zone !== Zone.None) {

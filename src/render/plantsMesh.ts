@@ -81,6 +81,13 @@ const COLORS = {
   substationBox: 0x4b5563,
   substationInsulator: 0xd7dde8,
   fencePost: 0x9aa3ad,
+  platform: 0x9a9da3,
+  stationRoof: 0xd84a3a,
+  stationPost: 0x3a4048,
+  gantry: 0xd9a441,
+  container: 0x4f6b3a,
+  yardHall: 0x6e5a9e,
+  yardRoof: 0xe4e7ea,
 } as const;
 
 /** Where a plant stands: which neighbours are water (for hydro shapes). */
@@ -331,6 +338,30 @@ function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
           oz: 0.05,
           color: COLORS.substationInsulator,
         },
+      ];
+    case PlantType.TrainStation:
+      return [
+        // Platform slab, two posts and a red roof over the waiting area.
+        { sx: 0.9, sy: 0.08, sz: 0.44, ox: 0, oy: 0, oz: 0.1, color: COLORS.platform },
+        { sx: 0.05, sy: 0.3, sz: 0.05, ox: -0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
+        { sx: 0.05, sy: 0.3, sz: 0.05, ox: 0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
+        { sx: 0.8, sy: 0.04, sz: 0.4, ox: 0, oy: 0.38, oz: 0.1, color: COLORS.stationRoof },
+      ];
+    case PlantType.FreightTerminal:
+      return [
+        // Apron, a gantry crane across the tile and a container under it.
+        { sx: 0.9, sy: 0.05, sz: 0.9, ox: 0, oy: 0, oz: 0, color: COLORS.platform },
+        { sx: 0.06, sy: 0.5, sz: 0.06, ox: -0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
+        { sx: 0.06, sy: 0.5, sz: 0.06, ox: 0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
+        { sx: 0.8, sy: 0.06, sz: 0.1, ox: 0, oy: 0.55, oz: 0, color: COLORS.gantry },
+        { sx: 0.4, sy: 0.18, sz: 0.2, ox: 0, oy: 0.05, oz: 0.2, color: COLORS.container },
+      ];
+    case PlantType.RailYard:
+      return [
+        // Long shed with a pale roof and a wide door toward the track.
+        { sx: 0.9, sy: 0.36, sz: 0.5, ox: 0, oy: 0, oz: 0.1, color: COLORS.yardHall },
+        { sx: 0.94, sy: 0.04, sz: 0.54, ox: 0, oy: 0.36, oz: 0.1, color: COLORS.yardRoof },
+        { sx: 0.5, sy: 0.28, sz: 0.03, ox: 0, oy: 0, oz: -0.16, color: COLORS.busDoor },
       ];
     default:
       return [];

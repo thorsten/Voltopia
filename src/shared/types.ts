@@ -111,7 +111,15 @@ export const OverlayMode = {
 export type OverlayMode = (typeof OverlayMode)[keyof typeof OverlayMode];
 
 /** Which mesh renders a VehicleState. */
-export const VehicleKind = { Car: 0, Van: 1, Bus: 2, Locomotive: 3, Wagon: 4 } as const;
+export const VehicleKind = {
+  Car: 0,
+  Van: 1,
+  Bus: 2,
+  Locomotive: 3,
+  Wagon: 4,
+  FreightLocomotive: 5,
+  FreightWagon: 6,
+} as const;
 export type VehicleKind = (typeof VehicleKind)[keyof typeof VehicleKind];
 /** A wagon's VehicleState id is its train's id plus this, so it never collides with a mover id. */
 export const WAGON_ID_OFFSET = 1 << 30;

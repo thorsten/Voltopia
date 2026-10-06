@@ -47,6 +47,9 @@ const TRANSIT_COLORS = {
   covered: 0x8fd6a4,
   uncovered: 0x6b7280,
   depot: 0x5b9bd5,
+  railCovered: 0x5fb3c9,
+  terminal: 0xd9a441,
+  yard: 0x6e5a9e,
 } as const;
 
 const DAMAGE_COLORS = { intact: 0x4cd964, light: 0xffb347, heavy: 0xe05263 } as const;
@@ -138,6 +141,8 @@ interface OverlayTile {
   busStop: number;
   stopState: number;
   transitCover: number;
+  railCover: number;
+  stationState: number;
   damage: number;
   heated: number;
   island: number;
@@ -209,6 +214,9 @@ export class OverlaysMesh implements DiffLayer {
         diff.tileType === TileType.Road ||
         diff.plantType === PlantType.LogisticsDepot ||
         diff.plantType === PlantType.BusDepot ||
+        diff.plantType === PlantType.TrainStation ||
+        diff.plantType === PlantType.FreightTerminal ||
+        diff.plantType === PlantType.RailYard ||
         diff.damage > 0 ||
         (diff.tileType === TileType.Plant && isSupplySource(diff.plantType)) ||
         diff.island !== 0
@@ -225,6 +233,8 @@ export class OverlaysMesh implements DiffLayer {
           busStop: diff.busStop,
           stopState: diff.stopState,
           transitCover: diff.transitCover,
+          railCover: diff.railCover,
+          stationState: diff.stationState,
           damage: diff.damage,
           heated: diff.heated,
           island: diff.island,
@@ -303,13 +313,27 @@ export class OverlaysMesh implements DiffLayer {
         } else if (this.mode === OverlayMode.Transit) {
           if (tile.tileType === TileType.Plant && tile.plantType === PlantType.BusDepot) {
             colorHex = TRANSIT_COLORS.depot;
+          } else if (
+            tile.tileType === TileType.Plant &&
+            tile.plantType === PlantType.TrainStation
+          ) {
+            colorHex = TRANSIT_COLORS[tile.stationState as StopState] ?? null;
+          } else if (
+            tile.tileType === TileType.Plant &&
+            tile.plantType === PlantType.FreightTerminal
+          ) {
+            colorHex = TRANSIT_COLORS.terminal;
+          } else if (tile.tileType === TileType.Plant && tile.plantType === PlantType.RailYard) {
+            colorHex = TRANSIT_COLORS.yard;
           } else if (tile.tileType === TileType.Road) {
             colorHex =
               tile.busStop !== 0
                 ? (TRANSIT_COLORS[tile.stopState as StopState] ?? null)
                 : tile.transitCover !== 0
                   ? TRANSIT_COLORS.covered
-                  : TRANSIT_COLORS.uncovered;
+                  : tile.railCover !== 0
+                    ? TRANSIT_COLORS.railCovered
+                    : TRANSIT_COLORS.uncovered;
           }
         } else if (this.mode === OverlayMode.Damage) {
           // Every tile that can break shows its state, so the player can

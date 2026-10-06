@@ -1,7 +1,7 @@
 import { BALANCE } from '../shared/constants.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import type { VehicleState } from '../shared/types.ts';
-import { VehicleKind } from '../shared/types.ts';
+import { VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { buildRoads, bulldozeTiles, undoLastAction, type BuildResult } from './roads.ts';
 import { buyInsulation } from './economy.ts';
 import { setDemandResponse } from './demandResponse.ts';
@@ -11,6 +11,7 @@ import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { buildRail } from './rail.ts';
+import { runningTrains, trailingPoint } from './trains.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -20,6 +21,7 @@ import {
   createSimState,
   deserializeState,
   serializeState,
+  TrainKind,
   type SimState,
 } from './state.ts';
 import { generateTerrain } from './terrain.ts';
@@ -183,6 +185,25 @@ export class SimEngine {
       angle: v.angle,
       kind: VehicleKind.Bus,
     }));
-    return [...cars, ...vans, ...buses];
+    const trains: VehicleState[] = [];
+    for (const t of runningTrains(this.state)) {
+      const freight = t.kind === TrainKind.Freight;
+      trains.push({
+        id: t.id,
+        x: t.x,
+        y: t.y,
+        angle: t.angle,
+        kind: freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive,
+      });
+      const wagon = trailingPoint(this.state, t, BALANCE.rail.wagonGap);
+      trains.push({
+        id: t.id + WAGON_ID_OFFSET,
+        x: wagon.x,
+        y: wagon.y,
+        angle: wagon.angle,
+        kind: freight ? VehicleKind.FreightWagon : VehicleKind.Wagon,
+      });
+    }
+    return [...cars, ...vans, ...buses, ...trains];
   }
 }
