@@ -392,7 +392,24 @@ asserted per run. Weather draws go to a private stream so every variant
 of a seed sees the same weather (otherwise commuters' and vans' draws on
 the shared `Rng` shift the clouds, and import and net money then differ
 by tens of thousands between variants for reasons that have nothing
-to do with rail). One seed-year (20 days × 960 ticks):
+to do with rail).
+
+**Deviations from the planned layout** (the plan's Task 13 Step 1):
+the track runs along y = 16 through the district centres instead of
+y = 8 at their edge, because stations at the edge covered only half of
+each district. A cross-town road along y = 14 was added, because
+without one no car could drive to work and the no-rail baseline had no
+commute to shift. The logistics depot and the shops moved to the west
+island, because a depot in the east always had factories in reach, so
+the baseline imported nothing and freight had nothing to prove. The
+west park grew to 48 solar, 32 wind and 100 batteries, because the
+planned park (6 solar, 4 wind, 8 batteries) left both islands in
+deficit about 90 % of ticks, which is no well-stored island. The probe
+gave the weather its own random stream, because otherwise the variants
+saw different weather and their money differed for reasons unrelated
+to rail; the game code is unchanged.
+
+One seed-year (20 days × 960 ticks):
 
 | seed | variant              | cross-town riders | rider share | congestion avg / max | evening charging peak | charging EU | traction EU | traction cost | west import | yard-island deficit ticks (17-22 h) | stalled share | goods fees | last day local / imported | net      |
 | ---- | -------------------- | ----------------- | ----------- | -------------------- | --------------------- | ----------- | ----------- | ------------- | ----------- | ----------------------------------- | ------------- | ---------- | ------------------------- | -------- |
