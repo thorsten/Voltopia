@@ -359,6 +359,36 @@ describe('traction and stalling', () => {
     expect(runningTrains(state)).toHaveLength(0);
     expect(state.trains.every((t) => t.stalled)).toBe(true);
   });
+
+  it('trains standing in a powered yard are not stalled', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const island = islandOf(state, at(4, 11));
+    state.lastIslands = [
+      {
+        number: island,
+        key: state.islandKeys[island],
+        tiles: 0,
+        buildings: 0,
+        substations: 0,
+        generation: 0,
+        consumption: 100,
+        stored: 0,
+        capacity: 0,
+        deficit: 100,
+        curtailment: 0,
+        gridImport: 0,
+        gridExport: 0,
+        importCost: 0,
+      },
+    ];
+    // Outside the window nothing dispatches: the whole fleet stands parked.
+    setHour(state, BALANCE.rail.windowEndHour);
+    runTicks(state, 5);
+    expect(state.trains.every((t) => t.phase === TrainPhase.Parked)).toBe(true);
+    expect(state.trains.some((t) => t.stalled)).toBe(false);
+    expect(railStats(state).trainsStalled).toBe(0);
+  });
 });
 
 describe('trailingPoint', () => {

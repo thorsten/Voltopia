@@ -439,6 +439,8 @@ export function trainsStep(state: SimState): void {
         !powered || hashTileTick(train.yard, state.tick) < (deficit.get(train.yard) ?? 0);
       switch (train.phase) {
         case TrainPhase.Parked: {
+          // Standing in a powered yard is not a stall; a dark yard's trains are.
+          train.stalled = !powered;
           if (train.dwellTicks > 0) train.dwellTicks--;
           if (!powered || train.dwellTicks > 0 || !inWindow) break;
           const due = train.kind === TrainKind.Freight ? terminalsDue : stationsDue;
