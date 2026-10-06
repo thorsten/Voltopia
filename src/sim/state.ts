@@ -895,7 +895,7 @@ export function markAllDirty(state: SimState): void {
 }
 
 /** What a placement is trying to do; decides which terrain accepts it. */
-export const BuildIntent = { Road: 0, Zone: 1, Plant: 2, PowerLine: 3 } as const;
+export const BuildIntent = { Road: 0, Zone: 1, Plant: 2, PowerLine: 3, Rail: 4 } as const;
 export type BuildIntent = (typeof BuildIntent)[keyof typeof BuildIntent];
 
 /** Lake surface level: the (uniform) elevation of the lake tiles. */
@@ -1101,11 +1101,22 @@ export function buildRejection(
     if (slopeAt(state, index) > BALANCE.terrain.maxBuildSlope) return 'tooSteep';
     return null;
   }
+  if (intent === BuildIntent.Rail) {
+    // Tracks share tiles with roads (level crossings) and lines, cross the
+    // river on a bridge, but never buildings, plants, lakes or the sea.
+    if (layers.density[index] !== 0 || layers.tileType[index] === TileType.Plant) {
+      return 'needsRailSite';
+    }
+    const t = layers.terrain[index] as Terrain;
+    if (t === Terrain.Lake || t === Terrain.Sea) return 'cannotBuildOnWater';
+    if (slopeAt(state, index) > BALANCE.terrain.maxBuildSlope) return 'tooSteep';
+    return null;
+  }
   if (layers.tileType[index] !== TileType.Empty || layers.density[index] !== 0) {
     return 'tileOccupied';
   }
-  // Zones and plants would collide with a line; roads may share the tile.
-  if (intent !== BuildIntent.Road && layers.powerLine[index] !== 0) {
+  // Zones and plants would collide with a line or a track; roads may share the tile.
+  if (intent !== BuildIntent.Road && (layers.powerLine[index] !== 0 || layers.rail[index] !== 0)) {
     return 'tileOccupied';
   }
   const terrain = layers.terrain[index] as Terrain;

@@ -15,6 +15,7 @@ import { computeDemand, decayStep, growthStep } from './growth.ts';
 import { forestShare, forestStep } from './forest.ts';
 import { happinessStep } from './happiness.ts';
 import { countPowerLineTiles } from './powerLines.ts';
+import { countRailTiles } from './rail.ts';
 import { tideState } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { storedByKind } from './storage.ts';
@@ -157,8 +158,7 @@ function countTiles(state: SimState): {
     plantTiles: 0,
     buildingTiles: 0,
     powerLineTiles: countPowerLineTiles(state),
-    // countRailTiles arrives in Task 2.
-    railTiles: 0,
+    railTiles: countRailTiles(state),
     depots: 0,
   };
   for (let i = 0; i < tileType.length; i++) {

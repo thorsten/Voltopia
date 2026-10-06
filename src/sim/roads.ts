@@ -2,6 +2,7 @@ import { BALANCE } from '../shared/constants.ts';
 import { DIRECTIONS, inBounds, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import { RoadClass, Terrain } from '../shared/types.ts';
 import { clearPowerLines } from './powerLines.ts';
+import { clearRail } from './rail.ts';
 import { clearBusStops } from './transit.ts';
 import { clearForest, fellingCost } from './forest.ts';
 import {
@@ -112,10 +113,12 @@ function roadPrice(state: SimState, index: number, avenue: boolean): number {
 export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
   const { layers } = state;
   const lineTiles = tiles.filter((index) => layers.powerLine[index] !== 0);
+  const railTiles = tiles.filter((index) => layers.rail[index] !== 0);
   const stopTiles = tiles.filter((index) => layers.busStop[index] !== 0);
   const clearable = tiles.filter(
     (index) =>
       layers.powerLine[index] === 0 &&
+      layers.rail[index] === 0 &&
       layers.busStop[index] === 0 &&
       (layers.tileType[index] !== TileType.Empty ||
         layers.zone[index] !== Zone.None ||
@@ -125,10 +128,14 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
   // but only where there is nothing else to remove first.
   const woodTiles = tiles.filter(
     (index) =>
-      layers.forest[index] !== 0 && layers.powerLine[index] === 0 && layers.busStop[index] === 0,
+      layers.forest[index] !== 0 &&
+      layers.powerLine[index] === 0 &&
+      layers.rail[index] === 0 &&
+      layers.busStop[index] === 0,
   );
   if (
     lineTiles.length === 0 &&
+    railTiles.length === 0 &&
     stopTiles.length === 0 &&
     clearable.length === 0 &&
     woodTiles.length === 0
@@ -139,7 +146,13 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
   const felling = woodTiles.reduce((sum, index) => sum + fellingCost(state, index), 0);
   if (felling > state.money) return { rejected: 'notEnoughMoney' };
 
-  const affected = withNeighbors(state, [...lineTiles, ...stopTiles, ...clearable, ...woodTiles]);
+  const affected = withNeighbors(state, [
+    ...lineTiles,
+    ...railTiles,
+    ...stopTiles,
+    ...clearable,
+    ...woodTiles,
+  ]);
   const undo: UndoEntry = {
     // Positive: undoing refunds what the felling cost (see buildRoads).
     moneyDelta: felling,
@@ -151,6 +164,7 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
   if (lineTiles.length > 0) clearPowerLines(state, lineTiles);
   // Removing the wreck removes the damage with it.
   for (const index of lineTiles) layers.damage[index] = 0;
+  if (railTiles.length > 0) clearRail(state, railTiles);
   if (stopTiles.length > 0) clearBusStops(state, stopTiles);
   for (const index of clearable) {
     layers.tileType[index] = TileType.Empty;
@@ -163,6 +177,7 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.stored[index] = 0;
     layers.buildingAge[index] = 0;
     layers.busStop[index] = 0;
+    layers.rail[index] = 0;
     layers.damage[index] = 0;
     layers.supplied[index] = SupplyStatus.NotConnected;
     markDirty(state, index);
@@ -188,6 +203,7 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.roadClass[tile.index] = tile.roadClass;
     layers.busStop[tile.index] = tile.busStop;
     layers.powerLine[tile.index] = tile.powerLine;
+    layers.rail[tile.index] = tile.rail;
     layers.zone[tile.index] = tile.zone;
     layers.density[tile.index] = tile.density;
     layers.variant[tile.index] = tile.variant;
@@ -197,5 +213,6 @@ export function undoLastAction(state: SimState): BuildResult {
     markDirty(state, tile.index);
   }
   bumpGridVersion(state);
+  state.railVersion++;
   return {};
 }

@@ -1,6 +1,7 @@
 import { BALANCE } from '../shared/constants.ts';
 import { PlantType, RoadClass, TileType } from '../shared/types.ts';
 import { countPowerLineTiles } from './powerLines.ts';
+import { countRailTiles } from './rail.ts';
 import type { BuildResult } from './roads.ts';
 import type { SimState } from './state.ts';
 import { countBusStops } from './transit.ts';
@@ -94,11 +95,12 @@ export function economyStep(
   const avenueUpkeep = avenueTiles * BALANCE.upkeepPerTick.avenuePerTile;
   const busStops = countBusStops(state);
   const busStopUpkeep = busStops * BALANCE.upkeepPerTick.busStop;
-  // Grid upkeep: roads, avenues, power lines and bus stops share one line item.
+  // Grid upkeep: roads, avenues, power lines, tracks and bus stops share one line item.
   const gridUpkeep =
     (roadTiles - avenueTiles) * BALANCE.upkeepPerTick.roadPerTile +
     avenueUpkeep +
     countPowerLineTiles(state) * BALANCE.upkeepPerTick.powerLinePerTile +
+    countRailTiles(state) * BALANCE.upkeepPerTick.railPerTile +
     busStopUpkeep;
   const biogasFuelCost =
     state.lastEnergy.biogas * BALANCE.upkeepPerTick.biogasFuelCostPerEnergyUnit;

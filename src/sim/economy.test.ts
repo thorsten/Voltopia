@@ -7,6 +7,7 @@ import { goalsStep } from './goals.ts';
 import { energySystemActive } from './growth.ts';
 import { happinessStep } from './happiness.ts';
 import { buildPowerLines } from './powerLines.ts';
+import { buildRail } from './rail.ts';
 import { buildRoads } from './roads.ts';
 import { createSimState, PlantType, SupplyStatus, Zone } from './state.ts';
 import { buildBusStops } from './transit.ts';
@@ -164,6 +165,15 @@ describe('economyStep', () => {
     expect(breakdown.busStops).toBe(1);
     expect(breakdown.busStopUpkeep).toBeCloseTo(busStop, 9);
     expect(breakdown.gridUpkeep).toBeCloseTo(2 * roadPerTile + busStop, 9);
+  });
+
+  it('charges track upkeep in the grid line item', () => {
+    const state = createSimState(1, 16);
+    state.layers.elevation.fill(0);
+    state.money = 1e6;
+    buildRail(state, [tileIndex(2, 2, 16), tileIndex(3, 2, 16)]);
+    economyStep(state, 0, 0, 0);
+    expect(state.lastEconomy.gridUpkeep).toBeCloseTo(2 * BALANCE.upkeepPerTick.railPerTile, 10);
   });
 });
 

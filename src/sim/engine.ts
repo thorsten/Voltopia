@@ -10,6 +10,7 @@ import { placePlant } from './energy.ts';
 import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { recomputeGrid } from './powerGrid.ts';
+import { buildRail } from './rail.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -95,6 +96,8 @@ export class SimEngine {
         return this.toEvents(buildPowerLines(state, command.tiles));
       case 'buildBusStop':
         return this.toEvents(buildBusStops(state, command.tiles));
+      case 'buildRail':
+        return this.toEvents(buildRail(state, command.tiles));
       case 'bulldoze':
         return this.toEvents(bulldozeTiles(state, command.tiles));
       case 'undo':
