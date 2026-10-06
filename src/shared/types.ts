@@ -60,6 +60,12 @@ export const PlantType = {
   HeatStore: 17,
   /** Gate of a grid island to the outer grid: carries import and export. Generates nothing. */
   Substation: 18,
+  /** Passenger station: a halt beside a track with a road for the riders. Generates nothing. */
+  TrainStation: 19,
+  /** Freight terminal: loads from factories and unloads to logistics depots in reach. */
+  FreightTerminal: 20,
+  /** Rail yard: fields the trains of its track network and feeds their catenary from its island. */
+  RailYard: 21,
 } as const;
 export type PlantType = (typeof PlantType)[keyof typeof PlantType];
 
@@ -76,6 +82,9 @@ export type StopState = (typeof StopState)[keyof typeof StopState];
 
 /** stopAge saturates here (Uint16). */
 export const MAX_STOP_AGE = 65535;
+
+/** stationAge, terminalAge and railGoodsAge saturate here (Uint16). */
+export const MAX_RAIL_AGE = 65535;
 
 export const SupplyStatus = {
   NotConnected: 0,
@@ -102,8 +111,10 @@ export const OverlayMode = {
 export type OverlayMode = (typeof OverlayMode)[keyof typeof OverlayMode];
 
 /** Which mesh renders a VehicleState. */
-export const VehicleKind = { Car: 0, Van: 1, Bus: 2 } as const;
+export const VehicleKind = { Car: 0, Van: 1, Bus: 2, Locomotive: 3, Wagon: 4 } as const;
 export type VehicleKind = (typeof VehicleKind)[keyof typeof VehicleKind];
+/** A wagon's VehicleState id is its train's id plus this, so it never collides with a mover id. */
+export const WAGON_ID_OFFSET = 1 << 30;
 
 export interface Weather {
   /** 0 = clear sky, 1 = fully overcast. Reduces photovoltaic generation. */
@@ -186,6 +197,8 @@ export interface EnergyStats {
   consumption: {
     buildings: number;
     charging: number;
+    /** Electricity the running trains drew (catenary, booked on the yard's island). */
+    traction: number;
     heating: number;
     cooling: number;
     /** Surplus electricity consumed by electrolysers (stored or sold). */
@@ -286,6 +299,7 @@ export interface TileCounts {
   plantTiles: number;
   buildingTiles: number;
   powerLineTiles: number;
+  railTiles: number;
   /** Logistics depots only; bus depots are tracked separately in TransitStats. */
   depots: number;
 }
@@ -377,6 +391,8 @@ export interface DeliveryStats {
    * (1 when today and yesterday are both empty).
    */
   localShare: number;
+  /** Logistics depots a freight train unloaded for within the supply window. */
+  depotsRailSupplied: number;
 }
 
 /** Fleet figures of one bus depot (inspector). */
@@ -393,11 +409,64 @@ export interface TransitStats {
   /** Riders over commuters with a workplace, 0..1 (0 when there are none). */
   riderShare: number;
   riders: number;
+  /** Today's riders by mode (sum = riders). */
+  busRiders: number;
+  railRiders: number;
   /** Buses on the road. */
   driving: number;
   stops: number;
   stopsServed: number;
   depots: number;
+}
+
+/** City-wide railway figures. */
+export interface RailStats {
+  /** Connected track networks. */
+  networks: number;
+  trackTiles: number;
+  stations: number;
+  stationsServed: number;
+  terminals: number;
+  terminalsLoading: number;
+  terminalsUnloading: number;
+  yards: number;
+  /** Trains out of the yard this tick. */
+  trainsRunning: number;
+  /** Trains that stood still this tick for lack of power. */
+  trainsStalled: number;
+}
+
+/** Inspector: a track tile. */
+export interface RailTileInfo {
+  networkTiles: number;
+  trainsInNetwork: number;
+}
+/** Inspector: a passenger station. */
+export interface StationInfo {
+  state: StopState;
+  ageTicks: number;
+  /** Commuters whose home or work road is covered by this station. */
+  coveredCommuters: number;
+  networkTiles: number;
+}
+/** Inspector: a freight terminal. */
+export interface TerminalInfo {
+  loads: boolean;
+  unloads: boolean;
+  depotsInReach: number;
+  factoriesInReach: number;
+  ageTicks: number;
+}
+/** Inspector: a rail yard. */
+export interface YardInfo {
+  passengerTrains: number;
+  freightTrains: number;
+  running: number;
+  stalled: number;
+  /** The yard tile is energised: its catenary has a feed. */
+  powered: boolean;
+  stationsInNetwork: number;
+  terminalsInNetwork: number;
 }
 
 /**
@@ -525,6 +594,10 @@ export interface TileInfo {
   transitCovered: boolean;
   /** Fleet of a bus depot tile, null elsewhere. */
   busDepot: BusDepotInfo | null;
+  rail: RailTileInfo | null;
+  station: StationInfo | null;
+  freightTerminal: TerminalInfo | null;
+  railYard: YardInfo | null;
   growthBlockers: GrowthBlocker[];
   /** Elevation level 0..7 of this tile. */
   elevation: number;
@@ -629,6 +702,7 @@ export interface GlobalStats {
   deliveries: DeliveryStats;
   /** City-wide public transit figures. */
   transit: TransitStats;
+  rail: RailStats;
   goals: GoalState[];
   counts: TileCounts;
   /** Per-tick budget breakdown for the budget panel. */
@@ -711,6 +785,23 @@ export interface SavedDisasters {
   }>;
 }
 
+/** A train as saved: position and tour, no transient flags. */
+export interface SavedTrain {
+  id: number;
+  kind: number;
+  yard: number;
+  yardTrack: number;
+  x: number;
+  y: number;
+  angle: number;
+  phase: number;
+  stops: number[];
+  pickup: number;
+  path: number[];
+  pathIndex: number;
+  dwellTicks: number;
+}
+
 /** Service coverage bits for `TileDiff.services` / `GlobalStats.services`. */
 export const SERVICE_FIRE = 1;
 export const SERVICE_POLICE = 2;
@@ -770,6 +861,12 @@ export interface TileDiff {
   stopState: number;
   /** 1 when this road tile is covered by a served bus stop. */
   transitCover: number;
+  /** Track mask: 0 = none, else LINE_PRESENT | connection bits (N=1, E=2, S=4, W=8). */
+  rail: number;
+  /** 1 when this road tile is within stationRadius of a served station. */
+  railCover: number;
+  /** StopState of a train station tile (0 elsewhere). */
+  stationState: number;
 }
 
 /** Position and heading of one vehicle, interpolated by the renderer. */
@@ -830,6 +927,10 @@ export interface SaveGame {
   wellStockedTicks?: number;
   /** Consecutive modal-shift ticks so far (absent in older saves → 0). */
   transitTicks?: number;
+  /** Consecutive railCity ticks so far (absent in older saves → 0). */
+  railTicks?: number;
+  /** Trains (absent in saves from before railways; the yard re-spawns its fleet). */
+  trains?: SavedTrain[];
   /** Legacy district-heating store pool; read on load, never written (see `stored`). */
   heatStored?: number;
   /** Consecutive warm-winter ticks so far (absent in older saves → 0). */
@@ -871,6 +972,8 @@ export interface SaveGame {
     roadClass?: ArrayBuffer;
     /** Bus stop layer; absent in saves from before transit. */
     busStop?: ArrayBuffer;
+    /** Track layer; absent in saves from before railways. */
+    rail?: ArrayBuffer;
     /** Forest layer; absent in saves from before woods (treeless map). */
     forest?: ArrayBuffer;
     /** Geothermal hotspot layer; absent in saves from before geothermal power. */

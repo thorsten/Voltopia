@@ -48,6 +48,9 @@ const PLANT_LABEL: Record<PlantType, TranslationKey | null> = {
   [PlantType.HeatPlant]: 'tool.plant-heat',
   [PlantType.HeatStore]: 'tool.plant-heatstore',
   [PlantType.Substation]: 'tool.plant-substation',
+  [PlantType.TrainStation]: 'tool.plant-station',
+  [PlantType.FreightTerminal]: 'tool.plant-terminal',
+  [PlantType.RailYard]: 'tool.plant-railyard',
 };
 
 const ZONE_LABEL: Record<Zone, TranslationKey | null> = {

@@ -29,6 +29,9 @@ export interface MirroredTile {
   busStop: number;
   stopState: number;
   transitCover: number;
+  rail: number;
+  railCover: number;
+  stationState: number;
   geothermal: number;
   damage: number;
   island: number;
@@ -47,6 +50,9 @@ export class TileMirror {
   readonly busStop: Uint8Array;
   readonly stopState: Uint8Array;
   readonly transitCover: Uint8Array;
+  readonly rail: Uint8Array;
+  readonly railCover: Uint8Array;
+  readonly stationState: Uint8Array;
   /** Geothermal hotspot quality per tile: 0 = none, 1..3. */
   readonly geothermal: Uint8Array;
   /** Damage points 0..255 per tile (0 = intact); see disasters.ts. */
@@ -70,6 +76,9 @@ export class TileMirror {
     this.busStop = new Uint8Array(count);
     this.stopState = new Uint8Array(count);
     this.transitCover = new Uint8Array(count);
+    this.rail = new Uint8Array(count);
+    this.railCover = new Uint8Array(count);
+    this.stationState = new Uint8Array(count);
     this.geothermal = new Uint8Array(count);
     this.damage = new Uint8Array(count);
     this.island = new Uint16Array(count);
@@ -90,6 +99,9 @@ export class TileMirror {
       this.busStop[i] = diff.busStop;
       this.stopState[i] = diff.stopState;
       this.transitCover[i] = diff.transitCover;
+      this.rail[i] = diff.rail;
+      this.railCover[i] = diff.railCover;
+      this.stationState[i] = diff.stationState;
       this.geothermal[i] = diff.geothermal;
       this.damage[i] = diff.damage;
       this.island[i] = diff.island;
@@ -118,6 +130,9 @@ export class TileMirror {
       busStop: this.busStop[index],
       stopState: this.stopState[index],
       transitCover: this.transitCover[index],
+      rail: this.rail[index],
+      railCover: this.railCover[index],
+      stationState: this.stationState[index],
       geothermal: this.geothermal[index],
       damage: this.damage[index],
       island: this.island[index],

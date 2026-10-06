@@ -220,10 +220,13 @@ describe('SimEngine basics', () => {
       depots: 0,
       factories: 0,
       localShare: 1,
+      depotsRailSupplied: 0,
     });
     expect(first.stats.transit).toEqual({
       riderShare: 0,
       riders: 0,
+      busRiders: 0,
+      railRiders: 0,
       driving: 0,
       stops: 0,
       stopsServed: 0,

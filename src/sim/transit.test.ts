@@ -499,6 +499,8 @@ describe('transitStep', () => {
     expect(transitStats(state)).toEqual({
       riderShare: 0,
       riders: 0,
+      busRiders: 0,
+      railRiders: 0,
       driving: 0,
       stops: 2,
       stopsServed: 1,

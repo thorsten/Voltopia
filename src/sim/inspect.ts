@@ -374,6 +374,11 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
       tileType === TileType.Plant && plant === PlantType.BusDepot
         ? busDepotInfo(state, index)
         : null,
+    // Railways do not run yet (see rail.ts/trains.ts, Task 2+).
+    rail: null,
+    station: null,
+    freightTerminal: null,
+    railYard: null,
     growthBlockers: growthBlockers(state, index, connected),
     elevation,
     slope,

@@ -503,6 +503,8 @@ export function deliveryStats(state: SimState): DeliveryStats {
     depots: depotTiles(state).length,
     factories,
     localShare,
+    // Freight trains do not run yet (see trains.ts, Task 2).
+    depotsRailSupplied: 0,
   };
 }
 

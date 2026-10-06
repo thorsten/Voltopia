@@ -44,6 +44,10 @@ const COLORS = {
     [PlantType.GeothermalPlant]: '#b5482f',
     [PlantType.HeatPlant]: '#d9822b',
     [PlantType.HeatStore]: '#c9a227',
+    // Placeholder colour for the three rail plants; Task 10 sets the final ones.
+    [PlantType.TrainStation]: '#8a8f99',
+    [PlantType.FreightTerminal]: '#8a8f99',
+    [PlantType.RailYard]: '#8a8f99',
   } as Record<number, string>,
 } as const;
 

@@ -104,6 +104,7 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   sums.consumption +=
     e.buildingConsumption +
     e.chargingConsumption +
+    e.tractionConsumption +
     e.heatingConsumption +
     e.coolingConsumption +
     e.heatPumpConsumption;
@@ -144,6 +145,7 @@ function countTiles(state: SimState): {
   plantTiles: number;
   buildingTiles: number;
   powerLineTiles: number;
+  railTiles: number;
   /** Logistics depots only; bus depots are tracked separately in transitStats. */
   depots: number;
 } {
@@ -155,6 +157,8 @@ function countTiles(state: SimState): {
     plantTiles: 0,
     buildingTiles: 0,
     powerLineTiles: countPowerLineTiles(state),
+    // countRailTiles arrives in Task 2.
+    railTiles: 0,
     depots: 0,
   };
   for (let i = 0; i < tileType.length; i++) {
@@ -202,6 +206,7 @@ export function buildStats(state: SimState): GlobalStats {
       consumption: {
         buildings: e.buildingConsumption,
         charging: e.chargingConsumption,
+        traction: e.tractionConsumption,
         heating: e.heatingConsumption,
         cooling: e.coolingConsumption,
         electrolysis: e.electrolysis,
@@ -271,6 +276,7 @@ export function buildStats(state: SimState): GlobalStats {
     },
     deliveries: { ...state.lastDeliveries },
     transit: { ...state.lastTransit },
+    rail: { ...state.lastRail },
     goals: goalStates(state),
     counts,
     budget: buildBudget(state),

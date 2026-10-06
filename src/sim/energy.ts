@@ -594,6 +594,8 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     rooftop: sum((r) => r.rooftop),
     buildingConsumption: sum((r) => r.buildingConsumption),
     chargingConsumption: sum((r) => r.chargingConsumption),
+    // Trains do not run yet (see trains.ts, Task 2): no catenary draw.
+    tractionConsumption: 0,
     heatingConsumption: sum((r) => r.heatingConsumption),
     coolingConsumption: sum((r) => r.coolingConsumption),
     curtailment: sum((r) => r.curtailment),

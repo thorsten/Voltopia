@@ -266,6 +266,7 @@ describe('goals', () => {
         depots: 1,
         factories: 0,
         localShare: 1,
+        depotsRailSupplied: 0,
       };
       for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
       expect(state.goalsAchieved.has('wellStocked')).toBe(false);
@@ -282,6 +283,7 @@ describe('goals', () => {
         depots: 1,
         factories: 0,
         localShare: 1,
+        depotsRailSupplied: 0,
       };
       for (let t = 0; t < 50; t++) goalsStep(state);
       expect(state.goalProgress.wellStockedTicks).toBe(50);
@@ -295,6 +297,7 @@ describe('goals', () => {
         depots: 1,
         factories: 0,
         localShare: 1,
+        depotsRailSupplied: 0,
       };
       goalsStep(state);
       expect(state.goalProgress.wellStockedTicks).toBe(0);
@@ -373,6 +376,8 @@ describe('goals', () => {
         stops: 8,
         stopsServed: 8,
         depots: 1,
+        busRiders: 30,
+        railRiders: 0,
       };
       for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
       expect(state.goalsAchieved.has('modalShift')).toBe(false);
@@ -389,6 +394,8 @@ describe('goals', () => {
         stops: 8,
         stopsServed: 8,
         depots: 1,
+        busRiders: 30,
+        railRiders: 0,
       };
       for (let t = 0; t < 50; t++) goalsStep(state);
       expect(state.goalProgress.transitTicks).toBe(50);
@@ -543,6 +550,7 @@ describe('localGoods', () => {
       depots: 1,
       factories: BALANCE.deliveries.goalLocalMinFactories,
       localShare: 1,
+      depotsRailSupplied: 0,
     };
     state.goods.lastDay = { local, imported, partial: false };
     state.tick = TICKS_PER_DAY;

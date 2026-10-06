@@ -421,6 +421,9 @@ export function transitStats(state: SimState): TransitStats {
   return {
     riderShare: commuters > 0 ? riders / commuters : 0,
     riders,
+    // Trains do not run yet (see trains.ts, Task 2): every rider is a bus rider.
+    busRiders: riders,
+    railRiders: 0,
     driving: drivingBusCount(state),
     stops,
     stopsServed,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import { LINE_PRESENT, tileIndex } from '../shared/grid.ts';
-import { DeliveryState, RoadClass, StopState, Terrain } from '../shared/types.ts';
+import { DIR_E, LINE_PRESENT, tileIndex } from '../shared/grid.ts';
+import { DeliveryState, MAX_RAIL_AGE, RoadClass, StopState, Terrain } from '../shared/types.ts';
 import { addDamage } from './disasters.ts';
 import { callBudgetTicks } from './demandResponse.ts';
 import { placePlant } from './energy.ts';
@@ -31,6 +31,8 @@ import {
   slopeCostMultiplier,
   stopStateOfAge,
   TileType,
+  TrainKind,
+  TrainPhase,
   Zone,
   type SimState,
 } from './state.ts';
@@ -826,5 +828,75 @@ describe('per-island pools in saves', () => {
     // The entry was dropped, not defaulted: nothing fills the gap until
     // the next syncIslandPools (the first tick's energyStep) runs.
     expect(() => poolForIsland(restored, 1)).toThrow();
+  });
+});
+
+describe('railway persistence', () => {
+  it('round-trips the rail layer and the trains, dropping lost ones', () => {
+    const state = createSimState(1, 16);
+    state.layers.rail[5] = LINE_PRESENT | DIR_E;
+    state.layers.rail[6] = LINE_PRESENT;
+    state.goalProgress.railTicks = 42;
+    state.trains.push(
+      {
+        id: 7,
+        kind: TrainKind.Freight,
+        yard: 40,
+        yardTrack: 41,
+        x: 5.5,
+        y: 0.5,
+        angle: 1,
+        phase: TrainPhase.Running,
+        stops: [6, 41],
+        pickup: 6,
+        path: [5, 6],
+        pathIndex: 1,
+        dwellTicks: 0,
+        stalled: true,
+      },
+      {
+        id: 8,
+        kind: TrainKind.Passenger,
+        yard: -1,
+        yardTrack: 41,
+        x: 0,
+        y: 0,
+        angle: 0,
+        phase: TrainPhase.Parked,
+        stops: [],
+        pickup: -1,
+        path: [],
+        pathIndex: 0,
+        dwellTicks: 0,
+        stalled: false,
+      },
+    );
+    const loaded = deserializeState(serializeState(state));
+    expect(loaded.layers.rail[5]).toBe(LINE_PRESENT | DIR_E);
+    expect(loaded.layers.rail[6]).toBe(LINE_PRESENT);
+    expect(loaded.goalProgress.railTicks).toBe(42);
+    expect(loaded.trains).toHaveLength(1);
+    expect(loaded.trains[0]).toMatchObject({
+      id: 7,
+      kind: TrainKind.Freight,
+      stops: [6, 41],
+      pickup: 6,
+    });
+    expect(loaded.trains[0].stalled).toBe(false);
+    expect(loaded.nextVehicleId).toBeGreaterThan(7);
+  });
+
+  it('loads a save without railway fields as a city without tracks', () => {
+    const state = createSimState(1, 16);
+    const save = serializeState(state);
+    delete save.layers.rail;
+    delete save.trains;
+    delete save.railTicks;
+    const loaded = deserializeState(save);
+    expect(loaded.layers.rail.every((v) => v === 0)).toBe(true);
+    expect(loaded.trains).toEqual([]);
+    expect(loaded.goalProgress.railTicks).toBe(0);
+    expect(loaded.layers.stationAge[0]).toBe(MAX_RAIL_AGE);
+    expect(loaded.layers.railStation[0]).toBe(-1);
   });
 });

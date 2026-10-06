@@ -13,6 +13,7 @@ import type {
   IslandStats,
   LifetimeSample,
   EnergyHistoryPoint,
+  RailStats,
   SaveGame,
   SavedDisasters,
   SeasonState,
@@ -24,6 +25,7 @@ import type {
 import {
   DeliveryState,
   DisasterKind,
+  MAX_RAIL_AGE,
   PlantType,
   StopState,
   SupplyStatus,
@@ -158,6 +160,40 @@ export interface Bus {
   dwellTicks: number;
 }
 
+/** What a train carries. */
+export const TrainKind = { Passenger: 0, Freight: 1 } as const;
+export type TrainKind = (typeof TrainKind)[keyof typeof TrainKind];
+
+/** Tour phases of a train. Parked covers the turnaround wait at the yard. */
+export const TrainPhase = { Parked: 0, Running: 1, Dwelling: 2 } as const;
+export type TrainPhase = (typeof TrainPhase)[keyof typeof TrainPhase];
+
+/** One electric train (persisted without `stalled`). Not a Mover: it runs on tracks. */
+export interface Train {
+  /** Stable id (shares nextVehicleId with cars, vans and buses). */
+  id: number;
+  kind: TrainKind;
+  /** Yard plant tile; -1 once the train is lost and awaits removal. */
+  yard: number;
+  /** Track tile beside the yard the train parks on. */
+  yardTrack: number;
+  x: number;
+  y: number;
+  angle: number;
+  phase: TrainPhase;
+  /** Remaining halts of the tour (track tiles beside plants); the last one is yardTrack. */
+  stops: number[];
+  /** Track tile of this tour's loading halt (freight), -1 when none or once loaded. */
+  pickup: number;
+  /** Track tiles from the current position to stops[0]. */
+  path: number[];
+  pathIndex: number;
+  /** Remaining dwell / turnaround ticks. */
+  dwellTicks: number;
+  /** Stood still this tick for lack of power (transient). */
+  stalled: boolean;
+}
+
 /** A reversible build action for the undo tool. */
 export interface UndoEntry {
   /** Money to restore (refunds the cost of the undone action). */
@@ -174,6 +210,7 @@ export interface UndoEntry {
     variant: number;
     plantType: number;
     busStop: number;
+    rail: number;
     forest: number;
     damage: number;
   }>;
@@ -253,6 +290,18 @@ export interface TileLayers {
   stopAge: Uint16Array;
   /** 1 on road tiles within stopRadius of a served bus stop. Derived, not persisted. */
   transitCover: Uint8Array;
+  /** Track mask per tile (0 = none, else LINE_PRESENT | connection bits). Persisted. */
+  rail: Uint8Array;
+  /** Track network number 1.. of this track tile; 0 = no track. Derived, not persisted. */
+  railNetwork: Uint16Array;
+  /** Ticks since a passenger train last halted at this station, saturating. Derived. */
+  stationAge: Uint16Array;
+  /** Ticks since a freight train last unloaded at this terminal, saturating. Derived. */
+  terminalAge: Uint16Array;
+  /** Nearest served station's tile for road tiles within stationRadius, -1 elsewhere. Derived. */
+  railStation: Int32Array;
+  /** Ticks since a freight train unloaded in reach of this depot, saturating. Derived. */
+  railGoodsAge: Uint16Array;
 }
 
 export interface SimState {
@@ -369,6 +418,12 @@ export interface SimState {
   /** Import fees paid this tick (budget line). */
   lastGoodsImportCost: number;
   buses: Bus[];
+  trains: Train[];
+  /** Bumped by every track build or removal; the network labelling is recomputed when it differs from railComputedVersion. */
+  railVersion: number;
+  railComputedVersion: number;
+  /** railNetworkKeys[n] = lowest tile index of network n; railNetworkKeys[0] = -1. */
+  railNetworkKeys: number[];
   undoStack: UndoEntry[];
   energyHistory: EnergyHistoryPoint[];
   /** Running sums since the last history sample (not persisted). */
@@ -397,6 +452,7 @@ export interface SimState {
   lastDeliveries: DeliveryStats;
   /** Figures from the last transitStep; transient. */
   lastTransit: TransitStats;
+  lastRail: RailStats;
   /** Achieved goal ids (persisted with the save game). */
   goalsAchieved: Set<string>;
   /**
@@ -420,6 +476,8 @@ export interface SimState {
     freeFlowTicks: number;
     wellStockedTicks: number;
     transitTicks: number;
+    /** Consecutive railCity ticks; persisted like transitTicks. */
+    railTicks: number;
     geothermalTicks: number;
     stormTicks: number;
     warmWinterTicks: number;
@@ -469,6 +527,8 @@ export interface SimState {
     rooftop: number;
     buildingConsumption: number;
     chargingConsumption: number;
+    /** Catenary draw of the running trains this tick. */
+    tractionConsumption: number;
     heatingConsumption: number;
     coolingConsumption: number;
     curtailment: number;
@@ -547,6 +607,12 @@ export function createTileLayers(size: number): TileLayers {
     busStop: new Uint8Array(tiles),
     stopAge: new Uint16Array(tiles),
     transitCover: new Uint8Array(tiles),
+    rail: new Uint8Array(tiles),
+    railNetwork: new Uint16Array(tiles),
+    stationAge: new Uint16Array(tiles).fill(MAX_RAIL_AGE),
+    terminalAge: new Uint16Array(tiles).fill(MAX_RAIL_AGE),
+    railStation: new Int32Array(tiles).fill(-1),
+    railGoodsAge: new Uint16Array(tiles).fill(MAX_RAIL_AGE),
   };
 }
 
@@ -607,6 +673,10 @@ export function createSimState(
     },
     lastGoodsImportCost: 0,
     buses: [],
+    trains: [],
+    railVersion: 0,
+    railComputedVersion: -1,
+    railNetworkKeys: [-1],
     undoStack: [],
     energyHistory: [],
     energyHistoryAccum: { generation: 0, consumption: 0, unshifted: 0, soc: 0, price: 0, ticks: 0 },
@@ -621,8 +691,30 @@ export function createSimState(
       depots: 0,
       factories: 0,
       localShare: 1,
+      depotsRailSupplied: 0,
     },
-    lastTransit: { riderShare: 0, riders: 0, driving: 0, stops: 0, stopsServed: 0, depots: 0 },
+    lastTransit: {
+      riderShare: 0,
+      riders: 0,
+      busRiders: 0,
+      railRiders: 0,
+      driving: 0,
+      stops: 0,
+      stopsServed: 0,
+      depots: 0,
+    },
+    lastRail: {
+      networks: 0,
+      trackTiles: 0,
+      stations: 0,
+      stationsServed: 0,
+      terminals: 0,
+      terminalsLoading: 0,
+      terminalsUnloading: 0,
+      yards: 0,
+      trainsRunning: 0,
+      trainsStalled: 0,
+    },
     goalsAchieved: new Set(),
     goalProgress: {
       cleanDayTicks: 0,
@@ -632,6 +724,7 @@ export function createSimState(
       freeFlowTicks: 0,
       wellStockedTicks: 0,
       transitTicks: 0,
+      railTicks: 0,
       geothermalTicks: 0,
       stormTicks: 0,
       warmWinterTicks: 0,
@@ -673,6 +766,7 @@ export function createSimState(
       rooftop: 0,
       buildingConsumption: 0,
       chargingConsumption: 0,
+      tractionConsumption: 0,
       heatingConsumption: 0,
       coolingConsumption: 0,
       curtailment: 0,
@@ -725,6 +819,7 @@ export function snapshotTile(state: SimState, index: number): UndoEntry['tiles']
     variant: layers.variant[index],
     plantType: layers.plantType[index],
     busStop: layers.busStop[index],
+    rail: layers.rail[index],
     forest: layers.forest[index],
     damage: layers.damage[index],
   };
@@ -779,6 +874,13 @@ export function collectDiffs(state: SimState): TileDiff[] {
       stopState:
         layers.busStop[index] !== 0 ? stopStateOfAge(layers.stopAge[index]) : StopState.Served,
       transitCover: layers.transitCover[index],
+      rail: layers.rail[index],
+      railCover: layers.railStation[index] >= 0 ? 1 : 0,
+      stationState:
+        layers.tileType[index] === TileType.Plant &&
+        layers.plantType[index] === PlantType.TrainStation
+          ? stationStateOfAge(layers.stationAge[index])
+          : StopState.Served,
     });
   }
   state.dirty.clear();
@@ -857,6 +959,23 @@ export function stopDueTicks(): number {
 export function stopStateOfAge(age: number): StopState {
   if (age > stopServiceTicks()) return StopState.Unserved;
   if (age > stopDueTicks()) return StopState.Due;
+  return StopState.Served;
+}
+
+/** Ticks a station stays served after a train halted there. */
+export function stationServiceTicks(): number {
+  return Math.round(BALANCE.rail.serviceWindowDays * TICKS_PER_DAY);
+}
+
+/** Ticks after which a station or terminal counts as due for a train. */
+export function stationDueTicks(): number {
+  return Math.round(BALANCE.rail.dueAfterDays * TICKS_PER_DAY);
+}
+
+/** Service bucket of a station given its ticks since the last train. */
+export function stationStateOfAge(age: number): StopState {
+  if (age > stationServiceTicks()) return StopState.Unserved;
+  if (age > stationDueTicks()) return StopState.Due;
   return StopState.Served;
 }
 
@@ -1124,6 +1243,7 @@ export function serializeState(state: SimState): SaveGame {
     freeFlowTicks: state.goalProgress.freeFlowTicks,
     wellStockedTicks: state.goalProgress.wellStockedTicks,
     transitTicks: state.goalProgress.transitTicks,
+    railTicks: state.goalProgress.railTicks,
     warmWinterTicks: state.goalProgress.warmWinterTicks,
     flexTicks: state.goalProgress.flexTicks,
     demandResponse: { active: state.demandResponse.active },
@@ -1155,7 +1275,25 @@ export function serializeState(state: SimState): SaveGame {
       geothermal: copyBuffer(layers.geothermal),
       reservoirHeat: copyBuffer(layers.reservoirHeat),
       damage: copyBuffer(layers.damage),
+      rail: copyBuffer(layers.rail),
     },
+    trains: state.trains
+      .filter((train) => train.yard >= 0)
+      .map((train) => ({
+        id: train.id,
+        kind: train.kind,
+        yard: train.yard,
+        yardTrack: train.yardTrack,
+        x: train.x,
+        y: train.y,
+        angle: train.angle,
+        phase: train.phase,
+        stops: [...train.stops],
+        pickup: train.pickup,
+        path: [...train.path],
+        pathIndex: train.pathIndex,
+        dwellTicks: train.dwellTicks,
+      })),
   };
 }
 
@@ -1221,6 +1359,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.goalProgress.freeFlowTicks = save.freeFlowTicks ?? 0;
   state.goalProgress.wellStockedTicks = save.wellStockedTicks ?? 0;
   state.goalProgress.transitTicks = save.transitTicks ?? 0;
+  state.goalProgress.railTicks = save.railTicks ?? 0;
   state.goalProgress.warmWinterTicks = save.warmWinterTicks ?? 0;
   state.goalProgress.flexTicks = save.flexTicks ?? 0;
   state.goalProgress.shedTotal =
@@ -1247,6 +1386,7 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.forest) state.layers.forest.set(new Uint8Array(save.layers.forest));
   if (save.layers.roadClass) state.layers.roadClass.set(new Uint8Array(save.layers.roadClass));
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
+  if (save.layers.rail) state.layers.rail.set(new Uint8Array(save.layers.rail));
   if (save.layers.damage) state.layers.damage.set(new Uint8Array(save.layers.damage));
   // A save from before disasters keeps its calm: the city only faces them
   // when it was founded with an intensity (see NewGameOptions).
@@ -1363,6 +1503,25 @@ export function deserializeState(save: SaveGame): SimState {
   // the morning's imported tours (if any) are gone, so today's localGoods
   // attempt is tainted (see the `goods` doc comment above).
   state.goods.partialDay = state.tick % TICKS_PER_DAY !== 0;
+  if (save.trains) {
+    state.trains = save.trains.map((t) => ({
+      id: t.id,
+      kind: t.kind as TrainKind,
+      yard: t.yard,
+      yardTrack: t.yardTrack,
+      x: t.x,
+      y: t.y,
+      angle: t.angle,
+      phase: t.phase as TrainPhase,
+      stops: [...t.stops],
+      pickup: t.pickup,
+      path: [...t.path],
+      pathIndex: t.pathIndex,
+      dwellTicks: t.dwellTicks,
+      stalled: false,
+    }));
+    for (const t of state.trains) state.nextVehicleId = Math.max(state.nextVehicleId, t.id + 1);
+  }
   markAllDirty(state);
   return state;
 }

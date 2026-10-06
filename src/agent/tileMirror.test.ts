@@ -39,6 +39,9 @@ function emptyDiff(index: number): TileDiff {
     busStop: 0,
     stopState: 0,
     transitCover: 0,
+    rail: 0,
+    railCover: 0,
+    stationState: 0,
   };
 }
 
@@ -106,6 +109,9 @@ describe('TileMirror', () => {
         busStop: 0,
         stopState: 0,
         transitCover: 0,
+        rail: 0,
+        railCover: 0,
+        stationState: 0,
       },
     ]);
     expect(Array.from(mirror.tileType)).toEqual(Array.from({ length: 16 }, () => 0));
