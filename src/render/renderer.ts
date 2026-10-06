@@ -444,6 +444,8 @@ export class GameRenderer {
 
   setVehicles(vehicles: VehicleState[]): void {
     this.vehiclesMesh.setVehicles(vehicles, performance.now() / 1000);
+    // The level crossings watch the trains among them.
+    this.railMesh.setTrains(vehicles);
   }
 
   /** Highlight tiles for a pending drag action (e.g. road preview). */

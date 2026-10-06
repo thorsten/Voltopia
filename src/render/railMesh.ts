@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DIR_E, DIR_N, DIR_S, DIR_W } from '../shared/grid.ts';
-import { Terrain, TileType, type TileDiff } from '../shared/types.ts';
+import {
+  Terrain,
+  TileType,
+  VehicleKind,
+  type TileDiff,
+  type VehicleState,
+} from '../shared/types.ts';
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer } from './renderer.ts';
 
@@ -11,7 +17,6 @@ const DECK_COLOR = 0x6b6f75;
 const PARAPET_COLOR = 0xd8d8d0;
 const BARRIER_POST_COLOR = 0xe8e8e2;
 const BARRIER_BAR_COLOR = 0xd84a3a;
-const SIGNAL_COLOR = 0x2b2f33;
 /** Rails sit this far either side of the tile's centre line. */
 const GAUGE = 0.09;
 const RAIL_WIDTH = 0.03;
@@ -32,6 +37,42 @@ const SIGNAL_HEAD = { sx: 0.08, sy: 0.1, sz: 0.05 } as const;
 /** The post stands this far from the tile centre along the road and beside the lane. */
 const BARRIER_ALONG_ROAD = 0.42;
 const BARRIER_BESIDE_LANE = 0.3;
+/** A train within this many tiles of the crossing along the track closes it. */
+const BARRIER_APPROACH_TILES = 3;
+/** … and only while it is this close to the track's centre line (so a train on another line is ignored). */
+const BARRIER_TRACK_LATERAL = 0.6;
+/** Seconds a bar takes to travel between raised and lowered. */
+const BARRIER_SWEEP_SECONDS = 0.6;
+/** The signal head alternates lit/dark over this period while the crossing is closed. */
+const SIGNAL_BLINK_PERIOD_SECONDS = 1;
+const SIGNAL_BLINK_DUTY = 0.5;
+/** Instance colours of the signal head: dark when the crossing is open, red when it is closed. */
+const SIGNAL_DARK = 0x2b2f33;
+const SIGNAL_LIT = 0xe0402c;
+
+/** One barrier of a level crossing: a post, the bar that swings down and its signal head. */
+interface CrossingBarrier {
+  /** Centre of the crossing tile in world coordinates. */
+  cx: number;
+  cz: number;
+  /** Whether the track runs along x (the road then crosses along z). */
+  alongX: boolean;
+  /** Which approach this barrier guards: -1 or +1 along the road. */
+  side: number;
+  /** Foot of the bar: the top of the post. */
+  px: number;
+  pz: number;
+  pivotY: number;
+  yaw: number;
+  /** 0 = raised, 1 = lowered flat across the road. */
+  progress: number;
+  /** Whether the signal head currently shows its lit colour. */
+  lit: boolean;
+}
+
+function frac(value: number): number {
+  return value - Math.floor(value);
+}
 
 /** Half a tile of track from the centre to one edge, pointing +x. */
 function segmentGeometry(withBallast: boolean): THREE.BufferGeometry {
@@ -94,6 +135,12 @@ export class RailMesh implements DiffLayer {
   private readonly barrierPosts: THREE.InstancedMesh;
   private readonly barrierBars: THREE.InstancedMesh;
   private readonly signalHeads: THREE.InstancedMesh;
+  private readonly barriers: CrossingBarrier[] = [];
+  /** Locomotive positions in world coordinates, from the last tick. */
+  private readonly trains: { x: number; z: number }[] = [];
+  private reducedMotion = false;
+  private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  private readonly color = new THREE.Color();
   private readonly masks: Uint8Array;
   private readonly tileTypes: Uint8Array;
   private readonly terrains: Uint8Array;
@@ -128,7 +175,8 @@ export class RailMesh implements DiffLayer {
     this.parapets = make(standingBoxGeometry(), PARAPET_COLOR, tiles * 2);
     this.barrierPosts = make(standingBoxGeometry(), BARRIER_POST_COLOR, tiles * 2);
     this.barrierBars = make(standingBoxGeometry(), BARRIER_BAR_COLOR, tiles * 2);
-    this.signalHeads = make(standingBoxGeometry(), SIGNAL_COLOR, tiles * 2);
+    // White base colour: the head's own colour is per instance, so it can blink.
+    this.signalHeads = make(standingBoxGeometry(), 0xffffff, tiles * 2);
   }
 
   hasRail(index: number): boolean {
@@ -178,7 +226,90 @@ export class RailMesh implements DiffLayer {
     mesh.setMatrixAt(slot, this.dummy.matrix);
   }
 
+  /**
+   * Train positions of the last tick, so the crossings can see them
+   * coming. Wagons are left out: a locomotive leads every train.
+   */
+  setTrains(vehicles: readonly VehicleState[]): void {
+    this.trains.length = 0;
+    for (const vehicle of vehicles) {
+      if (vehicle.kind !== VehicleKind.Locomotive && vehicle.kind !== VehicleKind.FreightLocomotive)
+        continue;
+      this.trains.push({ x: vehicle.x, z: vehicle.y });
+    }
+  }
+
+  setReducedMotion(reduced: boolean): void {
+    this.reducedMotion = reduced;
+  }
+
+  /**
+   * Swing the bars of every crossing a train is approaching down, raise
+   * the rest, and blink the signal head of a closed one. Under reduced
+   * motion a bar jumps to its end state and the head holds its colour.
+   */
+  update(deltaSeconds: number, nowSeconds: number): void {
+    if (this.barriers.length === 0) return;
+    const step = this.reducedMotion ? 1 : deltaSeconds / BARRIER_SWEEP_SECONDS;
+    const litPhase =
+      this.reducedMotion || frac(nowSeconds / SIGNAL_BLINK_PERIOD_SECONDS) < SIGNAL_BLINK_DUTY;
+    let movedBars = false;
+    let changedSignals = false;
+    for (let slot = 0; slot < this.barriers.length; slot++) {
+      const barrier = this.barriers[slot];
+      const target = this.trainApproaching(barrier) ? 1 : 0;
+      const progress =
+        target > barrier.progress
+          ? Math.min(target, barrier.progress + step)
+          : Math.max(target, barrier.progress - step);
+      if (progress !== barrier.progress) {
+        barrier.progress = progress;
+        this.writeBar(slot, barrier);
+        movedBars = true;
+      }
+      const lit = barrier.progress > 0 && litPhase;
+      if (lit !== barrier.lit) {
+        barrier.lit = lit;
+        this.writeSignal(slot, lit);
+        changedSignals = true;
+      }
+    }
+    if (movedBars) this.barrierBars.instanceMatrix.needsUpdate = true;
+    if (changedSignals && this.signalHeads.instanceColor)
+      this.signalHeads.instanceColor.needsUpdate = true;
+  }
+
+  /** Is a train within reach of this crossing, on its own track? */
+  private trainApproaching(barrier: CrossingBarrier): boolean {
+    for (const train of this.trains) {
+      const along = barrier.alongX ? train.x - barrier.cx : train.z - barrier.cz;
+      const lateral = barrier.alongX ? train.z - barrier.cz : train.x - barrier.cx;
+      if (Math.abs(along) <= BARRIER_APPROACH_TILES && Math.abs(lateral) <= BARRIER_TRACK_LATERAL)
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * The bar stands on the post's top and turns about that foot: upright
+   * at progress 0, flat across the road toward the lane's centre at 1.
+   */
+  private writeBar(slot: number, barrier: CrossingBarrier): void {
+    this.euler.set(0, barrier.yaw, barrier.side * barrier.progress * (Math.PI / 2));
+    this.dummy.position.set(barrier.px, barrier.pivotY, barrier.pz);
+    this.dummy.quaternion.setFromEuler(this.euler);
+    this.dummy.scale.set(BARRIER_BAR.sx, BARRIER_BAR.sy, BARRIER_BAR.sz);
+    this.dummy.updateMatrix();
+    this.barrierBars.setMatrixAt(slot, this.dummy.matrix);
+  }
+
+  private writeSignal(slot: number, lit: boolean): void {
+    this.color.setHex(lit ? SIGNAL_LIT : SIGNAL_DARK);
+    this.signalHeads.setColorAt(slot, this.color);
+  }
+
   private rebuild(): void {
+    this.barriers.length = 0;
     let segments = 0;
     let crossings = 0;
     let centres = 0;
@@ -262,15 +393,6 @@ export class RailMesh implements DiffLayer {
           const yaw = alongX ? 0 : Math.PI / 2;
           this.placeBox(this.barrierPosts, barriers, px, ground, pz, BARRIER_POST, yaw);
           this.placeBox(
-            this.barrierBars,
-            barriers,
-            px,
-            ground + BARRIER_POST.sy,
-            pz,
-            BARRIER_BAR,
-            yaw,
-          );
-          this.placeBox(
             this.signalHeads,
             barriers,
             px,
@@ -279,6 +401,24 @@ export class RailMesh implements DiffLayer {
             SIGNAL_HEAD,
             yaw,
           );
+          // A rebuild only follows a track or road edit; a bar standing
+          // open for the 0.6 s it needs to close again is not worth
+          // carrying progress across one.
+          const barrier: CrossingBarrier = {
+            cx: x,
+            cz: z,
+            alongX,
+            side: s,
+            px,
+            pz,
+            pivotY: ground + BARRIER_POST.sy,
+            yaw,
+            progress: 0,
+            lit: false,
+          };
+          this.barriers.push(barrier);
+          this.writeBar(barriers, barrier);
+          this.writeSignal(barriers, false);
           barriers++;
         }
       }
@@ -291,6 +431,7 @@ export class RailMesh implements DiffLayer {
     this.barrierPosts.count = barriers;
     this.barrierBars.count = barriers;
     this.signalHeads.count = barriers;
+    if (this.signalHeads.instanceColor) this.signalHeads.instanceColor.needsUpdate = true;
     for (const mesh of [
       this.segments,
       this.crossings,

@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
-import { Terrain, TileType, type TileDiff } from '../shared/types.ts';
+import {
+  Terrain,
+  TileType,
+  VehicleKind,
+  type TileDiff,
+  type VehicleState,
+} from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { RailMesh } from './railMesh.ts';
 
@@ -173,5 +179,94 @@ describe('RailMesh', () => {
     const { mesh, segments } = sceneWith(tiles);
     mesh.applyDiffs([{ ...tiles[at(2, 2)], rail: 0 }]);
     expect(segments.count).toBe(0);
+  });
+});
+
+describe('RailMesh level-crossing barriers', () => {
+  /** A straight east-west crossing at (3, 2) with its road running north-south. */
+  function crossing() {
+    const tiles = baseTiles();
+    tiles[at(2, 2)].rail = LINE_PRESENT | DIR_E;
+    tiles[at(3, 2)].rail = LINE_PRESENT | DIR_E | DIR_W;
+    tiles[at(3, 2)].tileType = TileType.Road;
+    tiles[at(3, 2)].roadMask = 5;
+    tiles[at(4, 2)].rail = LINE_PRESENT | DIR_W;
+    return sceneWith(tiles);
+  }
+
+  /** World direction the bar points in (its local +y axis after rotation). */
+  function barDirection(bars: THREE.InstancedMesh, slot: number): THREE.Vector3 {
+    return new THREE.Vector3(0, 1, 0).applyQuaternion(instanceOf(bars, slot).quaternion);
+  }
+
+  function train(x: number, y: number): VehicleState {
+    return { id: 1, x, y, angle: 0, kind: VehicleKind.Locomotive };
+  }
+
+  it('keeps the bars raised while no train is near', () => {
+    const { mesh, barrierBars } = crossing();
+    mesh.setTrains([train(7.5, 2.5)]); // four tiles east: out of range
+    mesh.update(1, 1);
+    for (const slot of [0, 1]) expect(barDirection(barrierBars, slot).y).toBeCloseTo(1, 6);
+  });
+
+  it('lowers both bars across the road when a train approaches on the track', () => {
+    const { mesh, barrierBars } = crossing();
+    mesh.setTrains([train(5, 2.5)]); // 1.5 tiles east on the track axis
+    mesh.update(1, 1);
+    // Barriers are placed for s = -1 then s = +1; each bar swings from its
+    // post toward the road's centre line, so across the lane and flat.
+    const near = barDirection(barrierBars, 0);
+    const far = barDirection(barrierBars, 1);
+    expect(Math.abs(near.y)).toBeLessThan(1e-6);
+    expect(Math.abs(far.y)).toBeLessThan(1e-6);
+    expect(near.x).toBeCloseTo(1, 6);
+    expect(far.x).toBeCloseTo(-1, 6);
+  });
+
+  it('ignores a train that is not on this crossing', () => {
+    const { mesh, barrierBars } = crossing();
+    mesh.setTrains([train(3.5, 5)]); // on the road axis, 2.5 tiles off the track
+    mesh.update(1, 1);
+    expect(barDirection(barrierBars, 0).y).toBeCloseTo(1, 6);
+  });
+
+  it('sweeps down over time and back up once the train has passed', () => {
+    const { mesh, barrierBars } = crossing();
+    mesh.setTrains([train(5, 2.5)]);
+    mesh.update(0.1, 0.1);
+    const partway = barDirection(barrierBars, 0);
+    expect(partway.y).toBeLessThan(1); // moving …
+    expect(partway.y).toBeGreaterThan(0.1); // … but not there yet
+    mesh.setTrains([]);
+    mesh.update(1, 1.1);
+    expect(barDirection(barrierBars, 0).y).toBeCloseTo(1, 6);
+  });
+
+  it('snaps without a sweep and holds the signal steady under reduced motion', () => {
+    const { mesh, barrierBars, signalHeads } = crossing();
+    mesh.setReducedMotion(true);
+    mesh.setTrains([train(5, 2.5)]);
+    mesh.update(0.016, 0.016);
+    expect(Math.abs(barDirection(barrierBars, 0).y)).toBeLessThan(1e-6);
+    const lit = new THREE.Color();
+    signalHeads.getColorAt(0, lit);
+    mesh.update(0.016, 1.016);
+    const later = new THREE.Color();
+    signalHeads.getColorAt(0, later);
+    expect(later.getHex()).toBe(lit.getHex());
+  });
+
+  it('blinks the signal head while the crossing is closed', () => {
+    const { mesh, signalHeads } = crossing();
+    mesh.setTrains([train(5, 2.5)]);
+    mesh.update(1, 1);
+    const colors = [0, 0.5, 1, 1.5].map((offset) => {
+      mesh.update(0.016, 1 + offset);
+      const color = new THREE.Color();
+      signalHeads.getColorAt(0, color);
+      return color.getHex();
+    });
+    expect(new Set(colors).size).toBeGreaterThan(1);
   });
 });
