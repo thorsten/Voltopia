@@ -675,7 +675,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
 }
 
 /** Deterministic pseudo-random value 0..1 per (tile, tick). */
-function hashTileTick(index: number, tick: number): number {
+export function hashTileTick(index: number, tick: number): number {
   let h = (index * 2654435761 + tick * 40503) >>> 0;
   h ^= h >>> 13;
   h = (h * 0x5bd1e995) >>> 0;

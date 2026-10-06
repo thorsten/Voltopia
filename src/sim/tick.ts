@@ -15,13 +15,14 @@ import { computeDemand, decayStep, growthStep } from './growth.ts';
 import { forestShare, forestStep } from './forest.ts';
 import { happinessStep } from './happiness.ts';
 import { countPowerLineTiles } from './powerLines.ts';
-import { countRailTiles } from './rail.ts';
+import { countRailTiles, railStats } from './rail.ts';
 import { tideState } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { storedByKind } from './storage.ts';
 import { recomputeServices, serviceCoverage } from './services.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import { transitStep, transitStats } from './transit.ts';
+import { trainsStep } from './trains.ts';
 import { chargingDemandByIsland, drivingVehicleCount, vehiclesStep } from './vehicles.ts';
 import { updateWeather } from './weather.ts';
 import {
@@ -64,6 +65,8 @@ export function stepTick(state: SimState): void {
   state.lastDeliveries = deliveryStats(state);
   transitStep(state, occupancy);
   state.lastTransit = transitStats(state);
+  trainsStep(state);
+  state.lastRail = railStats(state);
   updateTrafficLoad(state, occupancy);
   // Reservoirs first: this tick's generation reads the heat they leave.
   reservoirStep(state);

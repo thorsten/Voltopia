@@ -9,7 +9,7 @@ import {
   tileX,
   tileY,
 } from '../shared/grid.ts';
-import { MAX_RAIL_AGE, PlantType, StopState } from '../shared/types.ts';
+import { MAX_RAIL_AGE, PlantType, StopState, type RailStats } from '../shared/types.ts';
 import type { BuildResult } from './roads.ts';
 import { isFactory } from './deliveries.ts';
 import { clearForest, fellingCost } from './forest.ts';
@@ -25,6 +25,7 @@ import {
   stationStateOfAge,
   Terrain,
   TileType,
+  TrainPhase,
   withNeighbors,
   type SimState,
   type UndoEntry,
@@ -372,4 +373,37 @@ export function stampRailGoods(state: SimState, terminal: number): void {
 export function stationState(state: SimState, tile: number): StopState {
   if (!isStation(state, tile)) return StopState.Served;
   return stationStateOfAge(state.layers.stationAge[tile]);
+}
+
+/** City-wide railway figures for stats, HUD and the goal. */
+export function railStats(state: SimState): RailStats {
+  recomputeRailNetworks(state);
+  let stationsServed = 0;
+  const stations = stationTiles(state);
+  for (const s of stations) if (isStationServed(state, s)) stationsServed++;
+  const terminals = terminalTiles(state);
+  let terminalsLoading = 0;
+  let terminalsUnloading = 0;
+  for (const t of terminals) {
+    if (terminalLoads(state, t)) terminalsLoading++;
+    if (terminalUnloads(state, t)) terminalsUnloading++;
+  }
+  let trainsRunning = 0;
+  let trainsStalled = 0;
+  for (const train of state.trains) {
+    if (train.phase !== TrainPhase.Parked) trainsRunning++;
+    if (train.stalled) trainsStalled++;
+  }
+  return {
+    networks: state.railNetworkKeys.length - 1,
+    trackTiles: countRailTiles(state),
+    stations: stations.length,
+    stationsServed,
+    terminals: terminals.length,
+    terminalsLoading,
+    terminalsUnloading,
+    yards: yardTiles(state).length,
+    trainsRunning,
+    trainsStalled,
+  };
 }

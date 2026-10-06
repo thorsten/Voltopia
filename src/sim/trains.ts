@@ -1,0 +1,443 @@
+import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
+import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
+import { StopState } from '../shared/types.ts';
+import { hashTileTick, isTileConnected } from './energy.ts';
+import { islandOf, recomputeGrid } from './powerGrid.ts';
+import {
+  ageRailPlants,
+  isStation,
+  isTerminal,
+  isYard,
+  plantNetwork,
+  plantTrack,
+  railNetworkOf,
+  stampRailGoods,
+  stationTiles,
+  terminalLoads,
+  terminalTiles,
+  terminalUnloads,
+  updateRailCover,
+  yardTiles,
+} from './rail.ts';
+import { findRailPath, railDistances } from './routing.ts';
+import {
+  markDirty,
+  stationDueTicks,
+  stationStateOfAge,
+  TrainKind,
+  TrainPhase,
+  type SimState,
+  type Train,
+} from './state.ts';
+import { ticksAtHour } from './vehicles.ts';
+
+/** The yard's catenary has a feed: its tile is energised (as depots charge). */
+export function yardPowered(state: SimState, yard: number): boolean {
+  return isTileConnected(state, yard);
+}
+
+function createTrain(state: SimState, yard: number, yardTrack: number, kind: TrainKind): Train {
+  return {
+    id: state.nextVehicleId++,
+    kind,
+    yard,
+    yardTrack,
+    x: tileX(yardTrack, state.size) + 0.5,
+    y: tileY(yardTrack, state.size) + 0.5,
+    angle: 0,
+    phase: TrainPhase.Parked,
+    stops: [],
+    pickup: -1,
+    path: [],
+    pathIndex: 0,
+    dwellTicks: 0,
+    stalled: false,
+  };
+}
+
+/**
+ * Keep every powered yard's fleet complete: drop trains whose yard or
+ * parking track is gone (a train mid-tour just vanishes, like a bus),
+ * spawn the missing ones parked at the yard. A yard without a grid tie
+ * keeps the trains it has (they stand stalled) but gets no new ones.
+ */
+export function syncTrainFleet(state: SimState): void {
+  state.trains = state.trains.filter(
+    (t) => isYard(state, t.yard) && state.layers.rail[t.yardTrack] !== 0,
+  );
+  const perYard = new Map<number, { passenger: number; freight: number }>();
+  for (const t of state.trains) {
+    const n = perYard.get(t.yard) ?? { passenger: 0, freight: 0 };
+    if (t.kind === TrainKind.Freight) n.freight++;
+    else n.passenger++;
+    perYard.set(t.yard, n);
+  }
+  const c = BALANCE.rail;
+  for (const yard of yardTiles(state)) {
+    const track = plantTrack(state, yard);
+    if (track < 0 || !yardPowered(state, yard)) continue;
+    const n = perYard.get(yard) ?? { passenger: 0, freight: 0 };
+    for (let i = n.passenger; i < c.passengerTrainsPerYard; i++) {
+      state.trains.push(createTrain(state, yard, track, TrainKind.Passenger));
+    }
+    for (let i = n.freight; i < c.freightTrainsPerYard; i++) {
+      state.trains.push(createTrain(state, yard, track, TrainKind.Freight));
+    }
+  }
+}
+
+/** The track tile under a train. */
+function trainTile(state: SimState, train: Train): number {
+  return tileIndex(Math.floor(train.x), Math.floor(train.y), state.size);
+}
+
+/**
+ * Move one tick along the path at `step` tiles. No lanes, no battery:
+ * trains neither queue nor charge. 'lost' when the next path tile lost
+ * its track; 'arrived' after the last tile, with the path cleared.
+ */
+export function advanceTrain(
+  state: SimState,
+  train: Train,
+  step: number,
+): 'moving' | 'arrived' | 'lost' {
+  const target = train.path[train.pathIndex];
+  if (target === undefined || state.layers.rail[target] === 0) return 'lost';
+  const targetX = tileX(target, state.size) + 0.5;
+  const targetY = tileY(target, state.size) + 0.5;
+  const dx = targetX - train.x;
+  const dy = targetY - train.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= step) {
+    train.x = targetX;
+    train.y = targetY;
+    if (distance > 1e-9) train.angle = Math.atan2(dy, dx);
+    train.pathIndex++;
+    if (train.pathIndex >= train.path.length) {
+      train.path = [];
+      train.pathIndex = 0;
+      return 'arrived';
+    }
+    return 'moving';
+  }
+  train.x += (dx / distance) * step;
+  train.y += (dy / distance) * step;
+  train.angle = Math.atan2(dy, dx);
+  return 'moving';
+}
+
+/** Halts every train is already going to visit (never the yard tracks). */
+function claimedHalts(state: SimState): Set<number> {
+  const claimed = new Set<number>();
+  for (const t of state.trains) for (const s of t.stops) if (s !== t.yardTrack) claimed.add(s);
+  return claimed;
+}
+
+/** Nearest-neighbour order over rail distances from `start`, then the yard track. */
+function orderTour(
+  state: SimState,
+  start: number,
+  remaining: Set<number>,
+  yardTrack: number,
+  head: number[],
+): number[] {
+  const ordered = [...head];
+  let from = railDistances(state, start);
+  while (remaining.size > 0) {
+    let best = -1;
+    let bestCost = Infinity;
+    for (const tile of remaining) {
+      const cost = from.get(tile) ?? Infinity;
+      if (cost < bestCost || (cost === bestCost && tile < best)) {
+        best = tile;
+        bestCost = cost;
+      }
+    }
+    if (best < 0) break; // unreachable on this network after all
+    ordered.push(best);
+    remaining.delete(best);
+    from = railDistances(state, best);
+  }
+  ordered.push(yardTrack);
+  return ordered;
+}
+
+/**
+ * Plan a passenger tour for a train parked at its yard: up to
+ * stationsPerTour stations of the yard's network with
+ * `stationAge >= stationDueTicks() / 2`, not claimed, oldest first
+ * (ties: nearer by rail from the yard, then lower index), ordered
+ * nearest-neighbour and closed by the yard track. Empty when nothing
+ * qualifies, so an idle fleet does not circle.
+ */
+export function planPassengerTour(state: SimState, train: Train, claimed: Set<number>): number[] {
+  const network = railNetworkOf(state, train.yardTrack);
+  if (network === 0) return [];
+  const minAge = Math.floor(stationDueTicks() / 2);
+  const fromYard = railDistances(state, train.yardTrack);
+  const candidates: Array<{ halt: number; age: number; distance: number }> = [];
+  for (const station of stationTiles(state)) {
+    if (plantNetwork(state, station) !== network) continue;
+    const halt = plantTrack(state, station);
+    if (halt < 0 || claimed.has(halt) || halt === train.yardTrack) continue;
+    const age = state.layers.stationAge[station];
+    if (age < minAge) continue;
+    candidates.push({ halt, age, distance: fromYard.get(halt) ?? Infinity });
+  }
+  candidates.sort((a, b) => b.age - a.age || a.distance - b.distance || a.halt - b.halt);
+  const remaining = new Set(candidates.slice(0, BALANCE.rail.stationsPerTour).map((c) => c.halt));
+  if (remaining.size === 0) return [];
+  return orderTour(state, train.yardTrack, remaining, train.yardTrack, []);
+}
+
+/**
+ * Plan a freight tour: the nearest loading terminal of the network
+ * (ties: lower index) first, then up to terminalsPerTour unloading
+ * terminals with `terminalAge >= stationDueTicks() / 2`, oldest first,
+ * nearest-neighbour from the loading halt, closed by the yard track.
+ * Empty without a loading terminal or without a due unloading one.
+ */
+export function planFreightTour(state: SimState, train: Train, claimed: Set<number>): number[] {
+  const network = railNetworkOf(state, train.yardTrack);
+  if (network === 0) return [];
+  const minAge = Math.floor(stationDueTicks() / 2);
+  const fromYard = railDistances(state, train.yardTrack);
+  let pickup = -1;
+  let pickupCost = Infinity;
+  const unloading: Array<{ halt: number; age: number; distance: number }> = [];
+  for (const terminal of terminalTiles(state)) {
+    if (plantNetwork(state, terminal) !== network) continue;
+    const halt = plantTrack(state, terminal);
+    if (halt < 0 || halt === train.yardTrack) continue;
+    const distance = fromYard.get(halt) ?? Infinity;
+    if (
+      terminalLoads(state, terminal) &&
+      (distance < pickupCost || (distance === pickupCost && halt < pickup))
+    ) {
+      pickup = halt;
+      pickupCost = distance;
+    }
+    if (terminalUnloads(state, terminal) && !claimed.has(halt)) {
+      const age = state.layers.terminalAge[terminal];
+      if (age >= minAge) unloading.push({ halt, age, distance });
+    }
+  }
+  if (pickup < 0) return [];
+  unloading.sort((a, b) => b.age - a.age || a.distance - b.distance || a.halt - b.halt);
+  const remaining = new Set(
+    unloading
+      .slice(0, BALANCE.rail.terminalsPerTour)
+      .map((c) => c.halt)
+      .filter((halt) => halt !== pickup),
+  );
+  if (remaining.size === 0) return [];
+  return orderTour(state, pickup, remaining, train.yardTrack, [pickup]);
+}
+
+/** Route the train to stops[0], skipping halts that became unreachable; park it when the yard is unreachable. */
+function routeToNextHalt(state: SimState, train: Train): void {
+  const from = trainTile(state, train);
+  while (train.stops.length > 0) {
+    const path = findRailPath(state, from, train.stops[0]);
+    if (path) {
+      train.path = path;
+      train.pathIndex = 0;
+      train.phase = TrainPhase.Running;
+      return;
+    }
+    if (train.stops[0] === train.pickup) train.pickup = -1;
+    train.stops.shift();
+  }
+  parkAtYard(state, train);
+}
+
+function parkAtYard(state: SimState, train: Train): void {
+  train.stops = [];
+  train.pickup = -1;
+  train.path = [];
+  train.pathIndex = 0;
+  train.phase = TrainPhase.Parked;
+  train.dwellTicks = BALANCE.rail.turnaroundTicks;
+  train.x = tileX(train.yardTrack, state.size) + 0.5;
+  train.y = tileY(train.yardTrack, state.size) + 0.5;
+}
+
+/**
+ * The train pulled in at a halt: every station beside the track tile is
+ * served (passenger) or every unloading terminal beside it is supplied
+ * (freight, not at the loading halt). Returns the dwell length.
+ */
+function halt(state: SimState, train: Train): number {
+  const tile = trainTile(state, train);
+  const c = BALANCE.rail;
+  if (train.kind === TrainKind.Passenger) {
+    for (const n of neighbors4(tile, state.size)) {
+      if (!isStation(state, n)) continue;
+      const before = stationStateOfAge(state.layers.stationAge[n]);
+      state.layers.stationAge[n] = 0;
+      if (before !== StopState.Served) markDirty(state, n);
+    }
+    return c.dwellTicks;
+  }
+  if (tile === train.pickup) {
+    train.pickup = -1; // loaded
+    return c.loadTicks;
+  }
+  for (const n of neighbors4(tile, state.size)) {
+    if (isTerminal(state, n) && terminalUnloads(state, n)) stampRailGoods(state, n);
+  }
+  return c.unloadTicks;
+}
+
+function arrive(state: SimState, train: Train): void {
+  if (train.stops.length <= 1) {
+    parkAtYard(state, train);
+    return;
+  }
+  train.phase = TrainPhase.Dwelling;
+  train.dwellTicks = halt(state, train);
+}
+
+/**
+ * Deficit share (deficit / consumption, 0..1) of each yard's island from
+ * the last energy step, keyed by yard tile. Yards whose island has no
+ * record (or no consumption) get 0.
+ */
+export function yardDeficitShare(state: SimState): Map<number, number> {
+  recomputeGrid(state);
+  const byKey = new Map<number, number>();
+  for (const island of state.lastIslands) {
+    byKey.set(
+      island.key,
+      island.consumption > 0 ? Math.min(1, island.deficit / island.consumption) : 0,
+    );
+  }
+  const out = new Map<number, number>();
+  for (const yard of yardTiles(state)) {
+    const n = islandOf(state, yard);
+    out.set(yard, n === 0 ? 0 : (byKey.get(state.islandKeys[n]) ?? 0));
+  }
+  return out;
+}
+
+/**
+ * Catenary load per island this tick (index = island number): every
+ * train in phase Running that is not stalled draws its kind's traction
+ * load on the island of its yard. Bucket 0 stays empty: a yard off the
+ * grid runs nothing.
+ */
+export function tractionDemandByIsland(state: SimState): Float64Array {
+  recomputeGrid(state);
+  const out = new Float64Array(state.islandKeys.length);
+  const c = BALANCE.rail;
+  for (const t of state.trains) {
+    if (t.phase !== TrainPhase.Running || t.stalled) continue;
+    const island = state.layers.island[t.yard];
+    if (island === 0) continue;
+    out[island] += t.kind === TrainKind.Freight ? c.tractionLoadFreight : c.tractionLoadPassenger;
+  }
+  return out;
+}
+
+/**
+ * Railways: keep the fleets in sync, age stations, terminals and depot
+ * goods, dispatch tours inside the operating window, run the trains on
+ * the tracks — stalled in proportion to their yard island's deficit —
+ * halt at every stop, then rebuild the station coverage. Runs after
+ * transitStep (needs nothing from it) and before the energy step reads
+ * tractionDemandByIsland.
+ */
+export function trainsStep(state: SimState): void {
+  syncTrainFleet(state);
+  const { stationsDue, terminalsDue } = ageRailPlants(state);
+  if (state.trains.length > 0) {
+    const c = BALANCE.rail;
+    const step = c.speedTilesPerSecond / TICK_RATE;
+    const ticksIntoDay = state.tick % TICKS_PER_DAY;
+    const inWindow =
+      ticksIntoDay >= ticksAtHour(c.windowStartHour) && ticksIntoDay < ticksAtHour(c.windowEndHour);
+    const deficit = yardDeficitShare(state);
+    const claimed = claimedHalts(state);
+    for (const train of state.trains) {
+      const powered = yardPowered(state, train.yard);
+      // Proportional stall: the same hash rule that flickers buildings.
+      train.stalled =
+        !powered || hashTileTick(train.yard, state.tick) < (deficit.get(train.yard) ?? 0);
+      switch (train.phase) {
+        case TrainPhase.Parked: {
+          if (train.dwellTicks > 0) train.dwellTicks--;
+          if (!powered || train.dwellTicks > 0 || !inWindow) break;
+          const due = train.kind === TrainKind.Freight ? terminalsDue : stationsDue;
+          if (due === 0) break;
+          const stops =
+            train.kind === TrainKind.Freight
+              ? planFreightTour(state, train, claimed)
+              : planPassengerTour(state, train, claimed);
+          if (stops.length === 0) break;
+          for (const s of stops) if (s !== train.yardTrack) claimed.add(s);
+          train.stops = stops;
+          train.pickup = train.kind === TrainKind.Freight ? stops[0] : -1;
+          routeToNextHalt(state, train);
+          break;
+        }
+        case TrainPhase.Running: {
+          if (train.stalled) break;
+          const result = advanceTrain(state, train, step);
+          if (result === 'arrived') arrive(state, train);
+          else if (result === 'lost') parkAtYard(state, train);
+          break;
+        }
+        case TrainPhase.Dwelling: {
+          if (train.stalled) break;
+          train.dwellTicks--;
+          if (train.dwellTicks <= 0) {
+            train.stops.shift();
+            routeToNextHalt(state, train);
+          }
+          break;
+        }
+      }
+    }
+  }
+  updateRailCover(state);
+}
+
+/** Trains out of the yard (parked ones are not rendered). */
+export function runningTrains(state: SimState): Train[] {
+  return state.trains.filter((t) => t.phase !== TrainPhase.Parked);
+}
+
+/**
+ * A point `gap` tiles behind the locomotive along its path (the wagon).
+ * Walks back over the path's tile centres; clamps at the path start, so a
+ * train that just left sits with its wagon on the same tile.
+ */
+export function trailingPoint(
+  state: SimState,
+  train: Train,
+  gap: number,
+): { x: number; y: number; angle: number } {
+  let x = train.x;
+  let y = train.y;
+  let remaining = gap;
+  let angle = train.angle;
+  for (let i = train.pathIndex - 1; i >= 0 && remaining > 1e-9; i--) {
+    const px = tileX(train.path[i], state.size) + 0.5;
+    const py = tileY(train.path[i], state.size) + 0.5;
+    const dx = px - x;
+    const dy = py - y;
+    const d = Math.hypot(dx, dy);
+    if (d <= 1e-9) continue;
+    angle = Math.atan2(-dy, -dx);
+    if (d >= remaining) {
+      x += (dx / d) * remaining;
+      y += (dy / d) * remaining;
+      remaining = 0;
+    } else {
+      x = px;
+      y = py;
+      remaining -= d;
+    }
+  }
+  return { x, y, angle };
+}
