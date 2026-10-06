@@ -4,6 +4,9 @@ import { MinHeap } from '../shared/heap.ts';
 import { RoadClass } from '../shared/types.ts';
 import { TileType, type SimState } from './state.ts';
 
+type TilePredicate = (tile: number) => boolean;
+type TileCostFn = (tile: number) => number;
+
 /** Cost of driving onto a road tile: avenues are cheaper, loaded tiles dearer. */
 export function tileCost(state: SimState, tile: number): number {
   const { roadClass, trafficLoad } = state.layers;
@@ -12,18 +15,20 @@ export function tileCost(state: SimState, tile: number): number {
 }
 
 /**
- * Cheapest route over road tiles from `from` to `to` (both included), or
- * null when they are not connected. Dijkstra with per-tile costs from
- * road class and traffic load; ties break by tile index, so the result
- * is deterministic.
+ * Cheapest route over tiles accepted by `passable` from `from` to `to`
+ * (both included), or null when they are not connected. Dijkstra with
+ * per-tile `cost`; ties break by tile index, so the result is
+ * deterministic.
  */
-export function findRoadPath(state: SimState, from: number, to: number): number[] | null {
-  const { tileType } = state.layers;
-  if (tileType[from] !== TileType.Road || tileType[to] !== TileType.Road) {
-    return null;
-  }
+export function findPath(
+  state: SimState,
+  from: number,
+  to: number,
+  passable: TilePredicate,
+  cost: TileCostFn,
+): number[] | null {
+  if (!passable(from) || !passable(to)) return null;
   if (from === to) return [from];
-
   const tiles = state.size * state.size;
   const distance = new Float64Array(tiles).fill(Infinity);
   const cameFrom = new Int32Array(tiles).fill(-1);
@@ -37,8 +42,8 @@ export function findRoadPath(state: SimState, from: number, to: number): number[
     settled[tile] = 1;
     if (tile === to) break;
     for (const neighbor of neighbors4(tile, state.size)) {
-      if (tileType[neighbor] !== TileType.Road || settled[neighbor]) continue;
-      const next = distance[tile] + tileCost(state, neighbor);
+      if (!passable(neighbor) || settled[neighbor]) continue;
+      const next = distance[tile] + cost(neighbor);
       if (next < distance[neighbor]) {
         distance[neighbor] = next;
         cameFrom[neighbor] = tile;
@@ -57,18 +62,18 @@ export function findRoadPath(state: SimState, from: number, to: number): number[
 }
 
 /**
- * Route cost from one road tile to every road tile reachable within
- * `maxCost` (same tile costs as findRoadPath, so on empty streets the
- * cost is the tile count). Empty when `from` is not a road.
+ * Route cost from `from` to every passable tile reachable within
+ * `maxCost`. Empty when `from` is not passable.
  */
-export function roadDistances(
+export function distances(
   state: SimState,
   from: number,
+  passable: TilePredicate,
+  cost: TileCostFn,
   maxCost: number = Infinity,
 ): Map<number, number> {
-  const { tileType } = state.layers;
   const result = new Map<number, number>();
-  if (tileType[from] !== TileType.Road) return result;
+  if (!passable(from)) return result;
   const tiles = state.size * state.size;
   const distance = new Float64Array(tiles).fill(Infinity);
   const settled = new Uint8Array(tiles);
@@ -81,12 +86,42 @@ export function roadDistances(
     settled[tile] = 1;
     result.set(tile, distance[tile]);
     for (const neighbor of neighbors4(tile, state.size)) {
-      if (tileType[neighbor] !== TileType.Road || settled[neighbor]) continue;
-      const next = distance[tile] + tileCost(state, neighbor);
+      if (!passable(neighbor) || settled[neighbor]) continue;
+      const next = distance[tile] + cost(neighbor);
       if (next > maxCost || next >= distance[neighbor]) continue;
       distance[neighbor] = next;
       heap.push(next, neighbor);
     }
   }
   return result;
+}
+
+const isRoad = (state: SimState) => (tile: number) => state.layers.tileType[tile] === TileType.Road;
+const isTrack = (state: SimState) => (tile: number) => state.layers.rail[tile] !== 0;
+const flat = () => 1;
+
+/** Road route (see findPath): road class and traffic load price the tiles. */
+export function findRoadPath(state: SimState, from: number, to: number): number[] | null {
+  return findPath(state, from, to, isRoad(state), (tile) => tileCost(state, tile));
+}
+
+export function roadDistances(
+  state: SimState,
+  from: number,
+  maxCost: number = Infinity,
+): Map<number, number> {
+  return distances(state, from, isRoad(state), (tile) => tileCost(state, tile), maxCost);
+}
+
+/** Track route: every track tile costs 1, traffic and road class are irrelevant. */
+export function findRailPath(state: SimState, from: number, to: number): number[] | null {
+  return findPath(state, from, to, isTrack(state), flat);
+}
+
+export function railDistances(
+  state: SimState,
+  from: number,
+  maxCost: number = Infinity,
+): Map<number, number> {
+  return distances(state, from, isTrack(state), flat, maxCost);
 }

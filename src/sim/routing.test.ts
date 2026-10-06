@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { tileIndex } from '../shared/grid.ts';
-import { findRoadPath, roadDistances } from './routing.ts';
+import { findRoadPath, roadDistances, findRailPath, railDistances } from './routing.ts';
 import { buildRoads } from './roads.ts';
+import { buildRail } from './rail.ts';
 import { createSimState } from './state.ts';
 
 const SIZE = 24;
@@ -44,5 +45,49 @@ describe('roadDistances', () => {
     const a = [...roadDistances(town(), at(2, 10)).entries()];
     const b = [...roadDistances(town(), at(2, 10)).entries()];
     expect(a).toEqual(b);
+  });
+});
+
+describe('rail routing', () => {
+  /** Track from (2,5) to (20,5) with a branch south at x = 10; a road crosses at x = 6. */
+  function rails() {
+    const state = createSimState(1, SIZE);
+    state.layers.elevation.fill(0);
+    state.money = 1e9;
+    buildRail(
+      state,
+      Array.from({ length: 19 }, (_, i) => at(i + 2, 5)),
+    );
+    buildRail(state, [at(10, 6), at(10, 7)]);
+    buildRoads(state, [at(6, 4), at(6, 5), at(6, 6)]);
+    return state;
+  }
+
+  it('routes along track, through a level crossing, never onto plain roads', () => {
+    const state = rails();
+    const path = findRailPath(state, at(2, 5), at(10, 7));
+    expect(path).not.toBeNull();
+    expect(path![0]).toBe(at(2, 5));
+    expect(path![path!.length - 1]).toBe(at(10, 7));
+    expect(path).toContain(at(6, 5));
+    expect(path).not.toContain(at(6, 4));
+    expect(path!.length).toBe(11);
+    expect(findRailPath(state, at(2, 5), at(6, 4))).toBeNull();
+  });
+
+  it('rail distances ignore traffic load and road class', () => {
+    const state = rails();
+    state.layers.trafficLoad[at(6, 5)] = 255;
+    const d = railDistances(state, at(2, 5));
+    expect(d.get(at(20, 5))).toBe(18);
+    expect(d.get(at(10, 7))).toBe(10);
+    expect(d.has(at(6, 4))).toBe(false);
+    expect(railDistances(state, at(2, 5), 3).has(at(6, 5))).toBe(false);
+    expect(railDistances(state, at(0, 0)).size).toBe(0);
+  });
+
+  it('findRoadPath still refuses track-only tiles', () => {
+    const state = rails();
+    expect(findRoadPath(state, at(6, 4), at(2, 5))).toBeNull();
   });
 });
