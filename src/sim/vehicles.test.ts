@@ -5,16 +5,19 @@ import { PlantType, RoadClass, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { islandOf } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
-import { buildRoads } from './roads.ts';
+import { buildRail } from './rail.ts';
+import { buildRoads, bulldozeTiles } from './roads.ts';
 import { findRoadPath } from './routing.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
 import { createSimState, TileType, VanPhase, VehiclePhase, type SimState } from './state.ts';
+import { transitStats } from './transit.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import {
   chargingDemand,
   chargingDemandByIsland,
   drivingVehicles,
   isRider,
+  ridesRail,
   surplusAvailable,
   vehiclesStep,
 } from './vehicles.ts';
@@ -387,6 +390,7 @@ describe('congestion', () => {
       chargeTile: -1,
       waitTicks: 0,
       riderDay: -1,
+      riderMode: 'bus',
     });
   }
 
@@ -628,6 +632,7 @@ describe('avenues on the road', () => {
       chargeTile: -1,
       waitTicks: 0,
       riderDay: -1,
+      riderMode: 'bus',
     });
   }
 
@@ -811,6 +816,73 @@ describe('riders', () => {
     expect(state.vehicles.filter((v) => v.phase === VehiclePhase.ParkedWork)).toHaveLength(
       state.vehicles.length,
     );
+  });
+
+  /**
+   * Two served stations on one track south of the street: west station
+   * (4, 12) covers the homes' road tiles, east station (17, 12) the
+   * workplaces'. Each station touches a road stub at y = 11 (off the
+   * street y = 10) and the track at y = 13. Built on the unpowered town
+   * so the line and the solar farm of the powered one are not in the way;
+   * the coverage layer is written directly (updateRailCover is rail.ts'
+   * business).
+   */
+  function railCovered(state: SimState): void {
+    state.money = 1e9;
+    buildRoads(state, [at(4, 11), at(17, 11)]);
+    buildRail(
+      state,
+      Array.from({ length: 16 }, (_, x) => at(x + 3, 13)),
+    );
+    expect(placePlant(state, at(4, 12), PlantType.TrainStation)).toEqual({});
+    expect(placePlant(state, at(17, 12), PlantType.TrainStation)).toEqual({});
+    for (let x = 3; x <= 9; x++) state.layers.railStation[at(x, 10)] = at(4, 12);
+    for (let x = 10; x <= 18; x++) state.layers.railStation[at(x, 10)] = at(17, 12);
+  }
+
+  it('rides the train when home and work have different served stations on one network', () => {
+    const state = commuterTown(3, 200, false);
+    railCovered(state);
+    expect(ridesRail(state, at(3, 10), at(17, 10))).toBe(true);
+    expect(ridesRail(state, at(3, 10), at(5, 10))).toBe(false); // same station
+    expect(ridesRail(state, at(3, 10), at(2, 10))).toBe(false); // uncovered end
+    setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    for (const v of state.vehicles) {
+      v.homeRoad = at(3, 10);
+      v.workRoad = at(17, 10);
+    }
+    runHours(state, 4);
+    expect(drivingVehicles(state)).toHaveLength(0);
+    expect(state.vehicles.every((v) => isRider(state, v) && v.riderMode === 'rail')).toBe(true);
+    const stats = transitStats(state);
+    expect(stats.railRiders).toBe(state.vehicles.length);
+    expect(stats.busRiders).toBe(0);
+    expect(stats.riders).toBe(stats.railRiders);
+  });
+
+  it('two stations on different networks do not connect', () => {
+    const state = commuterTown(3, 200, false);
+    railCovered(state);
+    bulldozeTiles(state, [at(10, 13)]);
+    expect(ridesRail(state, at(3, 10), at(17, 10))).toBe(false);
+  });
+
+  it('bus coverage wins the label when both apply', () => {
+    const state = commuterTown(3, 200, false);
+    railCovered(state);
+    coverAll(state);
+    setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    for (const v of state.vehicles) {
+      v.homeRoad = at(3, 10);
+      v.workRoad = at(17, 10);
+    }
+    // Full departureWindowHours (1.5h) must pass so every vehicle's
+    // randomised departureOffset has had its chance to decide.
+    runHours(state, 2);
+    expect(state.vehicles.every((v) => v.riderMode === 'bus')).toBe(true);
+    expect(transitStats(state).busRiders).toBe(state.vehicles.length);
   });
 });
 

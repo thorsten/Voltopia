@@ -2,6 +2,7 @@ import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import { PlantType, RoadClass, Zone } from '../shared/types.ts';
 import { recomputeGrid } from './powerGrid.ts';
+import { plantNetwork } from './rail.ts';
 import { findRoadPath } from './routing.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
@@ -242,15 +243,30 @@ export function surplusAvailable(state: SimState): boolean {
 }
 
 /**
+ * A commuter rides the train when home and work each lie in reach of a
+ * served station, the two stations differ, and both stand on one track
+ * network (a train can run between them).
+ */
+export function ridesRail(state: SimState, homeRoad: number, workRoad: number): boolean {
+  const { railStation } = state.layers;
+  const a = railStation[homeRoad];
+  const b = railStation[workRoad];
+  if (a < 0 || b < 0 || a === b) return false;
+  const network = plantNetwork(state, a);
+  return network !== 0 && network === plantNetwork(state, b);
+}
+
+/**
  * Commuting electric vehicles with a physical battery model: driving
  * drains the battery, plugging in at home (evenings) or at a nearby
  * charging hub (workdays) recharges it — the charging load on the grid
  * emerges from what the fleet actually does. Congestion: at most a few
  * vehicles fit on a road tile; followers wait, so queues form. Riders —
- * commuters covered by a served bus stop at both home and work — decide
- * once a day at the morning departure moment to leave the car parked
- * instead; they record no commute and never enter the traffic load, so
- * the charging peak and the traffic load fall with the rider share.
+ * commuters covered by a served bus stop at both ends, or by two
+ * different served stations of one rail network — decide once a day at
+ * the morning departure moment to leave the car parked instead; they
+ * record no commute and never enter the traffic load, so the charging
+ * peak and the traffic load fall with the rider share.
  * Returns this tick's lane occupancy map; the caller must pass it on to
  * both `deliveriesStep` (so vans queue behind cars) and
  * `updateTrafficLoad` (see `tick.ts`).
@@ -298,6 +314,7 @@ export function vehiclesStep(state: SimState): Map<number, number> {
       chargeTile: -1,
       waitTicks: 0,
       riderDay: -1,
+      riderMode: 'bus',
     });
   }
 
@@ -340,8 +357,11 @@ export function vehiclesStep(state: SimState): Map<number, number> {
           const day = Math.floor(state.tick / TICKS_PER_DAY);
           // Decided to ride today: the car stays parked all day.
           if (vehicle.riderDay === day) break;
-          if (transitCover[vehicle.homeRoad] === 1 && transitCover[vehicle.workRoad] === 1) {
+          const busRide =
+            transitCover[vehicle.homeRoad] === 1 && transitCover[vehicle.workRoad] === 1;
+          if (busRide || ridesRail(state, vehicle.homeRoad, vehicle.workRoad)) {
             vehicle.riderDay = day;
+            vehicle.riderMode = busRide ? 'bus' : 'rail';
             break;
           }
           const path = findRoadPath(state, vehicle.homeRoad, vehicle.workRoad);

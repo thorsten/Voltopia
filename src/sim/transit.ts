@@ -401,18 +401,22 @@ export function transitStats(state: SimState): TransitStats {
     if (isStopServed(state, i)) stopsServed++;
   }
   let riders = 0;
+  let busRiders = 0;
+  let railRiders = 0;
   let commuters = 0;
   for (const vehicle of state.vehicles) {
     if (vehicle.workRoad < 0) continue;
     commuters++;
-    if (isRider(state, vehicle)) riders++;
+    if (!isRider(state, vehicle)) continue;
+    riders++;
+    if (vehicle.riderMode === 'rail') railRiders++;
+    else busRiders++;
   }
   return {
     riderShare: commuters > 0 ? riders / commuters : 0,
     riders,
-    // Trains do not run yet (see trains.ts, Task 2): every rider is a bus rider.
-    busRiders: riders,
-    railRiders: 0,
+    busRiders,
+    railRiders,
     driving: drivingBusCount(state),
     stops,
     stopsServed,

@@ -90,6 +90,8 @@ export interface Vehicle {
   waitTicks: number;
   /** Day of the last decision to ride the bus instead of driving; -1 = drives. Not persisted. */
   riderDay: number;
+  /** How the rider travels today ('bus' when both apply). Meaningless while riderDay < 0. Not persisted. */
+  riderMode: 'bus' | 'rail';
 }
 
 /** Tour phases of a delivery van. */
