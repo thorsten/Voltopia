@@ -6,6 +6,8 @@ import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import {
   ageRailPlants,
+  railCensus,
+  railStats,
   buildRail,
   countRailTiles,
   depotsInReach,
@@ -232,6 +234,36 @@ describe('rail plants', () => {
     expect(state.layers.railStation[at(5, 8)]).toBe(-1);
     expect(state.layers.railStation[at(10, 8)]).toBe(at(15, 9));
     expect(state.dirty.has(at(5, 8))).toBe(true);
+  });
+
+  it('ageRailPlants returns the census of the pass: plants by kind, ascending, and the track count', () => {
+    const state = corridor();
+    placePlant(state, at(15, 9), PlantType.TrainStation);
+    placePlant(state, at(5, 9), PlantType.TrainStation);
+    placePlant(state, at(7, 11), PlantType.FreightTerminal);
+    placePlant(state, at(9, 11), PlantType.RailYard);
+    const census = ageRailPlants(state);
+    expect(census.stations).toEqual([at(5, 9), at(15, 9)]);
+    expect(census.terminals).toEqual([at(7, 11)]);
+    expect(census.yards).toEqual([at(9, 11)]);
+    expect(census.trackTiles).toBe(19);
+    // The pure census agrees and ages nothing.
+    const age = state.layers.stationAge[at(5, 9)];
+    const pure = railCensus(state);
+    expect(pure).toEqual({
+      stations: census.stations,
+      terminals: census.terminals,
+      yards: census.yards,
+      trackTiles: 19,
+    });
+    expect(state.layers.stationAge[at(5, 9)]).toBe(age);
+    // railStats reads the census it is handed.
+    expect(railStats(state, pure)).toMatchObject({
+      stations: 2,
+      terminals: 1,
+      yards: 1,
+      trackTiles: 19,
+    });
   });
 
   it('updateRailCover clears the cover when the last station falls out of service, then idles', () => {

@@ -15,7 +15,7 @@ import { computeDemand, decayStep, growthStep } from './growth.ts';
 import { forestShare, forestStep } from './forest.ts';
 import { happinessStep } from './happiness.ts';
 import { countPowerLineTiles } from './powerLines.ts';
-import { countRailTiles, railStats } from './rail.ts';
+import { railStats } from './rail.ts';
 import { tideState } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { storedByKind } from './storage.ts';
@@ -65,8 +65,7 @@ export function stepTick(state: SimState): void {
   state.lastDeliveries = deliveryStats(state);
   transitStep(state, occupancy);
   state.lastTransit = transitStats(state);
-  trainsStep(state);
-  state.lastRail = railStats(state);
+  state.lastRail = railStats(state, trainsStep(state));
   updateTrafficLoad(state, occupancy);
   // Reservoirs first: this tick's generation reads the heat they leave.
   reservoirStep(state);
@@ -165,7 +164,8 @@ function countTiles(state: SimState): {
     plantTiles: 0,
     buildingTiles: 0,
     powerLineTiles: countPowerLineTiles(state),
-    railTiles: countRailTiles(state),
+    // From this tick's rail census, so the stats cost no second scan.
+    railTiles: state.lastRail.trackTiles,
     depots: 0,
   };
   for (let i = 0; i < tileType.length; i++) {

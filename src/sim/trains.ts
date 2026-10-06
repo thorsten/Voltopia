@@ -18,6 +18,7 @@ import {
   terminalUnloads,
   updateRailCover,
   yardTiles,
+  type RailCensus,
 } from './rail.ts';
 import { findRailPath, nearestNeighbourOrder, railDistances } from './routing.ts';
 import {
@@ -88,7 +89,7 @@ function createTrain(state: SimState, yard: number, yardTrack: number, kind: Tra
  * spawn the missing ones parked at the yard. A yard without a grid tie
  * keeps the trains it has (they stand stalled) but gets no new ones.
  */
-export function syncTrainFleet(state: SimState): void {
+export function syncTrainFleet(state: SimState, yards: readonly number[] = yardTiles(state)): void {
   state.trains = state.trains.filter(
     (t) => isYard(state, t.yard) && state.layers.rail[t.yardTrack] !== 0,
   );
@@ -100,7 +101,7 @@ export function syncTrainFleet(state: SimState): void {
     perYard.set(t.yard, n);
   }
   const c = BALANCE.rail;
-  for (const yard of yardTiles(state)) {
+  for (const yard of yards) {
     const track = plantTrack(state, yard);
     if (track < 0 || !yardPowered(state, yard)) continue;
     const n = perYard.get(yard) ?? { passenger: 0, freight: 0 };
@@ -419,11 +420,13 @@ export function tractionDemandByIsland(state: SimState): Float64Array {
  * the tracks — stalled in proportion to their yard island's deficit —
  * halt at every stop, then rebuild the station coverage. Runs after
  * transitStep (needs nothing from it) and before the energy step reads
- * tractionDemandByIsland.
+ * tractionDemandByIsland. One grid pass (`ageRailPlants`) feeds the
+ * fleet sync, the cover and — through the returned census — the stats.
  */
-export function trainsStep(state: SimState): void {
-  syncTrainFleet(state);
-  const { stationsDue, terminalsDue } = ageRailPlants(state);
+export function trainsStep(state: SimState): RailCensus {
+  const census = ageRailPlants(state);
+  const { stationsDue, terminalsDue } = census;
+  syncTrainFleet(state, census.yards);
   if (state.trains.length > 0) {
     const c = BALANCE.rail;
     const step = c.speedTilesPerSecond / TICK_RATE;
@@ -475,7 +478,8 @@ export function trainsStep(state: SimState): void {
       }
     }
   }
-  updateRailCover(state);
+  updateRailCover(state, census.stations);
+  return census;
 }
 
 /** Trains out of the yard (parked ones are not rendered). */

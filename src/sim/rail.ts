@@ -245,25 +245,63 @@ export function isStationServed(state: SimState, station: number): boolean {
 }
 
 /**
+ * What one pass over the grid finds of the railway: the rail plants by
+ * kind (ascending tile index) and the track tile count. The tick scans
+ * once (`ageRailPlants`) and hands the census to the fleet sync, the
+ * cover rebuild and the stats, so a city without a railway pays a
+ * single scan per tick for it.
+ */
+export interface RailCensus {
+  stations: number[];
+  terminals: number[];
+  yards: number[];
+  trackTiles: number;
+}
+
+/** The census without ageing anything (inspector and tests). */
+export function railCensus(state: SimState): RailCensus {
+  const { tileType, plantType, rail } = state.layers;
+  const census: RailCensus = { stations: [], terminals: [], yards: [], trackTiles: 0 };
+  for (let i = 0; i < tileType.length; i++) {
+    if (rail[i] !== 0) census.trackTiles++;
+    if (tileType[i] !== TileType.Plant) continue;
+    collectRailPlant(census, plantType[i] as PlantType, i);
+  }
+  return census;
+}
+
+function collectRailPlant(census: RailCensus, plant: PlantType, tile: number): void {
+  if (plant === PlantType.TrainStation) census.stations.push(tile);
+  else if (plant === PlantType.FreightTerminal) census.terminals.push(tile);
+  else if (plant === PlantType.RailYard) census.yards.push(tile);
+}
+
+/**
  * Advance the station, terminal and depot-goods ages by one tick
  * (saturating). Tiles that are not the matching plant sit at
  * MAX_RAIL_AGE. A station is marked dirty when it crosses into "due" or
- * "unserved" so the overlay follows. Returns how many stations and
- * unloading terminals are at least half-way to due — the dispatch
- * threshold `planPassengerTour` / `planFreightTour` use — so
- * `trainsStep` can skip planning while nothing qualifies.
+ * "unserved" so the overlay follows. Returns the census of this pass
+ * plus how many stations and unloading terminals are at least half-way
+ * to due — the dispatch threshold `planPassengerTour` /
+ * `planFreightTour` use — so `trainsStep` can skip planning while
+ * nothing qualifies.
  */
-export function ageRailPlants(state: SimState): { stationsDue: number; terminalsDue: number } {
+export function ageRailPlants(
+  state: SimState,
+): RailCensus & { stationsDue: number; terminalsDue: number } {
   const { layers } = state;
-  const { tileType, plantType, stationAge, terminalAge, railGoodsAge } = layers;
+  const { tileType, plantType, stationAge, terminalAge, railGoodsAge, rail } = layers;
   const due = stationDueTicks();
   const window = stationServiceTicks();
   const minAge = Math.floor(due / 2);
+  const census: RailCensus = { stations: [], terminals: [], yards: [], trackTiles: 0 };
   let stationsDue = 0;
   let terminalsDue = 0;
   for (let i = 0; i < tileType.length; i++) {
+    if (rail[i] !== 0) census.trackTiles++;
     const isPlant = tileType[i] === TileType.Plant;
-    const plant = isPlant ? plantType[i] : PlantType.None;
+    const plant = isPlant ? (plantType[i] as PlantType) : PlantType.None;
+    if (isPlant) collectRailPlant(census, plant, i);
     if (plant === PlantType.TrainStation) {
       const age = stationAge[i];
       if (age >= MAX_RAIL_AGE) {
@@ -295,7 +333,7 @@ export function ageRailPlants(state: SimState): { stationsDue: number; terminals
       railGoodsAge[i] = MAX_RAIL_AGE;
     }
   }
-  return { stationsDue, terminalsDue };
+  return { ...census, stationsDue, terminalsDue };
 }
 
 /**
@@ -303,12 +341,15 @@ export function ageRailPlants(state: SimState): { stationsDue: number; terminals
  * (chessboard) of a served station, the nearest such station (ties:
  * lower index); -1 elsewhere. Changed tiles are marked dirty.
  */
-export function updateRailCover(state: SimState): void {
+export function updateRailCover(
+  state: SimState,
+  stations: readonly number[] = stationTiles(state),
+): void {
   const { layers, size } = state;
-  const served = stationTiles(state).filter((station) => isStationServed(state, station));
+  const served = stations.filter((station) => isStationServed(state, station));
   // The common case — no served station and nothing covered — must cost
-  // one plant scan and no allocation: a city without a railway runs this
-  // every tick too.
+  // nothing beyond the census: a city without a railway runs this every
+  // tick too.
   if (served.length === 0 && state.railCoveredRoads === 0) return;
   const next = new Int32Array(layers.railStation.length).fill(-1);
   // A plain array: Int32Array.fill(Number.MAX_SAFE_INTEGER) truncates to -1,
@@ -391,35 +432,15 @@ export function stationState(state: SimState, tile: number): StopState {
 }
 
 /** City-wide railway figures for stats, HUD and the goal. */
-export function railStats(state: SimState): RailStats {
+export function railStats(state: SimState, census: RailCensus = railCensus(state)): RailStats {
   recomputeRailNetworks(state);
-  // One pass over the grid for every count: this runs every tick, in
-  // cities without a railway too.
-  const { tileType, plantType, rail } = state.layers;
-  let trackTiles = 0;
-  let stations = 0;
   let stationsServed = 0;
-  let terminals = 0;
+  for (const s of census.stations) if (isStationServed(state, s)) stationsServed++;
   let terminalsLoading = 0;
   let terminalsUnloading = 0;
-  let yards = 0;
-  for (let i = 0; i < tileType.length; i++) {
-    if (rail[i] !== 0) trackTiles++;
-    if (tileType[i] !== TileType.Plant) continue;
-    switch (plantType[i]) {
-      case PlantType.TrainStation:
-        stations++;
-        if (isStationServed(state, i)) stationsServed++;
-        break;
-      case PlantType.FreightTerminal:
-        terminals++;
-        if (terminalLoads(state, i)) terminalsLoading++;
-        if (terminalUnloads(state, i)) terminalsUnloading++;
-        break;
-      case PlantType.RailYard:
-        yards++;
-        break;
-    }
+  for (const t of census.terminals) {
+    if (terminalLoads(state, t)) terminalsLoading++;
+    if (terminalUnloads(state, t)) terminalsUnloading++;
   }
   let trainsRunning = 0;
   let trainsStalled = 0;
@@ -429,13 +450,13 @@ export function railStats(state: SimState): RailStats {
   }
   return {
     networks: state.railNetworkKeys.length - 1,
-    trackTiles,
-    stations,
+    trackTiles: census.trackTiles,
+    stations: census.stations.length,
     stationsServed,
-    terminals,
+    terminals: census.terminals.length,
     terminalsLoading,
     terminalsUnloading,
-    yards,
+    yards: census.yards.length,
     trainsRunning,
     trainsStalled,
   };
