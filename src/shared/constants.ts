@@ -1679,8 +1679,14 @@ export const BALANCE = {
      */
     tractionLoadPassenger: 5,
     tractionLoadFreight: 8,
-    /** Distance of the wagon behind the locomotive along the path, in tiles. */
-    wagonGap: 1,
+    /**
+     * Distance of the wagon behind the locomotive along the path, centre
+     * to centre, in tiles: half a locomotive (0.26) plus half a wagon
+     * (0.25) plus a coupler's slack, so the two carriages run coupled
+     * instead of a body-length apart. The drawn lengths live in
+     * render/vehiclesMesh.ts, whose test holds this value to them.
+     */
+    wagonGap: 0.55,
   },
 
   traffic: {

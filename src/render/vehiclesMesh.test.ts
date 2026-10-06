@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import type { TileDiff, VehicleState } from '../shared/types.ts';
 import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
-import { LANE_OFFSET, VehiclesMesh } from './vehiclesMesh.ts';
+import { BALANCE } from '../shared/constants.ts';
+import { LANE_OFFSET, LOCOMOTIVE_LENGTH, VehiclesMesh, WAGON_LENGTH } from './vehiclesMesh.ts';
 
 const SIZE = 8;
 
@@ -168,5 +169,15 @@ describe('trains', () => {
       expect(position.z).toBeCloseTo(2.5, 5); // trains sit on the centre line, cars at ±LANE_OFFSET
       expect(Math.abs(position.z - 2.5)).toBeLessThan(LANE_OFFSET / 2);
     }
+  });
+});
+
+describe('train coupling', () => {
+  it('trails the wagon a coupler behind the locomotive, not a tile', () => {
+    // The sim spaces the two centre to centre; anything much beyond the
+    // two half-bodies reads as a gap between the carriages.
+    const bodies = (LOCOMOTIVE_LENGTH + WAGON_LENGTH) / 2;
+    expect(BALANCE.rail.wagonGap).toBeGreaterThanOrEqual(bodies);
+    expect(BALANCE.rail.wagonGap - bodies).toBeLessThanOrEqual(0.08);
   });
 });

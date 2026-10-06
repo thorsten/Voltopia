@@ -55,9 +55,18 @@ function createBusGeometry(): THREE.BufferGeometry {
   return mergeGeometries([body, roof]);
 }
 
+/**
+ * Length of the drawn bodies, in tiles. BALANCE.rail.wagonGap — the
+ * distance the sim trails the wagon behind the locomotive — is measured
+ * centre to centre, so these two halves plus a coupler's slack are what
+ * it has to be; vehiclesMesh.test.ts holds the two in step.
+ */
+export const LOCOMOTIVE_LENGTH = 0.52;
+export const WAGON_LENGTH = 0.5;
+
 /** Simple low-poly locomotive: body plus a cab toward the front. */
 function createLocomotiveGeometry(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(0.52, 0.2, 0.18);
+  const body = new THREE.BoxGeometry(LOCOMOTIVE_LENGTH, 0.2, 0.18);
   body.translate(0, 0.12, 0);
   const cab = new THREE.BoxGeometry(0.16, 0.08, 0.16);
   cab.translate(0.12, 0.26, 0);
@@ -66,7 +75,7 @@ function createLocomotiveGeometry(): THREE.BufferGeometry {
 
 /** Simple low-poly wagon: a flat-roofed body. */
 function createWagonGeometry(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(0.5, 0.18, 0.17);
+  const body = new THREE.BoxGeometry(WAGON_LENGTH, 0.18, 0.17);
   body.translate(0, 0.11, 0);
   return mergeGeometries([body]);
 }
