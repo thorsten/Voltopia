@@ -465,6 +465,9 @@ const en = {
   'goal.districtGrid.title': 'Every district on the grid',
   'goal.districtGrid.body':
     'Every grid island with at least 20 buildings has a substation, and no island saw a deficit all day.',
+  'goal.railCity.title': 'Rail city',
+  'goal.railCity.body':
+    'A whole day with at least 15% of commuters riding the train and a depot supplied by rail, in a city of 300+.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -1087,6 +1090,9 @@ const de: Record<TranslationKey, string> = {
   'goal.districtGrid.title': 'Jeder Bezirk am Netz',
   'goal.districtGrid.body':
     'Jede Netzinsel mit mindestens 20 Gebäuden hat ein Umspannwerk, und keine Insel hatte den ganzen Tag ein Defizit.',
+  'goal.railCity.title': 'Bahnstadt',
+  'goal.railCity.body':
+    'Ein ganzer Tag, an dem mindestens 15 % der Pendler mit dem Zug fahren und ein Depot per Bahn versorgt wird, in einer Stadt ab 300 Einwohnern.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

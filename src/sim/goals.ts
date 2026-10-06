@@ -28,6 +28,7 @@ export const GOAL_IDS = [
   'loadManager',
   'localGoods',
   'districtGrid',
+  'railCity',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -106,6 +107,21 @@ export function goalsStep(state: SimState): void {
     progress.transitTicks++;
   } else {
     progress.transitTicks = 0;
+  }
+
+  // A whole day with a real share of commuters on the train and goods
+  // arriving at a depot by rail, for a real city.
+  const rail = BALANCE.goals.railCity;
+  const t = state.lastTransit;
+  const railShare = t.commuters > 0 ? t.railRiders / t.commuters : 0;
+  if (
+    population >= rail.minPopulation &&
+    railShare >= rail.riderShare &&
+    state.lastDeliveries.depotsRailSupplied > 0
+  ) {
+    progress.railTicks++;
+  } else {
+    progress.railTicks = 0;
   }
 
   // A whole day with a real share of generation from geothermal.
@@ -236,8 +252,12 @@ export function goalsStep(state: SimState): void {
   if (!achieved.has('loadManager') && progress.shedTotal >= BALANCE.demandResponse.goalShedEnergy) {
     achieved.add('loadManager');
   }
+  if (!achieved.has('railCity') && progress.railTicks >= TICKS_PER_DAY) {
+    achieved.add('railCity');
+  }
 
-  // Yesterday every tour loaded at a factory, in a real retail scene.
+  // Yesterday every tour was supplied locally (a factory pickup or a depot
+  // supplied by rail), in a real retail scene.
   const { goalLocalMinShops, goalLocalMinFactories } = BALANCE.deliveries;
   const yesterday = state.goods.lastDay;
   if (

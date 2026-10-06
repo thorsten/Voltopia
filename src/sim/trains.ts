@@ -1,6 +1,6 @@
 import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
-import { StopState } from '../shared/types.ts';
+import { StopState, type YardInfo } from '../shared/types.ts';
 import { hashTileTick, isTileConnected } from './energy.ts';
 import { islandOf, recomputeGrid } from './powerGrid.ts';
 import {
@@ -34,6 +34,33 @@ import { ticksAtHour } from './vehicles.ts';
 /** The yard's catenary has a feed: its tile is energised (as depots charge). */
 export function yardPowered(state: SimState, yard: number): boolean {
   return isTileConnected(state, yard);
+}
+
+/** Yard for the inspector. */
+export function yardInfo(state: SimState, yard: number): YardInfo {
+  let passengerTrains = 0;
+  let freightTrains = 0;
+  let running = 0;
+  let stalled = 0;
+  for (const t of state.trains) {
+    if (t.yard !== yard) continue;
+    if (t.kind === TrainKind.Freight) freightTrains++;
+    else passengerTrains++;
+    if (t.phase !== TrainPhase.Parked) running++;
+    if (t.stalled) stalled++;
+  }
+  const network = plantNetwork(state, yard);
+  const inNetwork = (tiles: number[]) =>
+    network === 0 ? 0 : tiles.filter((p) => plantNetwork(state, p) === network).length;
+  return {
+    passengerTrains,
+    freightTrains,
+    running,
+    stalled,
+    powered: yardPowered(state, yard),
+    stationsInNetwork: inNetwork(stationTiles(state)),
+    terminalsInNetwork: inNetwork(terminalTiles(state)),
+  };
 }
 
 function createTrain(state: SimState, yard: number, yardTrack: number, kind: TrainKind): Train {

@@ -417,6 +417,7 @@ export function transitStats(state: SimState): TransitStats {
     riders,
     busRiders,
     railRiders,
+    commuters,
     driving: drivingBusCount(state),
     stops,
     stopsServed,

@@ -700,6 +700,7 @@ export function createSimState(
       riders: 0,
       busRiders: 0,
       railRiders: 0,
+      commuters: 0,
       driving: 0,
       stops: 0,
       stopsServed: 0,

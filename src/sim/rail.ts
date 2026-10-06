@@ -9,7 +9,15 @@ import {
   tileX,
   tileY,
 } from '../shared/grid.ts';
-import { MAX_RAIL_AGE, PlantType, StopState, type RailStats } from '../shared/types.ts';
+import {
+  MAX_RAIL_AGE,
+  PlantType,
+  StopState,
+  type RailStats,
+  type RailTileInfo,
+  type StationInfo,
+  type TerminalInfo,
+} from '../shared/types.ts';
 import type { BuildResult } from './roads.ts';
 import { isFactory } from './deliveries.ts';
 import { clearForest, fellingCost } from './forest.ts';
@@ -405,5 +413,45 @@ export function railStats(state: SimState): RailStats {
     yards: yardTiles(state).length,
     trainsRunning,
     trainsStalled,
+  };
+}
+
+/** Track tile for the inspector: its network's size and the trains stationed on it. */
+export function railTileInfo(state: SimState, tile: number): RailTileInfo {
+  const network = railNetworkOf(state, tile);
+  let trainsInNetwork = 0;
+  for (const t of state.trains)
+    if (railNetworkOf(state, t.yardTrack) === network) trainsInNetwork++;
+  return { networkTiles: railNetworkTiles(state, network), trainsInNetwork };
+}
+
+/** Station for the inspector. */
+export function stationInfo(state: SimState, station: number): StationInfo {
+  const { railStation } = state.layers;
+  let coveredCommuters = 0;
+  for (const v of state.vehicles) {
+    if (v.workRoad < 0) continue;
+    if (railStation[v.homeRoad] === station || railStation[v.workRoad] === station)
+      coveredCommuters++;
+  }
+  return {
+    state: stationState(state, station),
+    ageTicks: state.layers.stationAge[station],
+    coveredCommuters,
+    networkTiles: railNetworkTiles(state, plantNetwork(state, station)),
+  };
+}
+
+/** Freight terminal for the inspector. */
+export function terminalInfo(state: SimState, terminal: number): TerminalInfo {
+  const factoriesInReach = tilesWithin(state, terminal, BALANCE.rail.freightRadius).filter((t) =>
+    isLoadingFactory(state, t),
+  ).length;
+  return {
+    loads: factoriesInReach > 0,
+    unloads: terminalUnloads(state, terminal),
+    depotsInReach: depotsInReach(state, terminal).length,
+    factoriesInReach,
+    ageTicks: state.layers.terminalAge[terminal],
   };
 }

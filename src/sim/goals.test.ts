@@ -378,6 +378,7 @@ describe('goals', () => {
         depots: 1,
         busRiders: 30,
         railRiders: 0,
+        commuters: 100,
       };
       for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
       expect(state.goalsAchieved.has('modalShift')).toBe(false);
@@ -396,6 +397,7 @@ describe('goals', () => {
         depots: 1,
         busRiders: 30,
         railRiders: 0,
+        commuters: 100,
       };
       for (let t = 0; t < 50; t++) goalsStep(state);
       expect(state.goalProgress.transitTicks).toBe(50);
@@ -407,6 +409,46 @@ describe('goals', () => {
       small.lastTransit = { ...state.lastTransit };
       goalsStep(small);
       expect(small.goalProgress.transitTicks).toBe(0);
+    });
+  });
+
+  describe('railCity', () => {
+    function railReady(state: SimState): void {
+      state.lastTransit = {
+        riderShare: 0.5,
+        riders: 100,
+        busRiders: 10,
+        railRiders: 90,
+        commuters: 200,
+        driving: 1,
+        stops: 0,
+        stopsServed: 0,
+        depots: 0,
+      };
+      state.lastDeliveries = { ...state.lastDeliveries, depotsRailSupplied: 1 };
+    }
+
+    it('needs a big city, the rail rider share and a rail-supplied depot for a whole day', () => {
+      const state = bigCity();
+      railReady(state);
+      for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
+      expect(state.goalsAchieved.has('railCity')).toBe(false);
+      goalsStep(state);
+      expect(state.goalsAchieved.has('railCity')).toBe(true);
+    });
+
+    it('resets the streak when the depot supply or the share lapses', () => {
+      const state = bigCity();
+      railReady(state);
+      for (let t = 0; t < 10; t++) goalsStep(state);
+      expect(state.goalProgress.railTicks).toBe(10);
+      state.lastDeliveries = { ...state.lastDeliveries, depotsRailSupplied: 0 };
+      goalsStep(state);
+      expect(state.goalProgress.railTicks).toBe(0);
+      state.lastDeliveries = { ...state.lastDeliveries, depotsRailSupplied: 1 };
+      state.lastTransit = { ...state.lastTransit, railRiders: 1 };
+      goalsStep(state);
+      expect(state.goalProgress.railTicks).toBe(0);
     });
   });
 

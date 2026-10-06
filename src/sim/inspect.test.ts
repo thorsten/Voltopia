@@ -12,6 +12,7 @@ import { heatPumpCop, recomputeHeated } from './heat.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { islandKey, islandOf } from './powerGrid.ts';
+import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -603,5 +604,51 @@ describe('district grid inspection', () => {
     expect(info.island?.key).toBe(eastKey);
     expect(info.island?.consumption).toBeCloseTo(eastStats.consumption, 9);
     expect(info.island?.consumption).toBeGreaterThan(0);
+  });
+});
+
+describe('railway inspector fields', () => {
+  it('reports a track tile, a station, a terminal and a yard', () => {
+    const state = createSimState(1, SIZE);
+    state.layers.elevation.fill(0);
+    state.money = 1e9;
+    buildRail(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(i + 2, 10)),
+    );
+    buildRoads(
+      state,
+      Array.from({ length: 10 }, (_, i) => at(i + 2, 8)),
+    );
+    placePlant(state, at(3, 9), PlantType.TrainStation);
+    placePlant(state, at(6, 11), PlantType.FreightTerminal);
+    placePlant(state, at(9, 11), PlantType.RailYard);
+    const track = inspectTile(state, at(5, 10))!;
+    expect(track.rail).toEqual({ networkTiles: 10, trainsInNetwork: 0 });
+    expect(track.station).toBeNull();
+    const station = inspectTile(state, at(3, 9))!;
+    expect(station.station).toMatchObject({
+      state: StopState.Unserved,
+      coveredCommuters: 0,
+      networkTiles: 10,
+    });
+    const terminal = inspectTile(state, at(6, 11))!;
+    expect(terminal.freightTerminal).toMatchObject({
+      loads: false,
+      unloads: false,
+      depotsInReach: 0,
+      factoriesInReach: 0,
+    });
+    const yard = inspectTile(state, at(9, 11))!;
+    expect(yard.railYard).toMatchObject({
+      passengerTrains: 0,
+      freightTrains: 0,
+      running: 0,
+      stalled: 0,
+      powered: false,
+      stationsInNetwork: 1,
+      terminalsInNetwork: 1,
+    });
+    expect(inspectTile(state, at(0, 0))!.rail).toBeNull();
   });
 });

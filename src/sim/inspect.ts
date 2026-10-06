@@ -26,6 +26,15 @@ import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { heatPumpCop, plantReach } from './heat.ts';
 import { isSupplySource, islandKey, islandOf, isTiedToGrid } from './powerGrid.ts';
+import {
+  hasRail,
+  isStation as isRailStation,
+  isTerminal,
+  isYard,
+  railTileInfo,
+  stationInfo,
+  terminalInfo,
+} from './rail.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
 import {
@@ -37,6 +46,7 @@ import {
   type SimState,
 } from './state.ts';
 import { laneCapacity } from './traffic.ts';
+import { yardInfo } from './trains.ts';
 import { busDepotInfo, isBusStop, stopState } from './transit.ts';
 import { currentSolarFactor, currentWindFactor, riverFlowFactor } from './weather.ts';
 
@@ -157,6 +167,8 @@ function ringRadius(state: SimState, index: number, connected: boolean): number 
     if (plant === PlantType.FireStation) return BALANCE.services.fire.radius;
     if (plant === PlantType.PoliceStation) return BALANCE.services.police.radius;
     if (isSupplySource(plant)) return BALANCE.energy.lineSupplyRadius;
+    if (isRailStation(state, index)) return BALANCE.rail.stationRadius;
+    if (isTerminal(state, index)) return BALANCE.rail.freightRadius;
     return 0;
   }
   if (isBusStop(state, index)) return BALANCE.transit.stopRadius;
@@ -234,10 +246,13 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
   const upkeepPerTick =
     tileType === TileType.Road
       ? BALANCE.upkeepPerTick.roadPerTile +
-        (layers.busStop[index] !== 0 ? BALANCE.upkeepPerTick.busStop : 0)
+        (layers.busStop[index] !== 0 ? BALANCE.upkeepPerTick.busStop : 0) +
+        (layers.rail[index] !== 0 ? BALANCE.upkeepPerTick.railPerTile : 0)
       : tileType === TileType.Plant
         ? (BALANCE.upkeepPerTick.plant[plant] ?? 0)
-        : 0;
+        : tileType === TileType.Empty && layers.rail[index] !== 0
+          ? BALANCE.upkeepPerTick.railPerTile
+          : 0;
   const fuelCostPerTick =
     plant === PlantType.BiogasPlant
       ? plantOutput.generation * BALANCE.upkeepPerTick.biogasFuelCostPerEnergyUnit
@@ -374,11 +389,10 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
       tileType === TileType.Plant && plant === PlantType.BusDepot
         ? busDepotInfo(state, index)
         : null,
-    // Railways do not run yet (see rail.ts/trains.ts, Task 2+).
-    rail: null,
-    station: null,
-    freightTerminal: null,
-    railYard: null,
+    rail: hasRail(state, index) ? railTileInfo(state, index) : null,
+    station: isRailStation(state, index) ? stationInfo(state, index) : null,
+    freightTerminal: isTerminal(state, index) ? terminalInfo(state, index) : null,
+    railYard: isYard(state, index) ? yardInfo(state, index) : null,
     growthBlockers: growthBlockers(state, index, connected),
     elevation,
     slope,
