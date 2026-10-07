@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BALANCE } from '../shared/constants.ts';
 import { LEVEL_HEIGHT } from './elevationField.ts';
 
 export interface Vec3 {
@@ -34,9 +35,14 @@ export const SHADOW_MARGIN_TILES = 4;
 export const SHADOW_MIN_HALF_EXTENT = 6;
 /** Extra depth beyond the view box, on the side away from the sun. */
 export const SHADOW_DEPTH_PADDING = 20;
-/** Height band of the visible ground: sea level to the highest terrain plus a tall building. */
+/**
+ * Headroom above the highest terrain for anything standing on a tile
+ * (buildings, plants, trees), in world units: the tallest object height.
+ */
+const TALLEST_OBJECT_HEIGHT = 3;
+/** Height band of the visible ground: sea level to the highest terrain plus the tallest object. */
 export const SHADOW_VIEW_MIN_Y = 0;
-export const SHADOW_VIEW_MAX_Y = 8 * LEVEL_HEIGHT + 3;
+export const SHADOW_VIEW_MAX_Y = BALANCE.terrain.maxLevel * LEVEL_HEIGHT + TALLEST_OBJECT_HEIGHT;
 /** Extents are rounded up to whole tiles, so panning at one zoom keeps the texel size fixed. */
 const EXTENT_STEP = 1;
 /**
