@@ -136,17 +136,55 @@ describe('fitShadowFrustum', () => {
     expect(casterPz).toBeLessThanOrEqual(positionPz + fit.far + 1e-6);
   });
 
-  it('clamps the fitted extent to the map bounds plus margin, not the full (zoomed-out) view', () => {
-    const farOutPts = box(32, 32, 300); // far larger than any real view of a real map
-    const unbounded = fitShadowFrustum({ ...base, points: farOutPts, sunDirection: down });
-    const bounds = { minX: 0, maxX: 64, minZ: 0, maxZ: 64 };
-    const bounded = fitShadowFrustum({ ...base, points: farOutPts, sunDirection: down, bounds });
-    expect(bounded.halfWidth).toBeLessThan(unbounded.halfWidth);
-    expect(bounded.halfHeight).toBeLessThan(unbounded.halfHeight);
-    // Clamped to [minX - margin, maxX + margin], then the margin is added again when sizing
-    // the half extent, so the ceiling is the map's half-extent plus twice the margin.
-    expect(bounded.halfWidth).toBeLessThanOrEqual(64 / 2 + 2 * base.margin);
-    expect(bounded.halfHeight).toBeLessThanOrEqual(64 / 2 + 2 * base.margin);
+  it('keeps every on-map grid point inside the fit when zoomed out like the real IsoCamera', () => {
+    // Mirrors IsoCamera's projection (camera.ts): azimuth pi/4, the classic isometric
+    // elevation atan(1/sqrt(2)), zoomed out well past the edges of a 64-tile map.
+    const GRID = 64;
+    const elevation = Math.atan(1 / Math.SQRT2);
+    const azimuth = Math.PI / 4;
+    const distance = 120;
+    const target = new THREE.Vector3(GRID / 2, 0, GRID / 2);
+    const cam = new THREE.OrthographicCamera(-50, 50, 50, -50, 0.1, 1000);
+    cam.position.set(
+      target.x + distance * Math.cos(elevation) * Math.sin(azimuth),
+      target.y + distance * Math.sin(elevation),
+      target.z + distance * Math.cos(elevation) * Math.cos(azimuth),
+    );
+    cam.lookAt(target);
+    cam.updateMatrixWorld();
+
+    const dir: Vec3 = { x: -0.4, y: -0.6, z: 0.3 };
+    const bounds = { minX: 0, maxX: GRID, minY: 0, maxY: base.casterHeight, minZ: 0, maxZ: GRID };
+    const viewPts = viewGroundCorners(cam, bounds.minY, bounds.maxY);
+    const fit = fitShadowFrustum({ ...base, points: viewPts, sunDirection: dir, bounds });
+    const unbounded = fitShadowFrustum({ ...base, points: viewPts, sunDirection: dir });
+
+    const f = normalize(dir);
+    const r = normalize(cross(fit.up, f));
+    const u = cross(f, r);
+    const targetX = dot(fit.target, r);
+    const targetY = dot(fit.target, u);
+    const positionPz = dot(fit.position, f);
+
+    let checked = 0;
+    for (let x = 0; x <= GRID; x++) {
+      for (let z = 0; z <= GRID; z++) {
+        for (const y of [bounds.minY, bounds.maxY]) {
+          const p: Vec3 = { x, y, z };
+          const ndc = new THREE.Vector3(p.x, p.y, p.z).project(cam);
+          if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue; // not actually visible
+          checked++;
+          expect(Math.abs(dot(p, r) - targetX)).toBeLessThanOrEqual(fit.halfWidth + 1e-6);
+          expect(Math.abs(dot(p, u) - targetY)).toBeLessThanOrEqual(fit.halfHeight + 1e-6);
+          const pz = dot(p, f);
+          expect(pz).toBeGreaterThanOrEqual(positionPz - 1e-6);
+          expect(pz).toBeLessThanOrEqual(positionPz + fit.far + 1e-6);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(fit.halfWidth).toBeLessThan(unbounded.halfWidth);
+    expect(fit.halfHeight).toBeLessThan(unbounded.halfHeight);
   });
 });
 

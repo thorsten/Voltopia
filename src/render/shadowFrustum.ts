@@ -64,17 +64,66 @@ function normalize(a: Vec3): Vec3 {
   return { x: a.x / l, y: a.y / l, z: a.z / l };
 }
 
-/** Clamp a point's x/z into `bounds` expanded by `margin`, leaving y untouched. */
-function clampToBounds(
-  p: Vec3,
-  bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
-  margin: number,
-): Vec3 {
-  return {
-    x: Math.min(Math.max(p.x, bounds.minX - margin), bounds.maxX + margin),
-    y: p.y,
-    z: Math.min(Math.max(p.z, bounds.minZ - margin), bounds.maxZ + margin),
-  };
+export interface ShadowBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * Light-space (r, u, f) axis-aligned bounding box of the eight corners of
+ * `bounds`. Any point inside the (axis-aligned, world-space) box is a
+ * convex combination of its corners, so its light-space coordinates are
+ * bounded by this box's light-space corners too — which is what lets
+ * `fitShadowFrustum` intersect it with the view's own light-space range
+ * per axis below, rather than clamping individual points (clamping
+ * world x/z independently distorts a rotated view footprint: its
+ * corners land on the map's edge midpoints instead of its corners).
+ */
+function boundsExtentInBasis(
+  bounds: ShadowBounds,
+  r: Vec3,
+  u: Vec3,
+  f: Vec3,
+): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  for (const x of [bounds.minX, bounds.maxX]) {
+    for (const y of [bounds.minY, bounds.maxY]) {
+      for (const z of [bounds.minZ, bounds.maxZ]) {
+        const corner: Vec3 = { x, y, z };
+        const cx = dot(corner, r),
+          cy = dot(corner, u),
+          cz = dot(corner, f);
+        minX = Math.min(minX, cx);
+        maxX = Math.max(maxX, cx);
+        minY = Math.min(minY, cy);
+        maxY = Math.max(maxY, cy);
+        minZ = Math.min(minZ, cz);
+        maxZ = Math.max(maxZ, cz);
+      }
+    }
+  }
+  return { minX, maxX, minY, maxY, minZ, maxZ };
+}
+
+/** Intersect [viewMin, viewMax] with [boundsMin, boundsMax]; fall back to the view range if empty. */
+function intersectRange(
+  viewMin: number,
+  viewMax: number,
+  boundsMin: number,
+  boundsMax: number,
+): [number, number] {
+  const lo = Math.max(viewMin, boundsMin);
+  const hi = Math.min(viewMax, boundsMax);
+  return lo <= hi ? [lo, hi] : [viewMin, viewMax];
 }
 
 /**
@@ -93,10 +142,16 @@ function clampToBounds(
  * plane. The far side (away from the sun) keeps the fixed `depthPadding`
  * — nothing needs to cast a shadow backwards into the view from there.
  *
- * `bounds`, if given, clamps the points' x/z to the map's extent
- * (expanded by `margin`) before fitting, so a camera zoomed out past the
- * edge of the map does not inflate the frustum (and blur every shadow)
- * with empty space that is never actually visible ground.
+ * `bounds`, if given, is intersected (per light-space axis, after
+ * projection) with the view's own range, so a camera zoomed out past
+ * the edge of the map does not inflate the frustum (and blur every
+ * shadow) with empty space that is never actually visible ground. The
+ * intersection — rather than clamping each point's world x/z into
+ * `bounds` — keeps a rotated (isometric) view footprint intact: that
+ * footprint is a diamond in world x/z, and clamping its corners
+ * independently per axis would snap them to the map's edge midpoints
+ * instead of its corners, pulling the fitted rectangle in from the
+ * map's actual corners.
  */
 export function fitShadowFrustum(input: {
   points: readonly Vec3[];
@@ -106,7 +161,7 @@ export function fitShadowFrustum(input: {
   minHalfExtent: number;
   depthPadding: number;
   casterHeight: number;
-  bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
+  bounds?: ShadowBounds;
 }): ShadowFit {
   const f = normalize(input.sunDirection);
   const ref: Vec3 =
@@ -119,8 +174,7 @@ export function fitShadowFrustum(input: {
     maxY = -Infinity,
     minZ = Infinity,
     maxZ = -Infinity;
-  for (const raw of input.points) {
-    const p = input.bounds ? clampToBounds(raw, input.bounds, input.margin) : raw;
+  for (const p of input.points) {
     const px = dot(p, r),
       py = dot(p, u),
       pz = dot(p, f);
@@ -130,6 +184,12 @@ export function fitShadowFrustum(input: {
     maxY = Math.max(maxY, py);
     minZ = Math.min(minZ, pz);
     maxZ = Math.max(maxZ, pz);
+  }
+  if (input.bounds) {
+    const box = boundsExtentInBasis(input.bounds, r, u, f);
+    [minX, maxX] = intersectRange(minX, maxX, box.minX, box.maxX);
+    [minY, maxY] = intersectRange(minY, maxY, box.minY, box.maxY);
+    [minZ, maxZ] = intersectRange(minZ, maxZ, box.minZ, box.maxZ);
   }
   const roundUp = (v: number) => Math.ceil(v / EXTENT_STEP) * EXTENT_STEP;
   const halfWidth = Math.max(input.minHalfExtent, roundUp((maxX - minX) / 2 + input.margin));

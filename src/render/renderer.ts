@@ -782,7 +782,14 @@ export class GameRenderer {
       minHalfExtent: SHADOW_MIN_HALF_EXTENT,
       depthPadding: SHADOW_DEPTH_PADDING,
       casterHeight: SHADOW_VIEW_MAX_Y - SHADOW_VIEW_MIN_Y,
-      bounds: { minX: 0, maxX: this.gridSize, minZ: 0, maxZ: this.gridSize },
+      bounds: {
+        minX: 0,
+        maxX: this.gridSize,
+        minY: SHADOW_VIEW_MIN_Y,
+        maxY: SHADOW_VIEW_MAX_Y,
+        minZ: 0,
+        maxZ: this.gridSize,
+      },
     });
     const { sun } = this.lights;
     sun.position.set(fit.position.x, fit.position.y, fit.position.z);
