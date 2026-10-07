@@ -26,6 +26,16 @@ import { GeothermalMesh } from './geothermalMesh.ts';
 import { ZoneTilesMesh } from './zoneTilesMesh.ts';
 import { WaterMesh } from './waterMesh.ts';
 import { DisasterMesh } from './disasterMesh.ts';
+import {
+  fitShadowFrustum,
+  viewGroundCorners,
+  SHADOW_MAP_SIZE,
+  SHADOW_MARGIN_TILES,
+  SHADOW_MIN_HALF_EXTENT,
+  SHADOW_DEPTH_PADDING,
+  SHADOW_VIEW_MIN_Y,
+  SHADOW_VIEW_MAX_Y,
+} from './shadowFrustum.ts';
 
 export interface PickedTile {
   index: number;
@@ -168,6 +178,8 @@ export class GameRenderer {
   private readonly activePointers = new Map<number, { x: number; y: number }>();
   private pinchState: { distance: number; centerX: number; centerY: number } | null = null;
   private animationFrame = 0;
+  /** Direction light travels from the sun into the scene; drives shading and the shadow camera. */
+  private readonly sunDirection = new THREE.Vector3(0, -1, 0);
   private lastFrameTime = 0;
   private frameListeners: Array<(deltaSeconds: number, nowSeconds: number) => void> = [];
   private disposed = false;
@@ -311,6 +323,9 @@ export class GameRenderer {
     this.attachInput();
     window.addEventListener('resize', this.handleResize);
     this.lastFrameTime = performance.now();
+    // Place the sun before the first frame, so it is never drawn at the
+    // scene.ts default position while waiting for the first stats update.
+    this.fitShadowToView();
     this.renderLoop(this.lastFrameTime);
   }
 
@@ -406,12 +421,12 @@ export class GameRenderer {
     const elevation = 0.25 + 0.9 * solarStrength * Math.sin(Math.PI * dayPhase);
     const center = this.gridSize / 2;
     const radius = this.gridSize * 1.2;
-    this.lights.sun.position.set(
+    const sunPosition = new THREE.Vector3(
       center + radius * Math.cos(elevation) * Math.cos(azimuth),
       Math.max(6, radius * Math.sin(elevation) * sunFactor + 6),
       center + radius * Math.cos(elevation) * Math.sin(azimuth) * 0.5,
     );
-    this.lights.sun.target.position.set(center, 0, center);
+    this.sunDirection.set(center, 0, center).sub(sunPosition).normalize();
     const cloudDimming = 1 - 0.45 * stats.weather.cloudCover;
     this.lights.sun.intensity = (0.15 + 1.6 * sunFactor) * cloudDimming;
     const warmth = (solarStrength - WINTER_SOLAR_STRENGTH) / (1 - WINTER_SOLAR_STRENGTH);
@@ -752,9 +767,34 @@ export class GameRenderer {
       this.selectionFill.material.opacity = 0.18 + 0.22 * pulse;
       this.selectionOutline.material.opacity = 0.55 + 0.45 * pulse;
     }
+    this.fitShadowToView();
     this.webgl.render(this.scene, this.isoCamera.camera);
     this.animationFrame = requestAnimationFrame(this.renderLoop);
   };
+
+  /** Place the sun and its shadow camera around what the camera sees (cheap: 8 points). */
+  private fitShadowToView(): void {
+    const fit = fitShadowFrustum({
+      points: viewGroundCorners(this.isoCamera.camera, SHADOW_VIEW_MIN_Y, SHADOW_VIEW_MAX_Y),
+      sunDirection: this.sunDirection,
+      mapSize: SHADOW_MAP_SIZE,
+      margin: SHADOW_MARGIN_TILES,
+      minHalfExtent: SHADOW_MIN_HALF_EXTENT,
+      depthPadding: SHADOW_DEPTH_PADDING,
+    });
+    const { sun } = this.lights;
+    sun.position.set(fit.position.x, fit.position.y, fit.position.z);
+    sun.target.position.set(fit.target.x, fit.target.y, fit.target.z);
+    sun.target.updateMatrixWorld();
+    const cam = sun.shadow.camera;
+    cam.left = -fit.halfWidth;
+    cam.right = fit.halfWidth;
+    cam.top = fit.halfHeight;
+    cam.bottom = -fit.halfHeight;
+    cam.near = 0;
+    cam.far = fit.far;
+    cam.updateProjectionMatrix();
+  }
 
   /** Keyboard (WASD/arrows) and screen-edge panning, applied per frame. */
   private applyContinuousPan(deltaSeconds: number): void {

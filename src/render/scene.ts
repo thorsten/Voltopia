@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SHADOW_MAP_SIZE } from './shadowFrustum.ts';
 
 export interface SceneLights {
   sun: THREE.DirectionalLight;
@@ -33,12 +34,8 @@ export function createScene(): { scene: THREE.Scene; lights: SceneLights } {
   const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
   sun.position.set(40, 80, 20);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -60;
-  sun.shadow.camera.right = 60;
-  sun.shadow.camera.top = 60;
-  sun.shadow.camera.bottom = -60;
-  sun.shadow.camera.far = 300;
+  // Frustum is set per frame by fitShadowToView() to follow the camera.
+  sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
   sun.shadow.bias = -0.0005;
   scene.add(sun);
   scene.add(sun.target);
