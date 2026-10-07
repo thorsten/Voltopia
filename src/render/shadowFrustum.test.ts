@@ -3,8 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { fitShadowFrustum, viewGroundCorners, type Vec3 } from './shadowFrustum.ts';
 
 const MAP = 2048;
-const base = { mapSize: MAP, margin: 2, minHalfExtent: 4, depthPadding: 10 };
+// casterHeight stays at or below depthPadding so straight-down-sun cases above are unaffected
+// by the sun-side padding fix (max(depthPadding, casterHeight / |f.y|) === depthPadding there).
+const base = { mapSize: MAP, margin: 2, minHalfExtent: 4, depthPadding: 10, casterHeight: 6 };
 const down: Vec3 = { x: 0, y: -1, z: 0 };
+
+function dot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+function normalize(a: Vec3): Vec3 {
+  const l = Math.hypot(a.x, a.y, a.z) || 1;
+  return { x: a.x / l, y: a.y / l, z: a.z / l };
+}
 
 /** A square of ground points centred on (cx, cz) with half-size h, at heights 0 and 3. */
 function box(cx: number, cz: number, h: number): Vec3[] {
@@ -75,6 +88,65 @@ describe('fitShadowFrustum', () => {
         expect(Number.isFinite(v)).toBe(true);
       }
     }
+  });
+
+  it('contains every view point plus the margin for a slanted sun, with the light on the sun side', () => {
+    const dir: Vec3 = { x: -0.7, y: -0.3, z: 0.2 };
+    const pts = box(20, 10, 15);
+    const fit = fitShadowFrustum({ ...base, points: pts, sunDirection: dir });
+    // Rebuild the fit's own basis (it hands back `up`, the reference it used) rather than
+    // assuming the world axes line up with the shadow camera's, as the straight-down tests do.
+    const f = normalize(dir);
+    const r = normalize(cross(fit.up, f));
+    const u = cross(f, r);
+    const targetX = dot(fit.target, r);
+    const targetY = dot(fit.target, u);
+    for (const p of pts) {
+      expect(Math.abs(dot(p, r) - targetX)).toBeLessThanOrEqual(fit.halfWidth - base.margin + 1e-6);
+      expect(Math.abs(dot(p, u) - targetY)).toBeLessThanOrEqual(
+        fit.halfHeight - base.margin + 1e-6,
+      );
+    }
+    const toLight = {
+      x: fit.position.x - fit.target.x,
+      y: fit.position.y - fit.target.y,
+      z: fit.position.z - fit.target.z,
+    };
+    expect(dot(toLight, dir)).toBeLessThan(0);
+  });
+
+  it('keeps a tall caster just outside the view, at casterHeight, within [0, far] for a low sun', () => {
+    // Flat view, nothing tall actually inside it.
+    const dir: Vec3 = { x: 1, y: -0.1, z: 0 };
+    const casterHeight = 8;
+    const viewPts = box(0, 0, 5);
+    const fit = fitShadowFrustum({ ...base, points: viewPts, sunDirection: dir, casterHeight });
+    const f = normalize(dir);
+    // A caster this far upstream, at casterHeight, still has to reach the near plane: its
+    // shadow can travel casterHeight / |f.y| along the ground before running out of height.
+    const maxCastDistance = casterHeight / Math.abs(f.y);
+    const caster: Vec3 = {
+      x: -5 - 0.5 * maxCastDistance * f.x,
+      y: casterHeight,
+      z: -0.5 * maxCastDistance * f.z,
+    };
+    const casterPz = dot(caster, f);
+    const positionPz = dot(fit.position, f);
+    expect(casterPz).toBeGreaterThanOrEqual(positionPz - 1e-6);
+    expect(casterPz).toBeLessThanOrEqual(positionPz + fit.far + 1e-6);
+  });
+
+  it('clamps the fitted extent to the map bounds plus margin, not the full (zoomed-out) view', () => {
+    const farOutPts = box(32, 32, 300); // far larger than any real view of a real map
+    const unbounded = fitShadowFrustum({ ...base, points: farOutPts, sunDirection: down });
+    const bounds = { minX: 0, maxX: 64, minZ: 0, maxZ: 64 };
+    const bounded = fitShadowFrustum({ ...base, points: farOutPts, sunDirection: down, bounds });
+    expect(bounded.halfWidth).toBeLessThan(unbounded.halfWidth);
+    expect(bounded.halfHeight).toBeLessThan(unbounded.halfHeight);
+    // Clamped to [minX - margin, maxX + margin], then the margin is added again when sizing
+    // the half extent, so the ceiling is the map's half-extent plus twice the margin.
+    expect(bounded.halfWidth).toBeLessThanOrEqual(64 / 2 + 2 * base.margin);
+    expect(bounded.halfHeight).toBeLessThanOrEqual(64 / 2 + 2 * base.margin);
   });
 });
 

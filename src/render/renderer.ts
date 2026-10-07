@@ -781,12 +781,17 @@ export class GameRenderer {
       margin: SHADOW_MARGIN_TILES,
       minHalfExtent: SHADOW_MIN_HALF_EXTENT,
       depthPadding: SHADOW_DEPTH_PADDING,
+      casterHeight: SHADOW_VIEW_MAX_Y - SHADOW_VIEW_MIN_Y,
+      bounds: { minX: 0, maxX: this.gridSize, minZ: 0, maxZ: this.gridSize },
     });
     const { sun } = this.lights;
     sun.position.set(fit.position.x, fit.position.y, fit.position.z);
     sun.target.position.set(fit.target.x, fit.target.y, fit.target.z);
     sun.target.updateMatrixWorld();
     const cam = sun.shadow.camera;
+    // Must match the basis fitShadowFrustum snapped the centre against, or three's internal
+    // lookAt (camera.up defaults to +Y) would re-derive a different basis and undo the snap.
+    cam.up.set(fit.up.x, fit.up.y, fit.up.z);
     cam.left = -fit.halfWidth;
     cam.right = fit.halfWidth;
     cam.top = fit.halfHeight;

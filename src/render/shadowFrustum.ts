@@ -8,7 +8,7 @@ export interface Vec3 {
 }
 
 export interface ShadowFit {
-  /** Where the directional light sits (target minus the sun direction times the depth). */
+  /** Where the directional light sits (target minus the sun direction times the near-side depth). */
   position: Vec3;
   /** What it looks at: the snapped centre of the view in light space. */
   target: Vec3;
@@ -16,6 +16,14 @@ export interface ShadowFit {
   halfHeight: number;
   /** Shadow camera far plane (near is 0). */
   far: number;
+  /**
+   * The world-up reference used to build the light-space basis (r, u, f).
+   * The renderer must set `sun.shadow.camera.up` to this before the next
+   * render, or three's internal `lookAt` (which uses the camera's own
+   * `up`, defaulting to +Y) would build a basis that disagrees with the
+   * one used here to snap the centre to texels, undoing the snap.
+   */
+  up: Vec3;
 }
 
 /** Shadow map edge in texels (unchanged from before the follow-the-view change). */
@@ -24,13 +32,26 @@ export const SHADOW_MAP_SIZE = 2048;
 export const SHADOW_MARGIN_TILES = 4;
 /** Smallest half extent of the shadow camera, so extreme zoom-in cannot degenerate. */
 export const SHADOW_MIN_HALF_EXTENT = 6;
-/** Extra depth in front of and behind the view box, so tall objects outside it still cast. */
+/** Extra depth beyond the view box, on the side away from the sun. */
 export const SHADOW_DEPTH_PADDING = 20;
 /** Height band of the visible ground: sea level to the highest terrain plus a tall building. */
 export const SHADOW_VIEW_MIN_Y = 0;
 export const SHADOW_VIEW_MAX_Y = 8 * LEVEL_HEIGHT + 3;
 /** Extents are rounded up to whole tiles, so panning at one zoom keeps the texel size fixed. */
 const EXTENT_STEP = 1;
+/**
+ * Floor for |sunDirection.y| when sizing the sun-side depth padding, so a
+ * sun sitting exactly on the horizon cannot divide by (near) zero and
+ * blow the padding up to infinity.
+ */
+const MIN_SUN_HEIGHT_COMPONENT = 0.05;
+/**
+ * Above this |f.y| the sun is treated as (near enough) straight down or
+ * up: the usual "world up" reference is nearly parallel to the sun
+ * direction and cross(ref, f) would be unstable, so a different
+ * reference axis is used instead.
+ */
+const NEAR_VERTICAL_SUN_Y = 0.99;
 
 function dot(a: Vec3, b: Vec3): number {
   return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -43,6 +64,19 @@ function normalize(a: Vec3): Vec3 {
   return { x: a.x / l, y: a.y / l, z: a.z / l };
 }
 
+/** Clamp a point's x/z into `bounds` expanded by `margin`, leaving y untouched. */
+function clampToBounds(
+  p: Vec3,
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
+  margin: number,
+): Vec3 {
+  return {
+    x: Math.min(Math.max(p.x, bounds.minX - margin), bounds.maxX + margin),
+    y: p.y,
+    z: Math.min(Math.max(p.z, bounds.minZ - margin), bounds.maxZ + margin),
+  };
+}
+
 /**
  * Fit an orthographic shadow camera around `points` (the visible part
  * of the map) as seen along `sunDirection` (pointing from the sun into
@@ -50,6 +84,19 @@ function normalize(a: Vec3): Vec3 {
  * extents are rounded up to whole tiles and never below
  * `minHalfExtent`, and its centre is snapped to whole shadow texels so
  * shadow edges do not crawl while the camera pans.
+ *
+ * `casterHeight` is the tallest object the view can contain; for a low
+ * sun its shadow can reach `casterHeight / |sunDirection.y|` across the
+ * ground, so the depth padding on the sun's side of the frustum grows
+ * with it, or a caster standing just outside the margin would be
+ * clipped out of the shadow camera before it ever reaches the near
+ * plane. The far side (away from the sun) keeps the fixed `depthPadding`
+ * — nothing needs to cast a shadow backwards into the view from there.
+ *
+ * `bounds`, if given, clamps the points' x/z to the map's extent
+ * (expanded by `margin`) before fitting, so a camera zoomed out past the
+ * edge of the map does not inflate the frustum (and blur every shadow)
+ * with empty space that is never actually visible ground.
  */
 export function fitShadowFrustum(input: {
   points: readonly Vec3[];
@@ -58,9 +105,12 @@ export function fitShadowFrustum(input: {
   margin: number;
   minHalfExtent: number;
   depthPadding: number;
+  casterHeight: number;
+  bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }): ShadowFit {
   const f = normalize(input.sunDirection);
-  const ref: Vec3 = Math.abs(f.y) > 0.99 ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
+  const ref: Vec3 =
+    Math.abs(f.y) > NEAR_VERTICAL_SUN_Y ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
   const r = normalize(cross(ref, f));
   const u = cross(f, r);
   let minX = Infinity,
@@ -69,7 +119,8 @@ export function fitShadowFrustum(input: {
     maxY = -Infinity,
     minZ = Infinity,
     maxZ = -Infinity;
-  for (const p of input.points) {
+  for (const raw of input.points) {
+    const p = input.bounds ? clampToBounds(raw, input.bounds, input.margin) : raw;
     const px = dot(p, r),
       py = dot(p, u),
       pz = dot(p, f);
@@ -93,19 +144,32 @@ export function fitShadowFrustum(input: {
     y: r.y * cx + u.y * cy + f.y * cz,
     z: r.z * cx + u.z * cy + f.z * cz,
   };
-  const depth = (maxZ - minZ) / 2 + input.depthPadding;
+  const halfSpanZ = (maxZ - minZ) / 2;
+  const sunSideDepth = Math.max(
+    input.depthPadding,
+    input.casterHeight / Math.max(Math.abs(f.y), MIN_SUN_HEIGHT_COMPONENT),
+  );
+  const depthNear = halfSpanZ + sunSideDepth;
+  const depthFar = halfSpanZ + input.depthPadding;
   return {
     target,
-    position: { x: target.x - f.x * depth, y: target.y - f.y * depth, z: target.z - f.z * depth },
+    position: {
+      x: target.x - f.x * depthNear,
+      y: target.y - f.y * depthNear,
+      z: target.z - f.z * depthNear,
+    },
     halfWidth,
     halfHeight,
-    far: 2 * depth,
+    far: depthNear + depthFar,
+    up: ref,
   };
 }
 
 const ndc = new THREE.Vector3();
 const near = new THREE.Vector3();
 const farPoint = new THREE.Vector3();
+/** Below this, a frustum-corner ray is treated as parallel to the ground (no safe intersection). */
+const PARALLEL_RAY_EPSILON = 1e-9;
 
 /**
  * The eight corners of what the orthographic camera sees between the
@@ -129,7 +193,7 @@ export function viewGroundCorners(
     farPoint.copy(ndc.set(sx, sy, 1)).unproject(camera);
     const dy = farPoint.y - near.y;
     for (const y of [minY, maxY]) {
-      const t = Math.abs(dy) < 1e-9 ? 0 : (y - near.y) / dy;
+      const t = Math.abs(dy) < PARALLEL_RAY_EPSILON ? 0 : (y - near.y) / dy;
       out.push({ x: near.x + (farPoint.x - near.x) * t, y, z: near.z + (farPoint.z - near.z) * t });
     }
   }
