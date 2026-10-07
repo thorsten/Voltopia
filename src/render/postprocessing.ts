@@ -96,6 +96,7 @@ class LitOnlyGTAOPass extends GTAOPass {
 export class PostChain {
   private readonly composer: EffectComposer;
   private readonly ao: LitOnlyGTAOPass;
+  private readonly output: OutputPass;
 
   constructor(webgl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
     const size = webgl.getDrawingBufferSize(new THREE.Vector2());
@@ -116,7 +117,8 @@ export class PostChain {
     });
     this.ao.blendIntensity = AO_BLEND_INTENSITY;
     this.composer.addPass(this.ao);
-    this.composer.addPass(new OutputPass());
+    this.output = new OutputPass();
+    this.composer.addPass(this.output);
   }
 
   setSize(width: number, height: number, pixelRatio: number): void {
@@ -134,6 +136,7 @@ export class PostChain {
 
   dispose(): void {
     this.ao.dispose();
+    this.output.dispose();
     this.composer.dispose();
   }
 }
