@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SHADOW_MAP_SIZE } from './shadowFrustum.ts';
+import { inverseNeutralToneMap } from './toneMapping.ts';
 
 export interface SceneLights {
   sun: THREE.DirectionalLight;
@@ -24,18 +25,27 @@ export const PALETTE = {
   sea: 0x2f6ea8,
 } as const;
 
-/** Exposure for NeutralToneMapping; 1 keeps the palette's brightness (tuned on the Mac). */
+/*
+ * Light levels for the standard material + NeutralToneMapping pipeline,
+ * calibrated so the on-screen colours match the former Lambert shading
+ * without tone mapping at noon, dusk and night: see "Calibration" in the
+ * Testing section of
+ * docs/superpowers/specs/2026-10-07-lighting-and-materials-design.md
+ * (headless calibration, to be confirmed on the Mac). The exposure stays
+ * at 1 because it only scales the intensities below.
+ */
+/** Exposure for NeutralToneMapping. */
 export const TONE_MAPPING_EXPOSURE = 1;
 /** Sun intensity = (SUN_BASE + SUN_GAIN * sunFactor) * cloud dimming. */
-export const SUN_INTENSITY_BASE = 0.15;
+export const SUN_INTENSITY_BASE = 0.235;
 export const SUN_INTENSITY_GAIN = 1.6;
 /** Hemisphere intensity = AMBIENT_BASE + AMBIENT_GAIN * sunFactor. */
-export const AMBIENT_INTENSITY_BASE = 0.35;
-export const AMBIENT_INTENSITY_GAIN = 0.65;
+export const AMBIENT_INTENSITY_BASE = 0.81;
+export const AMBIENT_INTENSITY_GAIN = 0.71;
 
 export function createScene(): { scene: THREE.Scene; lights: SceneLights } {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(PALETTE.skyDay);
+  scene.background = inverseNeutralToneMap(new THREE.Color(PALETTE.skyDay), TONE_MAPPING_EXPOSURE);
 
   const ambient = new THREE.HemisphereLight(0xdfeef5, 0x8a9a6a, 0.9);
   scene.add(ambient);

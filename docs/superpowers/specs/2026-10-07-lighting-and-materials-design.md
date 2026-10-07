@@ -129,6 +129,38 @@ Headless unit tests (no WebGL in the sandbox or in vitest):
   existing WebGL e2e test (Mac and CI with SwiftShader): the game boots,
   draws, and toggling the setting does not throw.
 
+Calibration (headless calibration, to be confirmed on the Mac): a
+throwaway node probe modelled three r186's shaders per channel — the
+former output sRGB(Lambert: albedo/π · (sun · cosθ + hemisphere)) and
+the new output sRGB(NeutralToneMapping(exposure · standard shading)),
+the latter with roughness 0.9, metalness 0, F0 0.04, GGX specular, the
+Fresnel-weighted diffuse, the DFG-LUT multiscattering terms and no
+environment map. Albedos: ground, road, light wall `0xe8e2d6`, red roof
+`0xd84a3a`, summer foliage; surfaces: up, wall facing the sun, wall
+facing away, seen at the isometric angle; lights from `setStats` at
+noon (sunFactor 1), dusk (0.15, evening) and night (0). Nelder–Mead
+minimised the squared sRGB error, weighted noon 1, dusk 1.5, night 2.
+RMS error per channel (sRGB units, 0–255):
+
+| Scenario | Old constants | Calibrated | Reference: no tone mapping |
+| -------- | ------------- | ---------- | -------------------------- |
+| Noon     | 18.6          | 12.5       | 1.8                        |
+| Dusk     | 17.4          | 9.8        | 0.8                        |
+| Night    | 13.0          | 8.3        | 0.6                        |
+
+Chosen: `SUN_INTENSITY_BASE` 0.235 (was 0.15), `SUN_INTENSITY_GAIN`
+1.6 (unchanged), `AMBIENT_INTENSITY_BASE` 0.81 (was 0.35),
+`AMBIENT_INTENSITY_GAIN` 0.71 (was 0.65), `TONE_MAPPING_EXPOSURE` 1
+(it only scales the four intensities, so it is redundant). Freeing the
+night ambient colour gained under 0.1, so it stays `0x46557a`. The
+residual is the curve's toe, not the light levels: it subtracts 0.04
+from every channel and maps a minimum channel below 0.08 to 6.25·x²,
+which no intensity can undo — saturated and dark colours (foliage, the
+roof, the road, night surfaces) come out more saturated than before.
+The sky is exact: the blended sky colour is pre-inverted through the
+curve (`inverseNeutralToneMap`, `src/render/toneMapping.ts`) before it
+becomes `scene.background`, so the night sky stays `#101a2a`.
+
 Acceptance on the Mac (the user): screenshots before and after at noon,
 dusk and night on the same save, ambient occlusion on and off; frame
 time with the overlay off at 64×64 and 96×96, AO on and off, recorded

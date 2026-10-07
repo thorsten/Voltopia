@@ -15,6 +15,7 @@ import {
   AMBIENT_INTENSITY_GAIN,
 } from './scene.ts';
 import { PostChain } from './postprocessing.ts';
+import { inverseNeutralToneMap } from './toneMapping.ts';
 import { GroundMesh } from './terrain.ts';
 import { ElevationField } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
@@ -453,11 +454,14 @@ export class GameRenderer {
     this.lights.ambient.intensity = AMBIENT_INTENSITY_BASE + AMBIENT_INTENSITY_GAIN * sunFactor;
     this.lights.ambient.color.copy(AMBIENT_DAY_COLOR).lerp(AMBIENT_NIGHT_COLOR, night);
 
+    // The sky keys are on-screen colours; the background passes through the
+    // tone curve in the OutputPass, so the blend is pre-inverted to land there.
     const background = this.scene.background as THREE.Color;
     background
       .copy(SKY_DAY_COLOR)
       .lerp(SKY_NIGHT_COLOR, night)
       .lerp(SKY_DUSK_COLOR, duskAmount(sunFactor, night) * 0.5);
+    inverseNeutralToneMap(background, TONE_MAPPING_EXPOSURE, background);
 
     for (const layer of this.diffLayers) layer.setEnvironment?.(environment);
     this.weatherFx.setCloudCover(stats.weather.cloudCover);
