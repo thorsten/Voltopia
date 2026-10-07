@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Physically based flat-colour materials, half-resolution GTAO ambient occlusion with a settings switch, neutral tone mapping and a shadow map that follows the view — without changing any mesh.
+**Goal:** Physically based flat-colour materials, half-resolution GTAO ambient occlusion with a settings switch, no tone mapping and a shadow map that follows the view — without changing any mesh.
 
 **Architecture:** A material factory (`src/render/materials.ts`) replaces every `MeshLambertMaterial`; a `PostChain` (`src/render/postprocessing.ts`) wraps an `EffectComposer` (multisampled target → render pass → lit-only half-resolution GTAO pass → output pass) that `Renderer` renders through; a pure `fitShadowFrustum` (`src/render/shadowFrustum.ts`) places the sun's shadow camera around the visible ground each frame, snapped to shadow texels.
 
@@ -14,8 +14,8 @@
 
 - Render only: no change under `src/sim/`, `src/shared/messages.ts`, `src/storage/` or `src/agent/`.
 - `src/render/` stays three.js only; `src/ui/` strings go through `src/ui/i18n.tsx` with EN **and** DE.
-- No magic numbers: every tuning value is a named, commented constant (`SURFACE_ROUGHNESS = 0.9`, `AO_RESOLUTION_SCALE = 0.5`, `TONE_MAPPING_EXPOSURE`, shadow constants).
-- Tone mapping is `THREE.NeutralToneMapping`, never ACES.
+- No magic numbers: every tuning value is a named, commented constant (`SURFACE_ROUGHNESS = 0.9`, `AO_RESOLUTION_SCALE = 0.5`, shadow constants).
+- No tone mapping: `THREE.NoToneMapping` (changed from `THREE.NeutralToneMapping` with the user on 2026-10-07 — its toe shifted dark and saturated colours; see the spec's Calibration paragraph). Never ACES.
 - Ambient occlusion defaults to **on**; the setting key is `ambientOcclusion`.
 - `MeshBasicMaterial` users (overlays, previews, selection, hover, icons, headlights) stay unchanged and must not cast ambient occlusion.
 - Vitest runs in node: no WebGL context. Anything needing one is covered by the WebGL e2e on the Mac/CI, not by unit tests. `src/**/*.test.ts` is typechecked with `types: ["vite/client"]` — no `node:` imports in tests; use `import.meta.glob` for source scans.

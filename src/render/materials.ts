@@ -12,8 +12,8 @@ export type SurfaceOptions = Omit<THREE.MeshStandardMaterialParameters, 'roughne
 /**
  * The one material for lit, opaque-or-tinted surfaces: a physically
  * based standard material with flat colour, high roughness and no
- * metal. It replaces the Lambert shading so the scene responds to the
- * tone curve and the ambient-occlusion pass consistently. Unlit helpers
+ * metal. It replaces the Lambert shading so every lit surface responds
+ * to the ambient-occlusion pass consistently. Unlit helpers
  * (overlays, previews, icons, headlights) keep MeshBasicMaterial.
  */
 export function surfaceMaterial(options: SurfaceOptions = {}): THREE.MeshStandardMaterial {

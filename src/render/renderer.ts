@@ -8,14 +8,12 @@ import {
   createScene,
   PALETTE,
   type SceneLights,
-  TONE_MAPPING_EXPOSURE,
   SUN_INTENSITY_BASE,
   SUN_INTENSITY_GAIN,
   AMBIENT_INTENSITY_BASE,
   AMBIENT_INTENSITY_GAIN,
 } from './scene.ts';
 import { PostChain } from './postprocessing.ts';
-import { inverseNeutralToneMap } from './toneMapping.ts';
 import { GroundMesh } from './terrain.ts';
 import { ElevationField } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
@@ -293,8 +291,8 @@ export class GameRenderer {
     this.webgl = new THREE.WebGLRenderer({ antialias: false });
     this.webgl.shadowMap.enabled = true;
     this.webgl.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.webgl.toneMapping = THREE.NeutralToneMapping;
-    this.webgl.toneMappingExposure = TONE_MAPPING_EXPOSURE;
+    // No tone curve (spec decision): the OutputPass only converts to sRGB.
+    this.webgl.toneMapping = THREE.NoToneMapping;
     this.webgl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.webgl.domElement);
     this.postChain = new PostChain(this.webgl, this.scene, this.isoCamera.camera);
@@ -454,14 +452,11 @@ export class GameRenderer {
     this.lights.ambient.intensity = AMBIENT_INTENSITY_BASE + AMBIENT_INTENSITY_GAIN * sunFactor;
     this.lights.ambient.color.copy(AMBIENT_DAY_COLOR).lerp(AMBIENT_NIGHT_COLOR, night);
 
-    // The sky keys are on-screen colours; the background passes through the
-    // tone curve in the OutputPass, so the blend is pre-inverted to land there.
     const background = this.scene.background as THREE.Color;
     background
       .copy(SKY_DAY_COLOR)
       .lerp(SKY_NIGHT_COLOR, night)
       .lerp(SKY_DUSK_COLOR, duskAmount(sunFactor, night) * 0.5);
-    inverseNeutralToneMap(background, TONE_MAPPING_EXPOSURE, background);
 
     for (const layer of this.diffLayers) layer.setEnvironment?.(environment);
     this.weatherFx.setCloudCover(stats.weather.cloudCover);

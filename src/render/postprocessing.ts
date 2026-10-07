@@ -90,8 +90,8 @@ class LitOnlyGTAOPass extends GTAOPass {
 
 /**
  * The frame pipeline: scene into a multisampled target, ambient
- * occlusion (optional), then tone mapping and sRGB conversion. The
- * renderer's toneMapping/exposure settings apply in the OutputPass.
+ * occlusion (optional), then the sRGB conversion in the OutputPass
+ * (the renderer's toneMapping is NoToneMapping, so no tone curve).
  */
 export class PostChain {
   private readonly composer: EffectComposer;
