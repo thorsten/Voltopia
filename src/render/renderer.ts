@@ -288,7 +288,8 @@ export class GameRenderer {
     this.isoCamera = new IsoCamera(gridSize);
     this.addDiffLayer(new IconsMesh(scene, gridSize, this.isoCamera.camera, this.elevation));
 
-    this.webgl = new THREE.WebGLRenderer({ antialias: true });
+    // No canvas MSAA: the PostChain's multisampled target antialiases the scene.
+    this.webgl = new THREE.WebGLRenderer({ antialias: false });
     this.webgl.shadowMap.enabled = true;
     this.webgl.shadowMap.type = THREE.PCFSoftShadowMap;
     this.webgl.toneMapping = THREE.NeutralToneMapping;
