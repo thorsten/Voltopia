@@ -4,7 +4,17 @@ import { DisasterKind, PlantType, Terrain, TileType } from '../shared/types.ts';
 import { IsoCamera } from './camera.ts';
 import { groundPointAtNdc, pickTile } from './picking.ts';
 import { nightFactor, sunIntensity } from '../shared/daylight.ts';
-import { createScene, PALETTE, type SceneLights } from './scene.ts';
+import {
+  createScene,
+  PALETTE,
+  type SceneLights,
+  TONE_MAPPING_EXPOSURE,
+  SUN_INTENSITY_BASE,
+  SUN_INTENSITY_GAIN,
+  AMBIENT_INTENSITY_BASE,
+  AMBIENT_INTENSITY_GAIN,
+} from './scene.ts';
+import { PostChain } from './postprocessing.ts';
 import { GroundMesh } from './terrain.ts';
 import { ElevationField } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
@@ -128,6 +138,7 @@ export class GameRenderer {
   readonly lights: SceneLights;
   readonly isoCamera: IsoCamera;
   private readonly webgl: THREE.WebGLRenderer;
+  private readonly postChain: PostChain;
   private readonly container: HTMLElement;
   private readonly gridSize: number;
   private readonly callbacks: RendererCallbacks;
@@ -280,8 +291,11 @@ export class GameRenderer {
     this.webgl = new THREE.WebGLRenderer({ antialias: true });
     this.webgl.shadowMap.enabled = true;
     this.webgl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.webgl.toneMapping = THREE.NeutralToneMapping;
+    this.webgl.toneMappingExposure = TONE_MAPPING_EXPOSURE;
     this.webgl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.webgl.domElement);
+    this.postChain = new PostChain(this.webgl, this.scene, this.isoCamera.camera);
 
     const hoverGeometry = new THREE.PlaneGeometry(1, 1);
     const hoverMaterial = new THREE.MeshBasicMaterial({
@@ -428,13 +442,14 @@ export class GameRenderer {
     );
     this.sunDirection.set(center, 0, center).sub(sunPosition).normalize();
     const cloudDimming = 1 - 0.45 * stats.weather.cloudCover;
-    this.lights.sun.intensity = (0.15 + 1.6 * sunFactor) * cloudDimming;
+    this.lights.sun.intensity =
+      (SUN_INTENSITY_BASE + SUN_INTENSITY_GAIN * sunFactor) * cloudDimming;
     const warmth = (solarStrength - WINTER_SOLAR_STRENGTH) / (1 - WINTER_SOLAR_STRENGTH);
     this.lights.sun.color
       .copy(SUN_WINTER_COLOR)
       .lerp(SUN_DAY_COLOR, THREE.MathUtils.clamp(warmth, 0, 1))
       .lerp(SUN_DUSK_COLOR, duskAmount(sunFactor, night));
-    this.lights.ambient.intensity = 0.35 + 0.65 * sunFactor;
+    this.lights.ambient.intensity = AMBIENT_INTENSITY_BASE + AMBIENT_INTENSITY_GAIN * sunFactor;
     this.lights.ambient.color.copy(AMBIENT_DAY_COLOR).lerp(AMBIENT_NIGHT_COLOR, night);
 
     const background = this.scene.background as THREE.Color;
@@ -543,6 +558,11 @@ export class GameRenderer {
         for (const material of materials) material.needsUpdate = true;
       }
     });
+  }
+
+  /** Toggle the ambient-occlusion pass (quality setting). */
+  setAmbientOcclusion(enabled: boolean): void {
+    this.postChain.setAmbientOcclusion(enabled);
   }
 
   /** Disable non-essential animations (accessibility setting). */
@@ -750,6 +770,7 @@ export class GameRenderer {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     this.webgl.setSize(width, height);
+    this.postChain.setSize(width, height, this.webgl.getPixelRatio());
     this.isoCamera.setViewport(width, height);
   };
 
@@ -768,7 +789,7 @@ export class GameRenderer {
       this.selectionOutline.material.opacity = 0.55 + 0.45 * pulse;
     }
     this.fitShadowToView();
-    this.webgl.render(this.scene, this.isoCamera.camera);
+    this.postChain.render();
     this.animationFrame = requestAnimationFrame(this.renderLoop);
   };
 
@@ -885,6 +906,7 @@ export class GameRenderer {
     window.removeEventListener('resize', this.handleResize);
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+    this.postChain.dispose();
     this.webgl.dispose();
     this.webgl.domElement.remove();
   }

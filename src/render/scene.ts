@@ -24,6 +24,15 @@ export const PALETTE = {
   sea: 0x2f6ea8,
 } as const;
 
+/** Exposure for NeutralToneMapping; 1 keeps the palette's brightness (tuned on the Mac). */
+export const TONE_MAPPING_EXPOSURE = 1;
+/** Sun intensity = (SUN_BASE + SUN_GAIN * sunFactor) * cloud dimming. */
+export const SUN_INTENSITY_BASE = 0.15;
+export const SUN_INTENSITY_GAIN = 1.6;
+/** Hemisphere intensity = AMBIENT_BASE + AMBIENT_GAIN * sunFactor. */
+export const AMBIENT_INTENSITY_BASE = 0.35;
+export const AMBIENT_INTENSITY_GAIN = 0.65;
+
 export function createScene(): { scene: THREE.Scene; lights: SceneLights } {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(PALETTE.skyDay);
