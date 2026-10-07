@@ -414,6 +414,9 @@ const en = {
   'settings.volume': 'Volume',
   'settings.graphics': 'Graphics',
   'settings.shadows': 'Shadows',
+  'settings.ambientOcclusion': 'Ambient occlusion',
+  'settings.ambientOcclusion.hint':
+    'Soft shading in corners and under objects. Turn off if the game stutters.',
   'settings.reducedMotion': 'Reduce motion',
   'settings.theme': 'HUD theme',
   'settings.theme.dark': 'Dark',
@@ -1070,6 +1073,9 @@ const de: Record<TranslationKey, string> = {
   'settings.volume': 'Lautstärke',
   'settings.graphics': 'Grafik',
   'settings.shadows': 'Schatten',
+  'settings.ambientOcclusion': 'Umgebungsverdeckung',
+  'settings.ambientOcclusion.hint':
+    'Weiche Schatten in Ecken und unter Objekten. Ausschalten, wenn das Spiel ruckelt.',
   'settings.reducedMotion': 'Bewegung reduzieren',
   'settings.theme': 'HUD-Design',
   'settings.theme.dark': 'Dunkel',

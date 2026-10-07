@@ -63,11 +63,13 @@ test('settings page toggles persist', async ({ page }) => {
   await page.getByTestId('open-settings').click();
   await expect(page.getByTestId('settings-page')).toBeVisible();
   await page.getByTestId('setting-shadows').click();
+  await page.getByTestId('setting-ambient-occlusion').click();
   await page.getByTestId('setting-sound').click();
   await page.reload();
   await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
   await page.getByTestId('open-settings').click();
   await expect(page.getByTestId('setting-shadows')).not.toBeChecked();
+  await expect(page.getByTestId('setting-ambient-occlusion')).not.toBeChecked();
   await expect(page.getByTestId('setting-sound')).not.toBeChecked();
 });
 

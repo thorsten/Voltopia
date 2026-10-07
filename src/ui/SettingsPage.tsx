@@ -114,6 +114,15 @@ export function SettingsPage({
           />
           <span>{t('settings.shadows')}</span>
         </label>
+        <label className="settings-row" title={t('settings.ambientOcclusion.hint')}>
+          <input
+            type="checkbox"
+            data-testid="setting-ambient-occlusion"
+            checked={settings.ambientOcclusion}
+            onChange={(e) => update({ ambientOcclusion: e.target.checked })}
+          />
+          <span>{t('settings.ambientOcclusion')}</span>
+        </label>
         <label className="settings-row">
           <input
             type="checkbox"

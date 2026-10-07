@@ -234,6 +234,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     sound.enabled = settings.soundEnabled;
     sound.volume = settings.soundVolume;
     rendererRef.current?.setShadows(settings.shadows);
+    rendererRef.current?.setAmbientOcclusion(settings.ambientOcclusion);
     rendererRef.current?.setReducedMotion(settings.reducedMotion);
     // On the root element so modals and the boot screen follow it too.
     document.documentElement.dataset.theme = settings.theme;

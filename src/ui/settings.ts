@@ -5,6 +5,7 @@ export interface AppSettings {
   soundEnabled: boolean;
   soundVolume: number;
   shadows: boolean;
+  ambientOcclusion: boolean;
   reducedMotion: boolean;
   theme: HudTheme;
 }
@@ -13,6 +14,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
   soundVolume: 0.4,
   shadows: true,
+  ambientOcclusion: true,
   reducedMotion: false,
   theme: 'dark',
 };
@@ -31,6 +33,7 @@ export function loadSettings(): AppSettings {
           ? Math.min(1, Math.max(0, parsed.soundVolume))
           : DEFAULT_SETTINGS.soundVolume,
       shadows: parsed.shadows ?? DEFAULT_SETTINGS.shadows,
+      ambientOcclusion: parsed.ambientOcclusion ?? DEFAULT_SETTINGS.ambientOcclusion,
       reducedMotion: parsed.reducedMotion ?? DEFAULT_SETTINGS.reducedMotion,
       theme: parsed.theme === 'light' ? 'light' : 'dark',
     };
