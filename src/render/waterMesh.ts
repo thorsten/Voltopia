@@ -5,6 +5,7 @@ import { PALETTE } from './scene.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
+import { surfaceMaterial } from './materials.ts';
 
 /**
  * Just above the ground plane, below roads (0.05) and the build grid. The
@@ -51,7 +52,7 @@ export class WaterMesh implements DiffLayer {
   private readonly riverMesh: THREE.InstancedMesh;
   /** Sea tiles: flat boxes on the tide-driven sea level. */
   private readonly seaMesh: THREE.InstancedMesh;
-  private readonly material: THREE.MeshLambertMaterial;
+  private readonly material: THREE.MeshStandardMaterial;
   private readonly terrain: Uint8Array;
   private readonly gridSize: number;
   private readonly matrix = new THREE.Matrix4();
@@ -67,7 +68,7 @@ export class WaterMesh implements DiffLayer {
     this.gridSize = gridSize;
     this.terrain = new Uint8Array(gridSize * gridSize);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
-    this.material = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    this.material = surfaceMaterial({ color: 0xffffff });
     this.mesh = new THREE.InstancedMesh(geometry, this.material, gridSize * gridSize);
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.

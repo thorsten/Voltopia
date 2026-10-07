@@ -7,6 +7,7 @@ import { PALETTE } from './scene.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composeBoxOnGround, composePrismOnGround, createHalfTilePrism } from './decal.ts';
+import { surfaceMaterial } from './materials.ts';
 
 const ROAD_HEIGHT = 0.05;
 const CENTER_SIZE = 0.62;
@@ -72,7 +73,7 @@ export class RoadsMesh implements DiffLayer {
     this.terrain = new Uint8Array(gridSize * gridSize);
     this.busStops = new Uint8Array(gridSize * gridSize);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshLambertMaterial({ color: PALETTE.road });
+    const material = surfaceMaterial({ color: PALETTE.road });
     this.mesh = new THREE.InstancedMesh(
       geometry,
       material,
@@ -96,7 +97,7 @@ export class RoadsMesh implements DiffLayer {
     // Lit like the road so the paint darkens at night instead of glowing.
     this.centreLines = new THREE.InstancedMesh(
       geometry,
-      new THREE.MeshLambertMaterial({ color: LINE_COLOR }),
+      surfaceMaterial({ color: LINE_COLOR }),
       gridSize * gridSize * 4 * LINE_DASHES_PER_ARM,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -107,7 +108,7 @@ export class RoadsMesh implements DiffLayer {
 
     const poleGeometry = new THREE.BoxGeometry(0.035, 0.3, 0.035);
     poleGeometry.translate(0, 0.15, 0);
-    const poleMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4048 });
+    const poleMaterial = surfaceMaterial({ color: 0x3a4048 });
     this.lampPoles = new THREE.InstancedMesh(poleGeometry, poleMaterial, gridSize * gridSize);
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.
@@ -141,7 +142,7 @@ export class RoadsMesh implements DiffLayer {
     const shelterGeometry = mergeGeometries([post1, post2, roof]);
     this.shelters = new THREE.InstancedMesh(
       shelterGeometry,
-      new THREE.MeshLambertMaterial({ color: SHELTER_COLOR }),
+      surfaceMaterial({ color: SHELTER_COLOR }),
       gridSize * gridSize,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -167,7 +168,7 @@ export class RoadsMesh implements DiffLayer {
     const deckGeometry = new THREE.BoxGeometry(1, 1, 1);
     this.decks = new THREE.InstancedMesh(
       deckGeometry,
-      new THREE.MeshLambertMaterial({ color: DECK_COLOR }),
+      surfaceMaterial({ color: DECK_COLOR }),
       gridSize * gridSize,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -181,7 +182,7 @@ export class RoadsMesh implements DiffLayer {
     // margin for width/meanders), at most 2 rails per tile.
     this.rails = new THREE.InstancedMesh(
       deckGeometry,
-      new THREE.MeshLambertMaterial({ color: RAIL_COLOR }),
+      surfaceMaterial({ color: RAIL_COLOR }),
       gridSize * 4,
     );
     // Instance transforms live across the whole grid; the base geometry's

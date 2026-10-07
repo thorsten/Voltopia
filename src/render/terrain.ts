@@ -3,6 +3,7 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import { PALETTE } from './scene.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
+import { surfaceMaterial } from './materials.ts';
 
 const SEASON_KEYS = [
   new THREE.Color(PALETTE.groundSpring),
@@ -38,7 +39,7 @@ const MAX_TERRAIN_Y = BALANCE.terrain.maxLevel * LEVEL_HEIGHT;
  */
 export class GroundMesh implements DiffLayer {
   readonly group: THREE.Group;
-  readonly ground: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshLambertMaterial>;
+  readonly ground: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
   private readonly gridLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly field: ElevationField;
   private readonly size: number;
@@ -54,7 +55,7 @@ export class GroundMesh implements DiffLayer {
     geometry.translate(size / 2, 0, size / 2);
     const colors = new Float32Array(geometry.attributes.position.count * 3).fill(1);
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const material = new THREE.MeshLambertMaterial({ color: PALETTE.ground, vertexColors: true });
+    const material = surfaceMaterial({ color: PALETTE.ground, vertexColors: true });
     this.ground = new THREE.Mesh(geometry, material);
     this.ground.receiveShadow = true;
     this.group.add(this.ground);

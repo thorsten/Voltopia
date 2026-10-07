@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
+import { surfaceMaterial } from './materials.ts';
 
 /** Fumarole cone: a small vent cone sitting on the ground. */
 const CONE_RADIUS = 0.16;
@@ -54,7 +55,7 @@ export class GeothermalMesh implements DiffLayer {
 
     this.cones = new THREE.InstancedMesh(
       new THREE.ConeGeometry(CONE_RADIUS, CONE_HEIGHT, 6),
-      new THREE.MeshLambertMaterial({ color: CONE_COLOR }),
+      surfaceMaterial({ color: CONE_COLOR }),
       tiles,
     );
     // Instance transforms span the whole grid; the base geometry's bounds

@@ -11,6 +11,7 @@ import {
 } from '../shared/types.ts';
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer } from './renderer.ts';
+import { surfaceMaterial } from './materials.ts';
 
 const BALLAST_COLOR = 0x8a8075;
 const RAIL_COLOR = 0x4a4d52;
@@ -153,11 +154,7 @@ export class RailMesh implements DiffLayer {
     this.tileTypes = new Uint8Array(tiles);
     this.terrains = new Uint8Array(tiles);
     const make = (geometry: THREE.BufferGeometry, color: number, count: number) => {
-      const mesh = new THREE.InstancedMesh(
-        geometry,
-        new THREE.MeshLambertMaterial({ color }),
-        count,
-      );
+      const mesh = new THREE.InstancedMesh(geometry, surfaceMaterial({ color }), count);
       mesh.frustumCulled = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;

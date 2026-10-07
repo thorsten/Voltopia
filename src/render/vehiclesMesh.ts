@@ -5,6 +5,7 @@ import type { VehicleState } from '../shared/types.ts';
 import { Terrain, VehicleKind } from '../shared/types.ts';
 import type { RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
+import { surfaceMaterial } from './materials.ts';
 
 /** Half wheelbase, in tiles: how far ahead/behind the carriageway is
  *  sampled to pitch a vehicle along the slope it drives on. */
@@ -113,11 +114,7 @@ export class VehiclesMesh {
     private readonly elevation: ElevationField,
     private readonly terrainAt: (index: number) => Terrain,
   ) {
-    this.mesh = new THREE.InstancedMesh(
-      createCarGeometry(),
-      new THREE.MeshLambertMaterial(),
-      MAX_VEHICLES,
-    );
+    this.mesh = new THREE.InstancedMesh(createCarGeometry(), surfaceMaterial(), MAX_VEHICLES);
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.
     this.mesh.frustumCulled = false;
@@ -131,7 +128,7 @@ export class VehiclesMesh {
 
     this.vans = new THREE.InstancedMesh(
       createVanGeometry(),
-      new THREE.MeshLambertMaterial({ color: VAN_COLOR }),
+      surfaceMaterial({ color: VAN_COLOR }),
       MAX_VANS,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -143,7 +140,7 @@ export class VehiclesMesh {
 
     this.buses = new THREE.InstancedMesh(
       createBusGeometry(),
-      new THREE.MeshLambertMaterial({ color: BUS_COLOR }),
+      surfaceMaterial({ color: BUS_COLOR }),
       MAX_BUSES,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -155,7 +152,7 @@ export class VehiclesMesh {
 
     this.locomotives = new THREE.InstancedMesh(
       createLocomotiveGeometry(),
-      new THREE.MeshLambertMaterial({ color: PASSENGER_TRAIN_COLOR }),
+      surfaceMaterial({ color: PASSENGER_TRAIN_COLOR }),
       MAX_TRAINS,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -167,7 +164,7 @@ export class VehiclesMesh {
 
     this.wagons = new THREE.InstancedMesh(
       createWagonGeometry(),
-      new THREE.MeshLambertMaterial({ color: WAGON_COLOR }),
+      surfaceMaterial({ color: WAGON_COLOR }),
       MAX_TRAINS,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -179,7 +176,7 @@ export class VehiclesMesh {
 
     this.freightLocomotives = new THREE.InstancedMesh(
       createLocomotiveGeometry(),
-      new THREE.MeshLambertMaterial({ color: FREIGHT_TRAIN_COLOR }),
+      surfaceMaterial({ color: FREIGHT_TRAIN_COLOR }),
       MAX_TRAINS,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -191,7 +188,7 @@ export class VehiclesMesh {
 
     this.freightWagons = new THREE.InstancedMesh(
       createWagonGeometry(),
-      new THREE.MeshLambertMaterial({ color: FREIGHT_WAGON_COLOR }),
+      surfaceMaterial({ color: FREIGHT_WAGON_COLOR }),
       MAX_TRAINS,
     );
     // Instance transforms live across the whole grid; the base geometry's

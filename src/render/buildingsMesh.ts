@@ -5,6 +5,7 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { PART_KINDS, PartKind, createPartGeometry } from './buildings/primitives.ts';
 import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
+import { surfaceMaterial } from './materials.ts';
 import {
   DOOR,
   type BuildingPart,
@@ -116,7 +117,7 @@ export class BuildingsMesh implements DiffLayer {
       const blockSize = MAX_PARTS_PER_KIND[kind];
       const mesh = new THREE.InstancedMesh(
         createPartGeometry(kind),
-        new THREE.MeshLambertMaterial(),
+        surfaceMaterial(),
         gridSize * gridSize * blockSize,
       );
       // Instance transforms live across the whole grid; the base geometry's

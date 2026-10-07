@@ -3,6 +3,7 @@ import { BALANCE } from '../shared/constants.ts';
 import type { TileDiff } from '../shared/types.ts';
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
+import { surfaceMaterial } from './materials.ts';
 
 /** Trees drawn per tile at growth stage 1..maxStage. */
 const TREES_BY_STAGE = [0, 1, 2, 3];
@@ -56,7 +57,7 @@ function hash(index: number, salt: number): number {
 export class ForestMesh implements DiffLayer {
   private readonly trunks: THREE.InstancedMesh;
   private readonly crowns: THREE.InstancedMesh;
-  private readonly crownMaterial: THREE.MeshLambertMaterial;
+  private readonly crownMaterial: THREE.MeshStandardMaterial;
   /** Tile index -> growth stage, for every wooded tile. */
   private readonly stages = new Map<number, number>();
   private readonly matrix = new THREE.Matrix4();
@@ -74,7 +75,7 @@ export class ForestMesh implements DiffLayer {
     trunkGeometry.translate(0, TRUNK_HEIGHT / 2, 0);
     this.trunks = new THREE.InstancedMesh(
       trunkGeometry,
-      new THREE.MeshLambertMaterial({ color: TRUNK_COLOR }),
+      surfaceMaterial({ color: TRUNK_COLOR }),
       capacity,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -86,7 +87,7 @@ export class ForestMesh implements DiffLayer {
 
     const crownGeometry = new THREE.BoxGeometry(CROWN_SIZE, CROWN_HEIGHT, CROWN_SIZE);
     crownGeometry.translate(0, TRUNK_HEIGHT + CROWN_HEIGHT / 2 - 0.04, 0);
-    this.crownMaterial = new THREE.MeshLambertMaterial({ color: FOLIAGE_KEYS[1] });
+    this.crownMaterial = surfaceMaterial({ color: FOLIAGE_KEYS[1] });
     this.crowns = new THREE.InstancedMesh(crownGeometry, this.crownMaterial, capacity);
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.

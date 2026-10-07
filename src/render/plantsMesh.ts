@@ -5,6 +5,7 @@ import { PlantType, Terrain, TileType } from '../shared/types.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
+import { surfaceMaterial } from './materials.ts';
 
 const MAX_BOX_PARTS_PER_PLANT = 8;
 const ROTOR_MAX_SPEED_RAD_PER_S = 6;
@@ -478,7 +479,7 @@ export class PlantsMesh implements DiffLayer {
     boxGeometry.translate(0, 0.5, 0);
     this.boxMesh = new THREE.InstancedMesh(
       boxGeometry,
-      new THREE.MeshLambertMaterial(),
+      surfaceMaterial(),
       capacity * MAX_BOX_PARTS_PER_PLANT,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -490,7 +491,7 @@ export class PlantsMesh implements DiffLayer {
 
     this.parkPads = new THREE.InstancedMesh(
       createHalfTilePrism(),
-      new THREE.MeshLambertMaterial({ color: COLORS.parkGrass }),
+      surfaceMaterial({ color: COLORS.parkGrass }),
       capacity * 2,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -502,7 +503,7 @@ export class PlantsMesh implements DiffLayer {
 
     this.rotorMesh = new THREE.InstancedMesh(
       createRotorGeometry(),
-      new THREE.MeshLambertMaterial({ color: COLORS.pole }),
+      surfaceMaterial({ color: COLORS.pole }),
       capacity,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -514,7 +515,7 @@ export class PlantsMesh implements DiffLayer {
     const domeGeometry = new THREE.SphereGeometry(DOME_RADIUS, 10, 6);
     this.domeMesh = new THREE.InstancedMesh(
       domeGeometry,
-      new THREE.MeshLambertMaterial({ color: COLORS.biogasDome }),
+      surfaceMaterial({ color: COLORS.biogasDome }),
       capacity,
     );
     // Instance transforms live across the whole grid; the base geometry's

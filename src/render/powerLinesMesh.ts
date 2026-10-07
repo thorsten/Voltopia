@@ -4,6 +4,7 @@ import type { TileDiff } from '../shared/types.ts';
 import { TileType } from '../shared/types.ts';
 import type { DiffLayer } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
+import { surfaceMaterial } from './materials.ts';
 
 const PYLON_COLOR = 0x6b6f75;
 const CABLE_COLOR = 0x2b2f33;
@@ -40,7 +41,7 @@ export class PowerLinesMesh implements DiffLayer {
     pylonGeometry.translate(0, PYLON_HEIGHT / 2, 0);
     this.pylons = new THREE.InstancedMesh(
       pylonGeometry,
-      new THREE.MeshLambertMaterial({ color: PYLON_COLOR }),
+      surfaceMaterial({ color: PYLON_COLOR }),
       gridSize * gridSize,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -52,7 +53,7 @@ export class PowerLinesMesh implements DiffLayer {
     const cableGeometry = new THREE.BoxGeometry(1, CABLE_THICKNESS, CABLE_THICKNESS);
     this.cables = new THREE.InstancedMesh(
       cableGeometry,
-      new THREE.MeshLambertMaterial({ color: CABLE_COLOR }),
+      surfaceMaterial({ color: CABLE_COLOR }),
       gridSize * gridSize * 2,
     );
     // Instance transforms live across the whole grid; the base geometry's
