@@ -46,21 +46,14 @@ export function aoSize(width: number, height: number): { width: number; height: 
  * overlays, previews and other unlit or transparent surfaces do not
  * leave a shadow in the occlusion term.
  *
- * Deviation from the task brief: the brief's draft also copied the
- * camera's projection matrix into gtaoMaterial/pdMaterial before calling
- * super.render(), reasoning that GTAOPass only refreshes those uniforms
- * on setSize (relevant because the isometric camera "zooms" by changing
- * its projection, not its position). That is not true of the installed
- * three 0.186.1: GTAOPass.render() itself copies
- * camera.projectionMatrix/projectionMatrixInverse (and gtaoMaterial's
- * cameraWorldMatrix, pdMaterial's projectionMatrixInverse) from
- * `this.camera` on every call, immediately before using them — see
- * node_modules/three/examples/jsm/postprocessing/GTAOPass.js, the
- * "render AO" and "render poisson denoise" sections of `render()`. A
- * manual copy one line above would just be overwritten with the same
- * values, so it was dropped as dead code.
+ * GTAOPass.render refreshes the camera projection uniforms each frame
+ * (three r186), so the zoom of the isometric camera needs no extra
+ * handling here.
  */
 class LitOnlyGTAOPass extends GTAOPass {
+  /** Reused across frames instead of allocating a new array per render call. */
+  private readonly hidden: THREE.Object3D[] = [];
+
   override setSize(width: number, height: number): void {
     const size = aoSize(width, height);
     super.setSize(size.width, size.height);
@@ -73,17 +66,24 @@ class LitOnlyGTAOPass extends GTAOPass {
     deltaTime: number,
     maskActive: boolean,
   ): void {
-    const hidden: THREE.Object3D[] = [];
     this.scene.traverse((object) => {
       if (object.visible && (object as THREE.Mesh).isMesh && !isOcclusionCaster(object)) {
         object.visible = false;
-        hidden.push(object);
+        this.hidden.push(object);
       }
     });
+    // GTAOPass's G-buffer step calls renderer.render(scene, camera) again to
+    // capture normals/depth; with shadowMap.autoUpdate left on that would
+    // redraw the shadow map a second time this frame (RenderPass already
+    // drew it once). Suspend it for the duration of super.render().
+    const autoUpdate = renderer.shadowMap.autoUpdate;
+    renderer.shadowMap.autoUpdate = false;
     try {
       super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
     } finally {
-      for (const object of hidden) object.visible = true;
+      renderer.shadowMap.autoUpdate = autoUpdate;
+      for (const object of this.hidden) object.visible = true;
+      this.hidden.length = 0;
     }
   }
 }
