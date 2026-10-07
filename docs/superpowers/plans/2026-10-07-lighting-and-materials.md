@@ -46,7 +46,7 @@
 
 ### Task 0: Branch
 
-- [ ] **Step 1:** `git checkout -b feature/lighting-materials` — Expected: `Switched to a new branch 'feature/lighting-materials'`.
+- [x] **Step 1:** `git checkout -b feature/lighting-materials` — Expected: `Switched to a new branch 'feature/lighting-materials'`.
 
 ---
 
@@ -61,7 +61,7 @@
 
 - Produces: `SURFACE_ROUGHNESS: number` (0.9), `type SurfaceOptions = Omit<THREE.MeshStandardMaterialParameters, 'roughness' | 'metalness'>`, `surfaceMaterial(options?: SurfaceOptions): THREE.MeshStandardMaterial`.
 
-- [ ] **Step 1: Failing tests** — `src/render/materials.test.ts`:
+- [x] **Step 1: Failing tests** — `src/render/materials.test.ts`:
 
 ```ts
 import * as THREE from 'three';
@@ -119,9 +119,9 @@ describe('render materials', () => {
 });
 ```
 
-- [ ] **Step 2:** `pnpm vitest run src/render/materials.test.ts` — Expected: FAIL (`./materials.ts` missing).
+- [x] **Step 2:** `pnpm vitest run src/render/materials.test.ts` — Expected: FAIL (`./materials.ts` missing).
 
-- [ ] **Step 3: Factory** — `src/render/materials.ts`:
+- [x] **Step 3: Factory** — `src/render/materials.ts`:
 
 ```ts
 import * as THREE from 'three';
@@ -151,11 +151,11 @@ export function surfaceMaterial(options: SurfaceOptions = {}): THREE.MeshStandar
 }
 ```
 
-- [ ] **Step 4: Replace every Lambert construction.** In each file listed, `new THREE.MeshLambertMaterial(X)` becomes `surfaceMaterial(X)` (and `new THREE.MeshLambertMaterial()` becomes `surfaceMaterial()`), with `import { surfaceMaterial } from './materials.ts';` added. Field and generic types change from `THREE.MeshLambertMaterial` to `THREE.MeshStandardMaterial` (`forestMesh.ts:59` `crownMaterial`, `terrain.ts:41` `ground`, `waterMesh.ts:54` `material`). Options stay exactly as they are. After the edit, `grep -rn MeshLambertMaterial src/render` prints nothing.
+- [x] **Step 4: Replace every Lambert construction.** In each file listed, `new THREE.MeshLambertMaterial(X)` becomes `surfaceMaterial(X)` (and `new THREE.MeshLambertMaterial()` becomes `surfaceMaterial()`), with `import { surfaceMaterial } from './materials.ts';` added. Field and generic types change from `THREE.MeshLambertMaterial` to `THREE.MeshStandardMaterial` (`forestMesh.ts:59` `crownMaterial`, `terrain.ts:41` `ground`, `waterMesh.ts:54` `material`). Options stay exactly as they are. After the edit, `grep -rn MeshLambertMaterial src/render` prints nothing.
 
-- [ ] **Step 5:** `pnpm vitest run src/render && pnpm typecheck` — Expected: PASS. Then `pnpm test` once.
+- [x] **Step 5:** `pnpm vitest run src/render && pnpm typecheck` — Expected: PASS. Then `pnpm test` once.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -182,7 +182,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - Produces: `interface Vec3 { x: number; y: number; z: number }`; `interface ShadowFit { position: Vec3; target: Vec3; halfWidth: number; halfHeight: number; far: number }`; `fitShadowFrustum(input: { points: readonly Vec3[]; sunDirection: Vec3; mapSize: number; margin: number; minHalfExtent: number; depthPadding: number }): ShadowFit`; `viewGroundCorners(camera: THREE.OrthographicCamera, minY: number, maxY: number): Vec3[]` (8 points); constants `SHADOW_MAP_SIZE = 2048`, `SHADOW_MARGIN_TILES = 4`, `SHADOW_MIN_HALF_EXTENT = 6`, `SHADOW_DEPTH_PADDING = 20`, `SHADOW_VIEW_MIN_Y = 0`, `SHADOW_VIEW_MAX_Y = 8 * LEVEL_HEIGHT + 3` (highest terrain level 7 plus a tall building, with headroom).
 
-- [ ] **Step 1: Failing tests** — `src/render/shadowFrustum.test.ts`:
+- [x] **Step 1: Failing tests** — `src/render/shadowFrustum.test.ts`:
 
 ```ts
 import * as THREE from 'three';
@@ -283,9 +283,9 @@ describe('viewGroundCorners', () => {
 });
 ```
 
-- [ ] **Step 2:** `pnpm vitest run src/render/shadowFrustum.test.ts` — Expected: FAIL (module missing).
+- [x] **Step 2:** `pnpm vitest run src/render/shadowFrustum.test.ts` — Expected: FAIL (module missing).
 
-- [ ] **Step 3: Implementation** — `src/render/shadowFrustum.ts`:
+- [x] **Step 3: Implementation** — `src/render/shadowFrustum.ts`:
 
 ```ts
 import * as THREE from 'three';
@@ -429,9 +429,9 @@ export function viewGroundCorners(
 
 (`pnpm format` will re-flow the compact `let` and loop lines; keep the logic.) For a straight-down sun the basis is `ref = (0, 0, -1)`, `f = (0, -1, 0)`, `r = cross(ref, f) = (-1, 0, 0)`, `u = (0, 0, 1)`; the test's `inside()` compares absolute offsets in x and z, so the sign of `r` does not matter.
 
-- [ ] **Step 4:** `pnpm vitest run src/render/shadowFrustum.test.ts` — Expected: PASS.
+- [x] **Step 4:** `pnpm vitest run src/render/shadowFrustum.test.ts` — Expected: PASS.
 
-- [ ] **Step 5: Wire it into the renderer.**
+- [x] **Step 5: Wire it into the renderer.**
 
 `src/render/scene.ts`: replace the fixed frustum lines (`sun.shadow.camera.left = -60` … `far = 300`) with `sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);` (import from `./shadowFrustum.ts`); keep `bias`; the frustum is set per frame now.
 
@@ -469,7 +469,7 @@ export function viewGroundCorners(
 
 It runs regardless of the shadows setting: the sun's direction drives the shading too.
 
-- [ ] **Step 6:** `pnpm vitest run src/render && pnpm typecheck`, then `pnpm test`. Commit:
+- [x] **Step 6:** `pnpm vitest run src/render && pnpm typecheck`, then `pnpm test`. Commit:
 
 ```bash
 pnpm format
@@ -498,7 +498,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: nothing from Tasks 1–2 beyond the renderer they touched.
 - Produces: `AO_RESOLUTION_SCALE = 0.5`; `isOcclusionCaster(object: THREE.Object3D): boolean`; `aoSize(width: number, height: number): { width: number; height: number }`; `class PostChain { constructor(webgl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera); setSize(width: number, height: number, pixelRatio: number): void; setAmbientOcclusion(enabled: boolean): void; render(): void; dispose(): void }`; `Renderer.setAmbientOcclusion(enabled: boolean): void`; in `scene.ts` `TONE_MAPPING_EXPOSURE = 1`.
 
-- [ ] **Step 1: Failing tests** — `src/render/postprocessing.test.ts` (import only the pure helpers; `GTAOPass` is imported by the module but not instantiated, which is fine headless):
+- [x] **Step 1: Failing tests** — `src/render/postprocessing.test.ts` (import only the pure helpers; `GTAOPass` is imported by the module but not instantiated, which is fine headless):
 
 ```ts
 import * as THREE from 'three';
@@ -542,9 +542,9 @@ describe('aoSize', () => {
 });
 ```
 
-- [ ] **Step 2:** `pnpm vitest run src/render/postprocessing.test.ts` — Expected: FAIL (module missing).
+- [x] **Step 2:** `pnpm vitest run src/render/postprocessing.test.ts` — Expected: FAIL (module missing).
 
-- [ ] **Step 3: Implementation** — `src/render/postprocessing.ts`:
+- [x] **Step 3: Implementation** — `src/render/postprocessing.ts`:
 
 ```ts
 import * as THREE from 'three';
@@ -688,9 +688,9 @@ export class PostChain {
 
 (`updateGtaoMaterial`'s accepted keys in 0.186: check `GTAOPass.js` lines ~374-426 and drop any key it does not read.)
 
-- [ ] **Step 4:** `pnpm vitest run src/render/postprocessing.test.ts` — Expected: PASS.
+- [x] **Step 4:** `pnpm vitest run src/render/postprocessing.test.ts` — Expected: PASS.
 
-- [ ] **Step 5: Wire the renderer and the tone curve.**
+- [x] **Step 5: Wire the renderer and the tone curve.**
 
 `src/render/scene.ts`: add
 
@@ -728,7 +728,7 @@ export const AMBIENT_INTENSITY_GAIN = 0.65;
 
 - The light update uses the new constants: `(SUN_INTENSITY_BASE + SUN_INTENSITY_GAIN * sunFactor) * cloudDimming` and `AMBIENT_INTENSITY_BASE + AMBIENT_INTENSITY_GAIN * sunFactor`.
 
-- [ ] **Step 6:** `pnpm vitest run src/render && pnpm typecheck && pnpm build` — Expected: PASS (the build proves the `three/addons` imports resolve). Then `pnpm test`. Commit:
+- [x] **Step 6:** `pnpm vitest run src/render && pnpm typecheck && pnpm build` — Expected: PASS (the build proves the `three/addons` imports resolve). Then `pnpm test`. Commit:
 
 ```bash
 pnpm format
@@ -757,7 +757,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `Renderer.setAmbientOcclusion(enabled: boolean)` (Task 3).
 - Produces: `AppSettings.ambientOcclusion: boolean`, `DEFAULT_SETTINGS.ambientOcclusion === true`; i18n keys `settings.ambientOcclusion`, `settings.ambientOcclusion.hint`; test id `setting-ambient-occlusion`.
 
-- [ ] **Step 1: Failing tests** — `src/ui/settings.test.ts`:
+- [x] **Step 1: Failing tests** — `src/ui/settings.test.ts`:
 
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -800,9 +800,9 @@ describe('settings', () => {
 });
 ```
 
-- [ ] **Step 2:** `pnpm vitest run src/ui/settings.test.ts` — Expected: FAIL (`ambientOcclusion` undefined).
+- [x] **Step 2:** `pnpm vitest run src/ui/settings.test.ts` — Expected: FAIL (`ambientOcclusion` undefined).
 
-- [ ] **Step 3: Implementation.**
+- [x] **Step 3: Implementation.**
 
 `src/ui/settings.ts`: add `ambientOcclusion: boolean;` after `shadows` in `AppSettings`, `ambientOcclusion: true,` in `DEFAULT_SETTINGS`, and `ambientOcclusion: parsed.ambientOcclusion ?? DEFAULT_SETTINGS.ambientOcclusion,` in `loadSettings`.
 
@@ -842,7 +842,7 @@ DE after `'settings.shadows': 'Schatten',`:
 
 `e2e/game.spec.ts`, in `settings page toggles persist`: click `setting-ambient-occlusion` next to the shadows click and, after the reload, `await expect(page.getByTestId('setting-ambient-occlusion')).not.toBeChecked();` (the sandbox cannot run Playwright; the Mac and CI do).
 
-- [ ] **Step 4:** `pnpm vitest run src/ui && pnpm typecheck` — Expected: PASS; then `pnpm test`. Commit:
+- [x] **Step 4:** `pnpm vitest run src/ui && pnpm typecheck` — Expected: PASS; then `pnpm test`. Commit:
 
 ```bash
 pnpm format
@@ -856,13 +856,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 5: Full checks and the Mac acceptance hand-off
 
-- [ ] **Step 1:** `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm coverage && pnpm build` — Expected: all PASS; coverage ≥ 90 % on `src/sim` + `src/shared` (untouched).
-- [ ] **Step 2: Tick-cost guard (see the CI incident of 2026-10-06):** this change is render-only, so `stepTick` cost is unchanged by construction; confirm with `git diff --stat main -- src/sim` → empty.
-- [ ] **Step 3: Hand-off checklist for the user (Mac):**
+- [x] **Step 1:** `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm coverage && pnpm build` — Expected: all PASS; coverage ≥ 90 % on `src/sim` + `src/shared` (untouched).
+- [x] **Step 2: Tick-cost guard (see the CI incident of 2026-10-06):** this change is render-only, so `stepTick` cost is unchanged by construction; confirm with `git diff --stat main -- src/sim` → empty.
+- [x] **Step 3: Hand-off checklist for the user (Mac):**
   1. `pnpm e2e` (WebGL test, settings toggles) and `node scripts/smoke.mjs`.
   2. Same save, screenshots before (main) and after at noon, dusk and night; AO on and off.
   3. Brightness and colours match the old palette; if the scene is darker or washed out, report it — the knobs are `TONE_MAPPING_EXPOSURE`, `SUN_INTENSITY_*`, `AMBIENT_INTENSITY_*` in `src/render/scene.ts`.
   4. AO strength and radius look right on buildings, trees and under vehicles; knobs `AO_*` in `src/render/postprocessing.ts`. No grey halos around overlays, the hover marker or icons.
   5. Shadows sharp when zoomed in, no crawling edges while panning, nothing missing at the screen border; at sunrise/sunset long shadows still reach in from just outside the view (knob `SHADOW_MARGIN_TILES`).
   6. Frame time (browser performance panel or the HUD's FPS if present) at 64×64 and 96×96, AO on and off. Target: 96×96 with AO under 16.7 ms; if not, set `AO_RESOLUTION_SCALE` to 1/3 first.
-- [ ] **Step 4:** Record the measured frame times and the final constants in the spec's Testing section once the user reports them (a follow-up commit after the Mac round).
+- [x] **Step 4:** Record the measured frame times and the final constants in the spec's Testing section once the user reports them (a follow-up commit after the Mac round).
