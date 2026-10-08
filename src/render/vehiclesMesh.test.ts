@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { TileDiff, VehicleState } from '../shared/types.ts';
 import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
-import { BALANCE } from '../shared/constants.ts';
+import { BALANCE, TICK_MS } from '../shared/constants.ts';
 import { LANE_OFFSET, LOCOMOTIVE_LENGTH, VehiclesMesh, WAGON_LENGTH } from './vehiclesMesh.ts';
 import { CAR_STYLES, carColorOf, carStyleOf } from './vehicles/variety.ts';
 
@@ -177,6 +177,40 @@ describe('trains', () => {
         expect(Math.abs(position.z - 2.5)).toBeLessThan(LANE_OFFSET / 2);
       }
     }
+  });
+});
+
+describe('angle blending across updates', () => {
+  // Two sim updates apart (nowSeconds 0, then 1) with the default update
+  // interval (TICK_MS / 1000 = 0.25 s, untouched by the single measured
+  // sample), so blend 0.5 lands at nowSeconds 1.125.
+  function blendedAngle(from: VehicleState, to: VehicleState, blend: number): number {
+    const scene = new THREE.Scene();
+    const mesh = new VehiclesMesh(
+      scene,
+      field(() => 0),
+      () => Terrain.Land,
+    );
+    mesh.setVehicles([from], 0);
+    mesh.setVehicles([to], 1);
+    mesh.update(1 + blend * (TICK_MS / 1000));
+    const cars = mesh.modelMeshes().get(carStyleOf(to.id))!;
+    const matrix = new THREE.Matrix4();
+    cars.getMatrixAt(0, matrix);
+    matrix.decompose(position, quaternion, scale);
+    const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
+    return Math.atan2(forward.z, forward.x);
+  }
+
+  it('snaps straight to the target angle across a reversal (0 -> π) instead of spinning through it', () => {
+    const angle = blendedAngle(car(3.5, 3.5, 0), car(3.5, 3.5, Math.PI), 0.5);
+    // atan2 wraps to (-π, π]; a reversal's target of π can come back as -π.
+    expect(Math.abs(angle)).toBeCloseTo(Math.PI, 6);
+  });
+
+  it('still blends a corner turn (0 -> π/2) halfway', () => {
+    const angle = blendedAngle(car(3.5, 3.5, 0), car(3.5, 3.5, Math.PI / 2), 0.5);
+    expect(angle).toBeCloseTo(Math.PI / 4, 6);
   });
 });
 

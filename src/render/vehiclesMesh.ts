@@ -40,6 +40,16 @@ const PITCH_SAMPLE = 0.15;
  *  is 0.62 tiles wide, so 0.14 keeps every vehicle body on the pad. */
 export const LANE_OFFSET = 0.14;
 
+/**
+ * Wrapped angle delta beyond which `update` snaps to the target angle
+ * instead of blending. A reversal flips every wagon's angle by π in one
+ * update; blending that through `lerpAngle` spins the consist 180° in
+ * place over one interpolation window, which reads as a glitch. A real
+ * curve never turns a vehicle more than a right angle (π/2) between two
+ * ticks, so the threshold sits well above that and only catches reversals.
+ */
+const SNAP_TURN = 0.9 * Math.PI;
+
 /** Which mesh an id/kind combination draws into. */
 export type ModelKey = CarStyle | 'van' | 'bus' | 'locomotive' | 'passengerWagon' | FreightBody;
 
@@ -259,7 +269,10 @@ export class VehiclesMesh {
       const source = this.previous.get(target.id) ?? target;
       // Teleports (respawns) should not slide across the map.
       const jump = Math.hypot(target.x - source.x, target.y - source.y) > 2;
-      const angle = jump ? target.angle : lerpAngle(source.angle, target.angle, blend);
+      const angle =
+        jump || Math.abs(wrapAngle(target.angle - source.angle)) > SNAP_TURN
+          ? target.angle
+          : lerpAngle(source.angle, target.angle, blend);
       const dirX = Math.cos(angle);
       const dirY = Math.sin(angle);
       // Keep right: the sim drives the centre line, so shift the drawn
@@ -328,9 +341,13 @@ export class VehiclesMesh {
   }
 }
 
-function lerpAngle(a: number, b: number, t: number): number {
-  let delta = b - a;
+/** Wrap an angle (difference) into (-π, π]. */
+function wrapAngle(delta: number): number {
   while (delta > Math.PI) delta -= 2 * Math.PI;
   while (delta < -Math.PI) delta += 2 * Math.PI;
-  return a + delta * t;
+  return delta;
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  return a + wrapAngle(b - a) * t;
 }
