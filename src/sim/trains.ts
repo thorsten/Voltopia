@@ -549,6 +549,29 @@ export function runningTrains(state: SimState): Train[] {
 }
 
 /**
+ * The locomotive's drawn heading (render semantics only; `train.angle`
+ * itself is untouched — crossings.ts reads it as the barrier axis and must
+ * not see this). `train.angle` only turns when the locomotive moves, so for
+ * one tick after a reversal — the tick `routeToNextHalt` plans the new leg,
+ * before `advanceTrain` ever runs it — it still points the old way while
+ * the trailing wagons (walked out via `consistAhead`/`leadingPoint`) are
+ * already drawn on the new leg. While Running, look from `pathIndex`
+ * onward for the first path tile that is not the one the locomotive
+ * stands on (a fresh or continued leg starts with a zero-distance hop onto
+ * the current tile, same as `advanceTrain` and `consistAhead` skip) and
+ * face it; with none left (or not Running), fall back to `train.angle`.
+ */
+export function locomotiveAngle(state: SimState, train: Train): number {
+  if (train.phase !== TrainPhase.Running) return train.angle;
+  for (let i = train.pathIndex; i < train.path.length; i++) {
+    const dx = tileX(train.path[i], state.size) + 0.5 - train.x;
+    const dy = tileY(train.path[i], state.size) + 0.5 - train.y;
+    if (Math.hypot(dx, dy) > TRAIL_EPSILON) return Math.atan2(dy, dx);
+  }
+  return train.angle;
+}
+
+/**
  * A point `gap` tiles behind the locomotive, walking back over its trail of
  * reached tile centres (newest first) so wagons follow through curves —
  * where the wagons of a pulling train stand. The trail survives a new leg

@@ -11,7 +11,7 @@ import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { buildRail } from './rail.ts';
-import { leadingPoint, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
+import { leadingPoint, locomotiveAngle, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -195,7 +195,7 @@ export class SimEngine {
         id: t.id,
         x: t.x,
         y: t.y,
-        angle: t.angle,
+        angle: locomotiveAngle(this.state, t),
         kind: freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive,
         ...(t.pushing ? { tail: true as const } : { lead: true as const }),
       });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import { tileIndex } from '../shared/grid.ts';
+import { tileIndex, tileX, tileY } from '../shared/grid.ts';
 import {
   PlantType,
   SupplyStatus,
@@ -17,7 +17,7 @@ import { timeOfDay, dayNumber } from './tick.ts';
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
-import { leadingPoint, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
+import { leadingPoint, locomotiveAngle, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { ticksAtHour } from './vehicles.ts';
 
 function makeEngine(seed = 42, size = 16): SimEngine {
@@ -379,7 +379,7 @@ describe('SimEngine basics', () => {
             id: train.id,
             x: train.x,
             y: train.y,
-            angle: train.angle,
+            angle: locomotiveAngle(state, train),
             kind: locoKind,
             ...(train.pushing ? { tail: true } : { lead: true }),
           },
@@ -413,6 +413,35 @@ describe('SimEngine basics', () => {
     if (event.type !== 'tick') throw new Error('expected tick');
     expect(state.trains.some((t) => t.pushing && t.phase === TrainPhase.Running)).toBe(true);
     checkTrains(event.vehicles);
+
+    // The reversal that just flipped `pushing` planned a new leg (new path,
+    // phase Running) but left x/y/angle at the halt until `advanceTrain`
+    // next runs it: train.angle still faces the old (now trailing)
+    // direction for this one tick, while the drawn locomotive already
+    // faces the next path tile — the direction the consist is actually
+    // about to run. A fresh leg starts with a zero-distance hop onto the
+    // tile the train already stands on (see advanceTrain), so the first
+    // tile that actually differs is found by skipping those, independent
+    // of locomotiveAngle's own implementation.
+    const reversed = state.trains.find((t) => t.pushing && t.phase === TrainPhase.Running)!;
+    let expectedAngle: number | undefined;
+    for (let i = reversed.pathIndex; i < reversed.path.length; i++) {
+      const dx = tileX(reversed.path[i], 32) + 0.5 - reversed.x;
+      const dy = tileY(reversed.path[i], 32) + 0.5 - reversed.y;
+      if (Math.hypot(dx, dy) > 1e-6) {
+        expectedAngle = Math.atan2(dy, dx);
+        break;
+      }
+    }
+    expect(expectedAngle).not.toBeUndefined();
+    const drawnAngle = locomotiveAngle(state, reversed);
+    expect(drawnAngle).toBeCloseTo(expectedAngle!, 6);
+    // Far enough from the old heading that this is a real difference, not
+    // interpolation noise.
+    let delta = drawnAngle - reversed.angle;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    expect(Math.abs(delta)).toBeGreaterThan(0.1);
 
     // Parked trains (not out of the yard) produce no vehicle entries at all.
     const parked = state.trains.filter((t) => t.phase === TrainPhase.Parked);
