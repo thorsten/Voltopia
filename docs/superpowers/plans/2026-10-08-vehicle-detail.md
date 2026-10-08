@@ -26,7 +26,7 @@
 
 ### Task 0: Branch
 
-- [ ] `git checkout -b feature/vehicle-detail`
+- [x] `git checkout -b feature/vehicle-detail`
 
 ---
 
@@ -41,7 +41,7 @@
 - Produces (models.ts): `MAX_PARTS_PER_MODEL = 16`; colour constants `BODY, GLASS, TYRE, TRIM, LENS_FRONT, LENS_REAR, PANTOGRAPH, VAN_STRIPE`; `LOCOMOTIVE_LENGTH = 0.52`, `WAGON_LENGTH = 0.5` (moved here from `vehiclesMesh.ts`); `interface VehicleModel { geometry: THREE.BufferGeometry; parts: number; length: number }`; builders `hatchbackModel(), sedanModel(), estateModel(), suvModel(), vanModel(), busModel(), locomotiveModel(), passengerWagonModel(), containerWagonModel(), hopperWagonModel(), tankWagonModel()` each returning `VehicleModel`.
 - Produces (variety.ts): `type CarStyle = 'hatchback' | 'sedan' | 'estate' | 'suv'`; `CAR_STYLES: readonly CarStyle[]`; `type FreightBody = 'container' | 'hopper' | 'tank'`; `FREIGHT_BODIES`; `CAR_COLORS: readonly number[]` (10 paints); `CONTAINER_COLORS: readonly number[]`; `vehicleHash(id: number): number`; `carStyleOf(id)`, `carColorOf(id)`, `freightBodyOf(id)`, `containerColorOf(id)`.
 
-- [ ] **Step 1: Failing tests** — `src/render/vehicles/models.test.ts`:
+- [x] **Step 1: Failing tests** — `src/render/vehicles/models.test.ts`:
 
 ```ts
 import * as THREE from 'three';
@@ -168,9 +168,9 @@ describe('vehicle variety', () => {
 });
 ```
 
-- [ ] **Step 2:** `pnpm vitest run src/render/vehicles` — Expected: FAIL (modules missing).
+- [x] **Step 2:** `pnpm vitest run src/render/vehicles` — Expected: FAIL (modules missing).
 
-- [ ] **Step 3: `src/render/vehicles/variety.ts`**
+- [x] **Step 3: `src/render/vehicles/variety.ts`**
 
 ```ts
 export type CarStyle = 'hatchback' | 'sedan' | 'estate' | 'suv';
@@ -208,7 +208,7 @@ export const containerColorOf = (id: number): number => pick(CONTAINER_COLORS, i
 
 (`id ^ salt` on ids above 2^31 loses the high part: use `vehicleHash(id) ^ salt` hashed again instead if the distribution test fails — i.e. `vehicleHash(vehicleHash(id) ^ salt)`. Keep whichever passes; both are deterministic.)
 
-- [ ] **Step 4: `src/render/vehicles/models.ts`**
+- [x] **Step 4: `src/render/vehicles/models.ts`**
 
 ```ts
 import * as THREE from 'three';
@@ -540,9 +540,9 @@ export function tankWagonModel(): VehicleModel {
 
 `mergeGeometries` needs identical attribute sets: `BoxGeometry` and `CylinderGeometry` both have `position`, `normal`, `uv` and an index, plus our `color` — they merge. If the bus windscreen line `L / 2 - 0.002 + 0.002` pushes past the body length check, use `L / 2 - 0.002`. After `pnpm format` the compact literals will re-flow; keep the numbers. Any builder whose test fails on a dimension: adjust that part's size/offset (not the test's table) so the bounding box matches the spec.
 
-- [ ] **Step 5:** `pnpm vitest run src/render/vehicles` — Expected: PASS. `pnpm typecheck`.
+- [x] **Step 5:** `pnpm vitest run src/render/vehicles` — Expected: PASS. `pnpm typecheck`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -571,7 +571,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: everything Task 1 produces. This task also **adds** `BALANCE.rail.passengerWagons = 3` and `BALANCE.rail.freightWagons = 4` (Task 3 uses them too); the renderer reads them through a small helper `wagonsPerTrain(kind: VehicleKind): number` in `vehiclesMesh.ts` to find the last wagon.
 - Produces: `VehiclesMesh.modelMeshes(): ReadonlyMap<ModelKey, THREE.InstancedMesh>` (read-only accessor for tests), `type ModelKey = CarStyle | 'van' | 'bus' | 'locomotive' | 'passengerWagon' | FreightBody`; `LOCOMOTIVE_LENGTH`/`WAGON_LENGTH` re-exported from `vehiclesMesh.ts` (existing test imports them from there).
 
-- [ ] **Step 1: Failing tests** — append to `src/render/vehiclesMesh.test.ts` (the file has `field(levelOf)`, `SIZE = 8`, imports `VehicleKind`, `Terrain`, `WAGON_ID_OFFSET`):
+- [x] **Step 1: Failing tests** — append to `src/render/vehiclesMesh.test.ts` (the file has `field(levelOf)`, `SIZE = 8`, imports `VehicleKind`, `Terrain`, `WAGON_ID_OFFSET`):
 
 ```ts
 describe('vehicle models and colours', () => {
@@ -657,9 +657,9 @@ describe('vehicle models and colours', () => {
 
 Imports to add: `CAR_STYLES, carColorOf, carStyleOf` from `./vehicles/variety.ts`, `type VehicleState` from `../shared/types.ts`. Existing tests that find "the car mesh" via `count === 1` or check headlight counts: update them to the new layout (headlights: road vehicles + locomotives; use `name === 'headlights'`).
 
-- [ ] **Step 2:** `pnpm vitest run src/render/vehiclesMesh.test.ts` — Expected: FAIL.
+- [x] **Step 2:** `pnpm vitest run src/render/vehiclesMesh.test.ts` — Expected: FAIL.
 
-- [ ] **Step 3: Implementation** in `src/render/vehiclesMesh.ts`:
+- [x] **Step 3: Implementation** in `src/render/vehiclesMesh.ts`:
 
 - Delete `createCarGeometry`, `createVanGeometry`, `createBusGeometry`, `createLocomotiveGeometry`, `createWagonGeometry`, the old colour constants and `LOCOMOTIVE_LENGTH`/`WAGON_LENGTH` definitions; `export { LOCOMOTIVE_LENGTH, WAGON_LENGTH } from './vehicles/models.ts';`.
 - Constants: `MAX_CARS_PER_STYLE = 256` (the sim caps cars at 220, so one style can hold them all), `MAX_VANS = 64`, `MAX_BUSES = 64`, `MAX_TRAINS = 64`, `MAX_WAGONS = MAX_TRAINS * 4`; fixed instance colours `VAN_COLOR = 0xf2f2ef`, `BUS_COLOR = 0x3f8fd6`, `PASSENGER_TRAIN_COLOR = 0xd84a3a`, `FREIGHT_TRAIN_COLOR = 0x4f6b3a`, `WAGON_COLOR = 0xc9ccd1`, `HOPPER_COLOR = 0x8a6a3f`, `TANK_COLOR = 0x9aa0a8`; light offsets `LIGHT_PROUD = 0.002` (how far in front of / behind the body the light quads sit).
@@ -741,9 +741,9 @@ Skip the target when its model's `count >= capacity` (before touching `previous`
     freightWagons: 4,
 ```
 
-- [ ] **Step 4:** `pnpm vitest run src/render && pnpm typecheck` — PASS; `pnpm test`.
+- [x] **Step 4:** `pnpm vitest run src/render && pnpm typecheck` — PASS; `pnpm test`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -771,7 +771,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `BALANCE.rail.passengerWagons`, `freightWagons`, `wagonGap` (Task 2 added the first two).
 - Produces: `Train.trail: number[]` (transient); `TRAIL_TILES` (derived, exported from `trains.ts`); `trailingPoint(state, train, gap)` walks the trail; `wagonsOf(train): number`.
 
-- [ ] **Step 1: Failing tests** — in `src/sim/trains.test.ts` replace the `describe('trailingPoint', …)` block with:
+- [x] **Step 1: Failing tests** — in `src/sim/trains.test.ts` replace the `describe('trailingPoint', …)` block with:
 
 ```ts
 describe('trailingPoint', () => {
@@ -859,9 +859,9 @@ describe('train trail', () => {
 
 In `src/sim/engine.test.ts`, update the train-mapping test (it asserts one wagon at `train.id + WAGON_ID_OFFSET`): for every running train expect `1 + n` entries where `n = BALANCE.rail.freightWagons` for freight and `passengerWagons` otherwise, wagon `k` (1..n) with id `train.id + k * WAGON_ID_OFFSET`, kind `Wagon`/`FreightWagon`, and position `trailingPoint(state, train, k * BALANCE.rail.wagonGap)`.
 
-- [ ] **Step 2:** `pnpm vitest run src/sim/trains.test.ts src/sim/engine.test.ts` — FAIL.
+- [x] **Step 2:** `pnpm vitest run src/sim/trains.test.ts src/sim/engine.test.ts` — FAIL.
 
-- [ ] **Step 3: Implementation**
+- [x] **Step 3: Implementation**
 
 `src/sim/state.ts` `Train`: add
 
@@ -948,11 +948,11 @@ for (let k = 1; k <= wagonsOf(t); k++) {
 }
 ```
 
-- [ ] **Step 4:** `pnpm vitest run src/sim && pnpm typecheck` — PASS; `pnpm test`.
+- [x] **Step 4:** `pnpm vitest run src/sim && pnpm typecheck` — PASS; `pnpm test`.
 
-- [ ] **Step 5: Tick-cost probe** (memory: CI budget). Write `/tmp/probe-tick.mjs` that imports `createSimState` and `stepTick` from this checkout's `src/sim/*.ts` (absolute paths), steps 300 ticks on 64 and 32 maps, prints ms/tick; run it here and against a `main` worktree (`git worktree add /tmp/vd-base main`, symlink `node_modules`), report both, then `git worktree remove --force /tmp/vd-base` and delete the probe. Expected: within noise (< 3 %).
+- [x] **Step 5: Tick-cost probe** (memory: CI budget). Write `/tmp/probe-tick.mjs` that imports `createSimState` and `stepTick` from this checkout's `src/sim/*.ts` (absolute paths), steps 300 ticks on 64 and 32 maps, prints ms/tick; run it here and against a `main` worktree (`git worktree add /tmp/vd-base main`, symlink `node_modules`), report both, then `git worktree remove --force /tmp/vd-base` and delete the probe. Expected: within noise (< 3 %).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -971,8 +971,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 4: Full checks and the Mac hand-off
 
-- [ ] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — all PASS, coverage ≥ 90 % on `src/sim` + `src/shared`.
-- [ ] Hand-off checklist for the user (Mac): `pnpm e2e`; a street at day and night (four car shapes, varied paints, a car keeps its colour, tail lights red at night); a bus and a van read at city zoom; a train of 3 and of 4 wagons turning a corner and departing a station without wagons jumping or overlapping; locomotive pantograph under the catenary; tank, hopper and container wagons mixed in freight trains; frame time unchanged at 96×96 with many cars.
+- [x] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — all PASS, coverage ≥ 90 % on `src/sim` + `src/shared`.
+- [x] Hand-off checklist for the user (Mac): `pnpm e2e`; a street at day and night (four car shapes, varied paints, a car keeps its colour, tail lights red at night); a bus and a van read at city zoom; a train of 3 and of 4 wagons turning a corner and departing a station without wagons jumping or overlapping; locomotive pantograph under the catenary; tank, hopper and container wagons mixed in freight trains; frame time unchanged at 96×96 with many cars.
 
 ---
 
@@ -986,7 +986,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - Produces: `Train.pushing: boolean` (transient); `consistAhead(state: SimState, train: Train, length: number): number[]` (tile indices ahead, nearest first, never the locomotive's own tile); `leadingPoint(state, train, gap): { x; y; angle }` (angle = heading of travel); `VehicleState.lead?: true`, `VehicleState.tail?: true`.
 
-- [ ] **Step 1: Failing tests** (`src/sim/trains.test.ts`, using `railTown`, `setHour`, `runTicks`):
+- [x] **Step 1: Failing tests** (`src/sim/trains.test.ts`, using `railTown`, `setHour`, `runTicks`):
 
 ```ts
 describe('push-pull', () => {
@@ -1065,9 +1065,9 @@ describe('push-pull', () => {
 
 `src/render/vehiclesMesh.test.ts`: train head and tail lights follow the `lead`/`tail` flags (a locomotive with `tail: true` and no `lead` gets a tail light and no headlight; a wagon with `lead: true` gets a headlight).
 
-- [ ] **Step 2:** run them — FAIL.
+- [x] **Step 2:** run them — FAIL.
 
-- [ ] **Step 3: Implementation** per the spec addendum:
+- [x] **Step 3: Implementation** per the spec addendum:
   - `Train.pushing` (doc comment: transient, render semantics only), `createTrain`/`parkAtYard`/`deserializeState` set `false`.
   - `consistAhead`: walk `path[pathIndex..]` (skip the locomotive's own tile), then continue: from the last tile `T` reached from `P`, the next tile is `T + (T − P)` if it carries track, else the single track neighbour of `T` other than `P` if exactly one exists, else stop. Stop when the walked length (tile-centre distances from the locomotive) reaches `length`, or after `TRAIL_TILES` continuation tiles.
   - `leadingPoint(state, train, gap)`: like `trailingPoint` but forward over `[locomotive position, ...consistAhead centres]`; angle = `atan2(dy, dx)` of the segment travelled.
@@ -1075,7 +1075,7 @@ describe('push-pull', () => {
   - `engine.collectVehicles`: wagons from `leadingPoint` while pushing, else `trailingPoint`; set `lead`/`tail` per the spec.
   - Renderer: for trains, headlight iff `lead`, tail light iff `tail` (road vehicles unchanged); remove the wagon-index last-wagon rule and `wagonsPerTrain` if now unused.
 
-- [ ] **Step 4:** `pnpm vitest run src/sim src/render && pnpm typecheck`, `pnpm test`, tick-cost probe vs `main` (as in Task 3), `pnpm format`, commit:
+- [x] **Step 4:** `pnpm vitest run src/sim src/render && pnpm typecheck`, `pnpm test`, tick-cost probe vs `main` (as in Task 3), `pnpm format`, commit:
 
 ```bash
 git commit -m "feat(sim,render): push-pull at reversals so wagons never run through the locomotive
