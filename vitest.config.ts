@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // Keeps long synchronous test files from tripping vitest's 60 s worker RPC timeout.
+    setupFiles: ['./src/test/yieldBetweenTests.ts'],
     // The multi-day simulation suites (heat, integration) take 6-8 s
     // locally under coverage and 2-3x that on shared CI runners, which
     // also starve vitest's worker threads — at 30 s they timed out once

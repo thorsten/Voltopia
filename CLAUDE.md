@@ -74,8 +74,14 @@ full state (except save snapshots).
   SwiftShader). Headless smoke: `node scripts/smoke.mjs`.
 - e2e uses `127.0.0.1` (not `localhost`) and Chromium flags
   `--no-proxy-server --no-sandbox` (see `playwright.config.ts`).
-- CI runners are 2-3x slower than dev machines — long sim tests need
-  generous vitest timeouts (`testTimeout` is set to 30s).
+- CI runners are 2-4x slower than dev machines — long sim tests need
+  generous vitest timeouts (`testTimeout` is 60s). Vitest workers also
+  have a fixed 60s RPC timeout that synchronous tests can trip ("Timeout
+  calling onTaskUpdate" with every test green): `src/test/yieldBetweenTests.ts`
+  yields the event loop after each test, so only the longest single test
+  matters — keep any one sim test under ~15s locally under `pnpm coverage`
+  and split heavy suites into several files. New per-tick sim work is a
+  CI budget too: gate it when its feature is absent.
 - When adding a dependency that has build/postinstall scripts, pnpm 12
   hard-fails a fresh install (`ERR_PNPM_IGNORED_BUILDS`) until the
   package is approved. The approval lives in `pnpm-workspace.yaml`
