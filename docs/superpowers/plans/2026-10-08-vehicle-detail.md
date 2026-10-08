@@ -973,3 +973,112 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — all PASS, coverage ≥ 90 % on `src/sim` + `src/shared`.
 - [ ] Hand-off checklist for the user (Mac): `pnpm e2e`; a street at day and night (four car shapes, varied paints, a car keeps its colour, tail lights red at night); a bus and a van read at city zoom; a train of 3 and of 4 wagons turning a corner and departing a station without wagons jumping or overlapping; locomotive pantograph under the catenary; tank, hopper and container wagons mixed in freight trains; frame time unchanged at 96×96 with many cars.
+
+---
+
+### Task 5: Push-pull at reversals (spec addendum, 2026-10-08)
+
+**Files:**
+
+- Modify: `src/sim/state.ts` (`Train.pushing`, `deserializeState`), `src/sim/trains.ts` (`createTrain`, `parkAtYard`, `routeToNextHalt`, new `consistAhead`, `leadingPoint`), `src/sim/engine.ts` (`collectVehicles`), `src/shared/types.ts` (`VehicleState.lead?`, `tail?`), `src/render/vehiclesMesh.ts` (train lights from flags), tests in `src/sim/trains.test.ts`, `src/sim/engine.test.ts`, `src/render/vehiclesMesh.test.ts`
+
+**Interfaces:**
+
+- Produces: `Train.pushing: boolean` (transient); `consistAhead(state: SimState, train: Train, length: number): number[]` (tile indices ahead, nearest first, never the locomotive's own tile); `leadingPoint(state, train, gap): { x; y; angle }` (angle = heading of travel); `VehicleState.lead?: true`, `VehicleState.tail?: true`.
+
+- [ ] **Step 1: Failing tests** (`src/sim/trains.test.ts`, using `railTown`, `setHour`, `runTicks`):
+
+```ts
+describe('push-pull', () => {
+  it('toggles pushing when a new leg starts back the way the train came', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    // Run until some train has reversed at a terminus at least once.
+    let reversed: Train | undefined;
+    for (let i = 0; i < 1200 && !reversed; i++) {
+      runTicks(state, 1);
+      reversed = state.trains.find((t) => t.pushing && t.phase === TrainPhase.Running);
+    }
+    expect(reversed).toBeDefined();
+  });
+
+  it('keeps every wagon on a track tile and ahead of the locomotive while pushing, behind while pulling', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    for (let i = 0; i < 1200; i++) {
+      runTicks(state, 1);
+      for (const t of runningTrains(state)) {
+        for (let k = 1; k <= wagonsOf(t); k++) {
+          const p = t.pushing
+            ? leadingPoint(state, t, k * BALANCE.rail.wagonGap)
+            : trailingPoint(state, t, k * BALANCE.rail.wagonGap);
+          const tile = tileIndex(Math.floor(p.x), Math.floor(p.y), state.size);
+          expect(state.layers.rail[tile]).not.toBe(0);
+        }
+      }
+    }
+  });
+
+  it('never lets a wagon pass through the locomotive at a reversal', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    const last = new Map<number, { pushing: boolean; side: number }>();
+    for (let i = 0; i < 1200; i++) {
+      runTicks(state, 1);
+      for (const t of runningTrains(state)) {
+        const p = t.pushing
+          ? leadingPoint(state, t, BALANCE.rail.wagonGap)
+          : trailingPoint(state, t, BALANCE.rail.wagonGap);
+        // Distance from the locomotive to wagon 1 never collapses below half a gap once running.
+        const d = Math.hypot(p.x - t.x, p.y - t.y);
+        if (t.trail.length >= 2 || t.pushing)
+          expect(d).toBeGreaterThan(BALANCE.rail.wagonGap * 0.5);
+        last.set(t.id, { pushing: t.pushing, side: 0 });
+      }
+    }
+  });
+
+  it('consistAhead continues along the track past the path end and stops at a buffer', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const t = state.trains[0];
+    // Head at (25, 10) heading east, path ends there; track continues to x = 28 and stops.
+    t.path = [at(24, 10), at(25, 10)];
+    t.pathIndex = 2;
+    t.x = 25.5;
+    t.y = 10.5;
+    t.angle = 0;
+    expect(consistAhead(state, t, 10)).toEqual([at(26, 10), at(27, 10), at(28, 10)]);
+  });
+
+  it('pushing and the rebuilt trail are transient', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    runTicks(state, 600);
+    const loaded = deserializeState(serializeState(state));
+    for (const t of loaded.trains) expect(t.pushing).toBe(false);
+  });
+});
+```
+
+`src/sim/engine.test.ts`: for running trains, exactly one emitted vehicle of the train has `lead: true` and exactly one `tail: true`; while `pushing` the lead is wagon n (`id = train.id + n * WAGON_ID_OFFSET`) and the tail is the locomotive, otherwise the locomotive leads and wagon n has the tail; wagon positions equal `leadingPoint`/`trailingPoint` accordingly.
+
+`src/render/vehiclesMesh.test.ts`: train head and tail lights follow the `lead`/`tail` flags (a locomotive with `tail: true` and no `lead` gets a tail light and no headlight; a wagon with `lead: true` gets a headlight).
+
+- [ ] **Step 2:** run them — FAIL.
+
+- [ ] **Step 3: Implementation** per the spec addendum:
+  - `Train.pushing` (doc comment: transient, render semantics only), `createTrain`/`parkAtYard`/`deserializeState` set `false`.
+  - `consistAhead`: walk `path[pathIndex..]` (skip the locomotive's own tile), then continue: from the last tile `T` reached from `P`, the next tile is `T + (T − P)` if it carries track, else the single track neighbour of `T` other than `P` if exactly one exists, else stop. Stop when the walked length (tile-centre distances from the locomotive) reaches `length`, or after `TRAIL_TILES` continuation tiles.
+  - `leadingPoint(state, train, gap)`: like `trailingPoint` but forward over `[locomotive position, ...consistAhead centres]`; angle = `atan2(dy, dx)` of the segment travelled.
+  - In `routeToNextHalt`, before replacing the path: let `came` = the newest trail tile different from the current tile (or `-1`); after finding the new path, if its first step from the current tile equals `came`, it is a reversal: if `pushing` → rebuild `trail` from `consistAhead(state, train, wagonsOf(train) * wagonGap + 1)` using the OLD path (compute it before assigning the new path), reversed (farthest first) and followed by the current tile, then `pushing = false`; else `pushing = true`.
+  - `engine.collectVehicles`: wagons from `leadingPoint` while pushing, else `trailingPoint`; set `lead`/`tail` per the spec.
+  - Renderer: for trains, headlight iff `lead`, tail light iff `tail` (road vehicles unchanged); remove the wagon-index last-wagon rule and `wagonsPerTrain` if now unused.
+
+- [ ] **Step 4:** `pnpm vitest run src/sim src/render && pnpm typecheck`, `pnpm test`, tick-cost probe vs `main` (as in Task 3), `pnpm format`, commit:
+
+```bash
+git commit -m "feat(sim,render): push-pull at reversals so wagons never run through the locomotive
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```

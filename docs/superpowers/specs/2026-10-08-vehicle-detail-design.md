@@ -140,3 +140,35 @@ jumping.
 
 Rotating wheels, indicators, brake lights, new vehicle types, liveries
 per company, textures, sound.
+
+## Addendum (2026-10-08): push-pull at reversals
+
+Found in review: on a terminus reversal the trail points back the way
+the train came, so for about three ticks the wagons run through the
+locomotive. Decided with the user: **push-pull** (rejected: accept the
+fold as a visual quirk). Render semantics only — the sim still moves
+the locomotive's position, so tour timing and gameplay are unchanged.
+
+- `Train.pushing: boolean`, transient like `trail` (false when created,
+  parked or loaded).
+- Reversal: when `routeToNextHalt` gives a train a new leg whose first
+  step goes back to the tile it came from, `pushing` toggles. Switching
+  from pushing to pulling rebuilds `trail` from the tiles the wagons
+  occupied ahead of the locomotive, so they stay where they physically
+  are.
+- `consistAhead(state, train, length)` walks forward from the
+  locomotive along the remaining path, then continues along the track
+  beyond the path's end (straight on, or the single other track
+  neighbour in a curve), and stops at a buffer or an ambiguous
+  junction. `leadingPoint(state, train, gap)` places a wagon on it.
+- Wagons are placed by `trailingPoint` while pulling and by
+  `leadingPoint` while pushing, so the consist never jumps at a
+  reversal.
+- Lights follow the consist: `VehicleState` gains optional `lead` and
+  `tail` flags (backward compatible). While pulling the locomotive leads
+  and the last wagon carries the tail lights; while pushing the far
+  wagon leads and the locomotive carries them. The renderer uses the
+  flags for trains instead of the wagon-index rule.
+- Known limit: pushing into a buffer stop compresses the consist over
+  the last tiles before the locomotive stops, because the track ends.
+  A yard at a dead end is the common case; parked trains are not drawn.
