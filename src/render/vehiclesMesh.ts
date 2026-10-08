@@ -1,11 +1,34 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TICK_MS } from '../shared/constants.ts';
+import { BALANCE, TICK_MS } from '../shared/constants.ts';
 import type { VehicleState } from '../shared/types.ts';
-import { Terrain, VehicleKind } from '../shared/types.ts';
+import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import type { RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { surfaceMaterial } from './materials.ts';
+import {
+  busModel,
+  containerWagonModel,
+  estateModel,
+  hatchbackModel,
+  hopperWagonModel,
+  locomotiveModel,
+  passengerWagonModel,
+  sedanModel,
+  suvModel,
+  tankWagonModel,
+  vanModel,
+  type VehicleModel,
+} from './vehicles/models.ts';
+import {
+  type CarStyle,
+  type FreightBody,
+  carColorOf,
+  carStyleOf,
+  containerColorOf,
+  freightBodyOf,
+} from './vehicles/variety.ts';
+
+export { LOCOMOTIVE_LENGTH, WAGON_LENGTH } from './vehicles/models.ts';
 
 /** Half wheelbase, in tiles: how far ahead/behind the carriageway is
  *  sampled to pitch a vehicle along the slope it drives on. */
@@ -17,91 +40,121 @@ const PITCH_SAMPLE = 0.15;
  *  is 0.62 tiles wide, so 0.14 keeps every vehicle body on the pad. */
 export const LANE_OFFSET = 0.14;
 
-const MAX_VEHICLES = 256;
+/** Which mesh an id/kind combination draws into. */
+export type ModelKey = CarStyle | 'van' | 'bus' | 'locomotive' | 'passengerWagon' | FreightBody;
+
+// The sim caps cars at 220, so one style's mesh can hold all of them.
+const MAX_CARS_PER_STYLE = 256;
 const MAX_VANS = 64;
 const MAX_BUSES = 64;
-const MAX_TRAINS = 32;
-const CAR_COLORS = [0xe8e6e0, 0x8fb3c9, 0xd9a066, 0x9aa88f, 0x707a86, 0xc9788f];
+const MAX_TRAINS = 64;
+const MAX_WAGONS = MAX_TRAINS * 4;
+
+// Fixed instance colours for vehicles that don't vary by id; cars and
+// freight containers pick theirs per id (see ./vehicles/variety.ts).
 const VAN_COLOR = 0xf2f2ef;
 const BUS_COLOR = 0x3f8fd6;
 const PASSENGER_TRAIN_COLOR = 0xd84a3a;
 const FREIGHT_TRAIN_COLOR = 0x4f6b3a;
 const WAGON_COLOR = 0xc9ccd1;
-const FREIGHT_WAGON_COLOR = 0x8a6a3f;
+const HOPPER_COLOR = 0x8a6a3f;
+const TANK_COLOR = 0x9aa0a8;
 
-/** Simple low-poly car: body + cabin merged into one geometry. */
-function createCarGeometry(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(0.3, 0.07, 0.14);
-  body.translate(0, 0.055, 0);
-  const cabin = new THREE.BoxGeometry(0.16, 0.06, 0.12);
-  cabin.translate(-0.015, 0.12, 0);
-  return mergeGeometries([body, cabin]);
+/** How far in front of / behind the body the light quads sit, in tiles,
+ *  so they don't sit coplanar with the body's end face (z-fighting). */
+const LIGHT_PROUD = 0.002;
+/** Height of the headlight quad above the ground, in tiles. */
+const HEADLIGHT_HEIGHT = 0.06;
+
+const MODELS: Record<ModelKey, { build: () => VehicleModel; capacity: number }> = {
+  hatchback: { build: hatchbackModel, capacity: MAX_CARS_PER_STYLE },
+  sedan: { build: sedanModel, capacity: MAX_CARS_PER_STYLE },
+  estate: { build: estateModel, capacity: MAX_CARS_PER_STYLE },
+  suv: { build: suvModel, capacity: MAX_CARS_PER_STYLE },
+  van: { build: vanModel, capacity: MAX_VANS },
+  bus: { build: busModel, capacity: MAX_BUSES },
+  locomotive: { build: locomotiveModel, capacity: MAX_TRAINS },
+  passengerWagon: { build: passengerWagonModel, capacity: MAX_WAGONS },
+  container: { build: containerWagonModel, capacity: MAX_WAGONS },
+  hopper: { build: hopperWagonModel, capacity: MAX_WAGONS },
+  tank: { build: tankWagonModel, capacity: MAX_WAGONS },
+};
+
+/** Wagons drawn behind a train, by the locomotive's or wagon's kind. */
+function wagonsPerTrain(kind: VehicleKind): number {
+  return kind === VehicleKind.FreightLocomotive || kind === VehicleKind.FreightWagon
+    ? BALANCE.rail.freightWagons
+    : BALANCE.rail.passengerWagons;
 }
 
-/** Boxy delivery van: tall cargo body plus a short cab. */
-function createVanGeometry(): THREE.BufferGeometry {
-  const cargo = new THREE.BoxGeometry(0.24, 0.16, 0.15);
-  cargo.translate(-0.05, 0.1, 0);
-  const cab = new THREE.BoxGeometry(0.1, 0.11, 0.15);
-  cab.translate(0.12, 0.075, 0);
-  return mergeGeometries([cargo, cab]);
+function modelKeyOf(v: VehicleState): ModelKey {
+  switch (v.kind) {
+    case VehicleKind.Car:
+      return carStyleOf(v.id);
+    case VehicleKind.Van:
+      return 'van';
+    case VehicleKind.Bus:
+      return 'bus';
+    case VehicleKind.Locomotive:
+    case VehicleKind.FreightLocomotive:
+      return 'locomotive';
+    case VehicleKind.Wagon:
+      return 'passengerWagon';
+    default:
+      return freightBodyOf(v.id);
+  }
 }
 
-/** Long single-deck bus: one body with a lighter roof strip. */
-function createBusGeometry(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(0.4, 0.17, 0.16);
-  body.translate(0, 0.105, 0);
-  const roof = new THREE.BoxGeometry(0.36, 0.02, 0.14);
-  roof.translate(0, 0.2, 0);
-  return mergeGeometries([body, roof]);
+function instanceColorOf(v: VehicleState, key: ModelKey): number {
+  switch (key) {
+    case 'van':
+      return VAN_COLOR;
+    case 'bus':
+      return BUS_COLOR;
+    case 'locomotive':
+      return v.kind === VehicleKind.FreightLocomotive ? FREIGHT_TRAIN_COLOR : PASSENGER_TRAIN_COLOR;
+    case 'passengerWagon':
+      return WAGON_COLOR;
+    case 'container':
+      return containerColorOf(v.id);
+    case 'hopper':
+      return HOPPER_COLOR;
+    case 'tank':
+      return TANK_COLOR;
+    default:
+      return carColorOf(v.id);
+  }
 }
 
-/**
- * Length of the drawn bodies, in tiles. BALANCE.rail.wagonGap — the
- * distance the sim trails the wagon behind the locomotive — is measured
- * centre to centre, so these two halves plus a coupler's slack are what
- * it has to be; vehiclesMesh.test.ts holds the two in step.
- */
-export const LOCOMOTIVE_LENGTH = 0.52;
-export const WAGON_LENGTH = 0.5;
-
-/** Simple low-poly locomotive: body plus a cab toward the front. */
-function createLocomotiveGeometry(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(LOCOMOTIVE_LENGTH, 0.2, 0.18);
-  body.translate(0, 0.12, 0);
-  const cab = new THREE.BoxGeometry(0.16, 0.08, 0.16);
-  cab.translate(0.12, 0.26, 0);
-  return mergeGeometries([body, cab]);
-}
-
-/** Simple low-poly wagon: a flat-roofed body. */
-function createWagonGeometry(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(WAGON_LENGTH, 0.18, 0.17);
-  body.translate(0, 0.11, 0);
-  return mergeGeometries([body]);
+interface ModelEntry {
+  mesh: THREE.InstancedMesh;
+  length: number;
+  count: number;
 }
 
 /**
  * Instanced electric vehicles. Positions arrive at tick rate from the
  * simulation; rendering interpolates between the last two updates for
- * smooth motion. Headlights fade in at night.
+ * smooth motion. Each model (car style, van, bus, locomotive, wagon
+ * body) is its own instanced mesh, so a vehicle's id picks both its
+ * model and, for cars and freight wagons, its colour. Head and tail
+ * lights fade in at night.
  */
 export class VehiclesMesh {
-  private readonly mesh: THREE.InstancedMesh;
-  private readonly vans: THREE.InstancedMesh;
-  private readonly buses: THREE.InstancedMesh;
-  private readonly locomotives: THREE.InstancedMesh;
-  private readonly wagons: THREE.InstancedMesh;
-  private readonly freightLocomotives: THREE.InstancedMesh;
-  private readonly freightWagons: THREE.InstancedMesh;
+  private readonly models = new Map<ModelKey, ModelEntry>();
   private readonly headlights: THREE.InstancedMesh;
+  private readonly tailLights: THREE.InstancedMesh;
   private readonly headlightMaterial: THREE.MeshBasicMaterial;
+  private readonly tailLightMaterial: THREE.MeshBasicMaterial;
   private previous = new Map<number, VehicleState>();
   private current: VehicleState[] = [];
   private lastUpdateSeconds = 0;
   /** Expected seconds between sim updates (changes with game speed). */
   private updateInterval = TICK_MS / 1000;
   private readonly matrix = new THREE.Matrix4();
+  private readonly lightMatrix = new THREE.Matrix4();
+  private readonly offset = new THREE.Matrix4();
+  private readonly color = new THREE.Color();
   private readonly position = new THREE.Vector3();
   private readonly quaternion = new THREE.Quaternion();
   private readonly pitchQuaternion = new THREE.Quaternion();
@@ -114,107 +167,60 @@ export class VehiclesMesh {
     private readonly elevation: ElevationField,
     private readonly terrainAt: (index: number) => Terrain,
   ) {
-    this.mesh = new THREE.InstancedMesh(createCarGeometry(), surfaceMaterial(), MAX_VEHICLES);
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.mesh.frustumCulled = false;
-    this.mesh.castShadow = true;
-    this.mesh.count = 0;
-    const color = new THREE.Color();
-    for (let i = 0; i < MAX_VEHICLES; i++) {
-      this.mesh.setColorAt(i, color.setHex(CAR_COLORS[i % CAR_COLORS.length]));
+    let lightCapacity = 0;
+    for (const key of Object.keys(MODELS) as ModelKey[]) {
+      const { build, capacity } = MODELS[key];
+      const built = build();
+      const mesh = new THREE.InstancedMesh(
+        built.geometry,
+        surfaceMaterial({ vertexColors: true }),
+        capacity,
+      );
+      // Instance transforms live across the whole grid; the base
+      // geometry's bounds would wrongly cull the mesh, so culling is
+      // disabled.
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      mesh.count = 0;
+      mesh.name = key;
+      scene.add(mesh);
+      this.models.set(key, { mesh, length: built.length, count: 0 });
+      lightCapacity += capacity;
     }
-    scene.add(this.mesh);
 
-    this.vans = new THREE.InstancedMesh(
-      createVanGeometry(),
-      surfaceMaterial({ color: VAN_COLOR }),
-      MAX_VANS,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.vans.frustumCulled = false;
-    this.vans.castShadow = true;
-    this.vans.count = 0;
-    scene.add(this.vans);
-
-    this.buses = new THREE.InstancedMesh(
-      createBusGeometry(),
-      surfaceMaterial({ color: BUS_COLOR }),
-      MAX_BUSES,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.buses.frustumCulled = false;
-    this.buses.castShadow = true;
-    this.buses.count = 0;
-    scene.add(this.buses);
-
-    this.locomotives = new THREE.InstancedMesh(
-      createLocomotiveGeometry(),
-      surfaceMaterial({ color: PASSENGER_TRAIN_COLOR }),
-      MAX_TRAINS,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.locomotives.frustumCulled = false;
-    this.locomotives.castShadow = true;
-    this.locomotives.count = 0;
-    scene.add(this.locomotives);
-
-    this.wagons = new THREE.InstancedMesh(
-      createWagonGeometry(),
-      surfaceMaterial({ color: WAGON_COLOR }),
-      MAX_TRAINS,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.wagons.frustumCulled = false;
-    this.wagons.castShadow = true;
-    this.wagons.count = 0;
-    scene.add(this.wagons);
-
-    this.freightLocomotives = new THREE.InstancedMesh(
-      createLocomotiveGeometry(),
-      surfaceMaterial({ color: FREIGHT_TRAIN_COLOR }),
-      MAX_TRAINS,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.freightLocomotives.frustumCulled = false;
-    this.freightLocomotives.castShadow = true;
-    this.freightLocomotives.count = 0;
-    scene.add(this.freightLocomotives);
-
-    this.freightWagons = new THREE.InstancedMesh(
-      createWagonGeometry(),
-      surfaceMaterial({ color: FREIGHT_WAGON_COLOR }),
-      MAX_TRAINS,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.freightWagons.frustumCulled = false;
-    this.freightWagons.castShadow = true;
-    this.freightWagons.count = 0;
-    scene.add(this.freightWagons);
-
-    const lightGeometry = new THREE.BoxGeometry(0.02, 0.03, 0.12);
-    lightGeometry.translate(0.16, 0.06, 0);
+    const lightGeometry = new THREE.BoxGeometry(0.004, 0.02, 0.1);
     this.headlightMaterial = new THREE.MeshBasicMaterial({
       color: 0xfff4c9,
       transparent: true,
       opacity: 0,
     });
-    this.headlights = new THREE.InstancedMesh(
-      lightGeometry,
-      this.headlightMaterial,
-      MAX_VEHICLES + MAX_VANS + MAX_BUSES + 4 * MAX_TRAINS,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
+    this.headlights = new THREE.InstancedMesh(lightGeometry, this.headlightMaterial, lightCapacity);
     this.headlights.frustumCulled = false;
     this.headlights.count = 0;
+    this.headlights.name = 'headlights';
     scene.add(this.headlights);
+
+    this.tailLightMaterial = new THREE.MeshBasicMaterial({
+      color: 0xe0403a,
+      transparent: true,
+      opacity: 0,
+    });
+    this.tailLights = new THREE.InstancedMesh(
+      lightGeometry.clone(),
+      this.tailLightMaterial,
+      lightCapacity,
+    );
+    this.tailLights.frustumCulled = false;
+    this.tailLights.count = 0;
+    this.tailLights.name = 'tailLights';
+    scene.add(this.tailLights);
+  }
+
+  /** Read-only accessor for tests: the instanced mesh drawing a model. */
+  modelMeshes(): ReadonlyMap<ModelKey, THREE.InstancedMesh> {
+    const out = new Map<ModelKey, THREE.InstancedMesh>();
+    for (const [key, entry] of this.models) out.set(key, entry.mesh);
+    return out;
   }
 
   /** New authoritative vehicle states from the simulation. */
@@ -231,7 +237,9 @@ export class VehiclesMesh {
   }
 
   setEnvironment(environment: RenderEnvironment): void {
-    this.headlightMaterial.opacity = Math.max(0, (environment.nightFactor - 0.3) / 0.7);
+    const opacity = Math.max(0, (environment.nightFactor - 0.3) / 0.7);
+    this.headlightMaterial.opacity = opacity;
+    this.tailLightMaterial.opacity = opacity;
   }
 
   /** Interpolate between the last two sim updates. */
@@ -241,22 +249,14 @@ export class VehiclesMesh {
       0,
       1,
     );
-    let cars = 0;
-    let vans = 0;
-    let buses = 0;
-    let locos = 0;
-    let wagons = 0;
-    let freightLocos = 0;
-    let freightWagons = 0;
-    let lights = 0;
+    for (const entry of this.models.values()) entry.count = 0;
+    let headlightCount = 0;
+    let tailLightCount = 0;
     for (const target of this.current) {
-      if (target.kind === VehicleKind.Van && vans >= MAX_VANS) continue;
-      if (target.kind === VehicleKind.Bus && buses >= MAX_BUSES) continue;
-      if (target.kind === VehicleKind.Car && cars >= MAX_VEHICLES) continue;
-      if (target.kind === VehicleKind.Locomotive && locos >= MAX_TRAINS) continue;
-      if (target.kind === VehicleKind.Wagon && wagons >= MAX_TRAINS) continue;
-      if (target.kind === VehicleKind.FreightLocomotive && freightLocos >= MAX_TRAINS) continue;
-      if (target.kind === VehicleKind.FreightWagon && freightWagons >= MAX_TRAINS) continue;
+      const key = modelKeyOf(target);
+      const entry = this.models.get(key)!;
+      if (entry.count >= MODELS[key].capacity) continue;
+      const color = instanceColorOf(target, key);
       // Trains run on the track's centre line; cars, vans and buses keep
       // to the right-hand lane of the road's centre line.
       const isTrain = target.kind >= VehicleKind.Locomotive;
@@ -284,52 +284,44 @@ export class VehiclesMesh {
       this.pitchQuaternion.setFromAxisAngle(this.pitchAxis, pitch);
       this.quaternion.multiply(this.pitchQuaternion);
       this.matrix.compose(this.position, this.quaternion, this.unitScale);
-      let isLocomotiveKind = false;
-      switch (target.kind) {
-        case VehicleKind.Van:
-          this.vans.setMatrixAt(vans++, this.matrix);
-          break;
-        case VehicleKind.Bus:
-          this.buses.setMatrixAt(buses++, this.matrix);
-          break;
-        case VehicleKind.Locomotive:
-          this.locomotives.setMatrixAt(locos++, this.matrix);
-          isLocomotiveKind = true;
-          break;
-        case VehicleKind.Wagon:
-          this.wagons.setMatrixAt(wagons++, this.matrix);
-          break;
-        case VehicleKind.FreightLocomotive:
-          this.freightLocomotives.setMatrixAt(freightLocos++, this.matrix);
-          isLocomotiveKind = true;
-          break;
-        case VehicleKind.FreightWagon:
-          this.freightWagons.setMatrixAt(freightWagons++, this.matrix);
-          break;
-        default:
-          this.mesh.setMatrixAt(cars++, this.matrix);
-          break;
+      entry.mesh.setMatrixAt(entry.count, this.matrix);
+      entry.mesh.setColorAt(entry.count, this.color.setHex(color));
+      entry.count++;
+
+      // Headlights shine from the front of road vehicles and locomotives;
+      // wagons are unpowered and carry none at the front.
+      const isLocomotiveKind =
+        target.kind === VehicleKind.Locomotive || target.kind === VehicleKind.FreightLocomotive;
+      if (!isTrain || isLocomotiveKind) {
+        this.lightMatrix.multiplyMatrices(
+          this.matrix,
+          this.offset.makeTranslation(entry.length / 2 + LIGHT_PROUD, HEADLIGHT_HEIGHT, 0),
+        );
+        this.headlights.setMatrixAt(headlightCount++, this.lightMatrix);
       }
-      // Headlights shine from the front of cars, vans, buses and
-      // locomotives; wagons are unpowered and carry none.
-      if (!isTrain || isLocomotiveKind) this.headlights.setMatrixAt(lights++, this.matrix);
+
+      // Tail lights: road vehicles always carry one; a train only on its
+      // last wagon.
+      const isLastWagon =
+        (target.kind === VehicleKind.Wagon || target.kind === VehicleKind.FreightWagon) &&
+        Math.floor(target.id / WAGON_ID_OFFSET) === wagonsPerTrain(target.kind);
+      if (!isTrain || isLastWagon) {
+        this.lightMatrix.multiplyMatrices(
+          this.matrix,
+          this.offset.makeTranslation(-(entry.length / 2 + LIGHT_PROUD), HEADLIGHT_HEIGHT, 0),
+        );
+        this.tailLights.setMatrixAt(tailLightCount++, this.lightMatrix);
+      }
     }
-    this.mesh.count = cars;
-    this.vans.count = vans;
-    this.buses.count = buses;
-    this.locomotives.count = locos;
-    this.wagons.count = wagons;
-    this.freightLocomotives.count = freightLocos;
-    this.freightWagons.count = freightWagons;
-    this.headlights.count = lights;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.vans.instanceMatrix.needsUpdate = true;
-    this.buses.instanceMatrix.needsUpdate = true;
-    this.locomotives.instanceMatrix.needsUpdate = true;
-    this.wagons.instanceMatrix.needsUpdate = true;
-    this.freightLocomotives.instanceMatrix.needsUpdate = true;
-    this.freightWagons.instanceMatrix.needsUpdate = true;
+    for (const entry of this.models.values()) {
+      entry.mesh.count = entry.count;
+      entry.mesh.instanceMatrix.needsUpdate = true;
+      if (entry.mesh.instanceColor) entry.mesh.instanceColor.needsUpdate = true;
+    }
+    this.headlights.count = headlightCount;
     this.headlights.instanceMatrix.needsUpdate = true;
+    this.tailLights.count = tailLightCount;
+    this.tailLights.instanceMatrix.needsUpdate = true;
   }
 
   /**

@@ -1701,6 +1701,10 @@ export const BALANCE = {
      * render/vehiclesMesh.ts, whose test holds this value to them.
      */
     wagonGap: 0.55,
+    /** Wagons behind a passenger locomotive (drawn; the sim trails them along the track). */
+    passengerWagons: 3,
+    /** Wagons behind a freight locomotive. */
+    freightWagons: 4,
   },
 
   traffic: {

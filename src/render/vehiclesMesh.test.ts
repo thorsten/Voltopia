@@ -5,6 +5,7 @@ import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
 import { LANE_OFFSET, LOCOMOTIVE_LENGTH, VehiclesMesh, WAGON_LENGTH } from './vehiclesMesh.ts';
+import { CAR_STYLES, carColorOf, carStyleOf } from './vehicles/variety.ts';
 
 const SIZE = 8;
 
@@ -34,12 +35,10 @@ function carMatrix(
   const mesh = new VehiclesMesh(scene, f, terrainAt);
   mesh.setVehicles([vehicle], 1);
   mesh.update(10); // far past the interpolation window → at the target
-  const cars = scene.children.find(
-    (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && c.count === 1,
-  );
-  expect(cars).toBeDefined();
+  const cars = mesh.modelMeshes().get(carStyleOf(vehicle.id))!;
+  expect(cars.count).toBe(1);
   const matrix = new THREE.Matrix4();
-  cars!.getMatrixAt(0, matrix);
+  cars.getMatrixAt(0, matrix);
   return matrix;
 }
 
@@ -157,17 +156,26 @@ describe('trains', () => {
       1,
     );
     mesh.update(10);
-    const used = scene.children.filter(
-      (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && c.count > 0,
-    );
-    // passenger locomotive, passenger wagon, freight locomotive: one each; headlights: two.
-    expect(used.map((m) => m.count).sort()).toEqual([1, 1, 1, 2]);
-    for (const m of used.filter((m) => m.count === 1)) {
-      const matrix = new THREE.Matrix4();
-      m.getMatrixAt(0, matrix);
-      const position = new THREE.Vector3().setFromMatrixPosition(matrix);
-      expect(position.z).toBeCloseTo(2.5, 5); // trains sit on the centre line, cars at ±LANE_OFFSET
-      expect(Math.abs(position.z - 2.5)).toBeLessThan(LANE_OFFSET / 2);
+    // Passenger and freight locomotives share one mesh (coloured per instance).
+    const locomotives = mesh.modelMeshes().get('locomotive')!;
+    const wagons = mesh.modelMeshes().get('passengerWagon')!;
+    expect(locomotives.count).toBe(2);
+    expect(wagons.count).toBe(1);
+    const headlights = scene.children.find(
+      (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && c.name === 'headlights',
+    )!;
+    expect(headlights.count).toBe(2); // one per locomotive; the wagon carries none
+    for (const [m, count] of [
+      [locomotives, 2],
+      [wagons, 1],
+    ] as const) {
+      for (let i = 0; i < count; i++) {
+        const matrix = new THREE.Matrix4();
+        m.getMatrixAt(i, matrix);
+        const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+        expect(position.z).toBeCloseTo(2.5, 5); // trains sit on the centre line, cars at ±LANE_OFFSET
+        expect(Math.abs(position.z - 2.5)).toBeLessThan(LANE_OFFSET / 2);
+      }
     }
   });
 });
@@ -179,5 +187,85 @@ describe('train coupling', () => {
     const bodies = (LOCOMOTIVE_LENGTH + WAGON_LENGTH) / 2;
     expect(BALANCE.rail.wagonGap).toBeGreaterThanOrEqual(bodies);
     expect(BALANCE.rail.wagonGap - bodies).toBeLessThanOrEqual(0.08);
+  });
+});
+
+describe('vehicle models and colours', () => {
+  function meshFor(): { scene: THREE.Scene; mesh: VehiclesMesh } {
+    const scene = new THREE.Scene();
+    return {
+      scene,
+      mesh: new VehiclesMesh(
+        scene,
+        field(() => 0),
+        () => Terrain.Land,
+      ),
+    };
+  }
+  const car = (id: number, x = 2.5): VehicleState => ({
+    id,
+    x,
+    y: 2.5,
+    angle: 0,
+    kind: VehicleKind.Car,
+  });
+
+  it('draws each car in the mesh its id selects', () => {
+    const { mesh } = meshFor();
+    const cars = [1, 2, 3, 4, 5, 6, 7, 8].map((id) => car(id, 1 + id * 0.5));
+    mesh.setVehicles(cars, 1);
+    mesh.update(10);
+    const counts = new Map<string, number>();
+    for (const c of cars) counts.set(carStyleOf(c.id), (counts.get(carStyleOf(c.id)) ?? 0) + 1);
+    for (const style of CAR_STYLES) {
+      expect(mesh.modelMeshes().get(style)!.count).toBe(counts.get(style) ?? 0);
+    }
+  });
+
+  it('keeps a car its colour when other cars appear or disappear', () => {
+    const { mesh } = meshFor();
+    const colorOf = (id: number): number => {
+      const m = mesh.modelMeshes().get(carStyleOf(id))!;
+      const c = new THREE.Color();
+      for (let i = 0; i < m.count; i++) {
+        m.getColorAt(i, c);
+        if (c.getHex() === carColorOf(id)) return c.getHex();
+      }
+      return -1;
+    };
+    mesh.setVehicles([car(7)], 1);
+    mesh.update(10);
+    expect(colorOf(7)).toBe(carColorOf(7));
+    mesh.setVehicles([car(3, 1.5), car(5, 4.5), car(7)], 2);
+    mesh.update(11);
+    expect(colorOf(7)).toBe(carColorOf(7));
+  });
+
+  it('puts tail lights on road vehicles and on the last wagon only, fading with night', () => {
+    const { scene, mesh } = meshFor();
+    const train = 9;
+    const vehicles: VehicleState[] = [
+      car(1),
+      { id: 2, x: 4.5, y: 2.5, angle: 0, kind: VehicleKind.Bus },
+      { id: train, x: 6.5, y: 5.5, angle: 0, kind: VehicleKind.Locomotive },
+      ...[1, 2, 3].map((k) => ({
+        id: train + k * WAGON_ID_OFFSET,
+        x: 6.5 - 0.55 * k,
+        y: 5.5,
+        angle: 0,
+        kind: VehicleKind.Wagon,
+      })),
+    ];
+    mesh.setVehicles(vehicles, 1);
+    mesh.update(10);
+    const tail = scene.children.find(
+      (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && c.name === 'tailLights',
+    )!;
+    expect(tail.count).toBe(3); // car, bus, last wagon
+    const material = tail.material as THREE.MeshBasicMaterial;
+    mesh.setEnvironment({ nightFactor: 0 } as never);
+    expect(material.opacity).toBe(0);
+    mesh.setEnvironment({ nightFactor: 1 } as never);
+    expect(material.opacity).toBeCloseTo(1, 6);
   });
 });
