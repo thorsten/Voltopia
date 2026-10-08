@@ -575,10 +575,16 @@ export function locomotiveAngle(state: SimState, train: Train): number {
  * A point `gap` tiles behind the locomotive, walking back over its trail of
  * reached tile centres (newest first) so wagons follow through curves —
  * where the wagons of a pulling train stand. The trail survives a new leg
- * starting at a halt, so wagons stay behind through a dwell; only a fresh
- * train leaving the yard has an empty trail, so its wagons unfold over the
- * first tiles it covers. Clamps at the oldest trail point once the trail
- * runs out.
+ * starting at a halt, so wagons stay behind through a dwell; a fresh train
+ * leaving the yard has an empty trail, so its wagons unfold over the first
+ * tiles it covers — the same as a train reloaded from a save while parked
+ * (`trail` is not persisted). A train reloaded while running instead has
+ * its trail re-seeded from the saved leg's already-reached tiles (see
+ * `deserializeState`), so its wagons start spread out rather than stacked;
+ * a train that was pushing before the save is drawn pulling for the rest
+ * of that leg (`pushing` is not persisted either), which is an accepted
+ * cost, not a crash. Clamps at the oldest trail point once the trail runs
+ * out.
  */
 export function trailingPoint(
   state: SimState,

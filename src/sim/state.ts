@@ -45,6 +45,7 @@ import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.t
 import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
+import { TRAIL_TILES } from './trains.ts';
 
 /** Commute phases of a vehicle. */
 export const VehiclePhase = {
@@ -1573,7 +1574,13 @@ export function deserializeState(save: SaveGame): SimState {
       pathIndex: t.pathIndex,
       dwellTicks: t.dwellTicks,
       stalled: false,
-      trail: [],
+      // Seed from the tiles already reached on the current leg (newest
+      // last), capped to TRAIL_TILES, so a running train's wagons stay
+      // spread out instead of stacking on it for their first tick after
+      // the load. `pushing` is always false on load (not saved): a train
+      // that was pushing before the save is drawn pulling for one leg
+      // after a reload — an accepted cost, not a crash.
+      trail: t.path.slice(0, t.pathIndex).slice(-TRAIL_TILES),
       pushing: false,
     }));
     for (const t of state.trains) state.nextVehicleId = Math.max(state.nextVehicleId, t.id + 1);

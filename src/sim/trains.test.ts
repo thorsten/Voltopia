@@ -473,13 +473,46 @@ describe('train trail', () => {
     );
   });
 
-  it('clears on parking and is not saved', () => {
+  it('is never saved, and stays empty for a parked train on load', () => {
     const state = railTown();
     setHour(state, BALANCE.rail.windowStartHour);
     runTicks(state, 60);
     const loaded = deserializeState(serializeState(state));
-    for (const t of loaded.trains) expect(t.trail).toEqual([]);
+    for (const t of loaded.trains) {
+      if (t.phase === TrainPhase.Parked) expect(t.trail).toEqual([]);
+    }
     expect(JSON.stringify(serializeState(state).trains ?? [])).not.toContain('trail');
+  });
+
+  it('is seeded on load for a running train, so its wagons start spread out instead of stacked', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    // Run until some train dwells, then runs again, then well into that
+    // leg — not the departing tick itself, whose trail is still short.
+    let train: Train | undefined;
+    for (let i = 0; i < 400 && !train; i++) {
+      runTicks(state, 1);
+      train = state.trains.find((t) => t.phase === TrainPhase.Dwelling);
+    }
+    expect(train).toBeDefined();
+    for (let i = 0; i < 100 && train!.phase !== TrainPhase.Running; i++) runTicks(state, 1);
+    // A few more ticks into the leg (not the departing tick itself, whose
+    // trail is still short), but stop as soon as it halts again.
+    for (let i = 0; i < 5 && train!.phase === TrainPhase.Running; i++) runTicks(state, 1);
+    expect(train!.phase).toBe(TrainPhase.Running);
+
+    const savedTrain = train!;
+    const loaded = deserializeState(serializeState(state));
+    const reloaded = loaded.trains.find((t) => t.id === savedTrain.id)!;
+    expect(reloaded.trail.length).toBeGreaterThan(0);
+    // Newest last: the last tile already reached on the current leg.
+    expect(reloaded.trail[reloaded.trail.length - 1]).toBe(
+      savedTrain.path[savedTrain.pathIndex - 1],
+    );
+    const wagon = trailingPoint(loaded, reloaded, BALANCE.rail.wagonGap);
+    expect(Math.hypot(wagon.x - reloaded.x, wagon.y - reloaded.y)).toBeGreaterThanOrEqual(
+      BALANCE.rail.wagonGap * 0.5,
+    );
   });
 });
 
