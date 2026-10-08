@@ -1015,6 +1015,7 @@ describe('level crossings', () => {
       dwellTicks: 0,
       stalled: false,
       trail: [],
+      pushing: false,
     };
     state.trains.push(train);
     return train;

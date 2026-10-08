@@ -10,6 +10,8 @@ import { buildRoads, bulldozeTiles } from './roads.ts';
 import { ticksAtHour } from './vehicles.ts';
 import {
   advanceTrain,
+  consistAhead,
+  leadingPoint,
   planFreightTour,
   planPassengerTour,
   runningTrains,
@@ -18,6 +20,7 @@ import {
   TRAIL_TILES,
   trailingPoint,
   trainsStep,
+  wagonsOf,
   yardDeficitShare,
 } from './trains.ts';
 import {
@@ -477,5 +480,204 @@ describe('train trail', () => {
     const loaded = deserializeState(serializeState(state));
     for (const t of loaded.trains) expect(t.trail).toEqual([]);
     expect(JSON.stringify(serializeState(state).trains ?? [])).not.toContain('trail');
+  });
+});
+
+describe('push-pull', () => {
+  it('toggles pushing when a new leg starts back the way the train came', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    // Run until some train has reversed at a terminus at least once.
+    let reversed: Train | undefined;
+    for (let i = 0; i < 1200 && !reversed; i++) {
+      runTicks(state, 1);
+      reversed = state.trains.find((t) => t.pushing && t.phase === TrainPhase.Running);
+    }
+    expect(reversed).toBeDefined();
+  });
+
+  it('keeps every wagon on a track tile and ahead of the locomotive while pushing, behind while pulling', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    for (let i = 0; i < 1200; i++) {
+      runTicks(state, 1);
+      for (const t of runningTrains(state)) {
+        for (let k = 1; k <= wagonsOf(t); k++) {
+          const p = t.pushing
+            ? leadingPoint(state, t, k * BALANCE.rail.wagonGap)
+            : trailingPoint(state, t, k * BALANCE.rail.wagonGap);
+          const tile = tileIndex(Math.floor(p.x), Math.floor(p.y), state.size);
+          expect(state.layers.rail[tile]).not.toBe(0);
+        }
+      }
+    }
+  });
+
+  it('never lets a wagon pass through the locomotive at a reversal', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    // Wagon 1's offset from the locomotive, last tick, per train still out.
+    const last = new Map<number, { dx: number; dy: number }>();
+    let checked = 0;
+    for (let i = 0; i < 1200; i++) {
+      runTicks(state, 1);
+      const out = new Set<number>();
+      for (const t of runningTrains(state)) {
+        const p = t.pushing
+          ? leadingPoint(state, t, BALANCE.rail.wagonGap)
+          : trailingPoint(state, t, BALANCE.rail.wagonGap);
+        // A fresh yard departure (pulling, trail < 2) legitimately unfolds.
+        if (t.trail.length < 2 && !t.pushing) continue;
+        out.add(t.id);
+        // Distance from the locomotive to wagon 1 never collapses below half a gap once running.
+        const dx = p.x - t.x;
+        const dy = p.y - t.y;
+        expect(Math.hypot(dx, dy)).toBeGreaterThan(BALANCE.rail.wagonGap * 0.5);
+        // And wagon 1 never swaps sides: a fold through the locomotive flips the offset.
+        const before = last.get(t.id);
+        if (before) {
+          expect(before.dx * dx + before.dy * dy).toBeGreaterThan(0);
+          checked++;
+        }
+        last.set(t.id, { dx, dy });
+      }
+      for (const id of last.keys()) if (!out.has(id)) last.delete(id);
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('consistAhead continues along the track past the path end and stops at a buffer', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const t = state.trains[0];
+    // Head at (25, 10) heading east, path ends there; track continues to x = 28 and stops.
+    t.path = [at(24, 10), at(25, 10)];
+    t.pathIndex = 2;
+    t.x = 25.5;
+    t.y = 10.5;
+    t.angle = 0;
+    expect(consistAhead(state, t, 10)).toEqual([at(26, 10), at(27, 10), at(28, 10)]);
+  });
+
+  it('consistAhead walks the remaining path first, then stops once the length is covered', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const t = state.trains[0];
+    t.path = [at(10, 10), at(11, 10), at(12, 10)];
+    t.pathIndex = 1;
+    t.x = 10.5;
+    t.y = 10.5;
+    // 1 to (11,10), 1 to (12,10), then 1 onward to (13,10) covers 2.5.
+    expect(consistAhead(state, t, 2.5)).toEqual([at(11, 10), at(12, 10), at(13, 10)]);
+  });
+
+  it('leadingPoint places wagons ahead along the track, heading of travel', () => {
+    const state = railTown();
+    syncTrainFleet(state);
+    const t = state.trains[0];
+    t.path = [at(24, 10), at(25, 10)];
+    t.pathIndex = 2;
+    t.x = 25.5;
+    t.y = 10.5;
+    expect(leadingPoint(state, t, 1.5)).toMatchObject({ x: 27, y: 10.5 });
+    expect(leadingPoint(state, t, 1.5).angle).toBeCloseTo(0, 9);
+    // Clamps at the buffer.
+    expect(leadingPoint(state, t, 10).x).toBeCloseTo(28.5, 9);
+  });
+
+  /** A train standing at (x, 10) at the end of a leg, its dwell about to end. */
+  function dwellingAt(state: SimState, x: number, cameFromX: number, nextHalt: number): Train {
+    syncTrainFleet(state);
+    const t = state.trains[0];
+    const dir = Math.sign(x - cameFromX);
+    t.path = [at(x - 2 * dir, 10), at(x - dir, 10), at(x, 10)];
+    t.pathIndex = 3;
+    t.trail = [0, 1, 2, 3, 4].map((i) => at(x - (4 - i) * dir, 10));
+    t.x = x + 0.5;
+    t.y = 10.5;
+    t.angle = dir > 0 ? 0 : Math.PI;
+    t.phase = TrainPhase.Dwelling;
+    t.dwellTicks = 1;
+    t.stops = [at(x, 10), nextHalt, t.yardTrack];
+    return t;
+  }
+
+  function wagonPoints(state: SimState, t: Train): Array<{ x: number; y: number }> {
+    const out = [];
+    for (let k = 1; k <= wagonsOf(t); k++) {
+      const p = t.pushing
+        ? leadingPoint(state, t, k * BALANCE.rail.wagonGap)
+        : trailingPoint(state, t, k * BALANCE.rail.wagonGap);
+      out.push({ x: p.x, y: p.y });
+    }
+    return out;
+  }
+
+  it('starts pushing on a reversal with the wagons where they stood', () => {
+    const state = railTown();
+    // Came east to (20, 10), next halt back west at (10, 10).
+    const t = dwellingAt(state, 20, 16, at(10, 10));
+    const before = wagonPoints(state, t);
+    runTicks(state, 1);
+    expect(t.phase).toBe(TrainPhase.Running);
+    expect(t.pushing).toBe(true);
+    const after = wagonPoints(state, t);
+    for (let k = 0; k < before.length; k++) {
+      expect(after[k].x).toBeCloseTo(before[k].x, 9);
+      expect(after[k].y).toBeCloseTo(before[k].y, 9);
+    }
+  });
+
+  it('pulls again on the next reversal, the trail rebuilt from the tiles the wagons occupied', () => {
+    const state = railTown();
+    // Came west to (12, 10) pushing (wagons ahead to the west), next halt back east.
+    const t = dwellingAt(state, 12, 16, at(24, 10));
+    t.pushing = true;
+    const before = wagonPoints(state, t);
+    runTicks(state, 1);
+    expect(t.phase).toBe(TrainPhase.Running);
+    expect(t.pushing).toBe(false);
+    expect(t.trail.at(-1)).toBe(at(12, 10));
+    expect(t.trail.length).toBeLessThanOrEqual(TRAIL_TILES);
+    for (const tile of t.trail) expect(state.layers.rail[tile]).not.toBe(0);
+    const after = wagonPoints(state, t);
+    for (let k = 0; k < before.length; k++) {
+      expect(after[k].x).toBeCloseTo(before[k].x, 9);
+      expect(after[k].y).toBeCloseTo(before[k].y, 9);
+    }
+  });
+
+  it('keeps pushing through a halt that does not reverse', () => {
+    const state = railTown();
+    // Came west to (16, 10) pushing, next halt further west.
+    const t = dwellingAt(state, 16, 20, at(10, 10));
+    t.pushing = true;
+    const before = wagonPoints(state, t);
+    runTicks(state, 1);
+    expect(t.pushing).toBe(true);
+    const after = wagonPoints(state, t);
+    for (let k = 0; k < before.length; k++) {
+      expect(after[k].x).toBeCloseTo(before[k].x, 9);
+    }
+  });
+
+  it('pushing and the rebuilt trail are transient', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    runTicks(state, 600);
+    const loaded = deserializeState(serializeState(state));
+    for (const t of loaded.trains) expect(t.pushing).toBe(false);
+    expect(JSON.stringify(serializeState(state).trains ?? [])).not.toContain('pushing');
+  });
+
+  it('stops pushing when the train parks', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    for (let i = 0; i < 2400; i++) {
+      runTicks(state, 1);
+      for (const t of state.trains) {
+        if (t.phase === TrainPhase.Parked) expect(t.pushing).toBe(false);
+      }
+    }
   });
 });

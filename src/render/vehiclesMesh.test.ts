@@ -149,9 +149,9 @@ describe('trains', () => {
     );
     mesh.setVehicles(
       [
-        { id: 1, x: 2.5, y: 2.5, angle: 0, kind: VehicleKind.Locomotive },
+        { id: 1, x: 2.5, y: 2.5, angle: 0, kind: VehicleKind.Locomotive, lead: true },
         { id: 1 + WAGON_ID_OFFSET, x: 1.5, y: 2.5, angle: 0, kind: VehicleKind.Wagon },
-        { id: 2, x: 4.5, y: 2.5, angle: 0, kind: VehicleKind.FreightLocomotive },
+        { id: 2, x: 4.5, y: 2.5, angle: 0, kind: VehicleKind.FreightLocomotive, lead: true },
       ],
       1,
     );
@@ -187,6 +187,65 @@ describe('train coupling', () => {
     const bodies = (LOCOMOTIVE_LENGTH + WAGON_LENGTH) / 2;
     expect(BALANCE.rail.wagonGap).toBeGreaterThanOrEqual(bodies);
     expect(BALANCE.rail.wagonGap - bodies).toBeLessThanOrEqual(0.08);
+  });
+});
+
+describe('push-pull lights', () => {
+  function lights(vehicles: VehicleState[]): {
+    head: THREE.InstancedMesh;
+    tail: THREE.InstancedMesh;
+  } {
+    const scene = new THREE.Scene();
+    const mesh = new VehiclesMesh(
+      scene,
+      field(() => 0),
+      () => Terrain.Land,
+    );
+    mesh.setVehicles(vehicles, 1);
+    mesh.update(10);
+    const named = (name: string) =>
+      scene.children.find(
+        (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && c.name === name,
+      )!;
+    return { head: named('headlights'), tail: named('tailLights') };
+  }
+
+  it('gives a pushing locomotive (tail, no lead) a tail light and no headlight', () => {
+    const { head, tail } = lights([
+      { id: 1, x: 2.5, y: 2.5, angle: 0, kind: VehicleKind.Locomotive, tail: true },
+    ]);
+    expect(head.count).toBe(0);
+    expect(tail.count).toBe(1);
+    // The tail light sits behind the body (−x of the heading), not in front.
+    const matrix = new THREE.Matrix4();
+    tail.getMatrixAt(0, matrix);
+    expect(new THREE.Vector3().setFromMatrixPosition(matrix).x).toBeLessThan(2.5);
+  });
+
+  it('gives the leading wagon of a pushed consist a headlight in front', () => {
+    const { head, tail } = lights([
+      {
+        id: 1 + 3 * WAGON_ID_OFFSET,
+        x: 4.5,
+        y: 2.5,
+        angle: 0,
+        kind: VehicleKind.Wagon,
+        lead: true,
+      },
+      { id: 1 + WAGON_ID_OFFSET, x: 3.5, y: 2.5, angle: 0, kind: VehicleKind.FreightWagon },
+    ]);
+    expect(head.count).toBe(1);
+    expect(tail.count).toBe(0);
+    const matrix = new THREE.Matrix4();
+    head.getMatrixAt(0, matrix);
+    expect(new THREE.Vector3().setFromMatrixPosition(matrix).x).toBeGreaterThan(4.5);
+  });
+
+  it('ignores the wagon index: an unflagged last wagon carries no tail light', () => {
+    const { tail } = lights([
+      { id: 1 + 3 * WAGON_ID_OFFSET, x: 4.5, y: 2.5, angle: 0, kind: VehicleKind.Wagon },
+    ]);
+    expect(tail.count).toBe(0);
   });
 });
 
@@ -241,19 +300,20 @@ describe('vehicle models and colours', () => {
     expect(colorOf(7)).toBe(carColorOf(7));
   });
 
-  it('puts tail lights on road vehicles and on the last wagon only, fading with night', () => {
+  it('puts tail lights on road vehicles and on the train vehicle flagged tail, fading with night', () => {
     const { scene, mesh } = meshFor();
     const train = 9;
     const vehicles: VehicleState[] = [
       car(1),
       { id: 2, x: 4.5, y: 2.5, angle: 0, kind: VehicleKind.Bus },
-      { id: train, x: 6.5, y: 5.5, angle: 0, kind: VehicleKind.Locomotive },
+      { id: train, x: 6.5, y: 5.5, angle: 0, kind: VehicleKind.Locomotive, lead: true },
       ...[1, 2, 3].map((k) => ({
         id: train + k * WAGON_ID_OFFSET,
         x: 6.5 - 0.55 * k,
         y: 5.5,
         angle: 0,
         kind: VehicleKind.Wagon,
+        ...(k === 3 ? { tail: true as const } : {}),
       })),
     ];
     mesh.setVehicles(vehicles, 1);

@@ -7,6 +7,7 @@ import {
   Terrain,
   VehicleKind,
   WAGON_ID_OFFSET,
+  type VehicleState,
   Zone,
 } from '../shared/types.ts';
 import { SimEngine } from './engine.ts';
@@ -16,7 +17,7 @@ import { timeOfDay, dayNumber } from './tick.ts';
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
-import { runningTrains, trailingPoint, wagonsOf } from './trains.ts';
+import { leadingPoint, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { ticksAtHour } from './vehicles.ts';
 
 function makeEngine(seed = 42, size = 16): SimEngine {
@@ -367,27 +368,51 @@ describe('SimEngine basics', () => {
     const running = runningTrains(state);
     expect(running.length).toBeGreaterThan(0);
 
-    for (const train of running) {
-      const freight = train.kind === TrainKind.Freight;
-      const locoKind = freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive;
-      const wagonKind = freight ? VehicleKind.FreightWagon : VehicleKind.Wagon;
-      expect(event.vehicles.filter((v) => v.id === train.id)).toEqual([
-        { id: train.id, x: train.x, y: train.y, angle: train.angle, kind: locoKind },
-      ]);
-      const n = wagonsOf(train);
-      for (let k = 1; k <= n; k++) {
-        const wagon = trailingPoint(state, train, k * BALANCE.rail.wagonGap);
-        expect(event.vehicles.filter((v) => v.id === train.id + k * WAGON_ID_OFFSET)).toEqual([
+    const checkTrains = (vehicles: VehicleState[]): void => {
+      for (const train of runningTrains(state)) {
+        const freight = train.kind === TrainKind.Freight;
+        const locoKind = freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive;
+        const wagonKind = freight ? VehicleKind.FreightWagon : VehicleKind.Wagon;
+        const n = wagonsOf(train);
+        expect(vehicles.filter((v) => v.id === train.id)).toEqual([
           {
-            id: train.id + k * WAGON_ID_OFFSET,
-            x: wagon.x,
-            y: wagon.y,
-            angle: wagon.angle,
-            kind: wagonKind,
+            id: train.id,
+            x: train.x,
+            y: train.y,
+            angle: train.angle,
+            kind: locoKind,
+            ...(train.pushing ? { tail: true } : { lead: true }),
           },
         ]);
+        for (let k = 1; k <= n; k++) {
+          const gap = k * BALANCE.rail.wagonGap;
+          const wagon = train.pushing
+            ? leadingPoint(state, train, gap)
+            : trailingPoint(state, train, gap);
+          const flags = k === n ? (train.pushing ? { lead: true } : { tail: true }) : {};
+          expect(vehicles.filter((v) => v.id === train.id + k * WAGON_ID_OFFSET)).toEqual([
+            {
+              id: train.id + k * WAGON_ID_OFFSET,
+              x: wagon.x,
+              y: wagon.y,
+              angle: wagon.angle,
+              kind: wagonKind,
+              ...flags,
+            },
+          ]);
+        }
+        const ofTrain = vehicles.filter((v) => v.id % WAGON_ID_OFFSET === train.id);
+        expect(ofTrain.filter((v) => v.lead)).toHaveLength(1);
+        expect(ofTrain.filter((v) => v.tail)).toHaveLength(1);
       }
-    }
+    };
+    checkTrains(event.vehicles);
+
+    // Run on until a train pushes after a terminus reversal: lights and wagons follow.
+    for (let i = 0; i < 1200 && !state.trains.some((t) => t.pushing); i++) event = engine.tick();
+    if (event.type !== 'tick') throw new Error('expected tick');
+    expect(state.trains.some((t) => t.pushing && t.phase === TrainPhase.Running)).toBe(true);
+    checkTrains(event.vehicles);
 
     // Parked trains (not out of the yard) produce no vehicle entries at all.
     const parked = state.trains.filter((t) => t.phase === TrainPhase.Parked);

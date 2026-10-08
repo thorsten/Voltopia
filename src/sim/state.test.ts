@@ -854,6 +854,7 @@ describe('railway persistence', () => {
         dwellTicks: 0,
         stalled: true,
         trail: [],
+        pushing: true,
       },
       {
         id: 8,
@@ -871,6 +872,7 @@ describe('railway persistence', () => {
         dwellTicks: 0,
         stalled: false,
         trail: [],
+        pushing: false,
       },
     );
     const loaded = deserializeState(serializeState(state));
@@ -885,6 +887,7 @@ describe('railway persistence', () => {
       pickup: 6,
     });
     expect(loaded.trains[0].stalled).toBe(false);
+    expect(loaded.trains[0].pushing).toBe(false);
     expect(loaded.nextVehicleId).toBeGreaterThan(7);
   });
 

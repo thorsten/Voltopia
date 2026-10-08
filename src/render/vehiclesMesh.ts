@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { BALANCE, TICK_MS } from '../shared/constants.ts';
+import { TICK_MS } from '../shared/constants.ts';
 import type { VehicleState } from '../shared/types.ts';
-import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
+import { Terrain, VehicleKind } from '../shared/types.ts';
 import type { RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { surfaceMaterial } from './materials.ts';
@@ -79,13 +79,6 @@ const MODELS: Record<ModelKey, { build: () => VehicleModel; capacity: number }> 
   hopper: { build: hopperWagonModel, capacity: MAX_WAGONS },
   tank: { build: tankWagonModel, capacity: MAX_WAGONS },
 };
-
-/** Wagons drawn behind a train, by the locomotive's or wagon's kind. */
-function wagonsPerTrain(kind: VehicleKind): number {
-  return kind === VehicleKind.FreightLocomotive || kind === VehicleKind.FreightWagon
-    ? BALANCE.rail.freightWagons
-    : BALANCE.rail.passengerWagons;
-}
 
 function modelKeyOf(v: VehicleState): ModelKey {
   switch (v.kind) {
@@ -288,11 +281,10 @@ export class VehiclesMesh {
       entry.mesh.setColorAt(entry.count, this.color.setHex(color));
       entry.count++;
 
-      // Headlights shine from the front of road vehicles and locomotives;
-      // wagons are unpowered and carry none at the front.
-      const isLocomotiveKind =
-        target.kind === VehicleKind.Locomotive || target.kind === VehicleKind.FreightLocomotive;
-      if (!isTrain || isLocomotiveKind) {
+      // Headlights shine from the front of road vehicles and of the
+      // vehicle leading a train (the locomotive, or the far wagon while it
+      // pushes); `lead` / `tail` come from the sim and follow push-pull.
+      if (!isTrain || target.lead) {
         this.lightMatrix.multiplyMatrices(
           this.matrix,
           this.offset.makeTranslation(entry.length / 2 + LIGHT_PROUD, HEADLIGHT_HEIGHT, 0),
@@ -300,12 +292,9 @@ export class VehiclesMesh {
         this.headlights.setMatrixAt(headlightCount++, this.lightMatrix);
       }
 
-      // Tail lights: road vehicles always carry one; a train only on its
-      // last wagon.
-      const isLastWagon =
-        (target.kind === VehicleKind.Wagon || target.kind === VehicleKind.FreightWagon) &&
-        Math.floor(target.id / WAGON_ID_OFFSET) === wagonsPerTrain(target.kind);
-      if (!isTrain || isLastWagon) {
+      // Tail lights: road vehicles always carry one; a train only at the
+      // rear of its consist.
+      if (!isTrain || target.tail) {
         this.lightMatrix.multiplyMatrices(
           this.matrix,
           this.offset.makeTranslation(-(entry.length / 2 + LIGHT_PROUD), HEADLIGHT_HEIGHT, 0),

@@ -200,6 +200,13 @@ export interface Train {
    * after a load or when parked.
    */
   trail: number[];
+  /**
+   * The locomotive pushes its wagons ahead of it (after a terminus
+   * reversal) instead of pulling them behind. Render semantics only: the
+   * sim still moves the locomotive's position. Transient: not saved,
+   * false when created, parked or loaded.
+   */
+  pushing: boolean;
 }
 
 /** A reversible build action for the undo tool. */
@@ -1567,6 +1574,7 @@ export function deserializeState(save: SaveGame): SimState {
       dwellTicks: t.dwellTicks,
       stalled: false,
       trail: [],
+      pushing: false,
     }));
     for (const t of state.trains) state.nextVehicleId = Math.max(state.nextVehicleId, t.id + 1);
   }

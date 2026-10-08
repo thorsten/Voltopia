@@ -890,6 +890,10 @@ export interface VehicleState {
   angle: number;
   /** Which mesh draws it. */
   kind: VehicleKind;
+  /** Front of a train's consist (headlights): the locomotive, or the far wagon while pushing. */
+  lead?: true;
+  /** Rear of a train's consist (tail lights): the last wagon, or the locomotive while pushing. */
+  tail?: true;
 }
 
 export interface SaveGame {

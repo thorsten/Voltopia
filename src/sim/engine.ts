@@ -11,7 +11,7 @@ import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { buildRail } from './rail.ts';
-import { runningTrains, trailingPoint, wagonsOf } from './trains.ts';
+import { leadingPoint, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -188,22 +188,34 @@ export class SimEngine {
     const trains: VehicleState[] = [];
     for (const t of runningTrains(this.state)) {
       const freight = t.kind === TrainKind.Freight;
+      // Push-pull: a pushing train's wagons stand ahead of the locomotive,
+      // the far wagon leads and the locomotive carries the tail lights.
+      const n = wagonsOf(t);
       trains.push({
         id: t.id,
         x: t.x,
         y: t.y,
         angle: t.angle,
         kind: freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive,
+        ...(t.pushing ? { tail: true as const } : { lead: true as const }),
       });
-      for (let k = 1; k <= wagonsOf(t); k++) {
-        const wagon = trailingPoint(this.state, t, k * BALANCE.rail.wagonGap);
-        trains.push({
+      for (let k = 1; k <= n; k++) {
+        const gap = k * BALANCE.rail.wagonGap;
+        const wagon = t.pushing
+          ? leadingPoint(this.state, t, gap)
+          : trailingPoint(this.state, t, gap);
+        const vehicle: VehicleState = {
           id: t.id + k * WAGON_ID_OFFSET,
           x: wagon.x,
           y: wagon.y,
           angle: wagon.angle,
           kind: freight ? VehicleKind.FreightWagon : VehicleKind.Wagon,
-        });
+        };
+        if (k === n) {
+          if (t.pushing) vehicle.lead = true;
+          else vehicle.tail = true;
+        }
+        trains.push(vehicle);
       }
     }
     return [...cars, ...vans, ...buses, ...trains];

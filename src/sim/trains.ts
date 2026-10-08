@@ -81,6 +81,7 @@ function createTrain(state: SimState, yard: number, yardTrack: number, kind: Tra
     dwellTicks: 0,
     stalled: false,
     trail: [],
+    pushing: false,
   };
 }
 
@@ -96,6 +97,12 @@ export const TRAIL_TILES =
   Math.ceil(
     Math.max(BALANCE.rail.passengerWagons, BALANCE.rail.freightWagons) * BALANCE.rail.wagonGap,
   ) + 2;
+
+/** Distances below this count as standing on a tile centre. */
+const TRAIL_EPSILON = 1e-9;
+
+/** Extra tiles walked past the last wagon when the trail is rebuilt at a reversal. */
+const REVERSAL_TRAIL_SLACK = 1;
 
 /**
  * Keep every powered yard's fleet complete: drop trains whose yard or
@@ -141,10 +148,11 @@ function trainTile(state: SimState, train: Train): number {
  * the zero-distance first hop to the train's own tile — never burns a
  * tick: the leftover step keeps driving the next leg. 'lost' when a
  * tile reached mid-step lost its track; 'arrived' after the last tile.
- * The finished leg stays on the train (`pathIndex === path.length`) so
- * the wagon keeps trailing it through the dwell; only `routeToNextHalt`
- * and `parkAtYard` replace it. Only ever called for a Running train,
- * whose path always has a tile ahead.
+ * Every tile centre reached is pushed onto the trail the wagons follow.
+ * The finished leg stays on the train (`pathIndex === path.length`), so
+ * `consistAhead` knows which way it was heading through the dwell; only
+ * `routeToNextHalt` and `parkAtYard` replace it. Only ever called for a
+ * Running train, whose path always has a tile ahead.
  */
 export function advanceTrain(
   state: SimState,
@@ -316,16 +324,20 @@ export function planFreightTour(state: SimState, train: Train, claimed: Set<numb
 /**
  * Route the train to stops[0], skipping halts that became unreachable;
  * park it when the yard is unreachable. The new leg keeps the tile the
- * train came from in front (pathIndex 1), so the wagon trails through
- * the halt instead of snapping into the locomotive on departure.
+ * train came from in front (pathIndex 1) as heading history. A leg whose
+ * first step goes back to the tile the train came from is a reversal:
+ * the train switches between pulling and pushing (see `reverse`), so
+ * its wagons stay where they stand.
  */
 function routeToNextHalt(state: SimState, train: Train): void {
   const from = trainTile(state, train);
   const old = train.path;
   const cameFrom = old.length >= 2 && old[old.length - 1] === from ? old[old.length - 2] : -1;
+  const came = newestOtherTrailTile(train, from);
   while (train.stops.length > 0) {
     const path = findRailPath(state, from, train.stops[0]);
     if (path) {
+      if (came >= 0 && path.length >= 2 && path[1] === came) reverse(state, train, from);
       if (cameFrom >= 0) {
         train.path = [cameFrom, ...path];
         train.pathIndex = 1;
@@ -342,6 +354,37 @@ function routeToNextHalt(state: SimState, train: Train): void {
   parkAtYard(state, train);
 }
 
+/** The newest trail tile other than `tile`, or -1 (the trail may repeat a tile). */
+function newestOtherTrailTile(train: Train, tile: number): number {
+  for (let i = train.trail.length - 1; i >= 0; i--) {
+    if (train.trail[i] !== tile) return train.trail[i];
+  }
+  return -1;
+}
+
+/**
+ * Push-pull at a reversal (render semantics only). Pulling → pushing: the
+ * wagons behind become the wagons ahead, `leadingPoint` finds them on the
+ * new leg. Pushing → pulling: the trail is rebuilt from the tiles the
+ * wagons occupied ahead of the locomotive (walked on the old path, so call
+ * before the new path is set), farthest first, ending at `tile`.
+ */
+function reverse(state: SimState, train: Train, tile: number): void {
+  if (!train.pushing) {
+    train.pushing = true;
+    return;
+  }
+  const ahead = consistAhead(
+    state,
+    train,
+    wagonsOf(train) * BALANCE.rail.wagonGap + REVERSAL_TRAIL_SLACK,
+  );
+  ahead.reverse();
+  ahead.push(tile);
+  train.trail = ahead.length > TRAIL_TILES ? ahead.slice(-TRAIL_TILES) : ahead;
+  train.pushing = false;
+}
+
 function parkAtYard(state: SimState, train: Train): void {
   train.stops = [];
   train.pickup = -1;
@@ -352,6 +395,7 @@ function parkAtYard(state: SimState, train: Train): void {
   train.x = tileX(train.yardTrack, state.size) + 0.5;
   train.y = tileY(train.yardTrack, state.size) + 0.5;
   train.trail = [];
+  train.pushing = false;
 }
 
 /**
@@ -506,11 +550,12 @@ export function runningTrains(state: SimState): Train[] {
 
 /**
  * A point `gap` tiles behind the locomotive, walking back over its trail of
- * reached tile centres (newest first) so wagons follow through curves. The
- * trail survives a new leg starting at a halt, so wagons stay behind
- * through a dwell; only a fresh train leaving the yard has an empty trail,
- * so its wagons unfold over the first tiles it covers. Clamps at the
- * oldest trail point once the trail runs out.
+ * reached tile centres (newest first) so wagons follow through curves —
+ * where the wagons of a pulling train stand. The trail survives a new leg
+ * starting at a halt, so wagons stay behind through a dwell; only a fresh
+ * train leaving the yard has an empty trail, so its wagons unfold over the
+ * first tiles it covers. Clamps at the oldest trail point once the trail
+ * runs out.
  */
 export function trailingPoint(
   state: SimState,
@@ -541,4 +586,110 @@ export function trailingPoint(
   }
   return { x, y, angle };
 }
-const TRAIL_EPSILON = 1e-9;
+
+/**
+ * Track tiles ahead of the locomotive, nearest first, whose centres it has
+ * not reached yet (never the tile whose centre it stands on): the rest of
+ * its path, then on along the track beyond the path's end — straight on,
+ * or the single other track neighbour in a curve — stopping at a buffer,
+ * an ambiguous junction or after TRAIL_TILES such tiles. Stops once the
+ * walked length (tile-centre distances from the locomotive) reaches
+ * `length`. Where a pushing train's wagons stand.
+ */
+export function consistAhead(state: SimState, train: Train, length: number): number[] {
+  const size = state.size;
+  const out: number[] = [];
+  let x = train.x;
+  let y = train.y;
+  let walked = 0;
+  // `last` is the newest tile of the walk, `prev` the one before it: the
+  // heading for the continuation past the path's end.
+  let last = trainTile(state, train);
+  let prev = -1;
+  for (let i = train.pathIndex - 1; i >= 0 && prev < 0; i--) {
+    if (train.path[i] !== last) prev = train.path[i];
+  }
+  if (prev < 0) prev = newestOtherTrailTile(train, last);
+  const take = (tile: number): boolean => {
+    const cx = tileX(tile, size) + 0.5;
+    const cy = tileY(tile, size) + 0.5;
+    const d = Math.hypot(cx - x, cy - y);
+    if (d <= TRAIL_EPSILON) return false; // standing on it
+    if (tile !== last) {
+      prev = last;
+      last = tile;
+    }
+    out.push(tile);
+    walked += d;
+    x = cx;
+    y = cy;
+    return walked >= length;
+  };
+  for (let i = train.pathIndex; i < train.path.length; i++) {
+    if (take(train.path[i])) return out;
+  }
+  for (let n = 0; n < TRAIL_TILES && prev >= 0; n++) {
+    const next = onwardTrack(state, prev, last);
+    if (next < 0 || take(next)) break;
+  }
+  return out;
+}
+
+/**
+ * The track tile after `tile` reached from `from`: straight on if that
+ * carries track, else the only other track neighbour; -1 at a buffer or
+ * where several tracks branch off.
+ */
+function onwardTrack(state: SimState, from: number, tile: number): number {
+  const size = state.size;
+  const tx = tileX(tile, size);
+  const ty = tileY(tile, size);
+  const sx = 2 * tx - tileX(from, size);
+  const sy = 2 * ty - tileY(from, size);
+  if (sx >= 0 && sy >= 0 && sx < size && sy < size) {
+    const straight = tileIndex(sx, sy, size);
+    if (state.layers.rail[straight] !== 0) return straight;
+  }
+  let onward = -1;
+  for (const n of neighbors4(tile, size)) {
+    if (n === from || state.layers.rail[n] === 0) continue;
+    if (onward >= 0) return -1;
+    onward = n;
+  }
+  return onward;
+}
+
+/**
+ * A point `gap` tiles ahead of the locomotive along `consistAhead`, heading
+ * the way the train travels — where a pushing train's wagons stand. Clamps
+ * at the last tile ahead (a buffer compresses the consist).
+ */
+export function leadingPoint(
+  state: SimState,
+  train: Train,
+  gap: number,
+): { x: number; y: number; angle: number } {
+  let x = train.x;
+  let y = train.y;
+  let remaining = gap;
+  let angle = train.angle;
+  for (const tile of consistAhead(state, train, gap)) {
+    if (remaining <= TRAIL_EPSILON) break;
+    const px = tileX(tile, state.size) + 0.5;
+    const py = tileY(tile, state.size) + 0.5;
+    const dx = px - x;
+    const dy = py - y;
+    const d = Math.hypot(dx, dy);
+    angle = Math.atan2(dy, dx);
+    if (d >= remaining) {
+      x += (dx / d) * remaining;
+      y += (dy / d) * remaining;
+      remaining = 0;
+    } else {
+      x = px;
+      y = py;
+      remaining -= d;
+    }
+  }
+  return { x, y, angle };
+}
