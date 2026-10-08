@@ -40,6 +40,7 @@ function runningTrain(state: SimState, x: number, y: number, angle = 0): void {
     pathIndex: 0,
     dwellTicks: 0,
     stalled: false,
+    trail: [],
   };
   state.trains.push(train);
 }

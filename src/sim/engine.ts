@@ -11,7 +11,7 @@ import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { buildRail } from './rail.ts';
-import { runningTrains, trailingPoint } from './trains.ts';
+import { runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
 import { drivingVehicles } from './vehicles.ts';
@@ -195,14 +195,16 @@ export class SimEngine {
         angle: t.angle,
         kind: freight ? VehicleKind.FreightLocomotive : VehicleKind.Locomotive,
       });
-      const wagon = trailingPoint(this.state, t, BALANCE.rail.wagonGap);
-      trains.push({
-        id: t.id + WAGON_ID_OFFSET,
-        x: wagon.x,
-        y: wagon.y,
-        angle: wagon.angle,
-        kind: freight ? VehicleKind.FreightWagon : VehicleKind.Wagon,
-      });
+      for (let k = 1; k <= wagonsOf(t); k++) {
+        const wagon = trailingPoint(this.state, t, k * BALANCE.rail.wagonGap);
+        trains.push({
+          id: t.id + k * WAGON_ID_OFFSET,
+          x: wagon.x,
+          y: wagon.y,
+          angle: wagon.angle,
+          kind: freight ? VehicleKind.FreightWagon : VehicleKind.Wagon,
+        });
+      }
     }
     return [...cars, ...vans, ...buses, ...trains];
   }

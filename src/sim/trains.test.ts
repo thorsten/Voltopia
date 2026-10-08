@@ -15,11 +15,20 @@ import {
   runningTrains,
   syncTrainFleet,
   tractionDemandByIsland,
+  TRAIL_TILES,
   trailingPoint,
   trainsStep,
   yardDeficitShare,
 } from './trains.ts';
-import { createSimState, TrainKind, TrainPhase, type SimState, type Train } from './state.ts';
+import {
+  createSimState,
+  deserializeState,
+  serializeState,
+  TrainKind,
+  TrainPhase,
+  type SimState,
+  type Train,
+} from './state.ts';
 
 const SIZE = 32;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -392,55 +401,81 @@ describe('traction and stalling', () => {
 });
 
 describe('trailingPoint', () => {
-  it('places the wagon one tile behind along the path and at the head when just departed', () => {
+  function onTrack(): { state: SimState; train: Train } {
     const state = railTown();
     syncTrainFleet(state);
-    const train: Train = {
-      ...state.trains[0],
-      path: [at(4, 10), at(5, 10), at(6, 10)],
-      pathIndex: 2,
-    };
-    train.x = 6.0;
+    return { state, train: state.trains[0] };
+  }
+
+  it('walks back through the trail of reached tile centres', () => {
+    const { state, train } = onTrack();
+    train.trail = [at(4, 10), at(5, 10), at(6, 10)];
+    train.x = 6.5;
     train.y = 10.5;
-    const wagon = trailingPoint(state, train, 1);
-    expect(wagon.x).toBeCloseTo(5.0);
-    expect(wagon.y).toBeCloseTo(10.5);
-    const fresh: Train = { ...train, pathIndex: 1, x: 4.6 };
-    expect(trailingPoint(state, fresh, 1).x).toBeCloseTo(4.5);
+    expect(trailingPoint(state, train, 1)).toMatchObject({ x: 5.5, y: 10.5 });
+    expect(trailingPoint(state, train, 1.5).x).toBeCloseTo(5.0, 9);
   });
 
-  it('keeps the wagon one tile behind a dwelling train', () => {
-    const state = railTown();
-    syncTrainFleet(state);
-    const train: Train = {
-      ...state.trains[0],
-      phase: TrainPhase.Dwelling,
-      path: [at(4, 10), at(5, 10), at(6, 10)],
-      pathIndex: 3,
-      x: 6.5,
-      y: 10.5,
-    };
-    const wagon = trailingPoint(state, train, 1);
-    expect(wagon.x).toBeCloseTo(5.5);
-    expect(wagon.y).toBeCloseTo(10.5);
+  it('follows a corner: points behind a turn lie on the earlier leg', () => {
+    const { state, train } = onTrack();
+    // Came east along y = 10, turned north at x = 6 (tiles exist only as indices here).
+    train.trail = [at(4, 10), at(5, 10), at(6, 10), at(6, 9)];
+    train.x = 6.5;
+    train.y = 9.0; // half way from (6, 9) toward (6, 8)
+    // 0.5 back to (6,9)'s centre, 1 down to (6,10)'s centre, 0.5 west along y = 10.5.
+    const p = trailingPoint(state, train, 2);
+    expect(p.y).toBeCloseTo(10.5, 9); // back round the corner
+    expect(p.x).toBeCloseTo(6.0, 9);
   });
 
-  it('the wagon trails through the halt as the train departs again', () => {
+  it('clamps at the oldest trail point', () => {
+    const { state, train } = onTrack();
+    train.trail = [at(5, 10)];
+    train.x = 5.9;
+    train.y = 10.5;
+    expect(trailingPoint(state, train, 5).x).toBeCloseTo(5.5, 9);
+  });
+});
+
+describe('train trail', () => {
+  it('records reached tile centres while running and stays within TRAIL_TILES', () => {
     const state = railTown();
     setHour(state, BALANCE.rail.windowStartHour);
-    let checked = 0;
-    for (let i = 0; i < ticksAtHour(2); i++) {
-      runTicks(state, 1);
-      for (const t of runningTrains(state)) {
-        const wagon = trailingPoint(state, t, BALANCE.rail.wagonGap);
-        const gap = Math.hypot(wagon.x - t.x, wagon.y - t.y);
-        // Away from the yard track the wagon never collapses into the locomotive.
-        if (t.path.length > 0 && Math.abs(t.x - 4.5) > 1.5) {
-          expect(gap).toBeGreaterThan(BALANCE.rail.wagonGap / 2);
-          checked++;
-        }
-      }
+    runTicks(state, 60);
+    const running = runningTrains(state);
+    expect(running.length).toBeGreaterThan(0);
+    for (const t of running) {
+      expect(t.trail.length).toBeGreaterThan(0);
+      expect(t.trail.length).toBeLessThanOrEqual(TRAIL_TILES);
+      for (const tile of t.trail) expect(state.layers.rail[tile]).not.toBe(0);
     }
-    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('keeps wagons behind the locomotive right after departing a halt', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    // Run until some train dwells, then until it runs again.
+    let train: Train | undefined;
+    for (let i = 0; i < 400 && !train; i++) {
+      runTicks(state, 1);
+      train = state.trains.find((t) => t.phase === TrainPhase.Dwelling);
+    }
+    expect(train).toBeDefined();
+    for (let i = 0; i < 100 && train!.phase !== TrainPhase.Running; i++) runTicks(state, 1);
+    runTicks(state, 1);
+    const head = { x: train!.x, y: train!.y };
+    const wagon = trailingPoint(state, train!, BALANCE.rail.wagonGap);
+    expect(Math.hypot(wagon.x - head.x, wagon.y - head.y)).toBeGreaterThan(
+      BALANCE.rail.wagonGap * 0.9,
+    );
+  });
+
+  it('clears on parking and is not saved', () => {
+    const state = railTown();
+    setHour(state, BALANCE.rail.windowStartHour);
+    runTicks(state, 60);
+    const loaded = deserializeState(serializeState(state));
+    for (const t of loaded.trains) expect(t.trail).toEqual([]);
+    expect(JSON.stringify(serializeState(state).trains ?? [])).not.toContain('trail');
   });
 });

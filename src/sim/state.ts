@@ -194,6 +194,12 @@ export interface Train {
   dwellTicks: number;
   /** Stood still this tick for lack of power (transient). */
   stalled: boolean;
+  /**
+   * Track tile centres the train last reached, newest last (at most
+   * TRAIL_TILES). Wagons are drawn along it. Transient: not saved, empty
+   * after a load or when parked.
+   */
+  trail: number[];
 }
 
 /** A reversible build action for the undo tool. */
@@ -1560,6 +1566,7 @@ export function deserializeState(save: SaveGame): SimState {
       pathIndex: t.pathIndex,
       dwellTicks: t.dwellTicks,
       stalled: false,
+      trail: [],
     }));
     for (const t of state.trains) state.nextVehicleId = Math.max(state.nextVehicleId, t.id + 1);
   }

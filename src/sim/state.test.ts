@@ -853,6 +853,7 @@ describe('railway persistence', () => {
         pathIndex: 1,
         dwellTicks: 0,
         stalled: true,
+        trail: [],
       },
       {
         id: 8,
@@ -869,6 +870,7 @@ describe('railway persistence', () => {
         pathIndex: 0,
         dwellTicks: 0,
         stalled: false,
+        trail: [],
       },
     );
     const loaded = deserializeState(serializeState(state));

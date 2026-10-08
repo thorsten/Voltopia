@@ -16,7 +16,7 @@ import { timeOfDay, dayNumber } from './tick.ts';
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
-import { runningTrains, trailingPoint } from './trains.ts';
+import { runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { ticksAtHour } from './vehicles.ts';
 
 function makeEngine(seed = 42, size = 16): SimEngine {
@@ -324,7 +324,7 @@ describe('SimEngine basics', () => {
     expect(engine.state.buses).toHaveLength(BALANCE.transit.busesPerDepot);
   });
 
-  it('sends running trains to the renderer as a locomotive plus a trailing wagon', () => {
+  it('sends running trains to the renderer as a locomotive plus its trailing wagons', () => {
     const engine = new SimEngine(1, 32);
     const { state } = engine;
     const at = (x: number, y: number) => tileIndex(x, y, 32);
@@ -374,23 +374,29 @@ describe('SimEngine basics', () => {
       expect(event.vehicles.filter((v) => v.id === train.id)).toEqual([
         { id: train.id, x: train.x, y: train.y, angle: train.angle, kind: locoKind },
       ]);
-      const wagon = trailingPoint(state, train, BALANCE.rail.wagonGap);
-      expect(event.vehicles.filter((v) => v.id === train.id + WAGON_ID_OFFSET)).toEqual([
-        {
-          id: train.id + WAGON_ID_OFFSET,
-          x: wagon.x,
-          y: wagon.y,
-          angle: wagon.angle,
-          kind: wagonKind,
-        },
-      ]);
+      const n = wagonsOf(train);
+      for (let k = 1; k <= n; k++) {
+        const wagon = trailingPoint(state, train, k * BALANCE.rail.wagonGap);
+        expect(event.vehicles.filter((v) => v.id === train.id + k * WAGON_ID_OFFSET)).toEqual([
+          {
+            id: train.id + k * WAGON_ID_OFFSET,
+            x: wagon.x,
+            y: wagon.y,
+            angle: wagon.angle,
+            kind: wagonKind,
+          },
+        ]);
+      }
     }
 
     // Parked trains (not out of the yard) produce no vehicle entries at all.
     const parked = state.trains.filter((t) => t.phase === TrainPhase.Parked);
     for (const train of parked) {
       expect(event.vehicles.some((v) => v.id === train.id)).toBe(false);
-      expect(event.vehicles.some((v) => v.id === train.id + WAGON_ID_OFFSET)).toBe(false);
+      const n = wagonsOf(train);
+      for (let k = 1; k <= n; k++) {
+        expect(event.vehicles.some((v) => v.id === train.id + k * WAGON_ID_OFFSET)).toBe(false);
+      }
     }
   });
 

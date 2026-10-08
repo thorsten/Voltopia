@@ -80,8 +80,22 @@ function createTrain(state: SimState, yard: number, yardTrack: number, kind: Tra
     pathIndex: 0,
     dwellTicks: 0,
     stalled: false,
+    trail: [],
   };
 }
+
+/** Wagons behind this train's locomotive. */
+export function wagonsOf(train: Train): number {
+  return train.kind === TrainKind.Freight
+    ? BALANCE.rail.freightWagons
+    : BALANCE.rail.passengerWagons;
+}
+
+/** Trail length that covers the longest train plus a tile of slack each way. */
+export const TRAIL_TILES =
+  Math.ceil(
+    Math.max(BALANCE.rail.passengerWagons, BALANCE.rail.freightWagons) * BALANCE.rail.wagonGap,
+  ) + 2;
 
 /**
  * Keep every powered yard's fleet complete: drop trains whose yard or
@@ -150,6 +164,8 @@ export function advanceTrain(
       train.x = targetX;
       train.y = targetY;
       if (distance > 1e-9) train.angle = Math.atan2(dy, dx);
+      train.trail.push(target);
+      if (train.trail.length > TRAIL_TILES) train.trail.shift();
       remaining -= distance;
       train.pathIndex++;
       if (train.pathIndex >= train.path.length) return 'arrived';
@@ -335,6 +351,7 @@ function parkAtYard(state: SimState, train: Train): void {
   train.dwellTicks = BALANCE.rail.turnaroundTicks;
   train.x = tileX(train.yardTrack, state.size) + 0.5;
   train.y = tileY(train.yardTrack, state.size) + 0.5;
+  train.trail = [];
 }
 
 /**
@@ -488,9 +505,12 @@ export function runningTrains(state: SimState): Train[] {
 }
 
 /**
- * A point `gap` tiles behind the locomotive along its path (the wagon).
- * Walks back over the path's tile centres; clamps at the path start, so a
- * train that just left sits with its wagon on the same tile.
+ * A point `gap` tiles behind the locomotive, walking back over its trail of
+ * reached tile centres (newest first) so wagons follow through curves. The
+ * trail survives a new leg starting at a halt, so wagons stay behind
+ * through a dwell; only a fresh train leaving the yard has an empty trail,
+ * so its wagons unfold over the first tiles it covers. Clamps at the
+ * oldest trail point once the trail runs out.
  */
 export function trailingPoint(
   state: SimState,
@@ -501,13 +521,13 @@ export function trailingPoint(
   let y = train.y;
   let remaining = gap;
   let angle = train.angle;
-  for (let i = train.pathIndex - 1; i >= 0 && remaining > 1e-9; i--) {
-    const px = tileX(train.path[i], state.size) + 0.5;
-    const py = tileY(train.path[i], state.size) + 0.5;
+  for (let i = train.trail.length - 1; i >= 0 && remaining > TRAIL_EPSILON; i--) {
+    const px = tileX(train.trail[i], state.size) + 0.5;
+    const py = tileY(train.trail[i], state.size) + 0.5;
     const dx = px - x;
     const dy = py - y;
     const d = Math.hypot(dx, dy);
-    if (d <= 1e-9) continue;
+    if (d <= TRAIL_EPSILON) continue;
     angle = Math.atan2(-dy, -dx);
     if (d >= remaining) {
       x += (dx / d) * remaining;
@@ -521,3 +541,4 @@ export function trailingPoint(
   }
   return { x, y, angle };
 }
+const TRAIL_EPSILON = 1e-9;
