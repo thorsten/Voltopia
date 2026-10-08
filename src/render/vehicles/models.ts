@@ -197,7 +197,9 @@ export function vanModel(): VehicleModel {
       part(0.232, 0.02, W, -L / 2 + 0.115, SILL + 0.06, 0, VAN_STRIPE),
       // Cab at the front, lower than the box, with a windscreen.
       part(0.11, 0.11, bodyW, L / 2 - 0.055, SILL + 0.055, 0, BODY),
-      part(0.004, 0.04, bodyW - 0.02, L / 2 - 0.002, SILL + 0.085, 0, GLASS),
+      // Nudged 0.002 past the body's end face so the outer glass face
+      // doesn't sit coplanar with the body (z-fighting).
+      part(0.004, 0.04, bodyW - 0.02, L / 2, SILL + 0.085, 0, GLASS),
       ...tyres(L, W, 0.07),
       ...lenses(L, bodyW, SILL + 0.03),
     ],
@@ -215,8 +217,9 @@ export function busModel(): VehicleModel {
       part(L, top - SILL, bodyW, 0, SILL + (top - SILL) / 2, 0, BODY),
       // Window band along both sides, slightly proud of the body.
       part(L - 0.04, 0.05, W, 0, top - 0.05, 0, GLASS),
-      // Windscreen.
-      part(0.004, 0.07, bodyW - 0.02, L / 2 - 0.002, top - 0.06, 0, GLASS),
+      // Windscreen, nudged 0.002 past the body's end face (avoids
+      // z-fighting with the flush body face).
+      part(0.004, 0.07, bodyW - 0.02, L / 2, top - 0.06, 0, GLASS),
       // Two door marks below the window band, on the right-hand side and mirrored.
       part(0.04, 0.065, W, 0.12, SILL + 0.0425, 0, TRIM),
       part(0.04, 0.065, W, -0.03, SILL + 0.0425, 0, TRIM),
@@ -248,9 +251,11 @@ export function locomotiveModel(): VehicleModel {
     [
       ...bogies(L),
       part(L, bodyTop - BOGIE.h, bodyW, 0, BOGIE.h + (bodyTop - BOGIE.h) / 2, 0, BODY),
-      // Cab windows: windscreens at both ends, a side band at the front cab.
-      part(0.004, 0.05, bodyW - 0.02, L / 2 - 0.002, 0.17, 0, GLASS),
-      part(0.004, 0.05, bodyW - 0.02, -L / 2 + 0.002, 0.17, 0, GLASS),
+      // Cab windows: windscreens at both ends, nudged 0.002 past the
+      // body's end faces (avoids z-fighting), plus a side band at the
+      // front cab.
+      part(0.004, 0.05, bodyW - 0.02, L / 2, 0.17, 0, GLASS),
+      part(0.004, 0.05, bodyW - 0.02, -L / 2, 0.17, 0, GLASS),
       part(0.08, 0.04, W, L / 2 - 0.06, 0.17, 0, GLASS),
       // Roof and pantograph (base, mast, contact bar).
       part(L - 0.04, 0.02, 0.15, 0, bodyTop + 0.01, 0, TRIM),

@@ -5,6 +5,7 @@ import {
   busModel,
   containerWagonModel,
   estateModel,
+  GLASS,
   hatchbackModel,
   hopperWagonModel,
   LOCOMOTIVE_LENGTH,
@@ -65,6 +66,44 @@ describe('vehicle models', () => {
           details++;
       }
       expect(details).toBeGreaterThan(0);
+    });
+  }
+
+  /**
+   * Guard against a windscreen box sitting flush with the body's end
+   * face: a glass box whose outer face is coplanar with the body face
+   * z-fights with it. The windscreen must poke out past the half length.
+   */
+  const WINDSCREEN_MODELS: Array<[string, () => VehicleModel, number]> = [
+    ['van', vanModel, 0.34],
+    ['bus', busModel, 0.4],
+    ['locomotive', locomotiveModel, LOCOMOTIVE_LENGTH],
+  ];
+  for (const [name, build, length] of WINDSCREEN_MODELS) {
+    it(`${name}: windscreen glass pokes out past the body's end face`, () => {
+      const g = build().geometry;
+      const position = g.getAttribute('position');
+      const color = g.getAttribute('color');
+      const glass = new THREE.Color(GLASS);
+      // Colours round-trip through a Float32Array, so compare with a
+      // tolerance rather than exact equality (a fresh THREE.Color's
+      // double-precision channels won't bit-match a float32 round trip).
+      const EPS = 1e-5;
+      let maxGlassX = -Infinity;
+      for (let i = 0; i < color.count; i++) {
+        if (
+          Math.abs(color.getX(i) - glass.r) < EPS &&
+          Math.abs(color.getY(i) - glass.g) < EPS &&
+          Math.abs(color.getZ(i) - glass.b) < EPS
+        ) {
+          maxGlassX = Math.max(maxGlassX, position.getX(i));
+        }
+      }
+      // A strict margin past half length, not just >=: a flush windscreen
+      // (outer face exactly at the body's end face) would pass a plain
+      // >= check up to floating-point noise, which is exactly the bug
+      // this guards against.
+      expect(maxGlassX).toBeGreaterThan(length / 2 + 0.001);
     });
   }
 });
