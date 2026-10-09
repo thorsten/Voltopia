@@ -5,6 +5,8 @@ export interface ZoneFamily {
   walls: readonly THREE.Color[];
   roofs: readonly THREE.Color[];
   trims: readonly THREE.Color[];
+  /** Darker stone tone of the plinth under the main body. */
+  plinth: THREE.Color;
 }
 
 const colors = (...hex: number[]): readonly THREE.Color[] => hex.map((h) => new THREE.Color(h));
@@ -20,21 +22,25 @@ export const ZONE_FAMILIES: Record<number, ZoneFamily> = {
     walls: colors(0xf1e6cf, 0xe3cfa6, 0xe8c3a6, 0xf6f2ea),
     roofs: colors(0xb85c45, 0x6b7280, 0x7d5a44),
     trims: colors(0xfbf8f1, 0x3d6b4f),
+    plinth: new THREE.Color(0x8c7d6b),
   },
   [Zone.Commercial]: {
     walls: colors(0xaab4bf, 0x8fa3b8, 0x7fb3b8, 0xb9b3a9),
     roofs: colors(0x4f565e, 0x2e3238, 0x7c8792),
     trims: colors(0xf2f4f6, 0x33383f),
+    plinth: new THREE.Color(0x5e646b),
   },
   [Zone.Retail]: {
     walls: colors(0xd9a39b, 0xe9b98f, 0xe9d99a, 0xd6b39c),
     roofs: colors(0x8f3b3b, 0x7a7f4a, 0x6f7378),
     trims: colors(0xc9453f, 0x3f8f8a),
+    plinth: new THREE.Color(0x7a6a5e),
   },
   [Zone.Industrial]: {
     walls: colors(0x9aa0a6, 0xb5b0a3, 0x8c8f93, 0xa7a295),
     roofs: colors(0x5b5f66, 0x8a4b3a, 0x6f7378),
     trims: colors(0xe0b030, 0x3f4650),
+    plinth: new THREE.Color(0x5b5f66),
   },
 };
 
@@ -46,6 +52,7 @@ export const ACCENT = {
   chimney: new THREE.Color(0x9a4f3b),
   acUnit: new THREE.Color(0xf0f2f4),
   antenna: new THREE.Color(0x4b4f55),
+  gutter: new THREE.Color(0x8a9099),
 } as const;
 
 const SUPPLY_GREY = new THREE.Color(0x8a8a8a);

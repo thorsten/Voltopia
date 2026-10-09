@@ -48,8 +48,8 @@ function accentState(b: TileBuilding): AccentState {
 }
 
 /** Pitched roofs take the weathered patina; flat slabs are boxes and do not. */
-function isRoofKind(kind: PartKind): boolean {
-  return kind === PartKind.GableRoof || kind === PartKind.HipRoof;
+export function isRoofKind(kind: PartKind): boolean {
+  return kind === PartKind.GableRoof || kind === PartKind.HipRoof || kind === PartKind.ShedRoof;
 }
 
 interface TileBuilding {
@@ -488,7 +488,13 @@ export class BuildingsMesh implements DiffLayer {
       const color = p.accent
         ? p.color
         : applySupplyTint(
-            applyAgeTint(p.color, building.ageStage, isRoofKind(p.kind), this.agedColor),
+            applyAgeTint(
+              p.color,
+              building.ageStage,
+              // A ridge cap is a box but weathers with the roof it sits on.
+              isRoofKind(p.kind) || p.detail === 'ridge',
+              this.agedColor,
+            ),
             building.supplied,
             this.color,
           );

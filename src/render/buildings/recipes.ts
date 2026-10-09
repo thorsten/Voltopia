@@ -17,6 +17,9 @@ export const STREET_FACES: readonly StreetFace[] = [
 export const PartRole = { Chimney: 0, Vent: 1, Antenna: 2 } as const;
 export type PartRole = (typeof PartRole)[keyof typeof PartRole];
 
+/** Shared stage 4 details; tests and heuristics skip parts carrying this tag. */
+export type PartDetail = 'plinth' | 'ridge' | 'gutter';
+
 export interface BuildingPart {
   kind: PartKind;
   /** Footprint (tile fractions) and height, before rotation. */
@@ -38,20 +41,38 @@ export interface BuildingPart {
   accent?: boolean;
   /** Effect anchor for buildingFxMesh.ts; the anchor is the part's top centre. */
   role?: PartRole;
+  /** Set on the shared details (plinth, ridge cap, gutters). */
+  detail?: PartDetail;
 }
 
-export const MAX_PARTS_PER_TILE = 8;
+export const MAX_PARTS_PER_TILE = 16;
 /** Slots a tile owns per primitive kind; proven over the whole grid by recipes.test.ts. */
 export const MAX_PARTS_PER_KIND: Record<PartKind, number> = {
-  [PartKind.Box]: 7,
-  [PartKind.GableRoof]: 2,
-  [PartKind.HipRoof]: 1,
-  [PartKind.Cylinder]: 2,
+  [PartKind.Box]: 12,
+  [PartKind.GableRoof]: 3,
+  [PartKind.HipRoof]: 2,
+  [PartKind.Cylinder]: 3,
+  [PartKind.ShedRoof]: 2,
 };
 /** Half of the 0.86 footprint: no part may reach past this from the tile centre. */
 export const FOOTPRINT_HALF = 0.43;
 
-const ROOF_OVERHANG = 0.04;
+/** How far a pitched roof reaches past its body on each side. */
+export const ROOF_OVERHANG = 0.02;
+/** The market hall's long gable is scaled rather than offset over its wide body. */
+const MARKET_HALL_ROOF_MARGIN = 1.04;
+/** Extra footprint (both sides together) of the flat roof slabs over a parapet. */
+const PARAPET_MARGIN = { apartment: 0.04, shop: 0.02 } as const;
+/** Stone base under every main body. */
+export const PLINTH_HEIGHT = 0.04;
+/** How far the plinth stands proud of the body on each side. */
+export const PLINTH_OVERHANG = 0.008;
+/** Thin box along a gable's ridge. */
+export const RIDGE_CAP = { w: 0.02, h: 0.015 } as const;
+/** The ridge cap is the roof colour darkened by this factor (it still ages with the roof). */
+export const RIDGE_DARKEN = 0.85;
+/** Thin box hanging under each eave of a gable. */
+export const GUTTER = { w: 0.015, h: 0.015 } as const;
 /** The residential door's footprint, shared with buildingsMesh.ts's window layout. */
 export const DOOR = { width: 0.2, height: 0.16, depth: 0.02 };
 const ROOFTOP_PV_THICKNESS = 0.02;
@@ -151,6 +172,81 @@ function box(
   flags: { main?: boolean; accent?: boolean; role?: PartRole } = {},
 ): BuildingPart {
   return { kind: PartKind.Box, sx, sy, sz, ox, oy, oz, turn: 0, color, ...flags };
+}
+
+/** True for the shared details (plinth, ridge cap, gutters). */
+export function isDetailPart(part: BuildingPart): boolean {
+  return part.detail !== undefined;
+}
+
+/** Stone base hugging the bottom of `body`, a hair proud of its walls. */
+function plinth(body: BuildingPart, family: ZoneFamily): BuildingPart {
+  return {
+    ...box(
+      body.sx + 2 * PLINTH_OVERHANG,
+      PLINTH_HEIGHT,
+      body.sz + 2 * PLINTH_OVERHANG,
+      body.ox,
+      body.oy,
+      body.oz,
+      family.plinth,
+    ),
+    detail: 'plinth',
+  };
+}
+
+const ridgeColors = new Map<number, THREE.Color>();
+
+/** Darkened roof colour, shared per hue like the palette colours. */
+function ridgeColor(color: THREE.Color): THREE.Color {
+  const hex = color.getHex();
+  let ridge = ridgeColors.get(hex);
+  if (!ridge) {
+    ridge = color.clone().multiplyScalar(RIDGE_DARKEN);
+    ridgeColors.set(hex, ridge);
+  }
+  return ridge;
+}
+
+/** Thin box along a gable's ridge (local x), centred on the ridge line. */
+function ridgeCap(roof: BuildingPart, color: THREE.Color): BuildingPart {
+  return {
+    kind: PartKind.Box,
+    sx: roof.sx,
+    sy: RIDGE_CAP.h,
+    sz: RIDGE_CAP.w,
+    ox: roof.ox,
+    oy: roof.oy + roof.sy - RIDGE_CAP.h / 2,
+    oz: roof.oz,
+    turn: roof.turn,
+    color: ridgeColor(color),
+    detail: 'ridge',
+  };
+}
+
+/** One gutter under each eave of a gable (its local ±z edges), honouring the roof's turn. */
+function gutters(roof: BuildingPart): BuildingPart[] {
+  return [-1, 1].map((side) => {
+    const [dx, dz] = faceOffset(0, side * (roof.sz / 2 - GUTTER.w / 2), roof.turn as StreetFace);
+    return {
+      kind: PartKind.Box,
+      sx: roof.sx,
+      sy: GUTTER.h,
+      sz: GUTTER.w,
+      ox: roof.ox + dx,
+      oy: roof.oy - GUTTER.h,
+      oz: roof.oz + dz,
+      turn: roof.turn,
+      color: ACCENT.gutter,
+      accent: true,
+      detail: 'gutter',
+    };
+  });
+}
+
+/** Ridge cap and both gutters of a gable. */
+function gableDetails(roof: BuildingPart): BuildingPart[] {
+  return [ridgeCap(roof, roof.color), ...gutters(roof)];
 }
 
 /**
@@ -267,14 +363,14 @@ function residential(
     const ox = (p.unit() - 0.5) * 0.2;
     const oz = (p.unit() - 0.5) * 0.2;
     const body = box(w, h, d, ox, 0, oz, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     const roofHeight = 0.14;
     if (p.chance(0.25)) {
       parts.push({
         kind: PartKind.HipRoof,
-        sx: w + ROOF_OVERHANG,
+        sx: w + 2 * ROOF_OVERHANG,
         sy: roofHeight,
-        sz: d + ROOF_OVERHANG,
+        sz: d + 2 * ROOF_OVERHANG,
         ox,
         oy: h,
         oz,
@@ -283,17 +379,18 @@ function residential(
       });
     } else {
       const turn = p.pick(2);
-      parts.push({
+      const gable: BuildingPart = {
         kind: PartKind.GableRoof,
-        sx: turn === 0 ? w + ROOF_OVERHANG : d + ROOF_OVERHANG,
+        sx: (turn === 0 ? w : d) + 2 * ROOF_OVERHANG,
         sy: roofHeight,
-        sz: turn === 0 ? d + ROOF_OVERHANG : w + ROOF_OVERHANG,
+        sz: (turn === 0 ? d : w) + 2 * ROOF_OVERHANG,
         ox,
         oy: h,
         oz,
         turn,
         color: roof,
-      });
+      };
+      parts.push(gable, ...gableDetails(gable));
     }
     const sideX = p.chance(0.5) ? 1 : -1;
     const sideZ = p.chance(0.5) ? 1 : -1;
@@ -327,8 +424,8 @@ function residential(
       let ew = 0.16;
       if ((side < 0 && ox < 0) || (side > 0 && ox > 0)) {
         // The pinned side matches the body's own jitter: shrink the wing so
-        // its outer edge (|ox| + w/2 + ew) still stays within FOOTPRINT_HALF.
-        ew = Math.min(ew, FOOTPRINT_HALF - Math.abs(ox) - w / 2);
+        // its roof's outer eave (|ox| + w/2 + ew + overhang) stays within FOOTPRINT_HALF.
+        ew = Math.min(ew, FOOTPRINT_HALF - Math.abs(ox) - w / 2 - ROOF_OVERHANG);
       }
       const eh = h * 0.7;
       const ed = d * 0.7;
@@ -336,9 +433,9 @@ function residential(
       parts.push(box(ew, eh, ed, ex, 0, oz, wall));
       parts.push({
         kind: PartKind.GableRoof,
-        sx: ed,
+        sx: ed + 2 * ROOF_OVERHANG,
         sy: 0.08,
-        sz: ew,
+        sz: ew + 2 * ROOF_OVERHANG,
         ox: ex,
         oy: eh,
         oz,
@@ -352,29 +449,30 @@ function residential(
     const d = 0.5;
     const h = 0.55 + p.unit() * 0.1;
     const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     const roofHeight = 0.16;
-    const roofW = faceWidth(body, face) + ROOF_OVERHANG;
-    const roofD = faceDepth(body, face) + ROOF_OVERHANG;
+    const roofW = faceWidth(body, face) + 2 * ROOF_OVERHANG;
+    const roofD = faceDepth(body, face) + 2 * ROOF_OVERHANG;
     // Ridge runs along the street face so the PV slope faces the street.
-    parts.push(
-      facePart(
-        PartKind.GableRoof,
-        body,
-        face,
-        { w: roofW, h: roofHeight, d: roofD, lx: 0, ly: h, lz: 0 },
-        roof,
-      ),
+    const gable = facePart(
+      PartKind.GableRoof,
+      body,
+      face,
+      { w: roofW, h: roofHeight, d: roofD, lx: 0, ly: h, lz: 0 },
+      roof,
     );
+    parts.push(gable, ...gableDetails(gable));
     if (p.chance(0.5)) {
       // Dormer on the back slope, so it never collides with the PV slab.
       const dormerX = (p.unit() - 0.5) * 0.2;
+      const dormerW = 0.14;
+      const dormerD = 0.12;
       parts.push(
         facePart(
           PartKind.Box,
           body,
           face,
-          { w: 0.14, h: 0.1, d: 0.12, lx: dormerX, ly: h + 0.02, lz: -roofD / 4 },
+          { w: dormerW, h: 0.1, d: dormerD, lx: dormerX, ly: h + 0.02, lz: -roofD / 4 },
           wall,
         ),
       );
@@ -383,7 +481,14 @@ function residential(
           PartKind.GableRoof,
           body,
           face,
-          { w: 0.16, h: 0.06, d: 0.14, lx: dormerX, ly: h + 0.12, lz: -roofD / 4 },
+          {
+            w: dormerW + 2 * ROOF_OVERHANG,
+            h: 0.06,
+            d: dormerD + 2 * ROOF_OVERHANG,
+            lx: dormerX,
+            ly: h + 0.12,
+            lz: -roofD / 4,
+          },
           roof,
         ),
       );
@@ -407,8 +512,10 @@ function residential(
     const w = 0.7;
     const h = 1.0 + p.unit() * 0.2;
     const body = box(w, h, w, 0, 0, 0, wall, { main: true });
-    parts.push(body);
-    parts.push(box(w + 0.04, 0.04, w + 0.04, 0, h, 0, roof));
+    parts.push(body, plinth(body, family));
+    parts.push(
+      box(w + PARAPET_MARGIN.apartment, 0.04, w + PARAPET_MARGIN.apartment, 0, h, 0, roof),
+    );
     parts.push(box(0.2, 0.12, 0.2, -0.18, h, -0.18, wall));
     const balconies = 2 + p.pick(2);
     for (let i = 0; i < balconies; i++) {
@@ -453,7 +560,7 @@ function commercial(
     const w = 0.62;
     const h = 0.4 + p.unit() * 0.06;
     const body = box(w, h, w, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     parts.push(box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true }));
     parts.push(onStreetFace(body, face, 0.5, 0.03, 0.1, h * 0.55, trim));
     parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
@@ -462,7 +569,7 @@ function commercial(
     const w = 0.62;
     const h = 1.0 + p.unit() * 0.1;
     const body = box(w, h, w, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     parts.push(box(w + 0.02, 0.025, w + 0.02, 0, h / 3, 0, trim, { accent: true }));
     parts.push(box(w + 0.02, 0.025, w + 0.02, 0, (2 * h) / 3, 0, trim, { accent: true }));
     parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
@@ -490,7 +597,7 @@ function commercial(
     const lowerH = h * 0.67;
     const upperH = h - lowerH;
     const body = box(w, lowerH, w, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     const setback = -0.08;
     parts.push(box(0.46, upperH, 0.46, setback, lowerH, setback, wall));
     parts.push(box(w + 0.04, 0.03, w + 0.04, 0, lowerH - 0.03, 0, trim, { accent: true }));
@@ -542,8 +649,8 @@ function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily
     const d = 0.6;
     const h = 0.3 + p.unit() * 0.05;
     const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-    parts.push(body);
-    parts.push(box(w + 0.02, 0.03, d + 0.02, 0, h, 0, roof));
+    parts.push(body, plinth(body, family));
+    parts.push(box(w + PARAPET_MARGIN.shop, 0.03, d + PARAPET_MARGIN.shop, 0, h, 0, roof));
     parts.push(onStreetFace(body, face, 0.9, 0.04, 0.08, h * 0.6, trim));
     parts.push(onStreetFace(body, face, 0.6, 0.08, 0.03, h * 0.6 + 0.05, sign));
   } else if (density === 2) {
@@ -552,25 +659,34 @@ function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily
     const d = 0.66;
     const h = 0.45 + p.unit() * 0.05;
     const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     const fw = faceWidth(body, face);
     const fd = faceDepth(body, face);
     const roofKind = p.chance(0.5) ? PartKind.GableRoof : PartKind.HipRoof;
-    parts.push(
-      facePart(
-        roofKind,
-        body,
-        face,
-        { w: fw + ROOF_OVERHANG, h: 0.14, d: fd / 2 + 0.02, lx: 0, ly: h, lz: -fd / 4 },
-        roof,
-      ),
+    // The pitched back half overhangs the back and sides, and its front
+    // eave reaches the same overhang past the middle over the flat front.
+    const backRoof = facePart(
+      roofKind,
+      body,
+      face,
+      {
+        w: fw + 2 * ROOF_OVERHANG,
+        h: 0.14,
+        d: fd / 2 + 2 * ROOF_OVERHANG,
+        lx: 0,
+        ly: h,
+        lz: -fd / 4,
+      },
+      roof,
     );
+    parts.push(backRoof);
+    if (roofKind === PartKind.GableRoof) parts.push(...gableDetails(backRoof));
     parts.push(
       facePart(
         PartKind.Box,
         body,
         face,
-        { w: fw + 0.02, h: 0.03, d: fd / 2, lx: 0, ly: h, lz: fd / 4 },
+        { w: fw + PARAPET_MARGIN.shop, h: 0.03, d: fd / 2, lx: 0, ly: h, lz: fd / 4 },
         roof,
       ),
     );
@@ -599,12 +715,12 @@ function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily
     const d = 0.78;
     const h = 0.8 + p.unit() * 0.08;
     const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     const fw = faceWidth(body, face);
     const fd = faceDepth(body, face);
     const roofHeight = 0.18;
-    const roofW = fw * 1.04;
-    const roofD = fd * 1.04;
+    const roofW = fw * MARKET_HALL_ROOF_MARGIN;
+    const roofD = fd * MARKET_HALL_ROOF_MARGIN;
     parts.push(
       facePart(
         PartKind.GableRoof,
@@ -653,15 +769,17 @@ function industrial(
   const trim = p.from(family.trims);
   const parts: BuildingPart[] = [];
 
+  // The two halves meet over the middle of the hall; each overhangs only
+  // its outer side, so together they overhang the hall all round.
   const sawTooth = (w: number, d: number, top: number, ox: number, oz: number): void => {
     const half = w / 2;
     for (const side of [-1, 1]) {
       parts.push({
         kind: PartKind.GableRoof,
-        sx: half,
+        sx: half + ROOF_OVERHANG,
         sy: 0.1,
-        sz: d,
-        ox: ox + (side * half) / 2,
+        sz: d + 2 * ROOF_OVERHANG,
+        ox: ox + (side * (half + ROOF_OVERHANG)) / 2,
         oy: top,
         oz,
         turn: 0,
@@ -689,7 +807,7 @@ function industrial(
     const d = 0.5;
     const h = 0.28 + p.unit() * 0.04;
     const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     sawTooth(w, d, h, 0, 0);
     parts.push(onStreetFace(body, face, 0.4, h * 0.7, 0.02, 0, trim));
     parts.push(chimney(0.06, 0.22, -0.25, h, -0.15));
@@ -698,7 +816,7 @@ function industrial(
     const w = 0.7;
     const h = 0.36 + p.unit() * 0.04;
     const body = box(w, h, 0.34, 0, 0, -0.12, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     sawTooth(w, 0.34, h, 0, -0.12);
     const annexH = h * 0.7;
     const annex = box(0.5, annexH, 0.22, -0.08, 0, 0.19, wall);
@@ -726,7 +844,7 @@ function industrial(
     const d = 0.5;
     const h = 0.42 + p.unit() * 0.06;
     const body = box(w, h, d, 0, 0, -0.04, wall, { main: true });
-    parts.push(body);
+    parts.push(body, plinth(body, family));
     sawTooth(w, d, h, 0, -0.04);
     parts.push(box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true }));
     parts.push(onStreetFace(body, face, 0.3, h * 0.6, 0.02, 0, trim));

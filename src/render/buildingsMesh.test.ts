@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { HEATED_SERVED, SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { BuildingsMesh } from './buildingsMesh.ts';
+import { BuildingsMesh, isRoofKind } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
 import { DOOR, MAX_PARTS_PER_KIND, PartRole, StreetFace, faceDepth } from './buildings/recipes.ts';
@@ -89,7 +89,11 @@ const CENTRE = 3 * SIZE + 3;
 describe('BuildingsMesh', () => {
   it('creates one culling-free instanced mesh per primitive kind plus windows', () => {
     const { scene, mesh } = setup();
+    expect(PART_KINDS).toHaveLength(5);
     expect(mesh.kindMeshes).toHaveLength(PART_KINDS.length);
+    expect(mesh.kindMeshes[PartKind.ShedRoof].instanceMatrix.count).toBe(
+      SIZE * SIZE * MAX_PARTS_PER_KIND[PartKind.ShedRoof],
+    );
     for (const kind of PART_KINDS) {
       const m = mesh.kindMeshes[kind];
       expect(m.frustumCulled).toBe(false);
@@ -742,6 +746,42 @@ describe('BuildingsMesh age stages', () => {
     expect(old.getHex()).toBe(applyAgeTint(gable.color, 2, true, new THREE.Color()).getHex());
   });
 
+  it('treats every pitched roof kind, including the shed roof, as a roof for the patina', () => {
+    expect(isRoofKind(PartKind.GableRoof)).toBe(true);
+    expect(isRoofKind(PartKind.HipRoof)).toBe(true);
+    expect(isRoofKind(PartKind.ShedRoof)).toBe(true);
+    expect(isRoofKind(PartKind.Box)).toBe(false);
+    expect(isRoofKind(PartKind.Cylinder)).toBe(false);
+  });
+
+  it('ages and supply-tints plinths like walls and ridge caps like the roof, never gutters', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([
+      { ...aged(CENTRE, Zone.Residential, 2, 2), supplied: SupplyStatus.Undersupplied } as TileDiff,
+    ]);
+    const boxes = mesh.partsAt(CENTRE)!.filter((p) => p.kind === PartKind.Box);
+    const colorOf = (detail: string): [THREE.Color, THREE.Color] => {
+      const slot = boxes.findIndex((p) => p.detail === detail);
+      expect(slot).toBeGreaterThanOrEqual(0);
+      const c = new THREE.Color();
+      mesh.kindMeshes[PartKind.Box].getColorAt(slot, c);
+      return [boxes[slot].color, c];
+    };
+    const tint = (color: THREE.Color, roof: boolean) =>
+      applySupplyTint(
+        applyAgeTint(color, 2, roof, new THREE.Color()),
+        SupplyStatus.Undersupplied,
+        new THREE.Color(),
+      ).getHex();
+    const [plinth, plinthDrawn] = colorOf('plinth');
+    expect(plinthDrawn.getHex()).toBe(tint(plinth, false));
+    const [ridge, ridgeDrawn] = colorOf('ridge');
+    expect(ridgeDrawn.getHex()).toBe(tint(ridge, true));
+    const [, gutterDrawn] = colorOf('gutter');
+    expect(gutterDrawn.getHex()).toBe(ACCENT.gutter.getHex());
+  });
+
   it('a densify returns the tile to stage 0 colours', () => {
     const { mesh } = setup();
     mesh.setReducedMotion(true);
@@ -852,11 +892,13 @@ describe('BuildingsMesh foundations on sloped ground', () => {
     mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
     const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
     const lift = ramp.centerY(CENTRE);
-    // The main body has the largest footprint of the boxes at every growth stage.
-    const body = () =>
-      instances(mesh.kindMeshes[PartKind.Box]).reduce((best, i) =>
-        i.s.x * i.s.z > best.s.x * best.s.z ? i : best,
-      );
+    // Boxes are written in recipe order from slot 0, so the main body's slot
+    // is its index among the boxes (the plinth below it is wider).
+    const slot = mesh
+      .partsAt(CENTRE)!
+      .filter((p) => p.kind === PartKind.Box)
+      .indexOf(main);
+    const body = () => instances(mesh.kindMeshes[PartKind.Box])[slot];
     const small = body();
     expect(small.p.y).toBeLessThan(lift);
     expect(small.p.y + small.s.y).toBeLessThan(lift + main.sy * 0.2);

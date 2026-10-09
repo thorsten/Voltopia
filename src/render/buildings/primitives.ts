@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** The instanced geometries a building is composed from. */
-export const PartKind = { Box: 0, GableRoof: 1, HipRoof: 2, Cylinder: 3 } as const;
+export const PartKind = { Box: 0, GableRoof: 1, HipRoof: 2, Cylinder: 3, ShedRoof: 4 } as const;
 export type PartKind = (typeof PartKind)[keyof typeof PartKind];
 
 export const PART_KINDS: readonly PartKind[] = [
@@ -9,6 +9,7 @@ export const PART_KINDS: readonly PartKind[] = [
   PartKind.GableRoof,
   PartKind.HipRoof,
   PartKind.Cylinder,
+  PartKind.ShedRoof,
 ];
 
 const CYLINDER_SEGMENTS = 8;
@@ -96,6 +97,41 @@ function createHipRoof(): THREE.BufferGeometry {
   return flatGeometry(faces.flat().map(Number));
 }
 
+/** Mono-pitch wedge: high edge along x at y = 1, z = -0.5; low edge at y = 0, z = +0.5. */
+function createShedRoof(): THREE.BufferGeometry {
+  const highE: Vec3 = [H, 1, -H];
+  const highW: Vec3 = [-H, 1, -H];
+
+  const faces: Vec3[] = [
+    // slope, falling toward +z
+    SW,
+    SE,
+    highE,
+    SW,
+    highE,
+    highW,
+    // back wall (-z)
+    NE,
+    NW,
+    highW,
+    NE,
+    highW,
+    highE,
+    // east side (+x)
+    SE,
+    NE,
+    highE,
+    // west side (-x)
+    NW,
+    SW,
+    highW,
+    // bottom
+    ...BOTTOM,
+  ];
+
+  return flatGeometry(faces.flat().map(Number));
+}
+
 /**
  * Geometry for one primitive kind. Every kind shares the convention
  * "unit footprint centred on the origin, base at y = 0, height 1", so the
@@ -111,5 +147,7 @@ export function createPartGeometry(kind: PartKind): THREE.BufferGeometry {
       return createHipRoof();
     case PartKind.Cylinder:
       return new THREE.CylinderGeometry(0.5, 0.5, 1, CYLINDER_SEGMENTS).translate(0, 0.5, 0);
+    case PartKind.ShedRoof:
+      return createShedRoof();
   }
 }

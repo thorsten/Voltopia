@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { Zone } from '../../shared/types.ts';
 import { PART_KINDS, PartKind } from './primitives.ts';
-import { ACCENT } from './palette.ts';
+import { ACCENT, ZONE_FAMILIES } from './palette.ts';
 import { MAX_PUFF_ANCHORS_PER_TILE } from './accents.ts';
 import {
   type BuildingPart,
   FOOTPRINT_HALF,
+  GUTTER,
   MAX_PARTS_PER_KIND,
   MAX_PARTS_PER_TILE,
+  PLINTH_HEIGHT,
+  PLINTH_OVERHANG,
   PartRole,
+  RIDGE_CAP,
+  RIDGE_DARKEN,
+  ROOF_OVERHANG,
   STREET_FACES,
   StreetFace,
   buildingHeight,
@@ -17,6 +23,7 @@ import {
   createPicker,
   faceDepth,
   faceOffset,
+  isDetailPart,
   mainBody,
   streetFaceFor,
 } from './recipes.ts';
@@ -121,38 +128,50 @@ describe('street face helpers', () => {
 });
 
 describe('building recipes', () => {
-  it('respect the per-tile and per-kind part budgets over the whole grid', () => {
-    // Part counts never depend on the face, so one face over all 4096
-    // tiles is the full proof. Assertions are accumulated and checked once
-    // after the loops (rather than inside the hot loop) to keep this test
-    // fast even with ~500k part lists across all zones.
-    const violations: string[] = [];
-    for (const zone of ZONES) {
+  it('pin the stage 4 budget: 16 parts per tile, five kinds', () => {
+    expect(MAX_PARTS_PER_TILE).toBe(16);
+    expect(MAX_PARTS_PER_KIND).toEqual({
+      [PartKind.Box]: 12,
+      [PartKind.GableRoof]: 3,
+      [PartKind.HipRoof]: 2,
+      [PartKind.Cylinder]: 3,
+      [PartKind.ShedRoof]: 2,
+    });
+  });
+
+  // One `it` per zone keeps each sweep well inside the CI per-test budget.
+  it.each(ZONES)(
+    'zone %i respects the per-tile and per-kind part budgets over the whole grid and every face',
+    (zone) => {
+      // Assertions are accumulated and checked once after the loops (rather
+      // than inside the hot loop) to keep this test fast with ~400k part lists.
+      const violations: string[] = [];
+      const counts = PART_KINDS.map(() => 0);
       for (const density of [1, 2, 3]) {
         for (let variant = 0; variant < VARIANTS; variant++) {
-          for (const index of FULL_GRID) {
-            const parts = buildingParts(zone, density, variant, index, StreetFace.South);
-            if (parts.length > MAX_PARTS_PER_TILE) {
-              violations.push(
-                `${zone}/${density}/${variant}/${index}: ${parts.length} parts > ${MAX_PARTS_PER_TILE}`,
-              );
-            }
-            for (const kind of PART_KINDS) {
-              let n = 0;
-              for (const p of parts) if (p.kind === kind) n++;
-              const max = MAX_PARTS_PER_KIND[kind];
-              if (n > max) {
-                violations.push(
-                  `${zone}/${density}/${variant}/${index}: ${n} parts of kind ${kind} > ${max}`,
-                );
+          for (const face of STREET_FACES) {
+            for (const index of FULL_GRID) {
+              const parts = buildingParts(zone, density, variant, index, face);
+              const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+              if (parts.length > MAX_PARTS_PER_TILE) {
+                violations.push(`${tag}: ${parts.length} parts > ${MAX_PARTS_PER_TILE}`);
+              }
+              counts.fill(0);
+              for (const p of parts) counts[p.kind]++;
+              for (const kind of PART_KINDS) {
+                if (counts[kind] > MAX_PARTS_PER_KIND[kind]) {
+                  violations.push(
+                    `${tag}: ${counts[kind]} parts of kind ${kind} > ${MAX_PARTS_PER_KIND[kind]}`,
+                  );
+                }
               }
             }
           }
         }
       }
-    }
-    expect(violations).toEqual([]);
-  });
+      expect(violations).toEqual([]);
+    },
+  );
 
   it('stay inside the footprint and above the ground', () => {
     // Assertions are accumulated as violations and checked once after the
@@ -211,7 +230,7 @@ describe('building recipes', () => {
 
   it('grow rooftop PV from density 2 only', () => {
     for (const { parts, density } of allRecipes(SAMPLE)) {
-      const pv = parts.some((p) => p.color.getHex() === ACCENT.rooftopPv.getHex());
+      const pv = parts.some((p) => !p.detail && p.color.getHex() === ACCENT.rooftopPv.getHex());
       expect(pv).toBe(density >= 2);
     }
   });
@@ -293,6 +312,7 @@ describe('building recipes', () => {
             (p) =>
               p.kind === PartKind.Box &&
               !p.main &&
+              !p.detail &&
               Math.abs(p.oy - (dormerRoof.oy - 0.1)) < 1e-6 &&
               (Math.abs(p.sx - 0.14) < 1e-9 || Math.abs(p.sz - 0.14) < 1e-9),
           );
@@ -322,7 +342,9 @@ describe('building recipes', () => {
         for (const index of SAMPLE) {
           const parts = buildingParts(Zone.Residential, 1, variant, index, face);
           const main = mainBody(parts)!;
-          const wing = parts.find((p) => p.kind === PartKind.Box && !p.main && !p.accent);
+          const wing = parts.find(
+            (p) => p.kind === PartKind.Box && !p.main && !p.accent && !p.detail,
+          );
           if (!wing) continue; // no side extension on this roll
           const wingSign = Math.sign(wing.ox - main.ox);
           const doorSign = face === StreetFace.East ? 1 : -1;
@@ -351,7 +373,8 @@ describe('building recipes', () => {
             const parts = buildingParts(zone, density, variant, index, face);
             const tag = `${zone}/${density}/${variant}/${face}/${index}`;
             const pv = parts.find(
-              (p) => p.color.getHex() === ACCENT.rooftopPv.getHex() && p.tilt !== undefined,
+              (p) =>
+                !p.detail && p.color.getHex() === ACCENT.rooftopPv.getHex() && p.tilt !== undefined,
             );
             if (!pv) {
               violations.push(`${tag}: no tilted rooftop PV part found`);
@@ -405,6 +428,7 @@ describe('building recipes', () => {
         const awnings = parts.filter(
           (p) =>
             p.accent &&
+            !p.detail &&
             p.kind === PartKind.Box &&
             p.sy <= 0.05 &&
             (p.ox - main.ox) * ex + (p.oz - main.oz) * ez > faceDepth(main, face) / 2,
@@ -422,6 +446,213 @@ describe('building recipes', () => {
       expect(gables[0].oy).toBeCloseTo(gables[1].oy, 9);
       expect(gables[0].ox).not.toBeCloseTo(gables[1].ox, 9);
     }
+  });
+
+  describe('shared details (stage 4)', () => {
+    const EPS = 1e-9;
+    const isPitched = (p: BuildingPart) =>
+      p.kind === PartKind.GableRoof || p.kind === PartKind.HipRoof || p.kind === PartKind.ShedRoof;
+
+    /** World-space xz bounds of a part (a quarter turn swaps its extents). */
+    function bounds(p: BuildingPart): { minX: number; maxX: number; minZ: number; maxZ: number } {
+      const [hx, hz] = p.turn % 2 === 0 ? [p.sx / 2, p.sz / 2] : [p.sz / 2, p.sx / 2];
+      return { minX: p.ox - hx, maxX: p.ox + hx, minZ: p.oz - hz, maxZ: p.oz + hz };
+    }
+
+    /** The main gable: the largest gable sitting on top of the main body, if any. */
+    function mainGable(parts: readonly BuildingPart[]): BuildingPart | undefined {
+      const main = mainBody(parts)!;
+      return parts
+        .filter((p) => p.kind === PartKind.GableRoof && Math.abs(p.oy - (main.oy + main.sy)) < EPS)
+        .reduce<BuildingPart | undefined>(
+          (a, b) => (a && a.sx * a.sz >= b.sx * b.sz ? a : b),
+          undefined,
+        );
+    }
+
+    it('tags only plinths, ridge caps and gutters as detail parts', () => {
+      // Batched like the footprint test above to stay fast.
+      const violations: string[] = [];
+      const allowed = new Set(['plinth', 'ridge', 'gutter']);
+      for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+        const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+        for (const p of parts) {
+          if (isDetailPart(p) !== (p.detail !== undefined)) {
+            violations.push(`${tag}: isDetailPart disagrees with the detail tag`);
+          }
+          if (p.detail === undefined) continue;
+          if (!allowed.has(p.detail)) violations.push(`${tag}: unknown detail ${p.detail}`);
+          if (p.main || p.role !== undefined) violations.push(`${tag}: detail is main or tagged`);
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('put exactly one plinth below every main body', () => {
+      const violations: string[] = [];
+      for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+        const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+        const main = mainBody(parts)!;
+        const plinths = parts.filter((p) => p.detail === 'plinth');
+        if (plinths.length !== 1) {
+          violations.push(`${tag}: ${plinths.length} plinths, expected 1`);
+          continue;
+        }
+        const [pl] = plinths;
+        const ok =
+          pl.kind === PartKind.Box &&
+          pl.turn === 0 &&
+          pl.tilt === undefined &&
+          !pl.accent &&
+          pl.oy === main.oy &&
+          pl.sy === PLINTH_HEIGHT &&
+          Math.abs(pl.sx - (main.sx + 2 * PLINTH_OVERHANG)) < EPS &&
+          Math.abs(pl.sz - (main.sz + 2 * PLINTH_OVERHANG)) < EPS &&
+          Math.abs(pl.ox - main.ox) < EPS &&
+          Math.abs(pl.oz - main.oz) < EPS &&
+          pl.color.getHex() === ZONE_FAMILIES[zone].plinth.getHex();
+        if (!ok) violations.push(`${tag}: plinth ${JSON.stringify(pl)} does not hug the main body`);
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('put a ridge cap and two gutters on the main gable of residential d1-d2 and retail d2', () => {
+      const violations: string[] = [];
+      const cases: ReadonlyArray<{ zone: Zone; density: number }> = [
+        { zone: Zone.Residential, density: 1 },
+        { zone: Zone.Residential, density: 2 },
+        { zone: Zone.Retail, density: 2 },
+      ];
+      let gabled = 0;
+      let hipped = 0;
+      for (const { zone, density } of cases) {
+        for (const face of STREET_FACES) {
+          for (let variant = 0; variant < VARIANTS; variant++) {
+            for (const index of SAMPLE) {
+              const parts = buildingParts(zone, density, variant, index, face);
+              const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+              const gable = mainGable(parts);
+              const ridges = parts.filter((p) => p.detail === 'ridge');
+              const gutters = parts.filter((p) => p.detail === 'gutter');
+              if (!gable) {
+                // A hip roof: four eaves would cost four parts, so none.
+                hipped++;
+                if (ridges.length + gutters.length !== 0) {
+                  violations.push(`${tag}: ridge/gutters without a main gable`);
+                }
+                continue;
+              }
+              gabled++;
+              if (ridges.length !== 1 || gutters.length !== 2) {
+                violations.push(`${tag}: ${ridges.length} ridges, ${gutters.length} gutters`);
+                continue;
+              }
+              const [ridge] = ridges;
+              const ridgeColor = gable.color.clone().multiplyScalar(RIDGE_DARKEN);
+              if (
+                ridge.kind !== PartKind.Box ||
+                Math.abs(ridge.sx - gable.sx) > 1e-6 ||
+                ridge.sz !== RIDGE_CAP.w ||
+                ridge.sy !== RIDGE_CAP.h ||
+                ridge.turn !== gable.turn ||
+                Math.abs(ridge.ox - gable.ox) > EPS ||
+                Math.abs(ridge.oz - gable.oz) > EPS ||
+                Math.abs(ridge.oy + ridge.sy / 2 - (gable.oy + gable.sy)) > EPS ||
+                ridge.accent ||
+                ridge.color.getHex() !== ridgeColor.getHex()
+              ) {
+                violations.push(`${tag}: ridge cap off the ridge`);
+              }
+              // Gutters run along both eaves: the gable's local ±z edges.
+              const [ex, ez] = faceOffset(0, 1, gable.turn as StreetFace);
+              const offsets = gutters
+                .map((g) => (g.ox - gable.ox) * ex + (g.oz - gable.oz) * ez)
+                .sort((a, b) => a - b);
+              const eave = gable.sz / 2 - GUTTER.w / 2;
+              if (Math.abs(offsets[0] + eave) > EPS || Math.abs(offsets[1] - eave) > EPS) {
+                violations.push(`${tag}: gutters at ${offsets.join(', ')}, expected ±${eave}`);
+              }
+              for (const g of gutters) {
+                const sideways = (g.ox - gable.ox) * ez - (g.oz - gable.oz) * ex;
+                if (
+                  g.kind !== PartKind.Box ||
+                  Math.abs(g.sx - gable.sx) > 1e-6 ||
+                  g.sz !== GUTTER.w ||
+                  g.sy !== GUTTER.h ||
+                  g.turn !== gable.turn ||
+                  Math.abs(sideways) > EPS ||
+                  Math.abs(g.oy + g.sy - gable.oy) > EPS ||
+                  !g.accent ||
+                  g.color.getHex() !== ACCENT.gutter.getHex()
+                ) {
+                  violations.push(`${tag}: gutter off the eave`);
+                }
+              }
+            }
+          }
+        }
+      }
+      expect(violations).toEqual([]);
+      expect(gabled).toBeGreaterThan(0);
+      expect(hipped).toBeGreaterThan(0);
+    });
+
+    it('put no ridge caps or gutters on any other recipe', () => {
+      for (const { zone, density, parts } of allRecipes(SAMPLE)) {
+        const expected =
+          (zone === Zone.Residential && density <= 2) || (zone === Zone.Retail && density === 2);
+        if (!expected) {
+          expect(parts.filter((p) => p.detail === 'ridge' || p.detail === 'gutter')).toEqual([]);
+        }
+      }
+    });
+
+    it('let pitched roofs overhang their supporting body by ROOF_OVERHANG on each side', () => {
+      // The market hall keeps its own MARKET_HALL_ROOF_MARGIN. Several roofs
+      // on one body (saw-tooth halves) are checked as their union; a roof edge
+      // that ends over the body (the retail d2 back-half roof) has no eave there.
+      const violations: string[] = [];
+      let checked = 0;
+      for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+        if (zone === Zone.Retail && density === 3) continue;
+        const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+        const groups = new Map<BuildingPart, BuildingPart[]>();
+        for (const roof of parts.filter(isPitched)) {
+          const support = parts.find((b) => {
+            if (b.kind !== PartKind.Box || b.detail || Math.abs(b.oy + b.sy - roof.oy) > EPS) {
+              return false;
+            }
+            const bb = bounds(b);
+            return roof.ox > bb.minX && roof.ox < bb.maxX && roof.oz > bb.minZ && roof.oz < bb.maxZ;
+          });
+          if (!support) {
+            violations.push(`${tag}: roof without a supporting body`);
+            continue;
+          }
+          groups.set(support, [...(groups.get(support) ?? []), roof]);
+        }
+        for (const [body, roofs] of groups) {
+          const b = bounds(body);
+          const r = roofs.map(bounds).reduce((a, c) => ({
+            minX: Math.min(a.minX, c.minX),
+            maxX: Math.max(a.maxX, c.maxX),
+            minZ: Math.min(a.minZ, c.minZ),
+            maxZ: Math.max(a.maxZ, c.maxZ),
+          }));
+          const overhangs = [b.minX - r.minX, r.maxX - b.maxX, b.minZ - r.minZ, r.maxZ - b.maxZ];
+          const eaves = overhangs.filter((o) => o > -EPS);
+          if (eaves.length < 3) violations.push(`${tag}: only ${eaves.length} overhanging sides`);
+          for (const o of eaves) {
+            if (Math.abs(o - ROOF_OVERHANG) > EPS) {
+              violations.push(`${tag}: overhang ${o} != ${ROOF_OVERHANG}`);
+            }
+          }
+          checked++;
+        }
+      }
+      expect(violations).toEqual([]);
+      expect(checked).toBeGreaterThan(0);
+    });
   });
 
   describe('part roles (stage 2 accents)', () => {
