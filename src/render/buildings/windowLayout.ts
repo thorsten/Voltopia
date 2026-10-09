@@ -28,6 +28,8 @@ export const WINDOW_GRID = {
   rowSpan: 0.82,
   /** Extra gap between a door and a window frame nudged clear of it. */
   doorMargin: 0.01,
+  /** Least gap a frame slid back to the facade edge keeps from the door. */
+  doorMinGap: 0.002,
 } as const;
 /**
  * Max window slots (framed windows, lit or dark) per building: the full
@@ -210,13 +212,13 @@ function clearOfDoor(
   if (!intersectsDoor) return lx;
   // Clear the door by the whole frame, not just the glass: a door margin
   // where the facade has room, else slid back to the facade edge as long
-  // as the frame still misses the door.
+  // as the frame still clears the door by `doorMinGap`.
   const clear = DOOR.width / 2 + FRAME_WIDTH / 2;
   const limit = width / 2 - FRAME_WIDTH / 2 - EPS;
   const beside = (side: 1 | -1): number | undefined => {
     const ideal = doorLx + side * (clear + WINDOW_GRID.doorMargin);
     const at = Math.max(-limit, Math.min(limit, ideal));
-    return side * (at - doorLx) >= clear ? at : undefined;
+    return side * (at - doorLx) >= clear + WINDOW_GRID.doorMinGap ? at : undefined;
   };
   const rightLx = beside(1);
   const leftLx = beside(-1);

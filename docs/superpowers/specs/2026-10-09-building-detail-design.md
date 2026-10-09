@@ -177,7 +177,7 @@ Window layouts are cached per building (computed once in `place()`), so
 a supply flip or removal only rewrites window matrices, and only the
 drawn window instances are uploaded. Headless timing of one supply flip
 on a 128×128 map with two thirds of the tiles built (10,880 buildings,
-118,550 frames): 87.7 ms before, 7.4 ms after (median of 30).
+118,550 frames): 87.7 ms before, 6.4 ms after (median of 30).
 
 Window-frame geometry is 40 vertices per window (4 planes × 4 + one
 6-face box × 4, confirmed against `windowGeometry()` in

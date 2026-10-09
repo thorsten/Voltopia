@@ -241,6 +241,12 @@ describe('window layout', () => {
       for (const x of frames) expect(Math.abs(x)).toBeCloseTo(clear, 9);
     });
 
+    it('drops a frame that cannot clear the door by the minimum gap', () => {
+      // Facade edge leaves the frame only half the minimum gap from the door.
+      const width = DOOR.width + 2 * FRAME_WIDTH + WINDOW_GRID.doorMinGap;
+      expect(streetFrames(width)).toHaveLength(0);
+    });
+
     it('slides a frame back to the facade edge, still clear of the door, when the margin does not fit', () => {
       const width = 0.42;
       const frames = streetFrames(width);
@@ -248,8 +254,10 @@ describe('window layout', () => {
       for (const x of frames) {
         // Flush with the facade edge ...
         expect(Math.abs(x) + FRAME_WIDTH / 2).toBeCloseTo(width / 2, 5);
-        // ... and the frame (not just the glass) still misses the door.
-        expect(Math.abs(x) - FRAME_WIDTH / 2).toBeGreaterThan(DOOR.width / 2);
+        // ... and the frame (not just the glass) still clears the door by the minimum gap.
+        expect(Math.abs(x) - FRAME_WIDTH / 2 - DOOR.width / 2).toBeGreaterThanOrEqual(
+          WINDOW_GRID.doorMinGap - 1e-9,
+        );
       }
     });
   });
