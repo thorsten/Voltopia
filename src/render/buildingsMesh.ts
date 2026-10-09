@@ -21,6 +21,7 @@ import {
   WINDOWS_PER_TILE,
   WINDOW_HEIGHT,
   WINDOW_WIDTH,
+  type WindowSlot,
   layoutWindows,
 } from './buildings/windowLayout.ts';
 
@@ -69,6 +70,12 @@ interface TileBuilding {
   ageStage: number;
   face: StreetFace;
   parts: BuildingPart[];
+  /**
+   * Laid-out windows, cached: the layout depends only on parts, face, zone
+   * and density, so it is computed once per `place()` and every window
+   * rebuild (supply flips, removals elsewhere) just writes matrices.
+   */
+  windows: WindowSlot[];
   /** Block per primitive kind (index = PartKind). */
   blocks: number[];
 }
@@ -190,6 +197,8 @@ export class BuildingsMesh implements DiffLayer {
     if (reduced && this.animations.size > 0) {
       for (const index of this.animations.keys()) this.writeMatrices(index, 1);
       this.animations.clear();
+      // Frames held back during the grow-in can show now.
+      this.rebuildWindows();
     }
   }
 
@@ -279,16 +288,20 @@ export class BuildingsMesh implements DiffLayer {
 
   update(deltaSeconds: number): void {
     if (this.animations.size === 0) return;
+    let grown = false;
     for (const [index, elapsed] of this.animations) {
       const next = elapsed + deltaSeconds;
       if (next >= GROW_ANIMATION_SECONDS) {
         this.animations.delete(index);
         this.writeMatrices(index, 1);
+        grown = true;
       } else {
         this.animations.set(index, next);
         this.writeMatrices(index, this.growthAt(next));
       }
     }
+    // Frames are full-size, so they appear only once their building is.
+    if (grown) this.rebuildWindows();
   }
 
   /** Ease-out cubic scale-in, shared by `update()` and `place()`. */
@@ -324,6 +337,7 @@ export class BuildingsMesh implements DiffLayer {
   ): void {
     const face = this.streetFace(index);
     const parts = buildingParts(zone, density, variant, index, face);
+    const windows = layoutWindows(parts, face, zone, density);
     let building = this.buildings.get(index);
     if (!building) {
       building = {
@@ -336,6 +350,7 @@ export class BuildingsMesh implements DiffLayer {
         ageStage,
         face,
         parts,
+        windows,
         blocks: this.layers.map((layer) => layer.blocks.alloc()),
       };
       this.buildings.set(index, building);
@@ -350,6 +365,7 @@ export class BuildingsMesh implements DiffLayer {
       building.ageStage = ageStage;
       building.face = face;
       building.parts = parts;
+      building.windows = windows;
     }
     this.hideUnusedSlots(building);
     if (animate && !this.reducedMotion) {
@@ -568,11 +584,12 @@ export class BuildingsMesh implements DiffLayer {
   }
 
   /**
-   * Framed windows from `layoutWindows` (street face and its opposite of
-   * the main body and any window-carrying secondary bodies); shops get one
-   * wide framed shopfront on the street face. Supplied buildings add a
-   * night glow quad over the glass of each lit window; a deterministic
-   * pattern keeps ~1/3 dark.
+   * Framed windows from each building's cached `layoutWindows` slots (street
+   * face and its opposite of the main body and any window-carrying secondary
+   * bodies); shops get one wide framed shopfront on the street face.
+   * Supplied buildings add a night glow quad over the glass of each lit
+   * window; a deterministic pattern keeps ~1/3 dark. Buildings still growing
+   * in get no frames yet — full-size frames would float around the small body.
    */
   private rebuildWindows(): void {
     const matrix = new THREE.Matrix4();
@@ -581,6 +598,7 @@ export class BuildingsMesh implements DiffLayer {
     let glowSlot = 0;
     const capacity = this.windowFramesMesh.instanceMatrix.count;
     for (const [index, building] of this.buildings) {
+      if (this.animations.has(index)) continue;
       // Buildings without (enough) power keep their frames but stay dark —
       // undersupply flips tick to tick, which reads as flickering at night.
       const lit = building.supplied === SupplyStatus.Supplied;
@@ -589,12 +607,7 @@ export class BuildingsMesh implements DiffLayer {
       const lift = this.elevation.centerY(index);
       // layoutWindows caps each building at WINDOWS_PER_TILE, the slots
       // reserved per tile, so the capacity check is only a safety net.
-      for (const w of layoutWindows(
-        building.parts,
-        building.face,
-        building.zone,
-        building.density,
-      )) {
+      for (const w of building.windows) {
         if (slot >= capacity) break;
         // Deterministically leave ~1/3 of windows dark (framed, no glow).
         const dark = !w.shopfront && (index * 7 + w.id * 13 + building.variant) % 3 === 0;
@@ -612,9 +625,21 @@ export class BuildingsMesh implements DiffLayer {
         }
       }
     }
-    this.windowFramesMesh.count = slot;
-    this.windowFramesMesh.instanceMatrix.needsUpdate = true;
-    this.windowsMesh.count = glowSlot;
-    this.windowsMesh.instanceMatrix.needsUpdate = true;
+    BuildingsMesh.uploadDrawn(this.windowFramesMesh, slot);
+    BuildingsMesh.uploadDrawn(this.windowsMesh, glowSlot);
+  }
+
+  /**
+   * Draw `count` instances and flag only those for re-upload, not the whole
+   * buffer. The range never goes empty: three.js reads an empty range list
+   * as "upload everything", and an upload flagged earlier this frame may
+   * still be pending when the count drops to 0.
+   */
+  private static uploadDrawn(mesh: THREE.InstancedMesh, count: number): void {
+    mesh.count = count;
+    const attr = mesh.instanceMatrix;
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, Math.max(1, count) * attr.itemSize);
+    if (count > 0) attr.needsUpdate = true;
   }
 }

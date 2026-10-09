@@ -842,6 +842,67 @@ describe('BuildingsMesh', () => {
       expect(mesh.windowFramesMesh.count).toBe(0);
       expect(mesh.windowCount()).toBe(0);
     });
+
+    it('uploads only the drawn window instances, not the whole buffers', () => {
+      const { scene, mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      // A second rebuild must replace, not pile up, the pending ranges.
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0, SupplyStatus.Undersupplied)]);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      for (const m of [mesh.windowFramesMesh, glowMesh(scene, mesh)]) {
+        const attr = m.instanceMatrix;
+        expect(m.count).toBeGreaterThan(0);
+        expect(m.count).toBeLessThan(attr.count);
+        expect(attr.updateRanges).toEqual([{ start: 0, count: m.count * attr.itemSize }]);
+      }
+    });
+
+    it('never leaves an empty window update range once the last building is gone', () => {
+      const { scene, mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 2, 0)]);
+      mesh.applyDiffs([empty(CENTRE)]);
+      // An empty range list would make a pending upload send the whole buffer.
+      for (const m of [mesh.windowFramesMesh, glowMesh(scene, mesh)]) {
+        expect(m.count).toBe(0);
+        expect(m.instanceMatrix.updateRanges).toEqual([{ start: 0, count: 16 }]);
+      }
+    });
+
+    it('holds back frames until the grow-in animation ends', () => {
+      const { mesh } = setup();
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+      expect(mesh.windowFramesMesh.count).toBe(0);
+      expect(mesh.windowCount()).toBe(0);
+      mesh.update(0.1);
+      // A re-issue mid-growth (road beside it) must not show them early either.
+      mesh.applyDiffs([road(CENTRE + 1)]);
+      expect(mesh.windowFramesMesh.count).toBe(0);
+      mesh.update(10);
+      expect(mesh.windowFramesMesh.count).toBe(expectedSlots(main));
+      expect(mesh.windowCount()).toBeGreaterThan(0);
+    });
+
+    it('keeps a grown neighbour framed while a new building grows in', () => {
+      const { mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      const grown = mesh.windowFramesMesh.count;
+      mesh.setReducedMotion(false);
+      mesh.applyDiffs([building(CENTRE + 2, Zone.Residential, 3, 0)]);
+      expect(mesh.windowFramesMesh.count).toBe(grown);
+    });
+
+    it('shows frames at once when reduced motion cuts a growth short', () => {
+      const { mesh } = setup();
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+      expect(mesh.windowFramesMesh.count).toBe(0);
+      mesh.setReducedMotion(true);
+      expect(mesh.windowFramesMesh.count).toBe(expectedSlots(main));
+    });
   });
 });
 
