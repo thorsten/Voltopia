@@ -10,7 +10,16 @@ import {
   silhouetteOf,
 } from './recipes.ts';
 import { WINDOW_FRAME_SCALE, WINDOW_SILL_DROP } from './windows.ts';
-import { WINDOWS_PER_TILE, type WindowSlot, layoutWindows, windowBodies } from './windowLayout.ts';
+import {
+  ASIDE_GAP,
+  FRAME_WIDTH,
+  WINDOWS_PER_TILE,
+  WINDOW_HEIGHT,
+  type WindowSlot,
+  layoutWindows,
+  windowBodies,
+  windowRows,
+} from './windowLayout.ts';
 
 const VARIANTS = 8;
 const SAMPLE = Array.from({ length: 64 }, (_, i) => i * 61 + 7);
@@ -167,6 +176,57 @@ describe('window layout', () => {
         }
       }
     }
+    expect(violations.slice(0, 10)).toEqual([]);
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('keeps a street-face frame on every window body with a free span beside its occluders', () => {
+    // Over every grid row: subtract the lateral extents of the parts that
+    // would cut a frame there from the facade; a free run of one frame
+    // plus the step-aside gaps must hold at least one street-face frame.
+    const needed = FRAME_WIDTH + 2 * ASIDE_GAP + EPS;
+    const violations: string[] = [];
+    const blanks = new Map<string, number>();
+    let checked = 0;
+    for (const { tag, name, zone, density, face, parts, slots } of allBuildings()) {
+      const bodies = windowBodies(parts);
+      bodies.forEach((body, i) => {
+        if (i === 0 && zone === Zone.Retail && density < 3) return; // shopfront
+        const normal = faceOffset(0, 1, face);
+        const tangent = faceOffset(1, 0, face);
+        const plane = along(body, normal)[1];
+        const facade = along(body, tangent);
+        const hasRoom = windowRows(body, i === 0).some((y) => {
+          const bottom = y - WINDOW_HEIGHT / 2 - WINDOW_SILL_DROP * WINDOW_HEIGHT;
+          const top = y + WINDOW_HEIGHT / 2 + ((WINDOW_FRAME_SCALE - 1) / 2) * WINDOW_HEIGHT;
+          const cuts = parts
+            .filter((p) => {
+              if (p === body || p.detail || p.band || p.tilt !== undefined) return false;
+              if (p.kind !== PartKind.Box && p.kind !== PartKind.ShedRoof) return false;
+              const n = along(p, normal);
+              return (
+                n[0] <= plane + EPS && n[1] >= plane - EPS && p.oy < top && p.oy + p.sy > bottom
+              );
+            })
+            .map((p) => along(p, tangent))
+            .sort((a, b) => a[0] - b[0]);
+          let from = facade[0];
+          for (const [a, b] of cuts) {
+            if (a - from >= needed) return true;
+            from = Math.max(from, b);
+          }
+          return facade[1] - from >= needed;
+        });
+        if (!hasRoom) return;
+        checked++;
+        const own = slots.filter((s) => s.face === face && hostOf(parts, s) === body);
+        if (own.length === 0) {
+          violations.push(`${tag}: body ${i} has room but a bare street face`);
+          blanks.set(name, (blanks.get(name) ?? 0) + 1);
+        }
+      });
+    }
+    expect(Object.fromEntries(blanks)).toEqual({});
     expect(violations.slice(0, 10)).toEqual([]);
     expect(checked).toBeGreaterThan(0);
   });

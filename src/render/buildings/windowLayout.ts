@@ -21,7 +21,7 @@ export const WINDOWS_PER_TILE = 24;
 export const WINDOW_WIDTH = 0.09;
 export const WINDOW_HEIGHT = 0.11;
 /** Visible window width: the frame, not the glass. */
-const FRAME_WIDTH = WINDOW_FRAME_SCALE * WINDOW_WIDTH;
+export const FRAME_WIDTH = WINDOW_FRAME_SCALE * WINDOW_WIDTH;
 /** Top of the retail shopfront glass as a fraction of body height; below the 0.6h awning. */
 const SHOPFRONT_TOP_FRACTION = 0.55;
 /** Preferred bottom of the shopfront glass; raised when its sill would sink into the plinth. */
@@ -72,6 +72,20 @@ export function windowBodies(parts: readonly BuildingPart[]): BuildingPart[] {
   return [main, ...parts.filter((p) => !p.main && p.windows)];
 }
 
+/**
+ * Glass-centre heights of a window body's rows. A ground-standing body
+ * keeps the main grid; a storey stacked on another part centres its rows
+ * so the sills clear what it stands on.
+ */
+export function windowRows(body: BuildingPart, isMain: boolean): number[] {
+  const rows = Math.min(4, Math.max(1, Math.round(body.sy / 0.28)));
+  return Array.from({ length: rows }, (_, row) =>
+    isMain || body.oy === 0
+      ? body.oy + ((row + 0.55) / rows) * body.sy * 0.82
+      : body.oy + ((row + 0.5) / rows) * body.sy,
+  );
+}
+
 /** Parts that can hide a window frame: every non-detail Box or shed roof, upright. */
 function isOccluder(part: BuildingPart): boolean {
   return (
@@ -107,17 +121,17 @@ function extentOnFace(
 }
 
 /**
- * True when some part other than `body` touches the facade plane at
- * `plane` (face frame) and overlaps the frame rectangle `rect` — the
- * window would be cut by it.
+ * The sideways extent (face frame) of the first part other than `body`
+ * that touches the facade plane at `plane` and overlaps the frame
+ * rectangle `rect` — the part that would cut the window — or undefined.
  */
-function isClipped(
+function clipper(
   parts: readonly BuildingPart[],
   body: BuildingPart,
   face: StreetFace,
   plane: number,
   rect: FrameRect,
-): boolean {
+): [number, number] | undefined {
   for (const part of parts) {
     if (part === body || !isOccluder(part)) continue;
     const e = extentOnFace(part, face);
@@ -128,10 +142,10 @@ function isClipped(
       e.y[0] < rect.top - EPS &&
       e.y[1] > rect.bottom + EPS
     ) {
-      return true;
+      return e.lat;
     }
   }
-  return false;
+  return undefined;
 }
 
 /** Sideways offset (face frame, from the body centre) of a door on `body`'s street face. */
@@ -193,13 +207,63 @@ function clearOfDoor(
   return target;
 }
 
+/** Gap between a moved-aside frame and the part it steps around. */
+export const ASIDE_GAP = 0.01;
+/** How many occluder edges one window may try before it is dropped. */
+const ASIDE_TRIES = 6;
+
+/**
+ * Where a window cut by an occluder can go instead: the nearest spot just
+ * beside an occluder edge (body-relative, face frame) that fits the facade,
+ * is cut by nothing and stays a frame width clear of `taken` — or undefined.
+ */
+function stepAside(
+  lx: number,
+  hit: [number, number],
+  bodyLat: number,
+  width: number,
+  taken: readonly number[],
+  cuts: (lx: number) => [number, number] | undefined,
+): number | undefined {
+  const half = FRAME_WIDTH / 2;
+  const edges = (span: [number, number]): number[] => [
+    span[0] - bodyLat - half - ASIDE_GAP,
+    span[1] - bodyLat + half + ASIDE_GAP,
+  ];
+  const frontier = edges(hit);
+  const tried: number[] = [];
+  for (let i = 0; i < ASIDE_TRIES; i++) {
+    const open = frontier.filter((c) => !tried.some((t) => Math.abs(t - c) < EPS));
+    if (open.length === 0) return undefined;
+    // Nearest first; ties go to the right, deterministically.
+    const c = open.reduce((best, x) =>
+      Math.abs(x - lx) < Math.abs(best - lx) - EPS ||
+      (Math.abs(Math.abs(x - lx) - Math.abs(best - lx)) <= EPS && x > best)
+        ? x
+        : best,
+    );
+    tried.push(c);
+    if (Math.abs(c) + half >= width / 2) continue;
+    const next = cuts(c);
+    if (next) {
+      frontier.push(...edges(next));
+      continue;
+    }
+    if (taken.some((t) => Math.abs(t - c) < FRAME_WIDTH)) continue;
+    return c;
+  }
+  return undefined;
+}
+
 /**
  * Framed windows on the street face and its opposite of every window
  * body (the main body and the parts flagged `windows`), as a column/row
  * grid per facade. Retail densities 1-2 get one wide shopfront on the
- * main body's street face instead. A window over a door is nudged aside
- * or dropped; a window whose frame another part (bay, canopy, sign,
- * neighbouring body...) would cut is dropped. At most `WINDOWS_PER_TILE`.
+ * main body's street face instead. A window over a door is nudged aside;
+ * a window whose frame another part (bay, canopy, sign, roll-up door,
+ * neighbouring body...) would cut steps aside to the nearest free spot
+ * beside that part in its row, or is dropped when there is none. Frames
+ * never overlap one another. At most `WINDOWS_PER_TILE`.
  */
 export function layoutWindows(
   parts: readonly BuildingPart[],
@@ -246,28 +310,43 @@ export function layoutWindows(
       }
       const doorLx = isStreet ? doorOn(parts, body, side) : undefined;
       const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
-      const rows = Math.min(4, Math.max(1, Math.round(body.sy / 0.28)));
+      const rows = windowRows(body, isMain).length;
       const colLx = Array.from({ length: cols }, (_, c) => ((c + 0.5) / cols - 0.5) * width * 0.8);
       const [bodyLat] = toFaceFrame(body.ox, body.oz, side);
-      for (let col = 0; col < cols; col++) {
-        for (let row = 0; row < rows; row++) {
-          id++;
-          // A ground-standing body keeps the main grid; a storey stacked on
-          // another part centres its rows so the sills clear what it stands on.
-          const y =
-            isMain || body.oy === 0
-              ? body.oy + ((row + 0.55) / rows) * body.sy * 0.82
-              : body.oy + ((row + 0.5) / rows) * body.sy;
-          const lx =
+      const faceSlots: WindowSlot[] = [];
+      const rowYs = windowRows(body, isMain);
+      for (let row = 0; row < rows; row++) {
+        const y = rowYs[row];
+        const cuts = (lx: number): [number, number] | undefined =>
+          clipper(
+            parts,
+            body,
+            side,
+            plane,
+            frameRect(bodyLat + lx, y, WINDOW_WIDTH, WINDOW_HEIGHT),
+          );
+        // Columns that stand free keep their place; cut ones then step aside
+        // around the parts that cut them, clear of everything already placed.
+        const placed: Array<{ col: number; lx: number }> = [];
+        const blocked: Array<{ col: number; lx: number; hit: [number, number] }> = [];
+        for (let col = 0; col < cols; col++) {
+          const nudged =
             doorLx === undefined
               ? colLx[col]
               : clearOfDoor(colLx[col], y, doorLx, body, width, colLx, col);
-          if (lx === undefined) continue;
-          const rect = frameRect(bodyLat + lx, y, WINDOW_WIDTH, WINDOW_HEIGHT);
-          if (isClipped(parts, body, side, plane, rect)) continue;
-          if (slots.length >= WINDOWS_PER_TILE) return slots;
+          const lx = nudged ?? colLx[col];
+          const hit = cuts(lx);
+          if (nudged !== undefined && !hit) placed.push({ col, lx });
+          else if (hit) blocked.push({ col, lx, hit });
+        }
+        for (const { col, lx, hit } of blocked) {
+          const taken = placed.map((p) => p.lx);
+          const aside = stepAside(lx, hit, bodyLat, width, taken, cuts);
+          if (aside !== undefined) placed.push({ col, lx: aside });
+        }
+        for (const { col, lx } of placed) {
           const [fx, fz] = faceOffset(lx, depth / 2, side);
-          slots.push({
+          faceSlots.push({
             face: side,
             x: body.ox + fx,
             z: body.oz + fz,
@@ -275,9 +354,16 @@ export function layoutWindows(
             width: WINDOW_WIDTH,
             height: WINDOW_HEIGHT,
             shopfront: false,
-            id,
+            // Column-major numbering, as the grid has always been counted.
+            id: id + col * rows + row + 1,
           });
         }
+      }
+      id += cols * rows;
+      faceSlots.sort((a, b) => a.id - b.id);
+      for (const slot of faceSlots) {
+        if (slots.length >= WINDOWS_PER_TILE) return slots;
+        slots.push(slot);
       }
     }
   }
