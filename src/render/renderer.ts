@@ -24,6 +24,7 @@ import { BuildingsMesh } from './buildingsMesh.ts';
 import { BuildingFxMesh } from './buildingFxMesh.ts';
 import { buildingHeight } from './buildings/recipes.ts';
 import { PlantsMesh, plantHeight } from './plantsMesh.ts';
+import { FrameCounters, frameDeltas } from './frameTiming.ts';
 import { VehiclesMesh } from './vehiclesMesh.ts';
 import { OverlaysMesh } from './overlays.ts';
 import { MinimapLayer } from './minimapLayer.ts';
@@ -191,6 +192,8 @@ export class GameRenderer {
   /** Direction light travels from the sun into the scene; drives shading and the shadow camera. */
   private readonly sunDirection = new THREE.Vector3(0, -1, 0);
   private lastFrameTime = 0;
+  /** Draw-call and triangle counters kept across the post chain's passes (see frameTiming.ts). */
+  private frameCounters!: FrameCounters;
   private frameListeners: Array<(deltaSeconds: number, nowSeconds: number) => void> = [];
   private disposed = false;
 
@@ -294,6 +297,7 @@ export class GameRenderer {
     // No tone curve (spec decision): the OutputPass only converts to sRGB.
     this.webgl.toneMapping = THREE.NoToneMapping;
     this.webgl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.frameCounters = new FrameCounters(this.webgl.info);
     container.appendChild(this.webgl.domElement);
     this.postChain = new PostChain(this.webgl, this.scene, this.isoCamera.camera);
 
@@ -347,7 +351,11 @@ export class GameRenderer {
     this.diffLayers.push(layer);
   }
 
-  /** Register a per-frame callback (animations, interpolation). */
+  /**
+   * Register a per-frame callback. `deltaSeconds` is the measured time
+   * since the previous frame, uncapped — a listener that animates should
+   * clamp it itself (see MAX_ANIMATION_STEP_SECONDS in frameTiming.ts).
+   */
   onFrame(listener: (deltaSeconds: number, nowSeconds: number) => void): void {
     this.frameListeners.push(listener);
   }
@@ -358,8 +366,9 @@ export class GameRenderer {
   }
 
   /**
-   * What a frame currently asks of the GPU, for the diagnostics panel.
-   * `instances` counts the instances actually submitted: every instanced
+   * What the last frame asked of the GPU, for the diagnostics panel. The
+   * draw calls and triangles cover every pass of the frame (see
+   * FrameCounters). `instances` counts the instances actually submitted: every instanced
    * mesh spans the whole grid and runs with frustum culling off, so this
    * is the number that grows with the map rather than with the view.
    */
@@ -816,19 +825,23 @@ export class GameRenderer {
 
   private renderLoop = (now: number): void => {
     if (this.disposed) return;
-    const deltaSeconds = Math.min((now - this.lastFrameTime) / 1000, 0.1);
+    // Animations take a capped step so a stall never makes them jump; the
+    // frame listeners get the real duration, so the diagnostics panel can
+    // show the stall.
+    const { measuredSeconds, animationSeconds } = frameDeltas(now, this.lastFrameTime);
     this.lastFrameTime = now;
-    this.isoCamera.update(deltaSeconds);
-    this.applyContinuousPan(deltaSeconds);
-    for (const layer of this.diffLayers) layer.update?.(deltaSeconds, now / 1000);
+    this.isoCamera.update(animationSeconds);
+    this.applyContinuousPan(animationSeconds);
+    for (const layer of this.diffLayers) layer.update?.(animationSeconds, now / 1000);
     this.vehiclesMesh.update(now / 1000);
-    for (const listener of this.frameListeners) listener(deltaSeconds, now / 1000);
+    for (const listener of this.frameListeners) listener(measuredSeconds, now / 1000);
     if (this.selectionMarker.visible) {
       const pulse = 0.5 + 0.5 * Math.sin((now / 1000) * 3);
       this.selectionFill.material.opacity = 0.18 + 0.22 * pulse;
       this.selectionOutline.material.opacity = 0.55 + 0.45 * pulse;
     }
     this.fitShadowToView();
+    this.frameCounters.beginFrame();
     this.postChain.render();
     this.animationFrame = requestAnimationFrame(this.renderLoop);
   };
