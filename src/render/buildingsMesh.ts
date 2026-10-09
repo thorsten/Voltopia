@@ -41,6 +41,18 @@ function accentState(b: TileBuilding): AccentState {
   return { heated: b.heated, supplied: b.supplied, damaged: b.damaged };
 }
 
+/** Below this, a tilted part's lowest edge counts as resting on the ground. */
+const GROUND_EPS = 1e-6;
+
+/**
+ * True for a tilted part whose lowest edge rests on the ground in recipe
+ * space (a loading ramp) — unlike rooftop PV, which rides on its roof.
+ */
+function touchesGround(p: BuildingPart): boolean {
+  const tilt = p.tilt ?? 0;
+  return tilt !== 0 && Math.abs(p.oy - (p.sz / 2) * Math.abs(Math.sin(tilt))) < GROUND_EPS;
+}
+
 /** Pitched roofs take the weathered patina; flat slabs are boxes and do not. */
 export function isRoofKind(kind: PartKind): boolean {
   return kind === PartKind.GableRoof || kind === PartKind.HipRoof || kind === PartKind.ShedRoof;
@@ -452,7 +464,11 @@ export class BuildingsMesh implements DiffLayer {
       const slot = this.cursor[p.kind]++;
       let baseY = p.oy;
       let sizeY = p.sy;
-      if (p.oy === 0 && p.tilt === undefined) {
+      let sizeZ = p.sz;
+      let tilt = p.tilt ?? 0;
+      if (p.tilt !== undefined && touchesGround(p)) {
+        ({ baseY, tilt, sizeZ } = this.pinFoot(cx, cz, lift, p, p.tilt));
+      } else if (p.oy === 0 && p.tilt === undefined) {
         // Foundation: a part that stands on the ground keeps its top but
         // drops its bottom to the lowest ground under its footprint, so
         // nothing floats on the downhill side of a sloped tile (the uphill
@@ -461,14 +477,53 @@ export class BuildingsMesh implements DiffLayer {
         sizeY = p.sy - baseY;
       }
       this.position.set(cx + p.ox * growth, lift + baseY * growth, cz + p.oz * growth);
-      this.euler.set(p.tilt ?? 0, p.turn * QUARTER_TURN, 0, 'YXZ');
+      this.euler.set(tilt, p.turn * QUARTER_TURN, 0, 'YXZ');
       this.quaternion.setFromEuler(this.euler);
-      this.scale.set(p.sx * growth, sizeY * growth, p.sz * growth);
+      this.scale.set(p.sx * growth, sizeY * growth, sizeZ * growth);
       this.matrix.compose(this.position, this.quaternion, this.scale);
       this.layers[p.kind].mesh.setMatrixAt(slot, this.matrix);
       this.touchedKinds.add(p.kind);
     }
     for (const kind of this.touchedKinds) this.touchMatrixRange(kind, building.blocks[kind]);
+  }
+
+  /**
+   * Re-pin a ground-touching tilted part (a loading ramp) to sloped ground:
+   * its high end and horizontal run stay where the recipe put them (against
+   * the door, at plinth height), its foot moves onto the lowest ground under
+   * the foot edge — nothing floats, the uphill corner sinks in like a
+   * foundation's. Returns the base height (recipe space), tilt and length.
+   */
+  private pinFoot(
+    cx: number,
+    cz: number,
+    lift: number,
+    p: BuildingPart,
+    tilt: number,
+  ): { baseY: number; tilt: number; sizeZ: number } {
+    const sign = Math.sign(tilt);
+    const half = p.sz / 2;
+    const run = p.sz * Math.cos(tilt);
+    const high = p.oy + half * Math.abs(Math.sin(tilt));
+    // Local +z (the end a positive tilt lowers) and local x, in world xz.
+    const angle = p.turn * QUARTER_TURN;
+    const [dx, dz] = [Math.sin(angle), Math.cos(angle)];
+    const [wx, wz] = [Math.cos(angle), -Math.sin(angle)];
+    const footX = cx + p.ox + (sign * run * dx) / 2;
+    const footZ = cz + p.oz + (sign * run * dz) / 2;
+    const max = this.gridSize - 1e-6;
+    let ground = Infinity;
+    for (const a of FOOTPRINT_SAMPLES) {
+      const x = Math.min(max, Math.max(0, footX + a * p.sx * wx));
+      const z = Math.min(max, Math.max(0, footZ + a * p.sx * wz));
+      ground = Math.min(ground, this.elevation.surfaceY(x, z));
+    }
+    const rise = high - (ground - lift);
+    return {
+      baseY: (ground - lift + high) / 2,
+      tilt: sign * Math.atan2(rise, run),
+      sizeZ: Math.hypot(run, rise),
+    };
   }
 
   /** Lowest ground height under a part's (turned) footprint, sampled on a 3x3 lattice. */

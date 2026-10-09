@@ -1173,6 +1173,97 @@ describe('BuildingsMesh foundations on sloped ground', () => {
     expect(full.p.y + full.s.y).toBeCloseTo(lift + main.sy, 6);
   });
 
+  /** World corners of a drawn unit-box instance at local y = 0 (its underside). */
+  function undersideCorners(m: THREE.Matrix4): THREE.Vector3[] {
+    return [-0.5, 0.5].flatMap((x) =>
+      [-0.5, 0.5].map((z) => new THREE.Vector3(x, 0, z).applyMatrix4(m)),
+    );
+  }
+
+  /** The drawn Box instance whose recipe part is `part` (Boxes are written in recipe order). */
+  function drawnBox(mesh: BuildingsMesh, part: object): THREE.Matrix4 {
+    const boxes = mesh.partsAt(CENTRE)!.filter((p) => p.kind === PartKind.Box);
+    return drawn(mesh.kindMeshes[PartKind.Box])[boxes.indexOf(part as (typeof boxes)[number])];
+  }
+
+  /** The matrix a part would get on flat ground at the tile's centre height. */
+  function flatMatrix(
+    part: {
+      ox: number;
+      oy: number;
+      oz: number;
+      sx: number;
+      sy: number;
+      sz: number;
+      turn: number;
+      tilt?: number;
+    },
+    lift: number,
+  ): THREE.Matrix4 {
+    return new THREE.Matrix4().compose(
+      new THREE.Vector3(3.5 + part.ox, lift + part.oy, 3.5 + part.oz),
+      new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(part.tilt ?? 0, part.turn * (Math.PI / 2), 0, 'YXZ'),
+      ),
+      new THREE.Vector3(part.sx, part.sy, part.sz),
+    );
+  }
+
+  it.each([
+    ['south', CENTRE + SIZE],
+    ['east', CENTRE + 1],
+    ['west', CENTRE - 1],
+    ['north', CENTRE - SIZE],
+  ])(
+    'pins a ground-touching tilted ramp (lean-to hall, %s face) to the ground, its top end at the door',
+    (_, roadIndex) => {
+      const field = rampField();
+      const mesh = new BuildingsMesh(new THREE.Scene(), SIZE, field);
+      mesh.setReducedMotion(true);
+      const variant = variantOf(Zone.Industrial, 1, 'leanToHall');
+      mesh.applyDiffs([road(roadIndex), building(CENTRE, Zone.Industrial, 1, variant)]);
+      const lift = field.centerY(CENTRE);
+      const ramp = mesh.partsAt(CENTRE)!.find((p) => p.kind === PartKind.Box && (p.tilt ?? 0) > 0)!;
+      expect(ramp).toBeDefined();
+      const corners = undersideCorners(drawnBox(mesh, ramp));
+      const flat = undersideCorners(flatMatrix(ramp, lift));
+      // The flat ramp's two low corners are its foot, the two high ones its top end.
+      const order = flat.map((_, i) => i).sort((a, b) => flat[a].y - flat[b].y);
+      const foot = order.slice(0, 2).map((i) => corners[i]);
+      const head = order.slice(2).map((i) => corners[i]);
+      const gaps = foot.map((c) => c.y - field.surfaceY(c.x, c.z));
+      // Nothing floats; the lower foot corner touches the ground (the other
+      // sinks in by the cross slope only, like a foundation's uphill side).
+      for (const g of gaps) expect(g).toBeLessThan(1e-6);
+      expect(Math.max(...gaps)).toBeGreaterThan(-1e-6);
+      // The top end keeps its place against the door slab, at plinth height.
+      for (const [k, i] of order.slice(2).entries()) {
+        expect(head[k].distanceTo(flat[i])).toBeLessThan(1e-6);
+        expect(head[k].y).toBeCloseTo(lift + PLINTH_HEIGHT, 6);
+      }
+      // The sample really is sloped under the foot.
+      const flatGaps = order
+        .slice(0, 2)
+        .map((i) => flat[i].y - field.surfaceY(flat[i].x, flat[i].z));
+      expect(Math.max(...flatGaps.map(Math.abs))).toBeGreaterThan(0.05);
+    },
+  );
+
+  it('leaves tilted rooftop PV where the recipe puts it on sloped ground', () => {
+    const field = rampField();
+    const mesh = new BuildingsMesh(new THREE.Scene(), SIZE, field);
+    mesh.setReducedMotion(true);
+    mesh.applyDiffs([
+      building(CENTRE, Zone.Industrial, 2, variantOf(Zone.Industrial, 2, 'loadingDock')),
+    ]);
+    const lift = field.centerY(CENTRE);
+    const pv = mesh.partsAt(CENTRE)!.find((p) => p.tilt !== undefined)!;
+    expect(pv.color.getHex()).toBe(ACCENT.rooftopPv.getHex());
+    const drawnPv = drawnBox(mesh, pv).elements;
+    const expected = flatMatrix(pv, lift).elements;
+    drawnPv.forEach((e, i) => expect(e).toBeCloseTo(expected[i], 6));
+  });
+
   it('changes nothing on flat ground', () => {
     const { mesh } = setup();
     mesh.setReducedMotion(true);
