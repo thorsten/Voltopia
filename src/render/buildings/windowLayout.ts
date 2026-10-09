@@ -12,11 +12,28 @@ import {
 } from './recipes.ts';
 import { WINDOW_FRAME_SCALE, WINDOW_SILL_DROP } from './windows.ts';
 
+/** The regular window grid on one facade. */
+export const WINDOW_GRID = {
+  /** Facade width per window column, before rounding to a column count. */
+  colPitch: 0.24,
+  /** Body height per window row, before rounding to a row count. */
+  rowPitch: 0.28,
+  maxCols: 3,
+  maxRows: 4,
+  /** Columns spread over this fraction of the facade width. */
+  spread: 0.8,
+  /** A ground-standing body's rows: first glass centre at this fraction of a row ... */
+  rowOffset: 0.55,
+  /** ... over this fraction of the body height (leaves room under the eaves). */
+  rowSpan: 0.82,
+  /** Extra gap between a door and a window frame nudged clear of it. */
+  doorMargin: 0.01,
+} as const;
 /**
- * Max window slots (framed windows, lit or dark) per building: 3 columns ×
- * 4 rows on two faces. Glow quads are a subset, so both meshes share it.
+ * Max window slots (framed windows, lit or dark) per building: the full
+ * grid on two faces. Glow quads are a subset, so both meshes share it.
  */
-export const WINDOWS_PER_TILE = 24;
+export const WINDOWS_PER_TILE = 2 * WINDOW_GRID.maxCols * WINDOW_GRID.maxRows;
 /** Glass size of one regular window. */
 export const WINDOW_WIDTH = 0.09;
 export const WINDOW_HEIGHT = 0.11;
@@ -26,6 +43,8 @@ export const FRAME_WIDTH = WINDOW_FRAME_SCALE * WINDOW_WIDTH;
 const SHOPFRONT_TOP_FRACTION = 0.55;
 /** Preferred bottom of the shopfront glass; raised when its sill would sink into the plinth. */
 const SHOPFRONT_BOTTOM_FRACTION = 0.12;
+/** Shopfront glass width as a fraction of the facade width. */
+const SHOPFRONT_WIDTH_FRACTION = 0.8;
 /** Tolerance for "touches the facade" and for rectangle overlaps. */
 const EPS = 1e-6;
 
@@ -78,10 +97,13 @@ export function windowBodies(parts: readonly BuildingPart[]): BuildingPart[] {
  * so the sills clear what it stands on.
  */
 export function windowRows(body: BuildingPart, isMain: boolean): number[] {
-  const rows = Math.min(4, Math.max(1, Math.round(body.sy / 0.28)));
+  const rows = Math.min(
+    WINDOW_GRID.maxRows,
+    Math.max(1, Math.round(body.sy / WINDOW_GRID.rowPitch)),
+  );
   return Array.from({ length: rows }, (_, row) =>
     isMain || body.oy === 0
-      ? body.oy + ((row + 0.55) / rows) * body.sy * 0.82
+      ? body.oy + ((row + WINDOW_GRID.rowOffset) / rows) * body.sy * WINDOW_GRID.rowSpan
       : body.oy + ((row + 0.5) / rows) * body.sy,
   );
 }
@@ -166,7 +188,7 @@ function doorOn(
 
 /**
  * The window's sideways position after clearing the door at `doorLx`:
- * unchanged when the glass misses the door, nudged to the nearer side that
+ * unchanged when the frame misses the door, nudged to the nearer side that
  * still fits the facade and clears the other columns, or undefined (drop).
  */
 function clearOfDoor(
@@ -186,18 +208,23 @@ function clearOfDoor(
     frame.bottom < body.oy + DOOR.height &&
     frame.top > body.oy;
   if (!intersectsDoor) return lx;
-  const nudge = DOOR.width / 2 + WINDOW_WIDTH / 2 + 0.01;
-  const rightLx = doorLx + nudge;
-  const leftLx = doorLx - nudge;
-  const rightFits = Math.abs(rightLx) + FRAME_WIDTH / 2 < width / 2;
-  const leftFits = Math.abs(leftLx) + FRAME_WIDTH / 2 < width / 2;
+  // Clear the door by the whole frame, not just the glass: a door margin
+  // where the facade has room, else slid back to the facade edge as long
+  // as the frame still misses the door.
+  const clear = DOOR.width / 2 + FRAME_WIDTH / 2;
+  const limit = width / 2 - FRAME_WIDTH / 2 - EPS;
+  const beside = (side: 1 | -1): number | undefined => {
+    const ideal = doorLx + side * (clear + WINDOW_GRID.doorMargin);
+    const at = Math.max(-limit, Math.min(limit, ideal));
+    return side * (at - doorLx) >= clear ? at : undefined;
+  };
+  const rightLx = beside(1);
+  const leftLx = beside(-1);
   let nudged: number | undefined;
-  if (rightFits && leftFits) {
+  if (rightLx !== undefined && leftLx !== undefined) {
     nudged = Math.abs(rightLx - lx) <= Math.abs(leftLx - lx) ? rightLx : leftLx;
-  } else if (rightFits) {
-    nudged = rightLx;
-  } else if (leftFits) {
-    nudged = leftLx;
+  } else {
+    nudged = rightLx ?? leftLx;
   }
   if (nudged === undefined) return undefined;
   const target = nudged;
@@ -301,7 +328,7 @@ export function layoutWindows(
           x: body.ox + px,
           z: body.oz + pz,
           y: body.oy + (top + bottom) / 2,
-          width: width * 0.8,
+          width: width * SHOPFRONT_WIDTH_FRACTION,
           height: top - bottom,
           shopfront: true,
           id: -1,
@@ -309,9 +336,15 @@ export function layoutWindows(
         continue;
       }
       const doorLx = isStreet ? doorOn(parts, body, side) : undefined;
-      const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
+      const cols = Math.min(
+        WINDOW_GRID.maxCols,
+        Math.max(1, Math.round(width / WINDOW_GRID.colPitch)),
+      );
       const rows = windowRows(body, isMain).length;
-      const colLx = Array.from({ length: cols }, (_, c) => ((c + 0.5) / cols - 0.5) * width * 0.8);
+      const colLx = Array.from(
+        { length: cols },
+        (_, c) => ((c + 0.5) / cols - 0.5) * width * WINDOW_GRID.spread,
+      );
       const [bodyLat] = toFaceFrame(body.ox, body.oz, side);
       const faceSlots: WindowSlot[] = [];
       const rowYs = windowRows(body, isMain);

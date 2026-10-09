@@ -161,13 +161,23 @@ three sizes above 48:
 | ShedRoof (×2)            | 8,192  | 18,432  | 32,768  |
 | Window frames/glow (×24) | 98,304 | 221,184 | 393,216 |
 
-A new headless test (`windowLayout.test.ts`, "fits a fully zoned
-density-3 128×128 map within the window capacity") takes the worst
-case over every silhouette restricted to density 3 — the stepped block
-at 24 windows, the per-tile budget — and checks
-`gridSize² × maxPerTile ≤ gridSize² × WINDOWS_PER_TILE` at 128×128, the
-same formula `buildingsMesh.ts` uses for `windowFramesMesh` and
-`windowsMesh`. Runs in well under 1 s (no scene build).
+The window capacity is checked on a real mesh (`buildingsMesh.test.ts`,
+"fits a fully zoned density-3 map, every tile at its window-heaviest, in
+the window capacity"): a 24×24 `BuildingsMesh` with every tile zoned at
+density 3 and given its window-heaviest (zone, variant) draws every
+laid-out window — `windowFramesMesh.count` equals the sum of the
+per-building layouts, so the capacity guard never cut one — and that sum
+is exactly `gridSize² × WINDOWS_PER_TILE`, the instance count both window
+meshes are built with. Capacity and layout cap are both linear in tiles,
+so the result holds at 96×96 and 128×128 too. `windowLayout.test.ts`
+keeps the per-silhouette cap (≤ `WINDOWS_PER_TILE`, the stepped block
+fills it exactly).
+
+Window layouts are cached per building (computed once in `place()`), so
+a supply flip or removal only rewrites window matrices, and only the
+drawn window instances are uploaded. Headless timing of one supply flip
+on a 128×128 map with two thirds of the tiles built (10,880 buildings,
+118,550 frames): 87.7 ms before, 7.4 ms after (median of 30).
 
 Window-frame geometry is 40 vertices per window (4 planes × 4 + one
 6-face box × 4, confirmed against `windowGeometry()` in

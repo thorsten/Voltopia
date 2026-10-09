@@ -35,7 +35,7 @@ import {
 
 const VARIANTS = 8;
 const GRID = 64;
-/** Zones with recipes so far — later tasks append to this list. */
+/** Every zone that has building recipes. */
 const ZONES: Zone[] = [Zone.Residential, Zone.Commercial, Zone.Retail, Zone.Industrial];
 
 /** Every (zone, density, variant, face) over a sample of tile indices. */
@@ -292,7 +292,8 @@ describe('building recipes', () => {
       if (zone !== Zone.Residential || density === 3) continue;
       const tag = `${density}/${variant}/${face}/${index}`;
       const main = mainBody(parts)!;
-      // The first door is the main body's: buildingsMesh.ts nudges windows around it.
+      // Recipes list the main body's door first, so `find` checks that one
+      // (windowLayout.ts itself matches doors by facade plane).
       const door = parts.find((p) => p.color.getHex() === ACCENT.door.getHex());
       if (!door) {
         violations.push(`${tag}: no door`);
@@ -677,6 +678,39 @@ describe('building recipes', () => {
       expect(violations).toEqual([]);
     });
 
+    it("put a plinth under the detached house's side wing like under its body", () => {
+      const violations: string[] = [];
+      let wings = 0;
+      for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+        if (
+          zone !== Zone.Residential ||
+          silhouetteOf(zone, density, variant, index) !== 'detached'
+        ) {
+          continue;
+        }
+        const tag = `${density}/${variant}/${face}/${index}`;
+        const plinths = parts.filter((p) => p.detail === 'plinth');
+        const walls = parts.filter(
+          (p) =>
+            p.kind === PartKind.Box && p.oy === 0 && !p.detail && !p.accent && p.tilt === undefined,
+        );
+        for (const wall of walls) {
+          if (!wall.main && !wall.windows) wings++;
+          const hugged = plinths.some(
+            (pl) =>
+              Math.abs(pl.ox - wall.ox) < EPS &&
+              Math.abs(pl.oz - wall.oz) < EPS &&
+              Math.abs(pl.sx - (wall.sx + 2 * PLINTH_OVERHANG)) < EPS &&
+              Math.abs(pl.sz - (wall.sz + 2 * PLINTH_OVERHANG)) < EPS,
+          );
+          if (!hugged) violations.push(`${tag}: wall body at ${wall.ox.toFixed(3)} has no plinth`);
+        }
+      }
+      expect(violations.slice(0, 10)).toEqual([]);
+      // Some sampled houses do have the (optional) wing.
+      expect(wings).toBeGreaterThan(0);
+    });
+
     it('put a ridge cap and two gutters on the main gable of residential d1-d2 and retail d2', () => {
       const violations: string[] = [];
       const cases: ReadonlyArray<{ zone: Zone; density: number }> = [
@@ -978,7 +1012,7 @@ describe('silhouettes (stage 4)', () => {
   const isBody = (p: BuildingPart) => p.kind === PartKind.Box && !p.main && !p.accent && !p.detail;
 
   it.each(SILHOUETTES)(
-    'zone $zone density $density draws every silhouette, the existing one most often',
+    'zone $zone density $density draws every silhouette: the existing one on ≥ 1/3, each new one on ≥ 1/4',
     ({ zone, density, names }) => {
       const counts = new Map<string, number>();
       for (let variant = 0; variant < VARIANTS; variant++) {
@@ -991,6 +1025,10 @@ describe('silhouettes (stage 4)', () => {
       const total = VARIANTS * SAMPLE.length;
       // The existing silhouette is the tuned default: at least a third of the street.
       expect(counts.get(names[0])!).toBeGreaterThanOrEqual(total / 3);
+      // Every new silhouette shows up often enough to read as part of the mix.
+      for (const name of names.slice(1)) {
+        expect(counts.get(name)!, name).toBeGreaterThanOrEqual(total / 4);
+      }
     },
   );
 

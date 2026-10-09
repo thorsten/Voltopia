@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { Zone } from '../../shared/types.ts';
 import { PartKind } from './primitives.ts';
+import { ACCENT } from './palette.ts';
 import {
   type BuildingPart,
+  DOOR,
   STREET_FACES,
-  type StreetFace,
+  StreetFace,
   buildingParts,
   faceOffset,
   silhouetteOf,
@@ -14,6 +17,7 @@ import {
   ASIDE_GAP,
   FRAME_WIDTH,
   WINDOWS_PER_TILE,
+  WINDOW_GRID,
   WINDOW_HEIGHT,
   type WindowSlot,
   layoutWindows,
@@ -112,22 +116,6 @@ describe('window layout', () => {
     expect(most.get('steppedBlock')).toBe(WINDOWS_PER_TILE);
   });
 
-  it('fits a fully zoned density-3 128×128 map within the window capacity', () => {
-    // Worst case over every silhouette, restricted to density 3 (the
-    // densest, most window-heavy tier a fully zoned map can reach).
-    let maxPerTile = 0;
-    for (const { density, slots } of allBuildings()) {
-      if (density === 3) maxPerTile = Math.max(maxPerTile, slots.length);
-    }
-    expect(maxPerTile).toBeLessThanOrEqual(WINDOWS_PER_TILE);
-    const gridSize = 128;
-    // Same capacity formula buildingsMesh.ts uses for windowFramesMesh and
-    // windowsMesh: gridSize² × WINDOWS_PER_TILE instances.
-    const capacity = gridSize * gridSize * WINDOWS_PER_TILE;
-    const worstCase = gridSize * gridSize * maxPerTile;
-    expect(worstCase).toBeLessThanOrEqual(capacity);
-  });
-
   it('gives every flagged secondary body windows of its own', () => {
     const expected = new Set([
       'semiDetached',
@@ -202,6 +190,68 @@ describe('window layout', () => {
     }
     expect(violations.slice(0, 10)).toEqual([]);
     expect(checked).toBeGreaterThan(0);
+  });
+
+  describe('door nudge', () => {
+    /** A one-row house body of `width` with a door centred on its south (street) face. */
+    function house(width: number): BuildingPart[] {
+      const depth = 0.5;
+      const color = new THREE.Color(0xffffff);
+      return [
+        {
+          kind: PartKind.Box,
+          sx: width,
+          sy: 0.3,
+          sz: depth,
+          ox: 0,
+          oy: 0,
+          oz: 0,
+          turn: 0,
+          color,
+          main: true,
+        },
+        {
+          kind: PartKind.Box,
+          sx: DOOR.width,
+          sy: DOOR.height,
+          sz: DOOR.depth,
+          ox: 0,
+          oy: 0,
+          oz: depth / 2 + DOOR.depth / 2,
+          turn: 0,
+          color: ACCENT.door,
+          accent: true,
+        },
+      ];
+    }
+
+    /** Lateral offsets of the street-face frames. */
+    function streetFrames(width: number): number[] {
+      return layoutWindows(house(width), StreetFace.South, Zone.Residential, 1)
+        .filter((s) => s.face === StreetFace.South)
+        .map((s) => s.x)
+        .sort((a, b) => a - b);
+    }
+
+    it('moves a frame over the door clear of it by the whole frame plus the door margin', () => {
+      // Two columns at ±0.1: both frames overlap the 0.2-wide door.
+      const frames = streetFrames(0.5);
+      const clear = DOOR.width / 2 + FRAME_WIDTH / 2 + WINDOW_GRID.doorMargin;
+      expect(frames).toHaveLength(2);
+      for (const x of frames) expect(Math.abs(x)).toBeCloseTo(clear, 9);
+    });
+
+    it('slides a frame back to the facade edge, still clear of the door, when the margin does not fit', () => {
+      const width = 0.42;
+      const frames = streetFrames(width);
+      expect(frames).toHaveLength(2);
+      for (const x of frames) {
+        // Flush with the facade edge ...
+        expect(Math.abs(x) + FRAME_WIDTH / 2).toBeCloseTo(width / 2, 5);
+        // ... and the frame (not just the glass) still misses the door.
+        expect(Math.abs(x) - FRAME_WIDTH / 2).toBeGreaterThan(DOOR.width / 2);
+      }
+    });
   });
 
   it('keeps a street-face frame on every window body with a free span beside its occluders', () => {

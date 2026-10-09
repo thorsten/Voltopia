@@ -83,7 +83,7 @@ export const RIDGE_CAP = { w: 0.02, h: 0.015 } as const;
 export const RIDGE_DARKEN = 0.85;
 /** Thin box hanging under each eave of a gable. */
 export const GUTTER = { w: 0.015, h: 0.015 } as const;
-/** The residential door's footprint, shared with buildingsMesh.ts's window layout. */
+/** The residential door's footprint, shared with windowLayout.ts, which clears windows around it. */
 export const DOOR = { width: 0.2, height: 0.16, depth: 0.02 };
 const ROOFTOP_PV_THICKNESS = 0.02;
 /** The residential chimney box (footprint side and height). */
@@ -682,7 +682,8 @@ function detachedHouse(
     const eh = h * 0.7;
     const ed = d * 0.7;
     const ex = ox + side * (w / 2 + ew / 2);
-    parts.push(box(ew, eh, ed, ex, 0, oz, wall));
+    const wing = box(ew, eh, ed, ex, 0, oz, wall);
+    parts.push(wing, plinth(wing, family));
     parts.push({
       kind: PartKind.GableRoof,
       sx: ed + 2 * ROOF_OVERHANG,
@@ -811,7 +812,7 @@ function semiDetached(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
     gable,
     ...gableDetails(gable),
     houseChimney(ox, h, oz, CHIMNEY.h),
-    // The main half's door first: buildingsMesh.ts clears its windows around it.
+    // windowLayout.ts finds each half's door by its facade plane, so order is free.
     doorAt(left, face, -doorLx),
     doorAt(right, face, doorLx),
   ];

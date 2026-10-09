@@ -12,8 +12,10 @@ import {
   PLINTH_HEIGHT,
   PartRole,
   StreetFace,
+  buildingParts,
   faceDepth,
   silhouetteOf,
+  streetFaceFor,
 } from './buildings/recipes.ts';
 import { type AccentAnchor, type AccentSink, type AccentState } from './buildings/accents.ts';
 import {
@@ -22,7 +24,12 @@ import {
   WINDOW_SILL_DROP,
   windowGeometry,
 } from './buildings/windows.ts';
-import { WINDOW_HEIGHT, WINDOW_WIDTH } from './buildings/windowLayout.ts';
+import {
+  WINDOWS_PER_TILE,
+  WINDOW_HEIGHT,
+  WINDOW_WIDTH,
+  layoutWindows,
+} from './buildings/windowLayout.ts';
 
 const SIZE = 8;
 
@@ -843,6 +850,46 @@ describe('BuildingsMesh', () => {
       expect(mesh.windowCount()).toBe(0);
     });
 
+    it('fits a fully zoned density-3 map, every tile at its window-heaviest, in the window capacity', () => {
+      const grid = 24;
+      const scene = new THREE.Scene();
+      const field = new ElevationField(grid);
+      field.applyDiffs(
+        Array.from({ length: grid * grid }, (_, index) => ({ index, elevation: 0 }) as TileDiff),
+      );
+      const mesh = new BuildingsMesh(scene, grid, field);
+      mesh.setReducedMotion(true);
+      const zones = [Zone.Residential, Zone.Commercial, Zone.Retail, Zone.Industrial];
+      let expected = 0;
+      const diffs: TileDiff[] = [];
+      for (let index = 0; index < grid * grid; index++) {
+        // No roads: every building faces the default street face.
+        const face = streetFaceFor(index, grid, () => false);
+        let best = { zone: zones[0], variant: 0, count: -1 };
+        for (const zone of zones) {
+          for (let variant = 0; variant < 8; variant++) {
+            const count = layoutWindows(
+              buildingParts(zone, 3, variant, index, face),
+              face,
+              zone,
+              3,
+            ).length;
+            if (count > best.count) best = { zone, variant, count };
+          }
+        }
+        expected += best.count;
+        diffs.push({ ...building(index, best.zone, 3, best.variant), elevation: 0 });
+      }
+      mesh.applyDiffs(diffs);
+      const frames = mesh.windowFramesMesh;
+      // Every laid-out window is drawn (the capacity guard never cut one) ...
+      expect(frames.count).toBe(expected);
+      expect(frames.count).toBeLessThanOrEqual(frames.instanceMatrix.count);
+      expect(mesh.windowCount()).toBeLessThanOrEqual(glowMesh(scene, mesh).instanceMatrix.count);
+      // ... and the window-heaviest silhouette fills each tile's budget exactly.
+      expect(frames.count).toBe(grid * grid * WINDOWS_PER_TILE);
+    });
+
     it('uploads only the drawn window instances, not the whole buffers', () => {
       const { scene, mesh } = setup();
       mesh.setReducedMotion(true);
@@ -1307,6 +1354,26 @@ describe('BuildingsMesh foundations on sloped ground', () => {
         .slice(0, 2)
         .map((i) => flat[i].y - field.surfaceY(flat[i].x, flat[i].z));
       expect(Math.max(...flatGaps.map(Math.abs))).toBeGreaterThan(0.05);
+    },
+  );
+
+  it.each([
+    ['south', CENTRE + SIZE],
+    ['east', CENTRE + 1],
+    ['west', CENTRE - 1],
+    ['north', CENTRE - SIZE],
+  ])(
+    'leaves the lean-to ramp (%s face) exactly at its recipe position on flat ground',
+    (_, roadIndex) => {
+      const { mesh } = setup();
+      mesh.setReducedMotion(true);
+      const variant = variantOf(Zone.Industrial, 1, 'leanToHall');
+      mesh.applyDiffs([road(roadIndex), building(CENTRE, Zone.Industrial, 1, variant)]);
+      const ramp = mesh.partsAt(CENTRE)!.find((p) => p.kind === PartKind.Box && (p.tilt ?? 0) > 0)!;
+      expect(ramp).toBeDefined();
+      const drawnRamp = drawnBox(mesh, ramp).elements;
+      const expected = flatMatrix(ramp, 0).elements;
+      drawnRamp.forEach((e, i) => expect(e).toBeCloseTo(expected[i], 6));
     },
   );
 
