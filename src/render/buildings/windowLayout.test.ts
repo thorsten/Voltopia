@@ -112,6 +112,22 @@ describe('window layout', () => {
     expect(most.get('steppedBlock')).toBe(WINDOWS_PER_TILE);
   });
 
+  it('fits a fully zoned density-3 128×128 map within the window capacity', () => {
+    // Worst case over every silhouette, restricted to density 3 (the
+    // densest, most window-heavy tier a fully zoned map can reach).
+    let maxPerTile = 0;
+    for (const { density, slots } of allBuildings()) {
+      if (density === 3) maxPerTile = Math.max(maxPerTile, slots.length);
+    }
+    expect(maxPerTile).toBeLessThanOrEqual(WINDOWS_PER_TILE);
+    const gridSize = 128;
+    // Same capacity formula buildingsMesh.ts uses for windowFramesMesh and
+    // windowsMesh: gridSize² × WINDOWS_PER_TILE instances.
+    const capacity = gridSize * gridSize * WINDOWS_PER_TILE;
+    const worstCase = gridSize * gridSize * maxPerTile;
+    expect(worstCase).toBeLessThanOrEqual(capacity);
+  });
+
   it('gives every flagged secondary body windows of its own', () => {
     const expected = new Set([
       'semiDetached',

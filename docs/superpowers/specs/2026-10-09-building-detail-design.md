@@ -137,6 +137,46 @@ night — new silhouettes recognisable, frames and sills visible by day,
 glow at night, plinths and gutters read at city zoom, frame time
 unchanged at 96×96.
 
+### Results (2026-10-09)
+
+`pnpm format && pnpm typecheck && pnpm lint && pnpm format:check &&
+pnpm coverage && pnpm build` all pass. Slowest test under coverage:
+`src/sim/integration.test.ts > full gameplay integration > grows a
+powered city and balances energy over days`, 9.3 s (well under the 15 s
+budget; next slowest were two other multi-day integration tests at
+6-8 s).
+
+Main now also offers a 128×128 map size (`src/ui/newGame.ts`:
+`MAP_SIZES = [48, 64, 96, 128]`). Startup `InstancedMesh` slot counts
+per kind (`gridSize² × MAX_PARTS_PER_KIND[kind]`) and per window mesh
+(`gridSize² × WINDOWS_PER_TILE`, `WINDOWS_PER_TILE = 24`), for the
+three sizes above 48:
+
+| Kind                     | 64×64  | 96×96   | 128×128 |
+| ------------------------ | ------ | ------- | ------- |
+| Box (×12)                | 49,152 | 110,592 | 196,608 |
+| GableRoof (×3)           | 12,288 | 27,648  | 49,152  |
+| HipRoof (×2)             | 8,192  | 18,432  | 32,768  |
+| Cylinder (×3)            | 12,288 | 27,648  | 49,152  |
+| ShedRoof (×2)            | 8,192  | 18,432  | 32,768  |
+| Window frames/glow (×24) | 98,304 | 221,184 | 393,216 |
+
+A new headless test (`windowLayout.test.ts`, "fits a fully zoned
+density-3 128×128 map within the window capacity") takes the worst
+case over every silhouette restricted to density 3 — the stepped block
+at 24 windows, the per-tile budget — and checks
+`gridSize² × maxPerTile ≤ gridSize² × WINDOWS_PER_TILE` at 128×128, the
+same formula `buildingsMesh.ts` uses for `windowFramesMesh` and
+`windowsMesh`. Runs in well under 1 s (no scene build).
+
+Window-frame geometry is 40 vertices per window (4 planes × 4 + one
+6-face box × 4, confirmed against `windowGeometry()` in
+`buildings/windows.ts`). At the 128×128 capacity of 393,216 window
+instances that is 15,728,640 vertices processed per frame if every slot
+were drawn — worth watching on the Mac frame-time check, though real
+cities only fill a fraction of that capacity (not every tile has a
+building, and most silhouettes use far fewer than 24 windows).
+
 ## Out of scope
 
 Shader façades, textures, interiors, new zones, gameplay or save
