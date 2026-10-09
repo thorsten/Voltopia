@@ -21,10 +21,17 @@ const MULLION = 0.08;
 /** Sill height, in glass units. */
 const SILL_HEIGHT = 0.08;
 /**
- * Sill depth in world units (the instance z scale is 1): a slim ledge just
- * proud of the mullions, well short of a balcony or door.
+ * Sill depth in world units, not glass units: instances scale x/y to the
+ * window but keep z at 1 so `WINDOW_PROUD` stays a true world offset. A
+ * slim ledge just proud of the mullions, well short of a balcony or door.
  */
 const SILL_DEPTH = 0.016;
+/**
+ * Drop from the glass bottom to the sill bottom, in glass units (the frame
+ * border below the glass plus the sill), so callers can keep sills clear
+ * of the plinth.
+ */
+export const WINDOW_SILL_DROP = (WINDOW_FRAME_SCALE - 1) / 2 + SILL_HEIGHT;
 
 function coloured(geometry: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
   const color = new THREE.Color(hex);

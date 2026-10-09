@@ -8,6 +8,7 @@ import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
 import { surfaceMaterial } from './materials.ts';
 import {
   DOOR,
+  PLINTH_HEIGHT,
   type BuildingPart,
   MAX_PARTS_PER_KIND,
   type StreetFace,
@@ -20,7 +21,12 @@ import {
 } from './buildings/recipes.ts';
 import { BlockAllocator } from './buildings/blocks.ts';
 import { type AccentSink, type AccentState, accentAnchors } from './buildings/accents.ts';
-import { WINDOW_PROUD, windowGeometry } from './buildings/windows.ts';
+import {
+  WINDOW_FRAME_SCALE,
+  WINDOW_PROUD,
+  WINDOW_SILL_DROP,
+  windowGeometry,
+} from './buildings/windows.ts';
 
 const GROW_ANIMATION_SECONDS = 0.45;
 /**
@@ -31,11 +37,17 @@ const WINDOWS_PER_TILE = 24;
 const WINDOW_COLOR = 0xffc978;
 const WINDOW_WIDTH = 0.09;
 const WINDOW_HEIGHT = 0.11;
-/** The night glow quad sits just in front of the glass and mullions. */
-const GLOW_PROUD = 3.5 * WINDOW_PROUD;
-/** Fraction of body height the retail shopfront quad spans; ends below the 0.6h awning. */
-const SHOPFRONT_HEIGHT_FRACTION = 0.43;
-const SHOPFRONT_CENTER_FRACTION = 0.335;
+/**
+ * The night glow quad sits over the glass (2 × WINDOW_PROUD) but behind
+ * the mullions (3 × WINDOW_PROUD), so the cross still reads at night.
+ */
+const GLOW_PROUD = 2.5 * WINDOW_PROUD;
+/** Visible window width: the frame, not the glass. */
+const FRAME_WIDTH = WINDOW_FRAME_SCALE * WINDOW_WIDTH;
+/** Top of the retail shopfront glass as a fraction of body height; below the 0.6h awning. */
+const SHOPFRONT_TOP_FRACTION = 0.55;
+/** Preferred bottom of the shopfront glass; raised when its sill would sink into the plinth. */
+const SHOPFRONT_BOTTOM_FRACTION = 0.12;
 const QUARTER_TURN = Math.PI / 2;
 /** Where a foundation samples the ground under its footprint (fractions of the part size). */
 const FOOTPRINT_SAMPLES = [-0.5, 0, 0.5] as const;
@@ -571,8 +583,16 @@ export class BuildingsMesh implements DiffLayer {
           // tile up front, and at most gridSize² buildings ever run through
           // this loop, so slot never reaches budgetEnd before this check.
           const shopWidth = width * 0.8;
-          const shopHeight = main.sy * SHOPFRONT_HEIGHT_FRACTION;
-          const centreY = lift + main.oy + main.sy * SHOPFRONT_CENTER_FRACTION;
+          // Keep the top fixed below the awning; lift the bottom so the
+          // sill (WINDOW_SILL_DROP × height below the glass) clears the
+          // plinth: bottom - DROP × (top - bottom) >= PLINTH_HEIGHT.
+          const top = main.sy * SHOPFRONT_TOP_FRACTION;
+          const bottom = Math.max(
+            main.sy * SHOPFRONT_BOTTOM_FRACTION,
+            (PLINTH_HEIGHT + WINDOW_SILL_DROP * top) / (1 + WINDOW_SILL_DROP),
+          );
+          const shopHeight = top - bottom;
+          const centreY = lift + main.oy + (top + bottom) / 2;
           const [fx, fz] = faceOffset(0, depth / 2, face);
           matrix.copy(rotation);
           matrix.scale(this.shopfrontScale.set(shopWidth, shopHeight, 1));
@@ -624,13 +644,13 @@ export class BuildingsMesh implements DiffLayer {
               if (intersectsDoor) {
                 // Nudge to the nearer side of the door that still fits the
                 // facade; drop the quad if neither side fits, or if the
-                // chosen side lands within WINDOW_WIDTH of another column
-                // (which would double it up with a neighbour instead).
+                // chosen side lands within a frame width of another column
+                // (which would overlap a neighbour's frame instead).
                 const nudge = DOOR.width / 2 + WINDOW_WIDTH / 2 + 0.01;
                 const rightLx = doorLx + nudge;
                 const leftLx = doorLx - nudge;
-                const rightFits = Math.abs(rightLx) + WINDOW_WIDTH / 2 < width / 2;
-                const leftFits = Math.abs(leftLx) + WINDOW_WIDTH / 2 < width / 2;
+                const rightFits = Math.abs(rightLx) + FRAME_WIDTH / 2 < width / 2;
+                const leftFits = Math.abs(leftLx) + FRAME_WIDTH / 2 < width / 2;
                 let nudgedLx: number | undefined;
                 if (rightFits && leftFits) {
                   nudgedLx = Math.abs(rightLx - lx) <= Math.abs(leftLx - lx) ? rightLx : leftLx;
@@ -641,7 +661,7 @@ export class BuildingsMesh implements DiffLayer {
                 }
                 if (nudgedLx === undefined) continue;
                 if (
-                  colLx.some((other, i) => i !== col && Math.abs(nudgedLx! - other) < WINDOW_WIDTH)
+                  colLx.some((other, i) => i !== col && Math.abs(nudgedLx! - other) < FRAME_WIDTH)
                 )
                   continue;
                 lx = nudgedLx;

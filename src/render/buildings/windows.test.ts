@@ -7,6 +7,7 @@ import {
   WINDOW_FRAME_SCALE,
   WINDOW_MAX_VERTICES,
   WINDOW_PROUD,
+  WINDOW_SILL_DROP,
   windowGeometry,
 } from './windows.ts';
 
@@ -110,6 +111,7 @@ describe('windowGeometry', () => {
     const sill = bounds(ofColor(all, SILL));
     expect(sill.maxX - sill.minX).toBeCloseTo(WINDOW_FRAME_SCALE, 6);
     expect(sill.maxY).toBeLessThan(0);
+    expect(sill.minY).toBeCloseTo(-WINDOW_SILL_DROP, 6);
     expect(sill.minZ).toBeCloseTo(0, 6);
     expect(sill.maxZ).toBeGreaterThan(WINDOW_PROUD);
   });

@@ -6,9 +6,21 @@ import { ElevationField } from './elevationField.ts';
 import { BuildingsMesh, isRoofKind } from './buildingsMesh.ts';
 import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
-import { DOOR, MAX_PARTS_PER_KIND, PartRole, StreetFace, faceDepth } from './buildings/recipes.ts';
+import {
+  DOOR,
+  MAX_PARTS_PER_KIND,
+  PLINTH_HEIGHT,
+  PartRole,
+  StreetFace,
+  faceDepth,
+} from './buildings/recipes.ts';
 import { type AccentAnchor, type AccentSink, type AccentState } from './buildings/accents.ts';
-import { WINDOW_PROUD } from './buildings/windows.ts';
+import {
+  WINDOW_FRAME_SCALE,
+  WINDOW_PROUD,
+  WINDOW_SILL_DROP,
+  windowGeometry,
+} from './buildings/windows.ts';
 
 /** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT/WINDOW_WIDTH; not exported for tests. */
 const WINDOW_HEIGHT = 0.11;
@@ -644,7 +656,14 @@ describe('BuildingsMesh', () => {
       expect(glow.visible).toBe(true);
     });
 
-    it('mounts frames on the facade with the glow quad over the glass', () => {
+    it('mounts frames on the facade with the glow quad between glass and mullions', () => {
+      const geometry = windowGeometry();
+      const z = geometry.getAttribute('position');
+      const layers = new Set<number>();
+      for (let i = 0; i < z.count; i++) layers.add(Math.round(z.getZ(i) / WINDOW_PROUD));
+      expect([...layers]).toEqual(expect.arrayContaining([2, 3]));
+      const glassZ = 2 * WINDOW_PROUD;
+      const mullionZ = 3 * WINDOW_PROUD;
       const { scene, mesh } = setup();
       mesh.setReducedMotion(true);
       mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
@@ -667,7 +686,10 @@ describe('BuildingsMesh', () => {
       for (let i = 0; i < glow.count; i++) {
         glow.getMatrixAt(i, m);
         p.setFromMatrixPosition(m);
-        expect(Math.abs(p.z - cz)).toBeCloseTo(main.sz / 2 + 3.5 * WINDOW_PROUD, 6);
+        // Over the glass but behind the mullion cross, so the cross reads at night.
+        const proud = Math.abs(p.z - cz) - main.sz / 2;
+        expect(proud).toBeGreaterThan(glassZ + 1e-6);
+        expect(proud).toBeLessThan(mullionZ - 1e-6);
       }
       expect(frameZ.size).toBe(2); // street face and its opposite
     });
@@ -682,7 +704,7 @@ describe('BuildingsMesh', () => {
     });
 
     it('frames a retail shopfront with one instance scaled to the shopfront', () => {
-      const { mesh } = setup();
+      const { scene, mesh } = setup();
       mesh.setReducedMotion(true);
       mesh.applyDiffs([building(CENTRE, Zone.Retail, 1, 0), road(CENTRE + SIZE)]);
       const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
@@ -699,9 +721,104 @@ describe('BuildingsMesh', () => {
       }
       expect(street).toHaveLength(1);
       expect(street[0].s.x).toBeCloseTo(main.sx * 0.8, 6);
-      expect(street[0].s.y).toBeCloseTo(main.sy * 0.43, 6);
-      // Glass bottom at the shopfront's lower edge (centre 0.335h, height 0.43h).
-      expect(street[0].p.y).toBeCloseTo(main.oy + main.sy * (0.335 - 0.43 / 2), 6);
+      // Glass top stays at 0.55h, below the 0.6h awning.
+      expect(street[0].p.y + street[0].s.y).toBeCloseTo(main.oy + main.sy * 0.55, 6);
+      // The glow quad covers exactly that glass.
+      const glow = glowMesh(scene, mesh);
+      let glowCentre: number | undefined;
+      for (let i = 0; i < glow.count; i++) {
+        glow.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        s.setFromMatrixScale(m);
+        if (p.z > cz) {
+          glowCentre = p.y;
+          expect(s.y * WINDOW_HEIGHT).toBeCloseTo(street[0].s.y, 6);
+        }
+      }
+      expect(glowCentre).toBeCloseTo(street[0].p.y + street[0].s.y / 2, 6);
+    });
+
+    it('keeps every retail d1-d2 shopfront sill clear of the plinth', () => {
+      for (const density of [1, 2]) {
+        for (let variant = 0; variant < 8; variant++) {
+          const { mesh } = setup();
+          mesh.setReducedMotion(true);
+          mesh.applyDiffs([building(CENTRE, Zone.Retail, density, variant), road(CENTRE + SIZE)]);
+          const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+          const cz = 3 + 0.5 + main.oz;
+          const m = new THREE.Matrix4();
+          const p = new THREE.Vector3();
+          const s = new THREE.Vector3();
+          let shopfronts = 0;
+          for (let i = 0; i < mesh.windowFramesMesh.count; i++) {
+            mesh.windowFramesMesh.getMatrixAt(i, m);
+            p.setFromMatrixPosition(m);
+            s.setFromMatrixScale(m);
+            if (p.z <= cz) continue;
+            shopfronts++;
+            const sillBottom = p.y - WINDOW_SILL_DROP * s.y;
+            expect(sillBottom, `d${density} v${variant}`).toBeGreaterThanOrEqual(
+              main.oy + PLINTH_HEIGHT - 1e-6,
+            );
+          }
+          expect(shopfronts, `d${density} v${variant}`).toBe(1);
+        }
+      }
+    });
+
+    it('never overlaps two window frames on one facade (residential with doors, all faces)', () => {
+      const frameHalfWidth = (WINDOW_FRAME_SCALE * WINDOW_WIDTH) / 2;
+      const frameAbove = (WINDOW_FRAME_SCALE - 1) / 2; // frame border above the glass, glass units
+      const roadFor = [CENTRE + SIZE, CENTRE + 1, CENTRE - SIZE, CENTRE - 1];
+      const m = new THREE.Matrix4();
+      const p = new THREE.Vector3();
+      const s = new THREE.Vector3();
+      const lateral = new THREE.Vector3();
+      const normal = new THREE.Vector3();
+      for (const density of [1, 2]) {
+        for (let variant = 0; variant < 8; variant++) {
+          for (const roadIndex of roadFor) {
+            const { mesh } = setup();
+            mesh.setReducedMotion(true);
+            mesh.applyDiffs([
+              building(CENTRE, Zone.Residential, density, variant),
+              road(roadIndex),
+            ]);
+            const facades = new Map<string, Array<{ x: number; y0: number; y1: number }>>();
+            for (let i = 0; i < mesh.windowFramesMesh.count; i++) {
+              mesh.windowFramesMesh.getMatrixAt(i, m);
+              p.setFromMatrixPosition(m);
+              s.setFromMatrixScale(m);
+              m.extractBasis(lateral, new THREE.Vector3(), normal);
+              lateral.normalize();
+              normal.normalize();
+              const key = `${normal.x.toFixed(3)},${normal.z.toFixed(3)},${p.dot(normal).toFixed(4)}`;
+              const list = facades.get(key) ?? [];
+              list.push({
+                x: p.dot(lateral),
+                y0: p.y - WINDOW_SILL_DROP * s.y,
+                y1: p.y + (1 + frameAbove) * s.y,
+              });
+              facades.set(key, list);
+            }
+            const label = `d${density} v${variant} road ${roadIndex}`;
+            expect(facades.size, label).toBe(2);
+            for (const frames of facades.values()) {
+              for (let a = 0; a < frames.length; a++) {
+                for (let b = a + 1; b < frames.length; b++) {
+                  const fa = frames[a];
+                  const fb = frames[b];
+                  const overlaps =
+                    Math.abs(fa.x - fb.x) < 2 * frameHalfWidth - 1e-6 &&
+                    fa.y0 < fb.y1 - 1e-6 &&
+                    fb.y0 < fa.y1 - 1e-6;
+                  expect(overlaps, label).toBe(false);
+                }
+              }
+            }
+          }
+        }
+      }
     });
 
     it('drops frames and glow together when the building is removed', () => {
