@@ -13,6 +13,7 @@ import {
   PartRole,
   StreetFace,
   faceDepth,
+  silhouetteOf,
 } from './buildings/recipes.ts';
 import { type AccentAnchor, type AccentSink, type AccentState } from './buildings/accents.ts';
 import {
@@ -98,6 +99,15 @@ function drawn(mesh: THREE.InstancedMesh): THREE.Matrix4[] {
 }
 
 const CENTRE = 3 * SIZE + 3;
+
+/** The first variant that builds `silhouette` on the centre tile. */
+function variantOf(zone: Zone, density: number, silhouette: string): number {
+  const variant = Array.from({ length: 8 }, (_, v) => v).find(
+    (v) => silhouetteOf(zone, density, v, CENTRE) === silhouette,
+  );
+  if (variant === undefined) throw new Error(`no ${silhouette} variant on the centre tile`);
+  return variant;
+}
 
 describe('BuildingsMesh', () => {
   it('creates one culling-free instanced mesh per primitive kind plus windows', () => {
@@ -319,7 +329,9 @@ describe('BuildingsMesh', () => {
   it('keeps a density-1 house lit on the street face, clear of the door', () => {
     const { scene, mesh } = setup();
     mesh.setReducedMotion(true);
-    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    // The detached house keeps its door centred on the facade.
+    const variant = variantOf(Zone.Residential, 1, 'detached');
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, variant)]);
     expect(mesh.streetFaceAt(CENTRE)).toBe(StreetFace.South);
     const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
     const windows = scene.children.find(
@@ -486,17 +498,17 @@ describe('BuildingsMesh', () => {
     expect(streetWindows).toBeGreaterThan(0);
   });
 
-  it('keeps the retail shopfront quad below the awning', () => {
+  it.each(['shop', 'canopyShop'])('keeps the retail shopfront quad below the %s shade', (name) => {
     const { scene, mesh } = setup();
     mesh.setReducedMotion(true);
-    mesh.applyDiffs([building(CENTRE, Zone.Retail, 1, 0), road(CENTRE + SIZE)]);
+    const variant = variantOf(Zone.Retail, 1, name);
+    mesh.applyDiffs([building(CENTRE, Zone.Retail, 1, variant), road(CENTRE + SIZE)]);
     const parts = mesh.partsAt(CENTRE)!;
     const main = parts.find((p) => p.main)!;
+    // An awning (thin accent slab) or the canopy shop's shed canopy.
     const awning = parts.find(
       (p) =>
-        p.accent &&
-        p.kind === PartKind.Box &&
-        p.sy <= 0.05 &&
+        ((p.accent && p.kind === PartKind.Box && p.sy <= 0.05) || p.kind === PartKind.ShedRoof) &&
         p.oz > main.oz + faceDepth(main, StreetFace.South) / 2,
     )!;
     expect(awning).toBeDefined();

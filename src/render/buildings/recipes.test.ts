@@ -5,7 +5,9 @@ import { PART_KINDS, PartKind } from './primitives.ts';
 import { ACCENT, ZONE_FAMILIES } from './palette.ts';
 import { MAX_PUFF_ANCHORS_PER_TILE } from './accents.ts';
 import {
+  BAY_DEPTH,
   type BuildingPart,
+  DOOR,
   FOOTPRINT_HALF,
   GUTTER,
   MAX_PARTS_PER_KIND,
@@ -16,6 +18,7 @@ import {
   RIDGE_CAP,
   RIDGE_DARKEN,
   ROOF_OVERHANG,
+  SETBACK,
   STREET_FACES,
   StreetFace,
   buildingHeight,
@@ -23,8 +26,10 @@ import {
   createPicker,
   faceDepth,
   faceOffset,
+  faceWidth,
   isDetailPart,
   mainBody,
+  silhouetteOf,
   streetFaceFor,
 } from './recipes.ts';
 
@@ -69,6 +74,37 @@ function partEdge(p: BuildingPart): number {
   // A quarter turn swaps the x and z extents; tilt only lowers the top.
   const [hx, hz] = p.turn % 2 === 0 ? [p.sx / 2, p.sz / 2] : [p.sz / 2, p.sx / 2];
   return Math.max(Math.abs(p.ox) + hx, Math.abs(p.oz) + hz);
+}
+
+interface Rect {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** World-space xz bounds of a part (a quarter turn swaps its extents). */
+function bounds(p: BuildingPart): Rect {
+  const [hx, hz] = p.turn % 2 === 0 ? [p.sx / 2, p.sz / 2] : [p.sz / 2, p.sx / 2];
+  return { minX: p.ox - hx, maxX: p.ox + hx, minZ: p.oz - hz, maxZ: p.oz + hz };
+}
+
+/** A world offset seen in the south-facing frame of `face` (+z toward the street). */
+function toFace(dx: number, dz: number, face: StreetFace): [number, number] {
+  return faceOffset(dx, dz, ((4 - face) % 4) as StreetFace);
+}
+
+/** Bounds of a part in the street-facing frame of `face`, relative to the tile centre. */
+function faceBounds(p: BuildingPart, face: StreetFace): Rect {
+  const b = bounds(p);
+  const [x0, z0] = toFace(b.minX, b.minZ, face);
+  const [x1, z1] = toFace(b.maxX, b.maxZ, face);
+  return {
+    minX: Math.min(x0, x1),
+    maxX: Math.max(x0, x1),
+    minZ: Math.min(z0, z1),
+    maxZ: Math.max(z0, z1),
+  };
 }
 
 describe('picker', () => {
@@ -248,21 +284,31 @@ describe('building recipes', () => {
     expect(violations).toEqual([]);
   });
 
-  it('give a residential house a door on the street face', () => {
-    for (const face of STREET_FACES) {
-      const parts = buildingParts(Zone.Residential, 1, 0, 1000, face);
+  it('give every residential house a door on the street face of its main body', () => {
+    const violations: string[] = [];
+    for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+      if (zone !== Zone.Residential || density === 3) continue;
+      const tag = `${density}/${variant}/${face}/${index}`;
       const main = mainBody(parts)!;
-      const door = parts.find((p) => p.color.getHex() === ACCENT.door.getHex())!;
-      expect(door).toBeDefined();
-      // The door sits just outside the body on the street side: its offset
-      // points along the face normal and has no sideways component.
-      const dx = door.ox - main.ox;
-      const dz = door.oz - main.oz;
-      const [ex, ez] = faceOffset(0, 1, face);
-      expect(dx * ex + dz * ez).toBeGreaterThan(faceDepth(main, face) / 2);
-      expect(Math.abs(dx * ez - dz * ex)).toBeLessThan(1e-9);
-      expect(door.turn).toBe(face);
+      // The first door is the main body's: buildingsMesh.ts nudges windows around it.
+      const door = parts.find((p) => p.color.getHex() === ACCENT.door.getHex());
+      if (!door) {
+        violations.push(`${tag}: no door`);
+        continue;
+      }
+      // Outside the body on the street side, within the main facade, turned to the face.
+      const [lx, lz] = toFace(door.ox - main.ox, door.oz - main.oz, face);
+      if (!(lz > faceDepth(main, face) / 2)) violations.push(`${tag}: door not on the street face`);
+      if (Math.abs(lx) + DOOR.width / 2 > faceWidth(main, face) / 2 + 1e-9) {
+        violations.push(`${tag}: door off the main facade (lx ${lx})`);
+      }
+      if (door.turn !== face) violations.push(`${tag}: door turn ${door.turn} != ${face}`);
+      // The detached house keeps its door centred on the facade.
+      if (silhouetteOf(zone, density, variant, index) === 'detached' && Math.abs(lx) > 1e-9) {
+        violations.push(`${tag}: detached door off centre`);
+      }
     }
+    expect(violations).toEqual([]);
   });
 
   it('buildingHeight does not depend on the street face', () => {
@@ -335,11 +381,12 @@ describe('building recipes', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps the density-1 side wing off the door side on east/west faces', () => {
+  it("keeps the detached house's side wing off the door side on east/west faces", () => {
     const violations: string[] = [];
     for (const face of [StreetFace.East, StreetFace.West] as const) {
       for (let variant = 0; variant < VARIANTS; variant++) {
         for (const index of SAMPLE) {
+          if (silhouetteOf(Zone.Residential, 1, variant, index) !== 'detached') continue;
           const parts = buildingParts(Zone.Residential, 1, variant, index, face);
           const main = mainBody(parts)!;
           const wing = parts.find(
@@ -360,16 +407,19 @@ describe('building recipes', () => {
     expect(violations).toEqual([]);
   });
 
-  it('lies the rooftop PV slab flush on the gable roof slope (residential d2, retail d3)', () => {
+  it('lies the rooftop PV slab flush on the pitched roof slope (residential d2, retail d3)', () => {
     const violations: string[] = [];
     const cases: ReadonlyArray<{ zone: Zone; density: number }> = [
       { zone: Zone.Residential, density: 2 },
       { zone: Zone.Retail, density: 3 },
     ];
+    // The supermarket keeps its PV flat on its flat roof.
+    const sloped = new Set(['townHouse', 'bayWindow', 'cornerHouse', 'marketHall']);
     for (const { zone, density } of cases) {
       for (const face of STREET_FACES) {
         for (let variant = 0; variant < VARIANTS; variant++) {
           for (const index of SAMPLE) {
+            if (!sloped.has(silhouetteOf(zone, density, variant, index))) continue;
             const parts = buildingParts(zone, density, variant, index, face);
             const tag = `${zone}/${density}/${variant}/${face}/${index}`;
             const pv = parts.find(
@@ -381,10 +431,11 @@ describe('building recipes', () => {
               continue;
             }
             const main = mainBody(parts)!;
-            // The PV sits on the main (largest footprint) gable; a density-2
-            // dormer adds a second, much smaller, gable it never sits on.
+            // The PV sits on the main (largest footprint) gable or hip roof
+            // (whose front face shares the gable's plane); a density-2 dormer
+            // adds a second, much smaller, gable it never sits on.
             const roofPart = parts
-              .filter((p) => p.kind === PartKind.GableRoof)
+              .filter((p) => p.kind === PartKind.GableRoof || p.kind === PartKind.HipRoof)
               .reduce((a, b) => (a.sx * a.sz >= b.sx * b.sz ? a : b));
             const roofHeight = roofPart.sy;
             const roofDepth = roofPart.sz;
@@ -417,25 +468,40 @@ describe('building recipes', () => {
     expect(violations).toEqual([]);
   });
 
-  it('hang retail awnings on the street face', () => {
-    for (const face of STREET_FACES) {
-      for (const density of [1, 2, 3]) {
-        const parts = buildingParts(Zone.Retail, density, 1, 2048, face);
-        const main = mainBody(parts)!;
-        const [ex, ez] = faceOffset(0, 1, face);
-        // Thin accent slabs whose offset along the face normal lies beyond
-        // the body: awnings (signs are taller, PV sits on the roof inside it).
-        const awnings = parts.filter(
-          (p) =>
-            p.accent &&
-            !p.detail &&
-            p.kind === PartKind.Box &&
-            p.sy <= 0.05 &&
-            (p.ox - main.ox) * ex + (p.oz - main.oz) * ez > faceDepth(main, face) / 2,
-        );
-        expect(awnings.length).toBe(density === 3 ? 2 : 1);
+  it('shade every shop on the street face: awnings, or a canopy on the canopy shop', () => {
+    const awningsPer: Record<string, number> = {
+      shop: 1,
+      canopyShop: 0,
+      wideShop: 1,
+      shopWithFlat: 1,
+      marketHall: 2,
+      supermarket: 1,
+    };
+    const violations: string[] = [];
+    for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
+      if (zone !== Zone.Retail) continue;
+      const tag = `${density}/${variant}/${face}/${index}`;
+      const silhouette = silhouetteOf(zone, density, variant, index);
+      const main = mainBody(parts)!;
+      const front = faceBounds(main, face).maxZ;
+      const beyondFacade = (p: BuildingPart) => {
+        const [, lz] = toFace(p.ox, p.oz, face);
+        return lz > front;
+      };
+      // Thin accent slabs whose centre lies beyond the facade: awnings and
+      // flat canopies (signs are taller, PV sits on the roof inside it).
+      const awnings = parts.filter(
+        (p) => p.accent && !p.detail && p.kind === PartKind.Box && p.sy <= 0.05 && beyondFacade(p),
+      );
+      if (awnings.length !== awningsPer[silhouette]) {
+        violations.push(`${tag} ${silhouette}: ${awnings.length} awnings`);
+      }
+      const canopies = parts.filter((p) => p.kind === PartKind.ShedRoof && beyondFacade(p));
+      if (canopies.length !== (silhouette === 'canopyShop' ? 1 : 0)) {
+        violations.push(`${tag} ${silhouette}: ${canopies.length} shed canopies`);
       }
     }
+    expect(violations).toEqual([]);
   });
 
   it('never lets a factory cylinder pass through a roof it stands beside', () => {
@@ -480,17 +546,22 @@ describe('building recipes', () => {
     const isPitched = (p: BuildingPart) =>
       p.kind === PartKind.GableRoof || p.kind === PartKind.HipRoof || p.kind === PartKind.ShedRoof;
 
-    /** World-space xz bounds of a part (a quarter turn swaps its extents). */
-    function bounds(p: BuildingPart): { minX: number; maxX: number; minZ: number; maxZ: number } {
-      const [hx, hz] = p.turn % 2 === 0 ? [p.sx / 2, p.sz / 2] : [p.sz / 2, p.sx / 2];
-      return { minX: p.ox - hx, maxX: p.ox + hx, minZ: p.oz - hz, maxZ: p.oz + hz };
-    }
-
-    /** The main gable: the largest gable sitting on top of the main body, if any. */
+    /**
+     * The main gable: the largest gable on top of the main body or of a
+     * storey stacked on it (the flat above a shop), if any. A detached
+     * house's wing gable sits lower; the L-house wing and a dormer are smaller.
+     */
     function mainGable(parts: readonly BuildingPart[]): BuildingPart | undefined {
       const main = mainBody(parts)!;
+      const mainTop = main.oy + main.sy;
+      const tops = [
+        mainTop,
+        ...parts
+          .filter((p) => p.kind === PartKind.Box && !p.detail && Math.abs(p.oy - mainTop) < EPS)
+          .map((p) => p.oy + p.sy),
+      ];
       return parts
-        .filter((p) => p.kind === PartKind.GableRoof && Math.abs(p.oy - (main.oy + main.sy)) < EPS)
+        .filter((p) => p.kind === PartKind.GableRoof && tops.some((t) => Math.abs(p.oy - t) < EPS))
         .reduce<BuildingPart | undefined>(
           (a, b) => (a && a.sx * a.sz >= b.sx * b.sz ? a : b),
           undefined,
@@ -515,30 +586,37 @@ describe('building recipes', () => {
       expect(violations).toEqual([]);
     });
 
-    it('put exactly one plinth below every main body', () => {
+    it('put exactly one plinth below every main body and plinths only below bodies', () => {
       const violations: string[] = [];
       for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
         const tag = `${zone}/${density}/${variant}/${face}/${index}`;
         const main = mainBody(parts)!;
-        const plinths = parts.filter((p) => p.detail === 'plinth');
-        if (plinths.length !== 1) {
-          violations.push(`${tag}: ${plinths.length} plinths, expected 1`);
-          continue;
-        }
-        const [pl] = plinths;
-        const ok =
+        // Unturned bodies only: a plinth is always an unturned Box.
+        const hugs = (pl: BuildingPart, body: BuildingPart) =>
+          body.turn === 0 &&
           pl.kind === PartKind.Box &&
           pl.turn === 0 &&
           pl.tilt === undefined &&
           !pl.accent &&
-          pl.oy === main.oy &&
+          pl.oy === body.oy &&
           pl.sy === PLINTH_HEIGHT &&
-          Math.abs(pl.sx - (main.sx + 2 * PLINTH_OVERHANG)) < EPS &&
-          Math.abs(pl.sz - (main.sz + 2 * PLINTH_OVERHANG)) < EPS &&
-          Math.abs(pl.ox - main.ox) < EPS &&
-          Math.abs(pl.oz - main.oz) < EPS &&
+          Math.abs(pl.sx - (body.sx + 2 * PLINTH_OVERHANG)) < EPS &&
+          Math.abs(pl.sz - (body.sz + 2 * PLINTH_OVERHANG)) < EPS &&
+          Math.abs(pl.ox - body.ox) < EPS &&
+          Math.abs(pl.oz - body.oz) < EPS &&
           pl.color.getHex() === ZONE_FAMILIES[zone].plinth.getHex();
-        if (!ok) violations.push(`${tag}: plinth ${JSON.stringify(pl)} does not hug the main body`);
+        const plinths = parts.filter((p) => p.detail === 'plinth');
+        if (plinths.filter((pl) => hugs(pl, main)).length !== 1) {
+          violations.push(`${tag}: no single plinth hugs the main body`);
+        }
+        // Further plinths (the L-house wing, the other semi-detached half)
+        // each hug a ground-standing body of their own.
+        const bodies = parts.filter((p) => p.kind === PartKind.Box && !p.detail && !p.accent);
+        for (const pl of plinths) {
+          if (!bodies.some((b) => b.oy === 0 && hugs(pl, b))) {
+            violations.push(`${tag}: plinth ${JSON.stringify(pl)} hugs no body`);
+          }
+        }
       }
       expect(violations).toEqual([]);
     });
@@ -643,23 +721,41 @@ describe('building recipes', () => {
       for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
         if (zone === Zone.Retail && density === 3) continue;
         const tag = `${zone}/${density}/${variant}/${face}/${index}`;
-        const groups = new Map<BuildingPart, BuildingPart[]>();
+        // The canopy shop's canopy hangs on the facade, not on a body top.
+        const canopyShop = silhouetteOf(zone, density, variant, index) === 'canopyShop';
+        // A roof is supported by every body whose top it sits on and whose
+        // footprint holds its centre — two when it spans a semi-detached pair.
+        const groups = new Map<string, { support: Rect; roofs: BuildingPart[] }>();
         for (const roof of parts.filter(isPitched)) {
-          const support = parts.find((b) => {
+          if (canopyShop && roof.kind === PartKind.ShedRoof) continue;
+          const supports = parts.filter((b) => {
             if (b.kind !== PartKind.Box || b.detail || Math.abs(b.oy + b.sy - roof.oy) > EPS) {
               return false;
             }
             const bb = bounds(b);
-            return roof.ox > bb.minX && roof.ox < bb.maxX && roof.oz > bb.minZ && roof.oz < bb.maxZ;
+            return (
+              roof.ox > bb.minX - EPS &&
+              roof.ox < bb.maxX + EPS &&
+              roof.oz > bb.minZ - EPS &&
+              roof.oz < bb.maxZ + EPS
+            );
           });
-          if (!support) {
+          if (supports.length === 0) {
             violations.push(`${tag}: roof without a supporting body`);
             continue;
           }
-          groups.set(support, [...(groups.get(support) ?? []), roof]);
+          const key = supports.map((b) => parts.indexOf(b)).join(',');
+          const support = supports.map(bounds).reduce((a, c) => ({
+            minX: Math.min(a.minX, c.minX),
+            maxX: Math.max(a.maxX, c.maxX),
+            minZ: Math.min(a.minZ, c.minZ),
+            maxZ: Math.max(a.maxZ, c.maxZ),
+          }));
+          const group = groups.get(key) ?? { support, roofs: [] };
+          group.roofs.push(roof);
+          groups.set(key, group);
         }
-        for (const [body, roofs] of groups) {
-          const b = bounds(body);
+        for (const { support: b, roofs } of groups.values()) {
           const r = roofs.map(bounds).reduce((a, c) => ({
             minX: Math.min(a.minX, c.minX),
             maxX: Math.max(a.maxX, c.maxX),
@@ -687,7 +783,7 @@ describe('building recipes', () => {
       return parts.filter((p) => p.role === role);
     }
 
-    it('tags exactly one chimney on every detached house', () => {
+    it('tags exactly one chimney on every density-1 house (one per semi-detached pair)', () => {
       for (const index of SAMPLE) {
         for (let variant = 0; variant < VARIANTS; variant++) {
           for (const face of STREET_FACES) {
@@ -720,7 +816,7 @@ describe('building recipes', () => {
       }
     });
 
-    it('tags two vents on the market hall', () => {
+    it('tags two vents on the market hall and the supermarket', () => {
       for (const index of SAMPLE) {
         for (let variant = 0; variant < VARIANTS; variant++) {
           for (const face of STREET_FACES) {
@@ -755,5 +851,340 @@ describe('building recipes', () => {
         }
       }
     });
+  });
+});
+
+describe('silhouettes (stage 4)', () => {
+  const EPS = 1e-6;
+  const SILHOUETTES: Array<{ zone: Zone; density: number; names: string[] }> = [
+    { zone: Zone.Residential, density: 1, names: ['detached', 'lHouse', 'semiDetached'] },
+    { zone: Zone.Residential, density: 2, names: ['townHouse', 'bayWindow', 'cornerHouse'] },
+    { zone: Zone.Residential, density: 3, names: ['apartment', 'steppedBlock'] },
+    { zone: Zone.Retail, density: 1, names: ['shop', 'canopyShop'] },
+    { zone: Zone.Retail, density: 2, names: ['wideShop', 'shopWithFlat'] },
+    { zone: Zone.Retail, density: 3, names: ['marketHall', 'supermarket'] },
+  ];
+
+  /** Every recipe of one silhouette over the variant × sample set and all faces. */
+  function* recipesOf(
+    zone: Zone,
+    density: number,
+    name: string,
+  ): Generator<{ tag: string; face: StreetFace; index: number; parts: BuildingPart[] }> {
+    for (let variant = 0; variant < VARIANTS; variant++) {
+      for (const index of SAMPLE) {
+        if (silhouetteOf(zone, density, variant, index) !== name) continue;
+        for (const face of STREET_FACES) {
+          yield {
+            tag: `${variant}/${face}/${index}`,
+            face,
+            index,
+            parts: buildingParts(zone, density, variant, index, face),
+          };
+        }
+      }
+    }
+  }
+
+  const isBody = (p: BuildingPart) => p.kind === PartKind.Box && !p.main && !p.accent && !p.detail;
+  const top = (p: BuildingPart) => p.oy + p.sy;
+
+  it.each(SILHOUETTES)(
+    'zone $zone density $density draws every silhouette, the existing one most often',
+    ({ zone, density, names }) => {
+      const counts = new Map<string, number>();
+      for (let variant = 0; variant < VARIANTS; variant++) {
+        for (const index of SAMPLE) {
+          const name = silhouetteOf(zone, density, variant, index);
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
+      expect([...counts.keys()].sort()).toEqual([...names].sort());
+      const total = VARIANTS * SAMPLE.length;
+      // The existing silhouette is the tuned default: at least a third of the street.
+      expect(counts.get(names[0])!).toBeGreaterThanOrEqual(total / 3);
+    },
+  );
+
+  it('replays the recipe draws: the silhouette never depends on the street face', () => {
+    // A silhouette-specific part count per face would differ if a face-
+    // dependent draw slipped in before the silhouette pick.
+    for (const { zone, density } of SILHOUETTES) {
+      for (const index of SAMPLE.slice(0, 16)) {
+        const kinds = STREET_FACES.map((face) =>
+          buildingParts(zone, density, 3, index, face)
+            .map((p) => p.kind)
+            .join(),
+        );
+        for (const k of kinds) expect(k).toBe(kinds[0]);
+      }
+    }
+    expect(silhouetteOf(Zone.Commercial, 3, 0, 0)).toBe('tower');
+    expect(silhouetteOf(Zone.Industrial, 1, 0, 0)).toBe('workshop');
+  });
+
+  it('builds the L-house from a body and a perpendicular wing behind or beside it', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Residential, 1, 'lHouse')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
+      const wings = parts.filter(isBody);
+      if (gables.length !== 2 || wings.length !== 1) {
+        violations.push(`${tag}: ${gables.length} gables, ${wings.length} wings`);
+        continue;
+      }
+      if ((gables[0].turn - gables[1].turn + 4) % 2 !== 1) {
+        violations.push(`${tag}: gables not at right angles`);
+      }
+      const m = faceBounds(main, face);
+      const w = faceBounds(wings[0], face);
+      // A shared edge with a positive overlap along it — never the street edge.
+      const alongX = Math.min(m.maxX, w.maxX) - Math.max(m.minX, w.minX);
+      const alongZ = Math.min(m.maxZ, w.maxZ) - Math.max(m.minZ, w.minZ);
+      const back = Math.abs(w.maxZ - m.minZ) < EPS && alongX > EPS;
+      const side =
+        (Math.abs(w.minX - m.maxX) < EPS || Math.abs(w.maxX - m.minX) < EPS) && alongZ > EPS;
+      if (!back && !side) violations.push(`${tag}: wing does not touch the body`);
+      if (w.maxZ > m.maxZ + EPS) violations.push(`${tag}: wing reaches the door side`);
+      // Each gable sits on its own body.
+      const onWing = gables.filter((g) => Math.abs(g.oy - top(wings[0])) < EPS);
+      if (onWing.length === 0) violations.push(`${tag}: no gable on the wing`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('mirrors the semi-detached pair about the tile centre under one ridge', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Residential, 1, 'semiDetached')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const others = parts.filter(isBody);
+      const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
+      if (others.length !== 1 || gables.length !== 1) {
+        violations.push(`${tag}: ${others.length} other halves, ${gables.length} gables`);
+        continue;
+      }
+      const [other] = others;
+      const m = faceBounds(main, face);
+      const o = faceBounds(other, face);
+      const mx = (m.minX + m.maxX) / 2;
+      const ox = (o.minX + o.maxX) / 2;
+      if (!(mx < 0)) violations.push(`${tag}: main is not the left half`);
+      if (Math.abs(mx + ox) > EPS) violations.push(`${tag}: halves not mirrored (${mx}, ${ox})`);
+      if (
+        Math.abs(m.maxX - m.minX - (o.maxX - o.minX)) > EPS ||
+        Math.abs(m.maxZ - m.minZ - (o.maxZ - o.minZ)) > EPS ||
+        Math.abs(m.minZ - o.minZ) > EPS ||
+        Math.abs(main.sy - other.sy) > EPS
+      ) {
+        violations.push(`${tag}: halves differ in size or depth`);
+      }
+      // One ridge along the facade over both halves.
+      const g = faceBounds(gables[0], face);
+      if (g.minX > m.minX || g.maxX < o.maxX) violations.push(`${tag}: gable misses a half`);
+      if (gables[0].turn % 2 !== face % 2) violations.push(`${tag}: ridge not along the facade`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('puts the bay window on the street face, BAY_DEPTH proud, under a shed roof below the eaves', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Residential, 2, 'bayWindow')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const sheds = parts.filter((p) => p.kind === PartKind.ShedRoof);
+      if (sheds.length !== 1) {
+        violations.push(`${tag}: ${sheds.length} shed roofs`);
+        continue;
+      }
+      const [shed] = sheds;
+      const bay = parts.find(
+        (p) => isBody(p) && Math.abs(top(p) - shed.oy) < EPS && Math.abs(p.oy - main.oy) < EPS,
+      );
+      if (!bay) {
+        violations.push(`${tag}: no bay box under the shed roof`);
+        continue;
+      }
+      const m = faceBounds(main, face);
+      const b = faceBounds(bay, face);
+      if (Math.abs(b.minZ - m.maxZ) > EPS || Math.abs(b.maxZ - m.maxZ - BAY_DEPTH) > EPS) {
+        violations.push(`${tag}: bay not BAY_DEPTH proud of the facade`);
+      }
+      if (b.minX < m.minX - EPS || b.maxX > m.maxX + EPS) violations.push(`${tag}: bay off facade`);
+      if (top(shed) > top(main) + EPS) violations.push(`${tag}: bay roof above the eaves`);
+      const door = parts.find((p) => p.color.getHex() === ACCENT.door.getHex())!;
+      const d = faceBounds(door, face);
+      if (d.maxX > b.minX + EPS && d.minX < b.maxX - EPS) {
+        violations.push(`${tag}: door behind the bay`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('gives the corner house a hip roof and its door at a corner of the street face', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Residential, 2, 'cornerHouse')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const hips = parts.filter((p) => p.kind === PartKind.HipRoof);
+      if (hips.length !== 1 || parts.some((p) => p.kind === PartKind.GableRoof)) {
+        violations.push(`${tag}: not a single hip roof`);
+        continue;
+      }
+      if (
+        Math.abs(hips[0].oy - top(main)) > EPS ||
+        Math.abs(hips[0].ox - main.ox) > EPS ||
+        Math.abs(hips[0].oz - main.oz) > EPS
+      ) {
+        violations.push(`${tag}: hip roof off the main body`);
+      }
+      const door = parts.find((p) => p.color.getHex() === ACCENT.door.getHex())!;
+      const [lx] = toFace(door.ox - main.ox, door.oz - main.oz, face);
+      if (Math.abs(lx) < 0.3 * faceWidth(main, face) - 1e-9) {
+        violations.push(`${tag}: door at ${lx}, not near a corner`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('sets the stepped block top storey back by SETBACK behind a terrace railing', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Residential, 3, 'steppedBlock')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const m = faceBounds(main, face);
+      const upper = parts.find((p) => isBody(p) && Math.abs(p.oy - top(main)) < EPS && p.sy > 0.1);
+      if (!upper) {
+        violations.push(`${tag}: no top storey`);
+        continue;
+      }
+      const u = faceBounds(upper, face);
+      if (
+        Math.abs(u.minX - m.minX) > EPS ||
+        Math.abs(u.maxX - m.maxX) > EPS ||
+        Math.abs(u.minZ - m.minZ) > EPS ||
+        Math.abs(u.maxZ - (m.maxZ - SETBACK)) > EPS
+      ) {
+        violations.push(`${tag}: top storey not set back by SETBACK on the street side`);
+      }
+      const railings = parts.filter((p) => {
+        if (!p.accent || p.kind !== PartKind.Box || p.detail) return false;
+        const r = faceBounds(p, face);
+        return (
+          r.maxZ - r.minZ <= 0.02 + EPS &&
+          p.oy >= top(main) - EPS &&
+          p.oy <= top(main) + 0.05 &&
+          r.minZ >= u.maxZ - EPS &&
+          r.maxZ <= m.maxZ + EPS &&
+          r.maxX - r.minX >= 0.8 * (m.maxX - m.minX)
+        );
+      });
+      if (railings.length !== 1) violations.push(`${tag}: ${railings.length} terrace railings`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('hangs the canopy shop canopy in front of the shop, above the door height', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Retail, 1, 'canopyShop')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const sheds = parts.filter((p) => p.kind === PartKind.ShedRoof);
+      if (sheds.length !== 1) {
+        violations.push(`${tag}: ${sheds.length} canopies`);
+        continue;
+      }
+      const [canopy] = sheds;
+      const c = faceBounds(canopy, face);
+      const m = faceBounds(main, face);
+      if (c.minZ < m.maxZ - EPS) violations.push(`${tag}: canopy not in front of the shop`);
+      if (canopy.oy < DOOR.height - EPS) violations.push(`${tag}: canopy edge below the door`);
+      if (top(canopy) > top(main) + EPS) violations.push(`${tag}: canopy above the shop`);
+      // The high edge (local -z) meets the wall: the canopy turns with the face.
+      if (canopy.turn !== face) violations.push(`${tag}: canopy turn ${canopy.turn}`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('puts a residential-tone flat with a gable on the shop body, windows on the shop', () => {
+    const violations: string[] = [];
+    const tones = new Set(ZONE_FAMILIES[Zone.Residential].walls.map((c) => c.getHex()));
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Retail, 2, 'shopWithFlat')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const flats = parts.filter((p) => isBody(p) && Math.abs(p.oy - top(main)) < EPS);
+      const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
+      if (flats.length !== 1 || gables.length !== 1) {
+        violations.push(`${tag}: ${flats.length} flats, ${gables.length} gables`);
+        continue;
+      }
+      const [flat] = flats;
+      if (!tones.has(flat.color.getHex())) violations.push(`${tag}: flat not residential-toned`);
+      if (main.oy !== 0) violations.push(`${tag}: the shop (main) is not the ground floor`);
+      const f = faceBounds(flat, face);
+      const m = faceBounds(main, face);
+      if (f.minX < m.minX - EPS || f.maxX > m.maxX + EPS || f.minZ < m.minZ - EPS) {
+        violations.push(`${tag}: flat overhangs the shop`);
+      }
+      if (Math.abs(gables[0].oy - top(flat)) > EPS) violations.push(`${tag}: gable off the flat`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('builds the supermarket low and wide with a glass entrance under a flat canopy', () => {
+    const violations: string[] = [];
+    let hallTop = Infinity;
+    for (const { parts } of recipesOf(Zone.Retail, 3, 'marketHall')) {
+      hallTop = Math.min(hallTop, Math.max(...parts.map(top)));
+    }
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Retail, 3, 'supermarket')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const m = faceBounds(main, face);
+      if (m.maxX - m.minX < 0.8 - EPS || m.maxZ - m.minZ < 0.7 - EPS) {
+        violations.push(`${tag}: footprint ${m.maxX - m.minX} × ${m.maxZ - m.minZ}`);
+      }
+      if (Math.max(...parts.map(top)) > hallTop) violations.push(`${tag}: taller than a hall`);
+      const entrances = parts.filter(
+        (p) => p.kind === PartKind.Box && p.color.getHex() === ACCENT.glass.getHex(),
+      );
+      if (entrances.length !== 1) {
+        violations.push(`${tag}: ${entrances.length} glass entrances`);
+        continue;
+      }
+      const e = faceBounds(entrances[0], face);
+      if (Math.abs(e.minZ - m.maxZ) > EPS || entrances[0].oy !== 0) {
+        violations.push(`${tag}: entrance not on the street face`);
+      }
+      const canopies = parts.filter((p) => {
+        if (!p.accent || p.kind !== PartKind.Box || p.sy > 0.05) return false;
+        const c = faceBounds(p, face);
+        return (
+          c.minZ >= m.maxZ - EPS &&
+          c.minX <= e.minX + EPS &&
+          c.maxX >= e.maxX - EPS &&
+          p.oy >= top(entrances[0]) - EPS
+        );
+      });
+      if (canopies.length !== 1) violations.push(`${tag}: ${canopies.length} entrance canopies`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
   });
 });

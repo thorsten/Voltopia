@@ -53,6 +53,8 @@ export const ACCENT = {
   acUnit: new THREE.Color(0xf0f2f4),
   antenna: new THREE.Color(0x4b4f55),
   gutter: new THREE.Color(0x8a9099),
+  /** Light glass tone of shop entrances and bay windows — reads as glass by day. */
+  glass: new THREE.Color(0x7d9cb3),
 } as const;
 
 const SUPPLY_GREY = new THREE.Color(0x8a8a8a);
