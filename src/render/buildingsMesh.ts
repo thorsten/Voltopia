@@ -20,20 +20,19 @@ import {
 } from './buildings/recipes.ts';
 import { BlockAllocator } from './buildings/blocks.ts';
 import { type AccentSink, type AccentState, accentAnchors } from './buildings/accents.ts';
+import { WINDOW_PROUD, windowGeometry } from './buildings/windows.ts';
 
 const GROW_ANIMATION_SECONDS = 0.45;
-/** Max lit window quads per building. */
+/**
+ * Max window slots (framed windows, lit or dark) per building: 3 columns ×
+ * 4 rows on two faces. Glow quads are a subset, so both meshes share it.
+ */
 const WINDOWS_PER_TILE = 24;
 const WINDOW_COLOR = 0xffc978;
 const WINDOW_WIDTH = 0.09;
 const WINDOW_HEIGHT = 0.11;
-const WINDOW_GAP = 0.012;
-/**
- * Gap on the street face only: wider than WINDOW_GAP so a window row clears
- * the street-face accents (door, balconies, awnings, canopies), which
- * protrude further than the opposite face ever needs to clear.
- */
-const STREET_WINDOW_GAP = 0.03;
+/** The night glow quad sits just in front of the glass and mullions. */
+const GLOW_PROUD = 3.5 * WINDOW_PROUD;
 /** Fraction of body height the retail shopfront quad spans; ends below the 0.6h awning. */
 const SHOPFRONT_HEIGHT_FRACTION = 0.43;
 const SHOPFRONT_CENTER_FRACTION = 0.335;
@@ -83,6 +82,8 @@ export class BuildingsMesh implements DiffLayer {
   readonly kindMeshes: readonly THREE.InstancedMesh[];
   private readonly layers: readonly KindLayer[];
   private readonly windowsMesh: THREE.InstancedMesh;
+  /** Framed windows (lit, visible day and night), one per laid-out window slot. */
+  readonly windowFramesMesh: THREE.InstancedMesh;
   private readonly windowsMaterial: THREE.MeshBasicMaterial;
   private readonly gridSize: number;
   private readonly roads: Uint8Array;
@@ -103,6 +104,8 @@ export class BuildingsMesh implements DiffLayer {
   private readonly touchedKinds = new Set<PartKind>();
   /** Reusable scale vector for the per-shopfront window quad in `rebuildWindows`. */
   private readonly shopfrontScale = new THREE.Vector3();
+  /** Scale of a regular window frame instance (z stays 1: WINDOW_PROUD is in world units). */
+  private readonly frameScale = new THREE.Vector3(WINDOW_WIDTH, WINDOW_HEIGHT, 1);
 
   constructor(
     scene: THREE.Scene,
@@ -131,7 +134,7 @@ export class BuildingsMesh implements DiffLayer {
     });
     this.kindMeshes = this.layers.map((layer) => layer.mesh);
 
-    const windowGeometry = new THREE.PlaneGeometry(WINDOW_WIDTH, WINDOW_HEIGHT);
+    const glowGeometry = new THREE.PlaneGeometry(WINDOW_WIDTH, WINDOW_HEIGHT);
     this.windowsMaterial = new THREE.MeshBasicMaterial({
       color: WINDOW_COLOR,
       transparent: true,
@@ -140,7 +143,7 @@ export class BuildingsMesh implements DiffLayer {
       depthWrite: false,
     });
     this.windowsMesh = new THREE.InstancedMesh(
-      windowGeometry,
+      glowGeometry,
       this.windowsMaterial,
       gridSize * gridSize * WINDOWS_PER_TILE,
     );
@@ -148,6 +151,18 @@ export class BuildingsMesh implements DiffLayer {
     this.windowsMesh.count = 0;
     this.windowsMesh.visible = false;
     scene.add(this.windowsMesh);
+
+    this.windowFramesMesh = new THREE.InstancedMesh(
+      windowGeometry(),
+      surfaceMaterial({ vertexColors: true }),
+      gridSize * gridSize * WINDOWS_PER_TILE,
+    );
+    // Same as the kind meshes: instances span the grid, so never cull.
+    this.windowFramesMesh.frustumCulled = false;
+    this.windowFramesMesh.castShadow = false;
+    this.windowFramesMesh.receiveShadow = true;
+    this.windowFramesMesh.count = 0;
+    scene.add(this.windowFramesMesh);
   }
 
   /** Street face of the building on `index`, for tests and debugging. */
@@ -505,20 +520,23 @@ export class BuildingsMesh implements DiffLayer {
   }
 
   /**
-   * Lit window quads on the street face and its opposite of each
-   * building's main body. Shops get one wide shopfront on the street
-   * face. A deterministic pattern keeps ~1/3 of the windows dark.
+   * Framed windows on the street face and its opposite of each building's
+   * main body, mounted on the facade; shops get one wide framed shopfront
+   * on the street face. Supplied buildings add a night glow quad over the
+   * glass of each lit window; a deterministic pattern keeps ~1/3 dark.
    */
   private rebuildWindows(): void {
     const matrix = new THREE.Matrix4();
     const rotation = new THREE.Matrix4();
     let slot = 0;
+    let glowSlot = 0;
+    const capacity = this.windowFramesMesh.instanceMatrix.count;
     for (const [index, building] of this.buildings) {
-      // Buildings without (enough) power stay dark — undersupply flips
-      // tick to tick, which reads as flickering at night.
-      if (building.supplied !== SupplyStatus.Supplied) continue;
       const main = mainBody(building.parts);
       if (!main) continue;
+      // Buildings without (enough) power keep their frames but stay dark —
+      // undersupply flips tick to tick, which reads as flickering at night.
+      const lit = building.supplied === SupplyStatus.Supplied;
       const cx = (index % this.gridSize) + 0.5 + main.ox;
       const cz = Math.floor(index / this.gridSize) + 0.5 + main.oz;
       const lift = this.elevation.centerY(index);
@@ -538,7 +556,8 @@ export class BuildingsMesh implements DiffLayer {
         const inverseFace = ((4 - building.face) % 4) as StreetFace;
         [doorLx] = faceOffset(doorPart.ox - main.ox, doorPart.oz - main.oz, inverseFace);
       }
-      const budgetEnd = Math.min(slot + WINDOWS_PER_TILE, this.windowsMesh.instanceMatrix.count);
+      // Glow quads are a subset of the frames, so one budget bounds both.
+      const budgetEnd = Math.min(slot + WINDOWS_PER_TILE, capacity);
       let windowId = 0;
       for (const [face, isStreet] of [
         [building.face, true],
@@ -546,29 +565,28 @@ export class BuildingsMesh implements DiffLayer {
       ] as const) {
         const width = faceWidth(main, face);
         const depth = faceDepth(main, face);
-        // The street face carries doors, balconies, awnings and canopies
-        // that protrude further than the opposite face ever needs to clear.
-        const gap = isStreet ? STREET_WINDOW_GAP : WINDOW_GAP;
         rotation.makeRotationY(face * QUARTER_TURN);
         if (isStreet && shopfront) {
           // Always within budget here: WINDOWS_PER_TILE is reserved per
           // tile up front, and at most gridSize² buildings ever run through
           // this loop, so slot never reaches budgetEnd before this check.
-          const [dx, dz] = faceOffset(0, depth / 2 + gap, face);
+          const shopWidth = width * 0.8;
+          const shopHeight = main.sy * SHOPFRONT_HEIGHT_FRACTION;
+          const centreY = lift + main.oy + main.sy * SHOPFRONT_CENTER_FRACTION;
+          const [fx, fz] = faceOffset(0, depth / 2, face);
           matrix.copy(rotation);
-          matrix.scale(
-            this.shopfrontScale.set(
-              (width * 0.8) / WINDOW_WIDTH,
-              (main.sy * SHOPFRONT_HEIGHT_FRACTION) / WINDOW_HEIGHT,
-              1,
-            ),
-          );
-          matrix.setPosition(
-            cx + dx,
-            lift + main.oy + main.sy * SHOPFRONT_CENTER_FRACTION,
-            cz + dz,
-          );
-          this.windowsMesh.setMatrixAt(slot++, matrix);
+          matrix.scale(this.shopfrontScale.set(shopWidth, shopHeight, 1));
+          matrix.setPosition(cx + fx, centreY - shopHeight / 2, cz + fz);
+          this.windowFramesMesh.setMatrixAt(slot++, matrix);
+          if (lit) {
+            const [gx, gz] = faceOffset(0, depth / 2 + GLOW_PROUD, face);
+            matrix.copy(rotation);
+            matrix.scale(
+              this.shopfrontScale.set(shopWidth / WINDOW_WIDTH, shopHeight / WINDOW_HEIGHT, 1),
+            );
+            matrix.setPosition(cx + gx, centreY, cz + gz);
+            this.windowsMesh.setMatrixAt(glowSlot++, matrix);
+          }
           continue;
         }
         const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
@@ -580,8 +598,8 @@ export class BuildingsMesh implements DiffLayer {
         for (let col = 0; col < cols; col++) {
           for (let row = 0; row < rows; row++) {
             windowId++;
-            // Deterministically leave ~1/3 of windows dark.
-            if ((index * 7 + windowId * 13 + building.variant) % 3 === 0) continue;
+            // Deterministically leave ~1/3 of windows dark (framed, no glow).
+            const dark = (index * 7 + windowId * 13 + building.variant) % 3 === 0;
             const localY = main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
             let lx = colLx[col];
             if (isStreet && doorLx !== undefined) {
@@ -630,16 +648,24 @@ export class BuildingsMesh implements DiffLayer {
               }
             }
             if (slot >= budgetEnd) break;
-            const [dx, dz] = faceOffset(lx, depth / 2 + gap, face);
-            const y = lift + localY;
+            const [fx, fz] = faceOffset(lx, depth / 2, face);
             matrix.copy(rotation);
-            matrix.setPosition(cx + dx, y, cz + dz);
-            this.windowsMesh.setMatrixAt(slot++, matrix);
+            matrix.scale(this.frameScale);
+            matrix.setPosition(cx + fx, lift + localY - WINDOW_HEIGHT / 2, cz + fz);
+            this.windowFramesMesh.setMatrixAt(slot++, matrix);
+            if (lit && !dark) {
+              const [gx, gz] = faceOffset(lx, depth / 2 + GLOW_PROUD, face);
+              matrix.copy(rotation);
+              matrix.setPosition(cx + gx, lift + localY, cz + gz);
+              this.windowsMesh.setMatrixAt(glowSlot++, matrix);
+            }
           }
         }
       }
     }
-    this.windowsMesh.count = slot;
+    this.windowFramesMesh.count = slot;
+    this.windowFramesMesh.instanceMatrix.needsUpdate = true;
+    this.windowsMesh.count = glowSlot;
     this.windowsMesh.instanceMatrix.needsUpdate = true;
   }
 }

@@ -8,6 +8,7 @@ import { PART_KINDS, PartKind } from './buildings/primitives.ts';
 import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
 import { DOOR, MAX_PARTS_PER_KIND, PartRole, StreetFace, faceDepth } from './buildings/recipes.ts';
 import { type AccentAnchor, type AccentSink, type AccentState } from './buildings/accents.ts';
+import { WINDOW_PROUD } from './buildings/windows.ts';
 
 /** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT/WINDOW_WIDTH; not exported for tests. */
 const WINDOW_HEIGHT = 0.11;
@@ -101,7 +102,8 @@ describe('BuildingsMesh', () => {
       expect(scene.children).toContain(m);
     }
     const instanced = scene.children.filter((c) => c instanceof THREE.InstancedMesh);
-    expect(instanced).toHaveLength(PART_KINDS.length + 1);
+    // Kind meshes, the night glow quads and the window frames.
+    expect(instanced).toHaveLength(PART_KINDS.length + 2);
   });
 
   it('uploads only the placed building block, never the whole instance buffer', () => {
@@ -576,6 +578,141 @@ describe('BuildingsMesh', () => {
     mesh.setEnvironment(env(1));
     expect(windows.visible).toBe(true);
     expect(windows.count).toBeGreaterThan(0);
+  });
+
+  describe('window frames', () => {
+    const env = (nightFactor: number) => ({
+      nightFactor,
+      sunFactor: 1 - nightFactor,
+      windFactor: 0,
+      tideLevel: 0,
+      demand: { residential: 0, commercial: 0, retail: 0, industrial: 0 },
+      islands: [],
+      phase: 0,
+      temperature: 15,
+      snowCover: 0,
+      sunrise: 0.25,
+      sunset: 0.75,
+      solarStrength: 1,
+    });
+
+    /** The night glow quads: the one extra instanced mesh that is neither a kind mesh nor the frames. */
+    function glowMesh(scene: THREE.Scene, mesh: BuildingsMesh): THREE.InstancedMesh {
+      return scene.children.find(
+        (c): c is THREE.InstancedMesh =>
+          c instanceof THREE.InstancedMesh &&
+          !mesh.kindMeshes.includes(c) &&
+          c !== mesh.windowFramesMesh,
+      )!;
+    }
+
+    /** Laid-out slots of a doorless main body: cols × rows on the street face and its opposite. */
+    function expectedSlots(main: { sx: number; sy: number }): number {
+      const cols = Math.min(3, Math.max(1, Math.round(main.sx / 0.24)));
+      const rows = Math.min(4, Math.max(1, Math.round(main.sy / 0.28)));
+      return 2 * cols * rows;
+    }
+
+    it('is a lit, culling-free, shadow-receiving mesh', () => {
+      const { scene, mesh } = setup();
+      const frames = mesh.windowFramesMesh;
+      expect(scene.children).toContain(frames);
+      expect(frames.frustumCulled).toBe(false);
+      expect(frames.castShadow).toBe(false);
+      expect(frames.receiveShadow).toBe(true);
+      expect(frames.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+      expect((frames.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
+      expect(frames.instanceMatrix.count).toBe(SIZE * SIZE * 24);
+    });
+
+    it('frames every laid-out window, dark ones included, and stays visible by day', () => {
+      const { scene, mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+      const frames = mesh.windowFramesMesh;
+      expect(frames.count).toBe(expectedSlots(main));
+      // ~1/3 of the windows are dark: they keep a frame but get no glow.
+      expect(mesh.windowCount()).toBeLessThan(frames.count);
+      expect(mesh.windowCount()).toBeGreaterThan(0);
+      mesh.setEnvironment(env(0));
+      expect(frames.visible).toBe(true);
+      const glow = glowMesh(scene, mesh);
+      expect(glow.visible).toBe(false);
+      mesh.setEnvironment(env(1));
+      expect(frames.visible).toBe(true);
+      expect(glow.visible).toBe(true);
+    });
+
+    it('mounts frames on the facade with the glow quad over the glass', () => {
+      const { scene, mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0)]);
+      const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+      const cz = 3 + 0.5 + main.oz;
+      const m = new THREE.Matrix4();
+      const p = new THREE.Vector3();
+      const s = new THREE.Vector3();
+      const frameZ = new Set<number>();
+      for (let i = 0; i < mesh.windowFramesMesh.count; i++) {
+        mesh.windowFramesMesh.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        s.setFromMatrixScale(m);
+        expect(s.x).toBeCloseTo(WINDOW_WIDTH, 6);
+        expect(s.y).toBeCloseTo(WINDOW_HEIGHT, 6);
+        expect(Math.abs(Math.abs(p.z - cz) - main.sz / 2)).toBeLessThan(1e-6);
+        frameZ.add(Math.round(p.z * 1e4));
+      }
+      const glow = glowMesh(scene, mesh);
+      for (let i = 0; i < glow.count; i++) {
+        glow.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        expect(Math.abs(p.z - cz)).toBeCloseTo(main.sz / 2 + 3.5 * WINDOW_PROUD, 6);
+      }
+      expect(frameZ.size).toBe(2); // street face and its opposite
+    });
+
+    it('gives an unsupplied building frames but no glow', () => {
+      const { mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 3, 0, SupplyStatus.NotConnected)]);
+      const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+      expect(mesh.windowFramesMesh.count).toBe(expectedSlots(main));
+      expect(mesh.windowCount()).toBe(0);
+    });
+
+    it('frames a retail shopfront with one instance scaled to the shopfront', () => {
+      const { mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Retail, 1, 0), road(CENTRE + SIZE)]);
+      const main = mesh.partsAt(CENTRE)!.find((p) => p.main)!;
+      const cz = 3 + 0.5 + main.oz;
+      const m = new THREE.Matrix4();
+      const p = new THREE.Vector3();
+      const s = new THREE.Vector3();
+      const street: Array<{ p: THREE.Vector3; s: THREE.Vector3 }> = [];
+      for (let i = 0; i < mesh.windowFramesMesh.count; i++) {
+        mesh.windowFramesMesh.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        s.setFromMatrixScale(m);
+        if (p.z > cz) street.push({ p: p.clone(), s: s.clone() });
+      }
+      expect(street).toHaveLength(1);
+      expect(street[0].s.x).toBeCloseTo(main.sx * 0.8, 6);
+      expect(street[0].s.y).toBeCloseTo(main.sy * 0.43, 6);
+      // Glass bottom at the shopfront's lower edge (centre 0.335h, height 0.43h).
+      expect(street[0].p.y).toBeCloseTo(main.oy + main.sy * (0.335 - 0.43 / 2), 6);
+    });
+
+    it('drops frames and glow together when the building is removed', () => {
+      const { mesh } = setup();
+      mesh.setReducedMotion(true);
+      mesh.applyDiffs([building(CENTRE, Zone.Residential, 2, 0)]);
+      expect(mesh.windowFramesMesh.count).toBeGreaterThan(0);
+      mesh.applyDiffs([empty(CENTRE)]);
+      expect(mesh.windowFramesMesh.count).toBe(0);
+      expect(mesh.windowCount()).toBe(0);
+    });
   });
 });
 
