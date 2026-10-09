@@ -163,6 +163,8 @@ describe('street face helpers', () => {
   });
 });
 
+const top = (p: BuildingPart) => p.oy + p.sy;
+
 describe('building recipes', () => {
   it('pin the stage 4 budget: 16 parts per tile, five kinds', () => {
     expect(MAX_PARTS_PER_TILE).toBe(16);
@@ -531,14 +533,68 @@ describe('building recipes', () => {
     expect(violations).toEqual([]);
   });
 
-  it('gives factories a saw-tooth roof: two gable parts side by side on the hall', () => {
-    for (const { zone, parts } of allRecipes(SAMPLE)) {
+  it('gives the classic factories a saw-tooth roof and the new ones shed roofs', () => {
+    const sawTooth = new Set(['workshop', 'plant', 'works']);
+    let classic = 0;
+    let shed = 0;
+    for (const { zone, density, variant, index, parts } of allRecipes(SAMPLE)) {
       if (zone !== Zone.Industrial) continue;
       const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
-      expect(gables).toHaveLength(2);
-      expect(gables[0].oy).toBeCloseTo(gables[1].oy, 9);
-      expect(gables[0].ox).not.toBeCloseTo(gables[1].ox, 9);
+      if (sawTooth.has(silhouetteOf(zone, density, variant, index))) {
+        classic++;
+        expect(gables).toHaveLength(2);
+        expect(gables[0].oy).toBeCloseTo(gables[1].oy, 9);
+        expect(gables[0].ox).not.toBeCloseTo(gables[1].ox, 9);
+      } else {
+        shed++;
+        expect(gables).toHaveLength(0);
+        expect(parts.filter((p) => p.kind === PartKind.ShedRoof).length).toBeGreaterThan(0);
+      }
     }
+    expect(classic).toBeGreaterThan(0);
+    expect(shed).toBeGreaterThan(0);
+  });
+
+  it('never lets a body rise through the eave of a roof beside it (commercial, industrial)', () => {
+    // A Box starting below a pitched roof's eave must end at or below it
+    // wherever their footprints overlap (the loading-dock annex under the
+    // hall's front overhang); parts standing on the roof are exempt, and so
+    // is a wall a shed roof's high edge reaches into by its overhang only
+    // (the lean-to against the hall, like the bay roof against the house).
+    const violations: string[] = [];
+    const isRoof = (p: BuildingPart) =>
+      p.kind === PartKind.GableRoof || p.kind === PartKind.HipRoof || p.kind === PartKind.ShedRoof;
+    for (const { zone, density, variant, face, index, parts } of allRecipes(SAMPLE)) {
+      if (zone !== Zone.Commercial && zone !== Zone.Industrial) continue;
+      const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+      for (const b of parts) {
+        if (b.kind !== PartKind.Box || b.detail || b.tilt !== undefined) continue;
+        for (const r of parts.filter(isRoof)) {
+          if (b.oy >= r.oy - 1e-9 || b.oy + b.sy <= r.oy + 1e-9) continue;
+          const bb = bounds(b);
+          const rb = bounds(r);
+          if (
+            bb.minX < rb.maxX - 1e-9 &&
+            bb.maxX > rb.minX + 1e-9 &&
+            bb.minZ < rb.maxZ - 1e-9 &&
+            bb.maxZ > rb.minZ + 1e-9
+          ) {
+            if (r.kind === PartKind.ShedRoof) {
+              // The overlap along the roof's local z, measured from its high edge.
+              const [ex, ez] = faceOffset(0, 1, r.turn as StreetFace);
+              const ends = [
+                (bb.minX - r.ox) * ex + (bb.minZ - r.oz) * ez,
+                (bb.maxX - r.ox) * ex + (bb.maxZ - r.oz) * ez,
+              ];
+              const reach = Math.min(Math.max(...ends), r.sz / 2) + r.sz / 2;
+              if (top(b) >= top(r) - 1e-9 && reach <= ROOF_OVERHANG + 1e-9) continue;
+            }
+            violations.push(`${tag}: a box rises through a roof eave`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
   });
 
   describe('shared details (stage 4)', () => {
@@ -890,6 +946,12 @@ describe('silhouettes (stage 4)', () => {
     { zone: Zone.Retail, density: 1, names: ['shop', 'canopyShop'] },
     { zone: Zone.Retail, density: 2, names: ['wideShop', 'shopWithFlat'] },
     { zone: Zone.Retail, density: 3, names: ['marketHall', 'supermarket'] },
+    { zone: Zone.Commercial, density: 1, names: ['lowOffice', 'pavilion'] },
+    { zone: Zone.Commercial, density: 2, names: ['officeBlock', 'atriumOffice'] },
+    { zone: Zone.Commercial, density: 3, names: ['tower', 'twinTowers'] },
+    { zone: Zone.Industrial, density: 1, names: ['workshop', 'leanToHall'] },
+    { zone: Zone.Industrial, density: 2, names: ['plant', 'loadingDock'] },
+    { zone: Zone.Industrial, density: 3, names: ['works', 'conveyorWorks'] },
   ];
 
   /** Every recipe of one silhouette over the variant × sample set and all faces. */
@@ -914,7 +976,6 @@ describe('silhouettes (stage 4)', () => {
   }
 
   const isBody = (p: BuildingPart) => p.kind === PartKind.Box && !p.main && !p.accent && !p.detail;
-  const top = (p: BuildingPart) => p.oy + p.sy;
 
   it.each(SILHOUETTES)(
     'zone $zone density $density draws every silhouette, the existing one most often',
@@ -946,8 +1007,10 @@ describe('silhouettes (stage 4)', () => {
         for (const k of kinds) expect(k).toBe(kinds[0]);
       }
     }
-    expect(silhouetteOf(Zone.Commercial, 3, 0, 0)).toBe('tower');
-    expect(silhouetteOf(Zone.Industrial, 1, 0, 0)).toBe('workshop');
+    // silhouetteOf names a real silhouette of every zone with recipes.
+    for (const { zone, density, names } of SILHOUETTES) {
+      expect(names).toContain(silhouetteOf(zone, density, 0, 0));
+    }
   });
 
   it('builds the L-house from a body and a perpendicular wing behind or beside it', () => {
@@ -1244,6 +1307,363 @@ describe('silhouettes (stage 4)', () => {
         );
       });
       if (canopies.length !== 1) violations.push(`${tag}: ${canopies.length} entrance canopies`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  /** The eight corners of a (turned, tilted) part, in the street frame of `face`. */
+  function corners(p: BuildingPart, face: StreetFace): Array<{ x: number; y: number; z: number }> {
+    const euler = new THREE.Euler(p.tilt ?? 0, p.turn * (Math.PI / 2), 0, 'YXZ');
+    const out: Array<{ x: number; y: number; z: number }> = [];
+    for (const cx of [-0.5, 0.5]) {
+      for (const cy of [0, 1]) {
+        for (const cz of [-0.5, 0.5]) {
+          const v = new THREE.Vector3(cx * p.sx, cy * p.sy, cz * p.sz).applyEuler(euler);
+          const [x, z] = toFace(p.ox + v.x, p.oz + v.z, face);
+          out.push({ x, y: p.oy + v.y, z });
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Height of a shed roof's slope above the world point (x, z), extended past its eaves. */
+  function shedSurface(r: BuildingPart, x: number, z: number): number {
+    const [ex, ez] = faceOffset(0, 1, r.turn as StreetFace); // local +z: the low edge
+    const along = (x - r.ox) * ex + (z - r.oz) * ez;
+    return r.oy + r.sy * (0.5 - along / r.sz);
+  }
+
+  const glassParts = (parts: readonly BuildingPart[]) =>
+    parts.filter((p) => p.kind === PartKind.Box && p.color.getHex() === ACCENT.glass.getHex());
+  const antennas = (parts: readonly BuildingPart[]) =>
+    parts.filter((p) => p.role === PartRole.Antenna);
+  /** Inside the face-frame footprint of `b` (centre of `p`), within EPS. */
+  const standsOn = (p: BuildingPart, b: BuildingPart) => {
+    const r = bounds(b);
+    return (
+      Math.abs(p.oy - top(b)) < EPS &&
+      p.ox > r.minX - EPS &&
+      p.ox < r.maxX + EPS &&
+      p.oz > r.minZ - EPS &&
+      p.oz < r.maxZ + EPS
+    );
+  };
+
+  it('covers the pavilion with a shed roof over a glass front on the street face', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Commercial, 1, 'pavilion')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const sheds = parts.filter((p) => p.kind === PartKind.ShedRoof);
+      if (sheds.length !== 1) {
+        violations.push(`${tag}: ${sheds.length} shed roofs`);
+        continue;
+      }
+      const s = faceBounds(sheds[0], face);
+      const m = faceBounds(main, face);
+      if (
+        Math.abs(sheds[0].oy - top(main)) > EPS ||
+        s.minX > m.minX ||
+        s.maxX < m.maxX ||
+        s.minZ > m.minZ ||
+        s.maxZ < m.maxZ
+      ) {
+        violations.push(`${tag}: shed roof not over the main body`);
+      }
+      const glass = glassParts(parts);
+      if (glass.length !== 1) {
+        violations.push(`${tag}: ${glass.length} glass slabs`);
+        continue;
+      }
+      const g = faceBounds(glass[0], face);
+      if (Math.abs(g.minZ - m.maxZ) > EPS) violations.push(`${tag}: glass off the street face`);
+      if (g.minX < m.minX - EPS || g.maxX > m.maxX + EPS)
+        violations.push(`${tag}: glass off facade`);
+      if (top(glass[0]) > top(main) + EPS) violations.push(`${tag}: glass above the eaves`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('builds the atrium office from two wings around a lower glass atrium', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Commercial, 2, 'atriumOffice')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const wings = parts.filter((p) => p.windows);
+      const glass = glassParts(parts);
+      if (wings.length !== 1 || glass.length !== 1) {
+        violations.push(`${tag}: ${wings.length} other wings, ${glass.length} atria`);
+        continue;
+      }
+      const [back] = wings;
+      const m = faceBounds(main, face);
+      const b = faceBounds(back, face);
+      const a = faceBounds(glass[0], face);
+      if (back.kind !== PartKind.Box || back.oy !== 0) violations.push(`${tag}: wing not a body`);
+      if (!(m.maxZ > b.maxZ)) violations.push(`${tag}: main is not the street-side wing`);
+      // The atrium fills the gap between the wings, inside their width.
+      if (Math.abs(a.minZ - b.maxZ) > EPS || Math.abs(a.maxZ - m.minZ) > EPS) {
+        violations.push(`${tag}: atrium not between the wings`);
+      }
+      if (a.minX < Math.max(m.minX, b.minX) - EPS || a.maxX > Math.min(m.maxX, b.maxX) + EPS) {
+        violations.push(`${tag}: atrium wider than the wings`);
+      }
+      if (!(top(glass[0]) < Math.min(top(main), top(back)))) {
+        violations.push(`${tag}: atrium not lower than the wings`);
+      }
+      const taller = top(back) > top(main) ? back : main;
+      const ant = antennas(parts);
+      if (ant.length !== 1 || !standsOn(ant[0], taller)) {
+        violations.push(`${tag}: antenna not on the taller wing`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('stands the twin towers on a low podium, equal in height, within the tower band', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Commercial, 3, 'twinTowers')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const towers = parts.filter((p) => p.windows);
+      if (towers.length !== 2) {
+        violations.push(`${tag}: ${towers.length} towers`);
+        continue;
+      }
+      if (!(top(main) < 0.5)) violations.push(`${tag}: podium not low (${top(main)})`);
+      const m = faceBounds(main, face);
+      for (const t of towers) {
+        const b = faceBounds(t, face);
+        if (t.kind !== PartKind.Box || t.oy < top(main) - EPS) {
+          violations.push(`${tag}: tower not on the podium`);
+        }
+        if (b.minX < m.minX - EPS || b.maxX > m.maxX + EPS || b.minZ < m.minZ - EPS) {
+          violations.push(`${tag}: tower overhangs the podium`);
+        }
+        if (top(t) < 1.6 - EPS || top(t) > 1.9 + EPS) {
+          violations.push(`${tag}: tower top ${top(t)} outside 1.6-1.9`);
+        }
+      }
+      if (Math.abs(top(towers[0]) - top(towers[1])) > EPS)
+        violations.push(`${tag}: unequal towers`);
+      const [t0, t1] = towers.map((t) => faceBounds(t, face));
+      if (t0.maxX > t1.minX + EPS && t1.maxX > t0.minX + EPS) {
+        violations.push(`${tag}: towers overlap`);
+      }
+      const ant = antennas(parts);
+      if (ant.length !== 1 || !towers.some((t) => standsOn(ant[0], t))) {
+        violations.push(`${tag}: not exactly one antenna on a tower`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('leans the lean-to against the hall wall below its eave, a ramp up to the door', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Industrial, 1, 'leanToHall')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const m = faceBounds(main, face);
+      const sheds = parts.filter((p) => p.kind === PartKind.ShedRoof);
+      const hallRoof = sheds.find((r) => Math.abs(r.oy - top(main)) < EPS);
+      const leanRoof = sheds.find((r) => r !== hallRoof);
+      if (sheds.length !== 2 || !hallRoof || !leanRoof) {
+        violations.push(`${tag}: no hall roof plus lean-to roof`);
+        continue;
+      }
+      const leanTo = parts.find(
+        (p) => p.kind === PartKind.Box && !p.detail && p !== main && standsOn(leanRoof, p),
+      );
+      if (!leanTo) {
+        violations.push(`${tag}: lean-to roof without its body`);
+        continue;
+      }
+      const l = faceBounds(leanTo, face);
+      const touchesRight = Math.abs(l.minX - m.maxX) < EPS;
+      const touchesLeft = Math.abs(l.maxX - m.minX) < EPS;
+      if (!touchesRight && !touchesLeft) violations.push(`${tag}: lean-to off the hall wall`);
+      if (leanTo.oy !== 0 || top(leanTo) >= top(main)) violations.push(`${tag}: lean-to too tall`);
+      // The lean-to roof stays below the hall eave and reaches into the wall
+      // by its overhang only; its high edge (local -z) faces the hall.
+      if (top(leanRoof) > top(main) + EPS) violations.push(`${tag}: lean-to roof above the eave`);
+      const r = faceBounds(leanRoof, face);
+      const into = touchesRight ? m.maxX - r.minX : r.maxX - m.minX;
+      if (Math.abs(into - ROOF_OVERHANG) > EPS)
+        violations.push(`${tag}: roof ${into} into the wall`);
+      const [hx, hz] = toFace(...faceOffset(0, -1, leanRoof.turn as StreetFace), face);
+      if (Math.abs(hz) > EPS || Math.sign(hx) !== (touchesRight ? -1 : 1)) {
+        violations.push(`${tag}: lean-to roof does not rise toward the hall`);
+      }
+      const ramps = parts.filter((p) => p.kind === PartKind.Box && (p.tilt ?? 0) > 0);
+      if (ramps.length !== 1) {
+        violations.push(`${tag}: ${ramps.length} ramps`);
+        continue;
+      }
+      const c = corners(ramps[0], face);
+      const lowest = Math.min(...c.map((v) => v.y));
+      if (Math.abs(lowest) > EPS) violations.push(`${tag}: ramp foot ${lowest} off the ground`);
+      if (Math.min(...c.map((v) => v.z)) < m.maxZ - EPS) {
+        violations.push(`${tag}: ramp enters the hall wall`);
+      }
+      // It climbs toward the hall: the corners at the wall are the high ones.
+      const wallEnd = c.reduce((a, v) => (v.z < a.z ? v : a));
+      if (!(wallEnd.y > lowest + EPS)) violations.push(`${tag}: ramp falls toward the hall`);
+      const rx = (Math.min(...c.map((v) => v.x)) + Math.max(...c.map((v) => v.x))) / 2;
+      if (rx < m.minX || rx > m.maxX) violations.push(`${tag}: ramp off the hall facade`);
+      if (parts.filter((p) => p.role === PartRole.Chimney).length !== 1) {
+        violations.push(`${tag}: not one chimney`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('fronts the loading dock with a raised slab, two roll-up doors and an office annex', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Industrial, 2, 'loadingDock')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const m = faceBounds(main, face);
+      const onFront = (p: BuildingPart) => Math.abs(faceBounds(p, face).minZ - m.maxZ) < EPS;
+      const docks = parts.filter(
+        (p) => p.kind === PartKind.Box && !p.detail && p.oy === 0 && p.sy <= 0.08 && onFront(p),
+      );
+      if (docks.length !== 1) {
+        violations.push(`${tag}: ${docks.length} dock slabs`);
+        continue;
+      }
+      const dock = faceBounds(docks[0], face);
+      const doors = parts.filter(
+        (p) =>
+          p.kind === PartKind.Box &&
+          p.accent &&
+          onFront(p) &&
+          Math.abs(p.oy - top(docks[0])) < EPS &&
+          faceBounds(p, face).maxZ - m.maxZ < 0.03,
+      );
+      if (doors.length !== 2) violations.push(`${tag}: ${doors.length} roll-up doors on the dock`);
+      for (const d of doors) {
+        const b = faceBounds(d, face);
+        if (b.minX < dock.minX - EPS || b.maxX > dock.maxX + EPS) {
+          violations.push(`${tag}: door off the dock`);
+        }
+      }
+      const annexes = parts.filter((p) => p.windows);
+      if (annexes.length !== 1) {
+        violations.push(`${tag}: ${annexes.length} office annexes`);
+        continue;
+      }
+      const [annex] = annexes;
+      const a = faceBounds(annex, face);
+      if (annex.kind !== PartKind.Box || annex.oy !== 0 || !onFront(annex)) {
+        violations.push(`${tag}: annex not standing against the hall front`);
+      }
+      if (a.maxX > dock.minX + EPS && dock.maxX > a.minX + EPS) {
+        violations.push(`${tag}: annex overlaps the dock`);
+      }
+      if (parts.filter((p) => p.role === PartRole.Chimney).length !== 1) {
+        violations.push(`${tag}: not one chimney`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('runs the conveyor from the hall roof up to the silo top without cutting either', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, parts } of recipesOf(Zone.Industrial, 3, 'conveyorWorks')) {
+      seen++;
+      const main = mainBody(parts)!;
+      const silos = parts.filter((p) => p.kind === PartKind.Cylinder && p.role === undefined);
+      const roofs = parts.filter((p) => p.kind === PartKind.ShedRoof);
+      const conveyors = parts.filter(
+        (p) =>
+          p.kind === PartKind.Box &&
+          p.tilt !== undefined &&
+          !p.detail &&
+          p.color.getHex() !== ACCENT.rooftopPv.getHex(),
+      );
+      if (silos.length !== 1 || roofs.length !== 1 || conveyors.length !== 1) {
+        violations.push(
+          `${tag}: ${silos.length} silos, ${roofs.length} roofs, ${conveyors.length} conveyors`,
+        );
+        continue;
+      }
+      const [silo] = silos;
+      const [roof] = roofs;
+      const [conveyor] = conveyors;
+      if (Math.abs(roof.oy - top(main)) > EPS) violations.push(`${tag}: roof off the hall`);
+      if (!(conveyor.tilt! >= 0.2 && conveyor.tilt! <= 0.6)) {
+        violations.push(`${tag}: conveyor tilt ${conveyor.tilt}`);
+      }
+      const world = corners(conveyor, StreetFace.South);
+      // Never below the hall's roof plane (it rests on it at its foot) ...
+      const above = world.map((v) => v.y - shedSurface(roof, v.x, v.z));
+      if (Math.min(...above) < -EPS) violations.push(`${tag}: conveyor cuts the hall roof`);
+      if (Math.min(...above) > EPS) violations.push(`${tag}: conveyor floats over the roof`);
+      const foot = world.reduce((a, v) => (v.y < a.y ? v : a));
+      const r = bounds(main);
+      if (foot.x < r.minX || foot.x > r.maxX || foot.z < r.minZ || foot.z > r.maxZ) {
+        violations.push(`${tag}: conveyor foot not over the hall`);
+      }
+      // ... and never inside the silo: outside its radius or above its top,
+      // the upper end resting on the rim.
+      const radius = silo.sx / 2;
+      const dist = (v: { x: number; z: number }) => Math.hypot(v.x - silo.ox, v.z - silo.oz);
+      if (world.some((v) => dist(v) < radius - EPS && v.y < top(silo) - EPS)) {
+        violations.push(`${tag}: conveyor cuts the silo`);
+      }
+      const rim = world.some((v) => Math.abs(v.y - top(silo)) < EPS && dist(v) <= radius + 0.05);
+      if (!rim) violations.push(`${tag}: conveyor does not reach the silo top`);
+      if (parts.filter((p) => p.role === PartRole.Chimney).length !== 1) {
+        violations.push(`${tag}: not one chimney`);
+      }
+      for (const p of parts.filter((q) => q.role !== undefined)) {
+        if (p.tilt !== undefined || p.turn !== 0) violations.push(`${tag}: tagged part tilted`);
+      }
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('lies the PV flush on the hall shed roof (loading dock, conveyor works)', () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const [density, name] of [
+      [2, 'loadingDock'],
+      [3, 'conveyorWorks'],
+    ] as const) {
+      for (const { tag, parts } of recipesOf(Zone.Industrial, density, name)) {
+        const roof = parts.find((p) => p.kind === PartKind.ShedRoof)!;
+        const pv = parts.filter((p) => p.color.getHex() === ACCENT.rooftopPv.getHex());
+        if (pv.length !== 1 || pv[0].tilt === undefined) {
+          violations.push(`${tag}: no tilted PV`);
+          continue;
+        }
+        seen++;
+        const expected = Math.atan2(roof.sy, roof.sz);
+        if (Math.abs(pv[0].tilt - expected) > EPS) violations.push(`${tag}: PV off the pitch`);
+        // Its underside hovers a hair above the slope, inside the roof outline.
+        const r = bounds(roof);
+        for (const v of corners(pv[0], StreetFace.South).filter((_, i) => i % 4 < 2)) {
+          const gap = v.y - shedSurface(roof, v.x, v.z);
+          if (gap < -EPS || gap > 0.02) violations.push(`${tag}: PV corner ${gap} off the slope`);
+          if (v.x < r.minX || v.x > r.maxX || v.z < r.minZ || v.z > r.maxZ) {
+            violations.push(`${tag}: PV past the roof edge`);
+          }
+        }
+      }
     }
     expect(violations).toEqual([]);
     expect(seen).toBeGreaterThan(0);

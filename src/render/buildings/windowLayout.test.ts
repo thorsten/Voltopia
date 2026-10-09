@@ -113,7 +113,15 @@ describe('window layout', () => {
   });
 
   it('gives every flagged secondary body windows of its own', () => {
-    const expected = new Set(['semiDetached', 'lHouse', 'steppedBlock', 'shopWithFlat']);
+    const expected = new Set([
+      'semiDetached',
+      'lHouse',
+      'steppedBlock',
+      'shopWithFlat',
+      'atriumOffice',
+      'twinTowers',
+      'loadingDock',
+    ]);
     const flaggedIn = new Set<string>();
     const violations: string[] = [];
     for (const { tag, name, parts, slots } of allBuildings()) {

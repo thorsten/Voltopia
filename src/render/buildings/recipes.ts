@@ -125,6 +125,57 @@ const FLAT_SIGN_HEIGHT = 0.055;
 /** Supermarket glass entrance and the flat canopy over it. */
 const SUPERMARKET_ENTRANCE = { w: 0.26, h: 0.24, d: 0.06 } as const;
 const SUPERMARKET_CANOPY = { w: 0.4, h: 0.03, d: 0.1 } as const;
+/** Antenna mast diameter (office block, towers). */
+const ANTENNA_WIDTH = 0.03;
+/** Pavilion: shed roof rise, glass front (fractions of the facade), its fins. */
+const PAVILION = {
+  roofHeight: 0.08,
+  glassWidthFraction: 0.8,
+  glassHeightFraction: 0.82,
+  glassDepth: 0.02,
+  fin: 0.015,
+} as const;
+/** Atrium office: wing footprint, the atrium between the wings, back wing step up. */
+const ATRIUM = {
+  wingWidth: 0.58,
+  wingDepth: 0.24,
+  gap: 0.2,
+  glassWidth: 0.46,
+  glassHeight: 0.48,
+  step: 0.06,
+} as const;
+/** Twin towers: podium, its roof slab, slim towers and their tops (the tower band). */
+const TWIN_TOWERS = {
+  podium: { w: 0.8, d: 0.64, h: 0.3 },
+  slab: 0.03,
+  tower: { w: 0.3, d: 0.32 },
+  spacing: 0.2,
+  setback: 0.06,
+  top: 1.6,
+  topRange: 0.3,
+} as const;
+/** Depth of a roll-up door slab on a factory facade. */
+const ROLL_UP_DOOR_DEPTH = 0.02;
+/** Rise of the shed roof over a factory hall. */
+const HALL_SHED_PITCH = 0.1;
+/** PV on a hall's shed roof: its length as a fraction of the slope. */
+const SHED_PV_DEPTH_FRACTION = 0.4;
+/** Gap between a rooftop PV slab's pivot and the slope under it. */
+const PV_LIFT = 0.01;
+/** Lean-to against the hall's side wall and its shed roof. */
+const LEAN_TO = { w: 0.2, d: 0.36, h: 0.2, pitch: 0.06 } as const;
+/** The lean-to hall's roll-up door width as a fraction of the facade. */
+const LEAN_TO_DOOR_FRACTION = 0.4;
+/** Loading ramp up to the door threshold: slope length and slab thickness. */
+const RAMP = { length: 0.14, thickness: 0.02 } as const;
+/** Raised dock slab and its two roll-up doors. */
+const DOCK = { h: 0.06, d: 0.12, gap: 0.02, doorWidth: 0.16, doorHeightFraction: 0.55 } as const;
+/** One-storey office annex beside the dock, below the hall's eave. */
+const DOCK_ANNEX = { w: 0.24, d: 0.22, h: 0.3, roof: 0.03 } as const;
+/** Silo of the conveyor works: footprint, height, position (u toward the silo side). */
+const SILO = { d: 0.18, h: 0.66, u: 0.3, lz: -0.05 } as const;
+/** Conveyor bridge: width, thickness and where its foot rests on the hall roof (u). */
+const CONVEYOR = { w: 0.07, thickness: 0.04, footU: -0.1 } as const;
 
 export type ResidentialSilhouette =
   | 'detached'
@@ -142,6 +193,20 @@ export type RetailSilhouette =
   | 'shopWithFlat'
   | 'marketHall'
   | 'supermarket';
+export type CommercialSilhouette =
+  | 'lowOffice'
+  | 'pavilion'
+  | 'officeBlock'
+  | 'atriumOffice'
+  | 'tower'
+  | 'twinTowers';
+export type IndustrialSilhouette =
+  | 'workshop'
+  | 'leanToHall'
+  | 'plant'
+  | 'loadingDock'
+  | 'works'
+  | 'conveyorWorks';
 
 /**
  * Silhouette choices per density, drawn uniformly from the list. The
@@ -166,10 +231,22 @@ const RETAIL_SILHOUETTES: Record<1 | 2 | 3, readonly RetailSilhouette[]> = {
   2: ['wideShop', 'shopWithFlat'],
   3: ['marketHall', 'supermarket'],
 };
-/** Commercial and industrial keep one silhouette per density (no draw yet). */
-const SINGLE_SILHOUETTES: Record<number, Record<1 | 2 | 3, string>> = {
-  [Zone.Commercial]: { 1: 'lowOffice', 2: 'officeBlock', 3: 'tower' },
-  [Zone.Industrial]: { 1: 'workshop', 2: 'plant', 3: 'works' },
+const COMMERCIAL_SILHOUETTES: Record<1 | 2 | 3, readonly CommercialSilhouette[]> = {
+  1: ['lowOffice', 'pavilion'],
+  2: ['officeBlock', 'atriumOffice'],
+  3: ['tower', 'twinTowers'],
+};
+const INDUSTRIAL_SILHOUETTES: Record<1 | 2 | 3, readonly IndustrialSilhouette[]> = {
+  1: ['workshop', 'leanToHall'],
+  2: ['plant', 'loadingDock'],
+  3: ['works', 'conveyorWorks'],
+};
+/** The silhouette lists of every zone with recipes, for `silhouetteOf`. */
+const ZONE_SILHOUETTES: Record<number, Record<1 | 2 | 3, readonly string[]>> = {
+  [Zone.Residential]: RESIDENTIAL_SILHOUETTES,
+  [Zone.Commercial]: COMMERCIAL_SILHOUETTES,
+  [Zone.Retail]: RETAIL_SILHOUETTES,
+  [Zone.Industrial]: INDUSTRIAL_SILHOUETTES,
 };
 
 export interface Picker {
@@ -431,7 +508,7 @@ function pvOnSlope(
   const run = roofDepth / 2;
   const angle = Math.atan2(roofHeight, run);
   const slope = Math.hypot(run, roofHeight);
-  const lift = 0.01;
+  const lift = PV_LIFT;
   return facePart(
     PartKind.Box,
     body,
@@ -1060,100 +1137,285 @@ function residential(
   return RESIDENTIAL_BUILDERS[silhouette](p, face, family, look);
 }
 
+/** A rooftop antenna mast carrying the stage 2 beacon. */
+function antenna(ox: number, oy: number, oz: number, height: number): BuildingPart {
+  return {
+    kind: PartKind.Cylinder,
+    sx: ANTENNA_WIDTH,
+    sy: height,
+    sz: ANTENNA_WIDTH,
+    ox,
+    oy,
+    oz,
+    turn: 0,
+    color: ACCENT.antenna,
+    accent: true,
+    role: PartRole.Antenna,
+  };
+}
+
+/** Low office: cornice band, entrance canopy, one AC unit. */
+function lowOffice(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, trim } = look;
+  const w = 0.62;
+  const h = 0.4 + p.unit() * 0.06;
+  const body = box(w, h, w, 0, 0, 0, wall, { main: true });
+  return [
+    body,
+    plinth(body, family),
+    box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true, band: true }),
+    onStreetFace(body, face, 0.5, 0.03, 0.1, h * 0.55, trim),
+    box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }),
+  ];
+}
+
+/**
+ * Pavilion: a low body under a shed roof that rises toward the street over
+ * a glass front, two trim fins dividing the glass.
+ */
+function pavilion(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.66;
+  const d = 0.56;
+  const h = 0.34 + p.unit() * 0.06;
+  const body = box(w, h, d, 0, 0, 0, wall, { main: true });
+  const fw = faceWidth(body, face);
+  const fd = faceDepth(body, face);
+  const glassW = fw * PAVILION.glassWidthFraction;
+  const glassH = h * PAVILION.glassHeightFraction;
+  const fin = (lx: number): BuildingPart =>
+    facePart(
+      PartKind.Box,
+      body,
+      face,
+      {
+        w: PAVILION.fin,
+        h: glassH,
+        d: PAVILION.fin,
+        lx,
+        ly: 0,
+        lz: fd / 2 + PAVILION.glassDepth + PAVILION.fin / 2,
+      },
+      trim,
+      { accent: true },
+    );
+  return [
+    body,
+    plinth(body, family),
+    // Turned half way: the high edge (local -z) stands over the street.
+    facePart(
+      PartKind.ShedRoof,
+      body,
+      face,
+      {
+        w: fw + 2 * ROOF_OVERHANG,
+        h: PAVILION.roofHeight,
+        d: fd + 2 * ROOF_OVERHANG,
+        lx: 0,
+        ly: h,
+        lz: 0,
+        turn: 2,
+      },
+      roof,
+    ),
+    onStreetFace(
+      body,
+      face,
+      PAVILION.glassWidthFraction,
+      glassH,
+      PAVILION.glassDepth,
+      0,
+      ACCENT.glass,
+    ),
+    fin(-glassW / 6),
+    fin(glassW / 6),
+  ];
+}
+
+/** Office block: two facade bands, two AC units, antenna, flat PV. */
+function officeBlock(p: Picker, _face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, trim } = look;
+  const w = 0.62;
+  const h = 1.0 + p.unit() * 0.1;
+  const body = box(w, h, w, 0, 0, 0, wall, { main: true });
+  return [
+    body,
+    plinth(body, family),
+    box(w + 0.02, 0.025, w + 0.02, 0, h / 3, 0, trim, { accent: true, band: true }),
+    box(w + 0.02, 0.025, w + 0.02, 0, (2 * h) / 3, 0, trim, { accent: true, band: true }),
+    box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }),
+    box(0.1, 0.08, 0.1, -0.15, h, -0.15, ACCENT.acUnit, { accent: true }),
+    antenna(0.2, h, 0.2, 0.25),
+    box(0.4, ROOFTOP_PV_THICKNESS, 0.3, -0.1, h, 0.12, ACCENT.rooftopPv, { accent: true }),
+  ];
+}
+
+/**
+ * Atrium office: a street-side wing (main) and a taller back wing, a
+ * lower glass atrium filling the gap between them; PV on the front wing,
+ * the antenna on the taller back wing.
+ */
+function atriumOffice(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, trim } = look;
+  const { wingWidth: w, wingDepth: d, gap } = ATRIUM;
+  // Under 0.98 high and 0.6 wide each wing lays out 3 rows × 2 columns,
+  // so both wings together stay within WINDOWS_PER_TILE (2 × 12).
+  const frontH = 0.84 + p.unit() * 0.06;
+  const backH = frontH + ATRIUM.step;
+  const wingZ = gap / 2 + d / 2;
+  const front = uprightBox(face, { w, h: frontH, d, lx: 0, ly: 0, lz: wingZ }, wall, {
+    main: true,
+  });
+  const back = uprightBox(face, { w, h: backH, d, lx: 0, ly: 0, lz: -wingZ }, wall, {
+    windows: true,
+  });
+  const cornice = (wing: BuildingPart): BuildingPart =>
+    box(wing.sx + 0.04, 0.03, wing.sz + 0.04, wing.ox, wing.sy - 0.03, wing.oz, trim, {
+      accent: true,
+      band: true,
+    });
+  const [ax, az] = faceOffset(-0.2, -wingZ, face);
+  return [
+    front,
+    plinth(front, family),
+    back,
+    plinth(back, family),
+    uprightBox(
+      face,
+      { w: ATRIUM.glassWidth, h: ATRIUM.glassHeight, d: gap, lx: 0, ly: 0, lz: 0 },
+      ACCENT.glass,
+      { accent: true },
+    ),
+    cornice(front),
+    cornice(back),
+    uprightBox(
+      face,
+      { w: 0.4, h: ROOFTOP_PV_THICKNESS, d: 0.14, lx: 0, ly: frontH, lz: wingZ },
+      ACCENT.rooftopPv,
+      { accent: true },
+    ),
+    uprightBox(face, { w: 0.1, h: 0.08, d: 0.1, lx: 0.15, ly: backH, lz: -wingZ }, ACCENT.acUnit, {
+      accent: true,
+    }),
+    antenna(ax, backH, az, 0.25),
+  ];
+}
+
+/** Tower with a setback upper third; a cylindrical core or a plant room; antenna; PV. */
+function tower(p: Picker, _face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.66;
+  const h = 1.6 + p.unit() * 0.3;
+  const lowerH = h * 0.67;
+  const upperH = h - lowerH;
+  const body = box(w, lowerH, w, 0, 0, 0, wall, { main: true });
+  const setback = -0.08;
+  const parts = [
+    body,
+    plinth(body, family),
+    box(0.46, upperH, 0.46, setback, lowerH, setback, wall),
+    box(w + 0.04, 0.03, w + 0.04, 0, lowerH - 0.03, 0, trim, { accent: true, band: true }),
+  ];
+  if (p.chance(0.5)) {
+    parts.push({
+      kind: PartKind.Cylinder,
+      sx: 0.16,
+      sy: upperH + 0.1,
+      sz: 0.16,
+      ox: 0.24,
+      oy: lowerH,
+      oz: 0.24,
+      turn: 0,
+      color: roof,
+    });
+  } else {
+    parts.push(box(0.16, 0.1, 0.16, 0.24, lowerH, 0.24, roof));
+  }
+  parts.push(
+    antenna(-0.25, h, -0.25, 0.3),
+    box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.02, h, -0.02, ACCENT.rooftopPv, { accent: true }),
+  );
+  return parts;
+}
+
+/**
+ * Twin towers: a low podium (main) under a roof slab, two slim towers of
+ * equal height on it, set back from the street; entrance canopy, PV on the
+ * podium in front of the towers, the antenna on one tower.
+ */
+function twinTowers(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const { podium: pd, tower: tw, spacing, setback } = TWIN_TOWERS;
+  const podiumH = pd.h + p.unit() * 0.04;
+  // Inside the single tower's 1.6-1.9 band, so commercial d3 stays the tallest.
+  const towerTop = TWIN_TOWERS.top + p.unit() * TWIN_TOWERS.topRange;
+  const base = podiumH + TWIN_TOWERS.slab;
+  const podium = uprightBox(face, { w: pd.w, h: podiumH, d: pd.d, lx: 0, ly: 0, lz: 0 }, wall, {
+    main: true,
+  });
+  // One column of four rows per tower facade: 2 × 8 tower windows plus the
+  // podium's single row stay within WINDOWS_PER_TILE.
+  const slimTower = (side: number): BuildingPart =>
+    uprightBox(
+      face,
+      { w: tw.w, h: towerTop - base, d: tw.d, lx: side * spacing, ly: base, lz: -setback },
+      wall,
+      { windows: true },
+    );
+  const crown = (t: BuildingPart): BuildingPart =>
+    box(t.sx + 0.02, 0.03, t.sz + 0.02, t.ox, towerTop - 0.03, t.oz, trim, {
+      accent: true,
+      band: true,
+    });
+  const left = slimTower(-1);
+  const right = slimTower(1);
+  return [
+    podium,
+    plinth(podium, family),
+    uprightBox(
+      face,
+      {
+        w: pd.w + PARAPET_MARGIN.shop,
+        h: TWIN_TOWERS.slab,
+        d: pd.d + PARAPET_MARGIN.shop,
+        lx: 0,
+        ly: podiumH,
+        lz: 0,
+      },
+      roof,
+    ),
+    left,
+    right,
+    crown(left),
+    crown(right),
+    onStreetFace(podium, face, 0.4, 0.03, 0.1, podiumH * 0.55, trim),
+    uprightBox(
+      face,
+      { w: 0.44, h: ROOFTOP_PV_THICKNESS, d: 0.14, lx: 0, ly: base, lz: 0.2 },
+      ACCENT.rooftopPv,
+      { accent: true },
+    ),
+    antenna(left.ox, towerTop, left.oz, 0.3),
+  ];
+}
+
+const COMMERCIAL_BUILDERS: Record<CommercialSilhouette, Builder> = {
+  lowOffice,
+  pavilion,
+  officeBlock,
+  atriumOffice,
+  tower,
+  twinTowers,
+};
+
 function commercial(
   density: number,
   p: Picker,
   face: StreetFace,
   family: ZoneFamily,
 ): BuildingPart[] {
-  const wall = p.from(family.walls);
-  const roof = p.from(family.roofs);
-  const trim = p.from(family.trims);
-  const parts: BuildingPart[] = [];
-
-  if (density === 1) {
-    // Low office: cornice band, entrance canopy, one AC unit.
-    const w = 0.62;
-    const h = 0.4 + p.unit() * 0.06;
-    const body = box(w, h, w, 0, 0, 0, wall, { main: true });
-    parts.push(body, plinth(body, family));
-    parts.push(box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true, band: true }));
-    parts.push(onStreetFace(body, face, 0.5, 0.03, 0.1, h * 0.55, trim));
-    parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
-  } else if (density === 2) {
-    // Office block: two facade bands, two AC units, antenna, flat PV.
-    const w = 0.62;
-    const h = 1.0 + p.unit() * 0.1;
-    const body = box(w, h, w, 0, 0, 0, wall, { main: true });
-    parts.push(body, plinth(body, family));
-    parts.push(box(w + 0.02, 0.025, w + 0.02, 0, h / 3, 0, trim, { accent: true, band: true }));
-    parts.push(
-      box(w + 0.02, 0.025, w + 0.02, 0, (2 * h) / 3, 0, trim, { accent: true, band: true }),
-    );
-    parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
-    parts.push(box(0.1, 0.08, 0.1, -0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
-    parts.push({
-      kind: PartKind.Cylinder,
-      sx: 0.03,
-      sy: 0.25,
-      sz: 0.03,
-      ox: 0.2,
-      oy: h,
-      oz: 0.2,
-      turn: 0,
-      color: ACCENT.antenna,
-      accent: true,
-      role: PartRole.Antenna,
-    });
-    parts.push(
-      box(0.4, ROOFTOP_PV_THICKNESS, 0.3, -0.1, h, 0.12, ACCENT.rooftopPv, { accent: true }),
-    );
-  } else {
-    // Tower with a setback upper third; a cylindrical core or a plant room; antenna; PV.
-    const w = 0.66;
-    const h = 1.6 + p.unit() * 0.3;
-    const lowerH = h * 0.67;
-    const upperH = h - lowerH;
-    const body = box(w, lowerH, w, 0, 0, 0, wall, { main: true });
-    parts.push(body, plinth(body, family));
-    const setback = -0.08;
-    parts.push(box(0.46, upperH, 0.46, setback, lowerH, setback, wall));
-    parts.push(
-      box(w + 0.04, 0.03, w + 0.04, 0, lowerH - 0.03, 0, trim, { accent: true, band: true }),
-    );
-    if (p.chance(0.5)) {
-      parts.push({
-        kind: PartKind.Cylinder,
-        sx: 0.16,
-        sy: upperH + 0.1,
-        sz: 0.16,
-        ox: 0.24,
-        oy: lowerH,
-        oz: 0.24,
-        turn: 0,
-        color: roof,
-      });
-    } else {
-      parts.push(box(0.16, 0.1, 0.16, 0.24, lowerH, 0.24, roof));
-    }
-    parts.push({
-      kind: PartKind.Cylinder,
-      sx: 0.03,
-      sy: 0.3,
-      sz: 0.03,
-      ox: -0.25,
-      oy: h,
-      oz: -0.25,
-      turn: 0,
-      color: ACCENT.antenna,
-      accent: true,
-      role: PartRole.Antenna,
-    });
-    parts.push(
-      box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.02, h, -0.02, ACCENT.rooftopPv, { accent: true }),
-    );
-  }
-  return parts;
+  const { look, silhouette } = drawLook(p, family, COMMERCIAL_SILHOUETTES[densityKey(density)]);
+  return COMMERCIAL_BUILDERS[silhouette](p, face, family, look);
 }
 
 /** Retail recipes draw the sign colour from the trim without consuming a draw. */
@@ -1468,40 +1730,35 @@ function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily
 }
 
 /**
- * Factories: low halls under a saw-tooth roof (two gable parts side by
- * side), a roll-up door on the street face, a chimney for the stage 2
- * smoke; the bigger plants add a tank or a silo and flat PV.
+ * Saw-tooth roof of the classic factories: two gable parts side by side
+ * meeting over the middle of the hall; each overhangs only its outer side,
+ * so together they overhang the hall all round.
  */
-function industrial(
-  density: number,
-  p: Picker,
-  face: StreetFace,
-  family: ZoneFamily,
+function sawTooth(
+  w: number,
+  d: number,
+  top: number,
+  ox: number,
+  oz: number,
+  color: THREE.Color,
 ): BuildingPart[] {
-  const wall = p.from(family.walls);
-  const roof = p.from(family.roofs);
-  const trim = p.from(family.trims);
-  const parts: BuildingPart[] = [];
+  const half = w / 2;
+  return [-1, 1].map((side) => ({
+    kind: PartKind.GableRoof,
+    sx: half + ROOF_OVERHANG,
+    sy: 0.1,
+    sz: d + 2 * ROOF_OVERHANG,
+    ox: ox + (side * (half + ROOF_OVERHANG)) / 2,
+    oy: top,
+    oz,
+    turn: 0,
+    color,
+  }));
+}
 
-  // The two halves meet over the middle of the hall; each overhangs only
-  // its outer side, so together they overhang the hall all round.
-  const sawTooth = (w: number, d: number, top: number, ox: number, oz: number): void => {
-    const half = w / 2;
-    for (const side of [-1, 1]) {
-      parts.push({
-        kind: PartKind.GableRoof,
-        sx: half + ROOF_OVERHANG,
-        sy: 0.1,
-        sz: d + 2 * ROOF_OVERHANG,
-        ox: ox + (side * (half + ROOF_OVERHANG)) / 2,
-        oy: top,
-        oz,
-        turn: 0,
-        color: roof,
-      });
-    }
-  };
-  const chimney = (sx: number, sy: number, ox: number, oy: number, oz: number): BuildingPart => ({
+/** A factory chimney, the stage 2 smoke anchor. */
+function factoryChimney(sx: number, sy: number, ox: number, oy: number, oz: number): BuildingPart {
+  return {
     kind: PartKind.Cylinder,
     sx,
     sy,
@@ -1513,30 +1770,168 @@ function industrial(
     color: ACCENT.chimney,
     accent: true,
     role: PartRole.Chimney,
-  });
+  };
+}
 
-  if (density === 1) {
-    // Workshop: one hall, saw-tooth roof, door, chimney at the back.
-    const w = 0.7;
-    const d = 0.5;
-    const h = 0.28 + p.unit() * 0.04;
-    const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-    parts.push(body, plinth(body, family));
-    sawTooth(w, d, h, 0, 0);
-    parts.push(onStreetFace(body, face, 0.4, h * 0.7, 0.02, 0, trim));
-    parts.push(chimney(0.06, 0.22, -0.25, h, -0.15));
-  } else if (density === 2) {
-    // Plant: main hall behind, lower annex in front, tank, chimney, PV.
-    const w = 0.7;
-    const h = 0.36 + p.unit() * 0.04;
-    const body = box(w, h, 0.34, 0, 0, -0.12, wall, { main: true });
-    parts.push(body, plinth(body, family));
-    sawTooth(w, 0.34, h, 0, -0.12);
-    const annexH = h * 0.7;
-    const annex = box(0.5, annexH, 0.22, -0.08, 0, 0.19, wall);
-    parts.push(annex);
-    parts.push(onStreetFace(annex, face, 0.5, annexH * 0.7, 0.02, 0, trim));
-    parts.push({
+/** Mono-pitch roof over a factory hall, overhanging every side, its high edge at the back. */
+function hallShed(hall: BuildingPart, face: StreetFace, color: THREE.Color): BuildingPart {
+  return facePart(
+    PartKind.ShedRoof,
+    hall,
+    face,
+    {
+      w: faceWidth(hall, face) + 2 * ROOF_OVERHANG,
+      h: HALL_SHED_PITCH,
+      d: faceDepth(hall, face) + 2 * ROOF_OVERHANG,
+      lx: 0,
+      ly: hall.sy,
+      lz: 0,
+    },
+    color,
+  );
+}
+
+/**
+ * Rooftop PV lying on the street-facing slope of `hallShed(hall)`, `lx`
+ * along the facade from the hall centre and centred `at` that fraction up
+ * the slope from the front eave; it pivots a hair above the slope.
+ */
+function pvOnShed(
+  hall: BuildingPart,
+  face: StreetFace,
+  lx: number,
+  width: number,
+  at: number,
+): BuildingPart {
+  const run = faceDepth(hall, face) + 2 * ROOF_OVERHANG;
+  const angle = Math.atan2(HALL_SHED_PITCH, run);
+  const slope = Math.hypot(run, HALL_SHED_PITCH);
+  return facePart(
+    PartKind.Box,
+    hall,
+    face,
+    {
+      w: width,
+      h: ROOFTOP_PV_THICKNESS,
+      d: slope * SHED_PV_DEPTH_FRACTION,
+      lx,
+      ly: hall.sy + HALL_SHED_PITCH * at + PV_LIFT * Math.cos(angle),
+      lz: run * (0.5 - at) + PV_LIFT * Math.sin(angle),
+      tilt: angle,
+    },
+    ACCENT.rooftopPv,
+    { accent: true },
+  );
+}
+
+/** Workshop: one hall, saw-tooth roof, door, chimney at the back. */
+function workshop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.7;
+  const d = 0.5;
+  const h = 0.28 + p.unit() * 0.04;
+  const body = box(w, h, d, 0, 0, 0, wall, { main: true });
+  return [
+    body,
+    plinth(body, family),
+    ...sawTooth(w, d, h, 0, 0, roof),
+    onStreetFace(body, face, 0.4, h * 0.7, ROLL_UP_DOOR_DEPTH, 0, trim),
+    factoryChimney(0.06, 0.22, -0.25, h, -0.15),
+  ];
+}
+
+/**
+ * Lean-to hall: a hall under a shed roof with a lower lean-to against one
+ * side wall, its own shed roof falling away from the hall below the hall's
+ * eave; a roll-up door with a ramp up to it, a chimney at the back.
+ */
+function leanToHall(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.56;
+  const d = 0.5;
+  const h = 0.28 + p.unit() * 0.04;
+  const side = p.chance(0.5) ? 1 : -1;
+  // Hall and lean-to together are centred on the tile.
+  const lx = (-side * LEAN_TO.w) / 2;
+  const lz = -0.06;
+  const hall = uprightBox(face, { w, h, d, lx, ly: 0, lz }, wall, { main: true });
+  // The lean-to's back is flush with the hall's.
+  const leanTo = uprightBox(
+    face,
+    {
+      w: LEAN_TO.w,
+      h: LEAN_TO.h,
+      d: LEAN_TO.d,
+      lx: lx + side * (w / 2 + LEAN_TO.w / 2),
+      ly: 0,
+      lz: lz - (d - LEAN_TO.d) / 2,
+    },
+    wall,
+  );
+  // A quarter turn toward `side` points the low edge (local +z) away from
+  // the hall; the high edge reaches ROOF_OVERHANG into the hall wall.
+  const leanRoof = facePart(
+    PartKind.ShedRoof,
+    leanTo,
+    face,
+    {
+      w: LEAN_TO.d + 2 * ROOF_OVERHANG,
+      h: LEAN_TO.pitch,
+      d: LEAN_TO.w + 2 * ROOF_OVERHANG,
+      lx: 0,
+      ly: LEAN_TO.h,
+      lz: 0,
+      turn: side > 0 ? 1 : 3,
+    },
+    roof,
+  );
+  // The ramp climbs from the street to the door threshold (plinth height),
+  // its upper end against the door slab; it pivots at its base centre.
+  const tilt = Math.asin(PLINTH_HEIGHT / RAMP.length);
+  const ramp = facePart(
+    PartKind.Box,
+    hall,
+    face,
+    {
+      w: w * LEAN_TO_DOOR_FRACTION,
+      h: RAMP.thickness,
+      d: RAMP.length,
+      lx: 0,
+      ly: PLINTH_HEIGHT / 2,
+      lz: d / 2 + ROLL_UP_DOOR_DEPTH + (RAMP.length / 2) * Math.cos(tilt),
+      tilt,
+    },
+    family.plinth,
+  );
+  const [cx, cz] = faceOffset(lx - side * 0.18, lz - 0.15, face);
+  return [
+    hall,
+    plinth(hall, family),
+    hallShed(hall, face, roof),
+    leanTo,
+    plinth(leanTo, family),
+    leanRoof,
+    onStreetFace(hall, face, LEAN_TO_DOOR_FRACTION, h * 0.7, ROLL_UP_DOOR_DEPTH, 0, trim),
+    ramp,
+    factoryChimney(0.06, 0.22, cx, h, cz),
+  ];
+}
+
+/** Plant: main hall behind, lower annex in front, tank, chimney, PV. */
+function plant(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.7;
+  const h = 0.36 + p.unit() * 0.04;
+  const body = box(w, h, 0.34, 0, 0, -0.12, wall, { main: true });
+  const annexH = h * 0.7;
+  const annex = box(0.5, annexH, 0.22, -0.08, 0, 0.19, wall);
+  return [
+    body,
+    plinth(body, family),
+    ...sawTooth(w, 0.34, h, 0, -0.12, roof),
+    annex,
+    onStreetFace(annex, face, 0.5, annexH * 0.7, ROLL_UP_DOOR_DEPTH, 0, trim),
+    {
       kind: PartKind.Cylinder,
       sx: 0.14,
       sy: 0.3,
@@ -1547,25 +1942,106 @@ function industrial(
       turn: 0,
       color: ACCENT.waterTank,
       accent: true,
-    });
-    parts.push(chimney(0.06, 0.34, -0.27, h, -0.2));
-    parts.push(
-      box(0.3, ROOFTOP_PV_THICKNESS, 0.16, 0.1, annexH, 0.19, ACCENT.rooftopPv, { accent: true }),
+    },
+    factoryChimney(0.06, 0.34, -0.27, h, -0.2),
+    box(0.3, ROOFTOP_PV_THICKNESS, 0.16, 0.1, annexH, 0.19, ACCENT.rooftopPv, { accent: true }),
+  ];
+}
+
+/**
+ * Loading dock: a hall under a shed roof, a raised dock slab along its
+ * street face with two roll-up doors on it, a one-storey office annex
+ * beside the dock (below the hall's eave), PV on the slope, a chimney.
+ */
+function loadingDock(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.74;
+  const d = 0.44;
+  const lz = -0.08;
+  const h = 0.36 + p.unit() * 0.04;
+  const side = p.chance(0.5) ? 1 : -1;
+  const hall = uprightBox(face, { w, h, d, lx: 0, ly: 0, lz }, wall, { main: true });
+  const front = lz + d / 2;
+  const annexLx = side * (w / 2 - DOCK_ANNEX.w / 2);
+  const annex = uprightBox(
+    face,
+    {
+      w: DOCK_ANNEX.w,
+      h: DOCK_ANNEX.h,
+      d: DOCK_ANNEX.d,
+      lx: annexLx,
+      ly: 0,
+      lz: front + DOCK_ANNEX.d / 2,
+    },
+    wall,
+    { windows: true },
+  );
+  // Its roof slab overhangs the three free sides and stops at the hall wall.
+  const slabD = DOCK_ANNEX.d + PARAPET_MARGIN.shop / 2;
+  const annexRoof = uprightBox(
+    face,
+    {
+      w: DOCK_ANNEX.w + PARAPET_MARGIN.shop,
+      h: DOCK_ANNEX.roof,
+      d: slabD,
+      lx: annexLx,
+      ly: DOCK_ANNEX.h,
+      lz: front + slabD / 2,
+    },
+    roof,
+  );
+  const dockW = w - DOCK_ANNEX.w - DOCK.gap;
+  const dockLx = -side * (w / 2 - dockW / 2);
+  const dock = uprightBox(
+    face,
+    { w: dockW, h: DOCK.h, d: DOCK.d, lx: dockLx, ly: 0, lz: front + DOCK.d / 2 },
+    family.plinth,
+  );
+  const door = (k: number): BuildingPart =>
+    uprightBox(
+      face,
+      {
+        w: DOCK.doorWidth,
+        h: h * DOCK.doorHeightFraction,
+        d: ROLL_UP_DOOR_DEPTH,
+        lx: dockLx + (k * dockW) / 4,
+        ly: DOCK.h,
+        lz: front + ROLL_UP_DOOR_DEPTH / 2,
+      },
+      trim,
+      { accent: true },
     );
-  } else {
-    // Works: long hall, trim band, silo, tall chimney, door, PV.
-    const w = 0.74;
-    const d = 0.5;
-    const h = 0.42 + p.unit() * 0.06;
-    const body = box(w, h, d, 0, 0, -0.04, wall, { main: true });
-    parts.push(body, plinth(body, family));
-    sawTooth(w, d, h, 0, -0.04);
-    parts.push(
-      box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true, band: true }),
-    );
-    parts.push(onStreetFace(body, face, 0.3, h * 0.6, 0.02, 0, trim));
+  const [cx, cz] = faceOffset(side * 0.28, lz - 0.14, face);
+  return [
+    hall,
+    plinth(hall, family),
+    hallShed(hall, face, roof),
+    annex,
+    plinth(annex, family),
+    annexRoof,
+    dock,
+    door(-1),
+    door(1),
+    pvOnShed(hall, face, -side * 0.12, 0.36, 0.4),
+    factoryChimney(0.06, 0.34, cx, h, cz),
+  ];
+}
+
+/** Works: long hall, trim band, silo, tall chimney, door, PV. */
+function works(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.74;
+  const d = 0.5;
+  const h = 0.42 + p.unit() * 0.06;
+  const body = box(w, h, d, 0, 0, -0.04, wall, { main: true });
+  return [
+    body,
+    plinth(body, family),
+    ...sawTooth(w, d, h, 0, -0.04, roof),
+    box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true, band: true }),
+    onStreetFace(body, face, 0.3, h * 0.6, ROLL_UP_DOOR_DEPTH, 0, trim),
     // The silo stands clear of the saw-tooth's front eave (its overhang included).
-    parts.push({
+    {
       kind: PartKind.Cylinder,
       sx: 0.18,
       sy: 0.7,
@@ -1576,13 +2052,112 @@ function industrial(
       turn: 0,
       color: ACCENT.waterTank,
       accent: true,
-    });
-    parts.push(chimney(0.06, 0.55, -0.3, h, -0.25));
-    parts.push(
-      box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.15, h + 0.1, 0.1, ACCENT.rooftopPv, { accent: true }),
-    );
-  }
-  return parts;
+    },
+    factoryChimney(0.06, 0.55, -0.3, h, -0.25),
+    box(0.3, ROOFTOP_PV_THICKNESS, 0.2, -0.15, h + 0.1, 0.1, ACCENT.rooftopPv, { accent: true }),
+  ];
+}
+
+/**
+ * Conveyor works: a hall under a shed roof, a silo beside it clear of the
+ * eave, and an inclined conveyor bridge whose foot rests on the hall roof
+ * and whose upper end rests on the silo's near rim; trim band, door, PV
+ * on the slope, a tall chimney.
+ */
+function conveyorWorks(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+): BuildingPart[] {
+  const { wall, roof, trim } = look;
+  const w = 0.56;
+  const d = 0.5;
+  const lz = -0.08;
+  const h = 0.42 + p.unit() * 0.06;
+  // `side` is where the silo stands; `u` runs from the hall toward it.
+  const side = p.chance(0.5) ? 1 : -1;
+  const hallU = -0.12;
+  const hall = uprightBox(face, { w, h, d, lx: side * hallU, ly: 0, lz }, wall, { main: true });
+  const [sx, sz] = faceOffset(side * SILO.u, SILO.lz, face);
+  // The foot rests on the roof slope along the conveyor's back (higher)
+  // edge; the slope falls toward the street from the back eave.
+  const frontEave = lz + d / 2 + ROOF_OVERHANG;
+  const backEdge = SILO.lz - CONVEYOR.w / 2;
+  const footY = h + (HALL_SHED_PITCH * (frontEave - backEdge)) / (d + 2 * ROOF_OVERHANG);
+  const rimU = SILO.u - SILO.d / 2;
+  const run = rimU - CONVEYOR.footU;
+  const rise = SILO.h - footY;
+  const tilt = Math.atan2(rise, run);
+  // Its local +z (the end a positive tilt lowers) points back to the hall.
+  const conveyor = facePart(
+    PartKind.Box,
+    { ox: 0, oy: 0, oz: 0 },
+    face,
+    {
+      w: CONVEYOR.w,
+      h: CONVEYOR.thickness,
+      d: Math.hypot(run, rise),
+      lx: (side * (CONVEYOR.footU + rimU)) / 2,
+      ly: (footY + SILO.h) / 2,
+      lz: SILO.lz,
+      turn: side > 0 ? 3 : 1,
+      tilt,
+    },
+    trim,
+    { accent: true },
+  );
+  const [cx, cz] = faceOffset(side * -0.3, lz - 0.17, face);
+  return [
+    hall,
+    plinth(hall, family),
+    hallShed(hall, face, roof),
+    box(hall.sx + 0.02, 0.03, hall.sz + 0.02, hall.ox, h * 0.5, hall.oz, trim, {
+      accent: true,
+      band: true,
+    }),
+    onStreetFace(hall, face, 0.3, h * 0.6, ROLL_UP_DOOR_DEPTH, 0, trim),
+    {
+      kind: PartKind.Cylinder,
+      sx: SILO.d,
+      sy: SILO.h,
+      sz: SILO.d,
+      ox: sx,
+      oy: 0,
+      oz: sz,
+      turn: 0,
+      color: ACCENT.waterTank,
+      accent: true,
+    },
+    conveyor,
+    pvOnShed(hall, face, side * -0.15, 0.2, 0.3),
+    factoryChimney(0.06, 0.55, cx, h, cz),
+  ];
+}
+
+const INDUSTRIAL_BUILDERS: Record<IndustrialSilhouette, Builder> = {
+  workshop,
+  leanToHall,
+  plant,
+  loadingDock,
+  works,
+  conveyorWorks,
+};
+
+/**
+ * Factories: halls under a saw-tooth roof (workshop, plant, works) or a
+ * shed roof (the newer silhouettes), roll-up doors on the street face, a
+ * chimney for the stage 2 smoke; the bigger plants add a tank or a silo
+ * and PV.
+ */
+function industrial(
+  density: number,
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+): BuildingPart[] {
+  const { look, silhouette } = drawLook(p, family, INDUSTRIAL_SILHOUETTES[densityKey(density)]);
+  return INDUSTRIAL_BUILDERS[silhouette](p, face, family, look);
 }
 
 /**
@@ -1619,15 +2194,10 @@ export function buildingParts(
  * silhouette draws (for tests and debugging).
  */
 export function silhouetteOf(zone: Zone, density: number, variant: number, index: number): string {
-  const key = densityKey(density);
   const family = ZONE_FAMILIES[zone];
-  if (zone === Zone.Residential) {
-    return drawLook(createPicker(variant, index), family, RESIDENTIAL_SILHOUETTES[key]).silhouette;
-  }
-  if (zone === Zone.Retail) {
-    return drawLook(createPicker(variant, index), family, RETAIL_SILHOUETTES[key]).silhouette;
-  }
-  return SINGLE_SILHOUETTES[zone]?.[key] ?? '';
+  const choices = ZONE_SILHOUETTES[zone];
+  if (!family || !choices) return '';
+  return drawLook(createPicker(variant, index), family, choices[densityKey(density)]).silhouette;
 }
 
 /** Top of the tallest part — how high the building rises above the tile. */
