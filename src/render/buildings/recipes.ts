@@ -43,6 +43,16 @@ export interface BuildingPart {
   role?: PartRole;
   /** Set on the shared details (plinth, ridge cap, gutters). */
   detail?: PartDetail;
+  /**
+   * A secondary body that carries windows too (semi-detached half, L-house
+   * wing, stacked storey); laid out like the main body, see windowLayout.ts.
+   */
+  windows?: true;
+  /**
+   * A thin band run across the facade (balcony slab, ledge): windows may sit
+   * behind it, so the window layout does not drop frames it crosses.
+   */
+  band?: true;
 }
 
 export const MAX_PARTS_PER_TILE = 16;
@@ -254,7 +264,7 @@ function box(
   oy: number,
   oz: number,
   color: THREE.Color,
-  flags: { main?: boolean; accent?: boolean; role?: PartRole } = {},
+  flags: { main?: boolean; accent?: boolean; role?: PartRole; band?: true; windows?: true } = {},
 ): BuildingPart {
   return { kind: PartKind.Box, sx, sy, sz, ox, oy, oz, turn: 0, color, ...flags };
 }
@@ -474,7 +484,7 @@ function uprightBox(
   face: StreetFace,
   local: Omit<Local, 'turn' | 'tilt'>,
   color: THREE.Color,
-  flags: { main?: boolean; accent?: boolean; role?: PartRole } = {},
+  flags: { main?: boolean; accent?: boolean; role?: PartRole; windows?: true } = {},
 ): BuildingPart {
   const [ox, oz] = faceOffset(local.lx, local.lz, face);
   // A box is symmetric, so swapping its extents on east/west equals a quarter turn.
@@ -632,6 +642,7 @@ function lHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): Bu
     face,
     { w: wing.w, h, d: wing.d, lx: lx + side * (w / 2 - wing.w / 2), ly: 0, lz: -d / 2 },
     wall,
+    { windows: true },
   );
   const gable = facePart(
     PartKind.GableRoof,
@@ -641,18 +652,26 @@ function lHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): Bu
     roof,
   );
   // Same pitch as the main gable, so the wing's ridge runs into its back slope.
-  const wingRoofHeight = (roofHeight * (wing.w / 2 + ROOF_OVERHANG)) / (d / 2 + ROOF_OVERHANG);
+  const wingRun = wing.w / 2 + ROOF_OVERHANG;
+  const wingRoofHeight = (roofHeight * wingRun) / (d / 2 + ROOF_OVERHANG);
+  // The wing roof runs forward from its back eave until its ridge meets the
+  // main back slope: wingRun in from the main back eave (equal pitch), so
+  // the valleys are clean and its front gable end lies inside the main roof.
+  // Both in the wing body's face frame (+lz toward the street).
+  const wingBack = -wing.d / 2 - ROOF_OVERHANG;
+  const mainBackEave = wing.d / 2 - ROOF_OVERHANG;
+  const wingFront = mainBackEave + wingRun;
   const wingGable = facePart(
     PartKind.GableRoof,
     wingBody,
     face,
     {
-      w: wing.d + 2 * ROOF_OVERHANG,
+      w: wingFront - wingBack,
       h: wingRoofHeight,
       d: wing.w + 2 * ROOF_OVERHANG,
       lx: 0,
       ly: h,
-      lz: 0,
+      lz: (wingFront + wingBack) / 2,
       turn: 1,
     },
     roof,
@@ -687,7 +706,9 @@ function semiDetached(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
   const left = uprightBox(face, { w: half, h, d, lx: -half / 2, ly: 0, lz }, wall, {
     main: true,
   });
-  const right = uprightBox(face, { w: half, h, d, lx: half / 2, ly: 0, lz }, otherWall);
+  const right = uprightBox(face, { w: half, h, d, lx: half / 2, ly: 0, lz }, otherWall, {
+    windows: true,
+  });
   const [ox, oz] = faceOffset(0, lz, face);
   const centre = { ox, oy: 0, oz };
   const gable = facePart(
@@ -789,7 +810,7 @@ function townHouseParts(
       along,
     ),
   );
-  parts.push(box(w + 0.02, 0.02, d + 0.02, 0, h * 0.5, 0, trim, { accent: true }));
+  parts.push(box(w + 0.02, 0.02, d + 0.02, 0, h * 0.5, 0, trim, { accent: true, band: true }));
   parts.push(pvOnSlope(body, face, roofW, roofD, roofHeight, h));
   return { parts, body, doorLx: along * (faceWidth(body, face) / 2 - DOOR.width / 2) };
 }
@@ -904,7 +925,7 @@ function cornerHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look
       trim,
       { accent: true },
     ),
-    box(w + 0.02, 0.02, w + 0.02, 0, h * 0.5, 0, trim, { accent: true }),
+    box(w + 0.02, 0.02, w + 0.02, 0, h * 0.5, 0, trim, { accent: true, band: true }),
     // A hip's front face shares the gable's plane but narrows to the apex:
     // a smaller slab low on the slope stays on it.
     pvOnSlope(body, face, roofW, roofW, roofHeight, h, HIP_PV_FIT),
@@ -923,7 +944,10 @@ function apartment(p: Picker, face: StreetFace, family: ZoneFamily, look: Look):
   parts.push(box(0.2, 0.12, 0.2, -0.18, h, -0.18, wall));
   const balconies = 2 + p.pick(2);
   for (let i = 0; i < balconies; i++) {
-    parts.push(onStreetFace(body, face, 0.7, 0.03, 0.08, (h * (i + 1)) / (balconies + 1), trim));
+    parts.push({
+      ...onStreetFace(body, face, 0.7, 0.03, 0.08, (h * (i + 1)) / (balconies + 1), trim),
+      band: true,
+    });
   }
   parts.push(
     box(0.49, ROOFTOP_PV_THICKNESS, 0.38, 0.12, h + 0.04, 0.12, ACCENT.rooftopPv, {
@@ -971,6 +995,7 @@ function steppedBlock(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
     face,
     { w, h: TOP_STOREY_HEIGHT, d: w - SETBACK, lx: 0, ly: lowerH, lz: -SETBACK / 2 },
     wall,
+    { windows: true },
   );
   const parts = [
     body,
@@ -998,9 +1023,10 @@ function steppedBlock(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
     ),
   ];
   for (let i = 0; i < balconies; i++) {
-    parts.push(
-      onStreetFace(body, face, 0.7, 0.03, 0.08, (lowerH * (i + 1)) / (balconies + 1), trim),
-    );
+    parts.push({
+      ...onStreetFace(body, face, 0.7, 0.03, 0.08, (lowerH * (i + 1)) / (balconies + 1), trim),
+      band: true,
+    });
   }
   parts.push(
     uprightBox(
@@ -1051,7 +1077,7 @@ function commercial(
     const h = 0.4 + p.unit() * 0.06;
     const body = box(w, h, w, 0, 0, 0, wall, { main: true });
     parts.push(body, plinth(body, family));
-    parts.push(box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true }));
+    parts.push(box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true, band: true }));
     parts.push(onStreetFace(body, face, 0.5, 0.03, 0.1, h * 0.55, trim));
     parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
   } else if (density === 2) {
@@ -1060,8 +1086,10 @@ function commercial(
     const h = 1.0 + p.unit() * 0.1;
     const body = box(w, h, w, 0, 0, 0, wall, { main: true });
     parts.push(body, plinth(body, family));
-    parts.push(box(w + 0.02, 0.025, w + 0.02, 0, h / 3, 0, trim, { accent: true }));
-    parts.push(box(w + 0.02, 0.025, w + 0.02, 0, (2 * h) / 3, 0, trim, { accent: true }));
+    parts.push(box(w + 0.02, 0.025, w + 0.02, 0, h / 3, 0, trim, { accent: true, band: true }));
+    parts.push(
+      box(w + 0.02, 0.025, w + 0.02, 0, (2 * h) / 3, 0, trim, { accent: true, band: true }),
+    );
     parts.push(box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
     parts.push(box(0.1, 0.08, 0.1, -0.15, h, -0.15, ACCENT.acUnit, { accent: true }));
     parts.push({
@@ -1090,7 +1118,9 @@ function commercial(
     parts.push(body, plinth(body, family));
     const setback = -0.08;
     parts.push(box(0.46, upperH, 0.46, setback, lowerH, setback, wall));
-    parts.push(box(w + 0.04, 0.03, w + 0.04, 0, lowerH - 0.03, 0, trim, { accent: true }));
+    parts.push(
+      box(w + 0.04, 0.03, w + 0.04, 0, lowerH - 0.03, 0, trim, { accent: true, band: true }),
+    );
     if (p.chance(0.5)) {
       parts.push({
         kind: PartKind.Cylinder,
@@ -1284,7 +1314,7 @@ function shopWithFlat(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
   const shopH = 0.26 + p.unit() * 0.04;
   const flatWall = p.from(ZONE_FAMILIES[Zone.Residential].walls);
   const body = box(w, shopH, d, 0, 0, 0, wall, { main: true });
-  const flat = box(w, FLAT_STOREY_HEIGHT, d, 0, shopH, 0, flatWall);
+  const flat = box(w, FLAT_STOREY_HEIGHT, d, 0, shopH, 0, flatWall, { windows: true });
   const roofHeight = 0.14;
   const roofW = faceWidth(body, face) + 2 * ROOF_OVERHANG;
   const roofD = faceDepth(body, face) + 2 * ROOF_OVERHANG;
@@ -1300,7 +1330,7 @@ function shopWithFlat(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
     plinth(body, family),
     flat,
     // Cornice between the shop and the flat.
-    box(w + 0.02, 0.025, d + 0.02, 0, shopH, 0, trim, { accent: true }),
+    box(w + 0.02, 0.025, d + 0.02, 0, shopH, 0, trim, { accent: true, band: true }),
     gable,
     ...gableDetails(gable),
     onStreetFace(body, face, 0.9, 0.04, 0.08, shopH * 0.6, trim),
@@ -1530,7 +1560,9 @@ function industrial(
     const body = box(w, h, d, 0, 0, -0.04, wall, { main: true });
     parts.push(body, plinth(body, family));
     sawTooth(w, d, h, 0, -0.04);
-    parts.push(box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true }));
+    parts.push(
+      box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true, band: true }),
+    );
     parts.push(onStreetFace(body, face, 0.3, h * 0.6, 0.02, 0, trim));
     // The silo stands clear of the saw-tooth's front eave (its overhang included).
     parts.push({

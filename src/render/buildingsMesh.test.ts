@@ -22,10 +22,7 @@ import {
   WINDOW_SILL_DROP,
   windowGeometry,
 } from './buildings/windows.ts';
-
-/** Mirrors buildingsMesh.ts's private WINDOW_HEIGHT/WINDOW_WIDTH; not exported for tests. */
-const WINDOW_HEIGHT = 0.11;
-const WINDOW_WIDTH = 0.09;
+import { WINDOW_HEIGHT, WINDOW_WIDTH } from './buildings/windowLayout.ts';
 
 const SIZE = 8;
 
@@ -766,7 +763,8 @@ describe('BuildingsMesh', () => {
             mesh.windowFramesMesh.getMatrixAt(i, m);
             p.setFromMatrixPosition(m);
             s.setFromMatrixScale(m);
-            if (p.z <= cz) continue;
+            // The street face only; the flat above a shop has its own windows.
+            if (p.z <= cz || p.y >= main.oy + main.sy) continue;
             shopfronts++;
             const sillBottom = p.y - WINDOW_SILL_DROP * s.y;
             expect(sillBottom, `d${density} v${variant}`).toBeGreaterThanOrEqual(
@@ -814,7 +812,9 @@ describe('BuildingsMesh', () => {
               facades.set(key, list);
             }
             const label = `d${density} v${variant} road ${roadIndex}`;
-            expect(facades.size, label).toBe(2);
+            // Street face and its opposite, plus the planes of any secondary
+            // window bodies (L-house wing, semi-detached half).
+            expect(facades.size, label).toBeGreaterThanOrEqual(2);
             for (const frames of facades.values()) {
               for (let a = 0; a < frames.length; a++) {
                 for (let b = a + 1; b < frames.length; b++) {

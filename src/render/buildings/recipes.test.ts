@@ -763,8 +763,35 @@ describe('building recipes', () => {
             maxZ: Math.max(a.maxZ, c.maxZ),
           }));
           const overhangs = [b.minX - r.minX, r.maxX - b.maxX, b.minZ - r.minZ, r.maxZ - b.maxZ];
-          const eaves = overhangs.filter((o) => o > -EPS);
-          if (eaves.length < 3) violations.push(`${tag}: only ${eaves.length} overhanging sides`);
+          // A roof end that reaches over another body of the same eave height
+          // runs into that body's roof (the L-house wing ridge meeting the
+          // main back slope): a valley, not an eave.
+          const edges = [
+            { x: r.minX, z: (r.minZ + r.maxZ) / 2 },
+            { x: r.maxX, z: (r.minZ + r.maxZ) / 2 },
+            { x: (r.minX + r.maxX) / 2, z: r.minZ },
+            { x: (r.minX + r.maxX) / 2, z: r.maxZ },
+          ];
+          const intoOtherRoof = edges.map(({ x, z }) =>
+            parts.some((o) => {
+              if (
+                o.kind !== PartKind.Box ||
+                o.detail ||
+                Math.abs(o.oy + o.sy - roofs[0].oy) > EPS
+              ) {
+                return false;
+              }
+              const ob = bounds(o);
+              const inside =
+                x > ob.minX + EPS && x < ob.maxX - EPS && z > ob.minZ + EPS && z < ob.maxZ - EPS;
+              const outsideSupport =
+                x < b.minX - EPS || x > b.maxX + EPS || z < b.minZ - EPS || z > b.maxZ + EPS;
+              return inside && outsideSupport;
+            }),
+          );
+          const eaves = overhangs.filter((o, i) => o > -EPS && !intoOtherRoof[i]);
+          if (eaves.length + intoOtherRoof.filter(Boolean).length < 3)
+            violations.push(`${tag}: only ${eaves.length} overhanging sides`);
           for (const o of eaves) {
             if (Math.abs(o - ROOF_OVERHANG) > EPS) {
               violations.push(`${tag}: overhang ${o} != ${ROOF_OVERHANG}`);
@@ -951,6 +978,40 @@ describe('silhouettes (stage 4)', () => {
       // Each gable sits on its own body.
       const onWing = gables.filter((g) => Math.abs(g.oy - top(wings[0])) < EPS);
       if (onWing.length === 0) violations.push(`${tag}: no gable on the wing`);
+    }
+    expect(violations).toEqual([]);
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("runs the L-house wing ridge into the main roof's back slope (no exposed gable end)", () => {
+    const violations: string[] = [];
+    let seen = 0;
+    for (const { tag, face, parts } of recipesOf(Zone.Residential, 1, 'lHouse')) {
+      seen++;
+      const gables = parts.filter((p) => p.kind === PartKind.GableRoof);
+      const main = gables.find((g) => g.turn === face)!;
+      const wing = gables.find((g) => g.turn !== face)!;
+      const m = faceBounds(main, face);
+      const w = faceBounds(wing, face);
+      // The wing ridge runs toward the street (+z in the face frame); its
+      // front end must lie on the main gable's back slope, inside its span.
+      const ridgeX = (w.minX + w.maxX) / 2;
+      const ridgeZ = w.maxZ;
+      const ridgeY = wing.oy + wing.sy;
+      const halfDepth = (m.maxZ - m.minZ) / 2;
+      const centreZ = (m.minZ + m.maxZ) / 2;
+      if (ridgeZ > centreZ || ridgeZ < m.minZ || ridgeX < m.minX || ridgeX > m.maxX) {
+        violations.push(`${tag}: wing ridge ends off the main back slope`);
+        continue;
+      }
+      const surfaceY = main.oy + main.sy * (1 - Math.abs(ridgeZ - centreZ) / halfDepth);
+      if (Math.abs(ridgeY - surfaceY) > EPS) {
+        violations.push(`${tag}: wing ridge ${ridgeY} vs main slope ${surfaceY}`);
+      }
+      // Equal pitch: rise over run matches, so the valleys are straight.
+      const mainPitch = main.sy / halfDepth;
+      const wingPitch = wing.sy / ((w.maxX - w.minX) / 2);
+      if (Math.abs(mainPitch - wingPitch) > EPS) violations.push(`${tag}: pitches differ`);
     }
     expect(violations).toEqual([]);
     expect(seen).toBeGreaterThan(0);

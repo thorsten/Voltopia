@@ -4,50 +4,33 @@ import { HEATED_SERVED, SupplyStatus, TileType, Zone } from '../shared/types.ts'
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { PART_KINDS, PartKind, createPartGeometry } from './buildings/primitives.ts';
-import { ACCENT, applyAgeTint, applySupplyTint } from './buildings/palette.ts';
+import { applyAgeTint, applySupplyTint } from './buildings/palette.ts';
 import { surfaceMaterial } from './materials.ts';
 import {
-  DOOR,
-  PLINTH_HEIGHT,
   type BuildingPart,
   MAX_PARTS_PER_KIND,
   type StreetFace,
   buildingParts,
-  faceDepth,
   faceOffset,
-  faceWidth,
-  mainBody,
   streetFaceFor,
 } from './buildings/recipes.ts';
 import { BlockAllocator } from './buildings/blocks.ts';
 import { type AccentSink, type AccentState, accentAnchors } from './buildings/accents.ts';
+import { WINDOW_PROUD, windowGeometry } from './buildings/windows.ts';
 import {
-  WINDOW_FRAME_SCALE,
-  WINDOW_PROUD,
-  WINDOW_SILL_DROP,
-  windowGeometry,
-} from './buildings/windows.ts';
+  WINDOWS_PER_TILE,
+  WINDOW_HEIGHT,
+  WINDOW_WIDTH,
+  layoutWindows,
+} from './buildings/windowLayout.ts';
 
 const GROW_ANIMATION_SECONDS = 0.45;
-/**
- * Max window slots (framed windows, lit or dark) per building: 3 columns ×
- * 4 rows on two faces. Glow quads are a subset, so both meshes share it.
- */
-const WINDOWS_PER_TILE = 24;
 const WINDOW_COLOR = 0xffc978;
-const WINDOW_WIDTH = 0.09;
-const WINDOW_HEIGHT = 0.11;
 /**
  * The night glow quad sits over the glass (2 × WINDOW_PROUD) but behind
  * the mullions (3 × WINDOW_PROUD), so the cross still reads at night.
  */
 const GLOW_PROUD = 2.5 * WINDOW_PROUD;
-/** Visible window width: the frame, not the glass. */
-const FRAME_WIDTH = WINDOW_FRAME_SCALE * WINDOW_WIDTH;
-/** Top of the retail shopfront glass as a fraction of body height; below the 0.6h awning. */
-const SHOPFRONT_TOP_FRACTION = 0.55;
-/** Preferred bottom of the shopfront glass; raised when its sill would sink into the plinth. */
-const SHOPFRONT_BOTTOM_FRACTION = 0.12;
 const QUARTER_TURN = Math.PI / 2;
 /** Where a foundation samples the ground under its footprint (fractions of the part size). */
 const FOOTPRINT_SAMPLES = [-0.5, 0, 0.5] as const;
@@ -114,10 +97,8 @@ export class BuildingsMesh implements DiffLayer {
   private readonly cursor = new Int32Array(PART_KINDS.length);
   /** Reusable set of kinds touched by one writeMatrices/writeColors call. */
   private readonly touchedKinds = new Set<PartKind>();
-  /** Reusable scale vector for the per-shopfront window quad in `rebuildWindows`. */
-  private readonly shopfrontScale = new THREE.Vector3();
-  /** Scale of a regular window frame instance (z stays 1: WINDOW_PROUD is in world units). */
-  private readonly frameScale = new THREE.Vector3(WINDOW_WIDTH, WINDOW_HEIGHT, 1);
+  /** Reusable window instance scale (z stays 1: WINDOW_PROUD is in world units). */
+  private readonly frameScale = new THREE.Vector3();
 
   constructor(
     scene: THREE.Scene,
@@ -532,10 +513,11 @@ export class BuildingsMesh implements DiffLayer {
   }
 
   /**
-   * Framed windows on the street face and its opposite of each building's
-   * main body, mounted on the facade; shops get one wide framed shopfront
-   * on the street face. Supplied buildings add a night glow quad over the
-   * glass of each lit window; a deterministic pattern keeps ~1/3 dark.
+   * Framed windows from `layoutWindows` (street face and its opposite of
+   * the main body and any window-carrying secondary bodies); shops get one
+   * wide framed shopfront on the street face. Supplied buildings add a
+   * night glow quad over the glass of each lit window; a deterministic
+   * pattern keeps ~1/3 dark.
    */
   private rebuildWindows(): void {
     const matrix = new THREE.Matrix4();
@@ -544,142 +526,34 @@ export class BuildingsMesh implements DiffLayer {
     let glowSlot = 0;
     const capacity = this.windowFramesMesh.instanceMatrix.count;
     for (const [index, building] of this.buildings) {
-      const main = mainBody(building.parts);
-      if (!main) continue;
       // Buildings without (enough) power keep their frames but stay dark —
       // undersupply flips tick to tick, which reads as flickering at night.
       const lit = building.supplied === SupplyStatus.Supplied;
-      const cx = (index % this.gridSize) + 0.5 + main.ox;
-      const cz = Math.floor(index / this.gridSize) + 0.5 + main.oz;
+      const cx = (index % this.gridSize) + 0.5;
+      const cz = Math.floor(index / this.gridSize) + 0.5;
       const lift = this.elevation.centerY(index);
-      const shopfront = building.zone === Zone.Retail && building.density < 3;
-      // Only a real door part (residential densities 1-2) ever needs a
-      // window nudge; density 3 (and every non-residential zone) has none,
-      // so `doorLx` stays undefined and the street face keeps its grid as
-      // is. `doorLx` is the door's sideways offset in the body's own
-      // south-facing frame — the inverse of the face rotation `facePart`
-      // applied when placing it (inverting `face` by `(4 - face) % 4` and
-      // re-running `faceOffset` undoes that rotation).
-      const doorPart = building.parts.find(
-        (p) => p.accent && p.color.getHex() === ACCENT.door.getHex(),
-      );
-      let doorLx: number | undefined;
-      if (doorPart) {
-        const inverseFace = ((4 - building.face) % 4) as StreetFace;
-        [doorLx] = faceOffset(doorPart.ox - main.ox, doorPart.oz - main.oz, inverseFace);
-      }
-      // Glow quads are a subset of the frames, so one budget bounds both.
-      const budgetEnd = Math.min(slot + WINDOWS_PER_TILE, capacity);
-      let windowId = 0;
-      for (const [face, isStreet] of [
-        [building.face, true],
-        [((building.face + 2) % 4) as StreetFace, false],
-      ] as const) {
-        const width = faceWidth(main, face);
-        const depth = faceDepth(main, face);
-        rotation.makeRotationY(face * QUARTER_TURN);
-        if (isStreet && shopfront) {
-          // Always within budget here: WINDOWS_PER_TILE is reserved per
-          // tile up front, and at most gridSize² buildings ever run through
-          // this loop, so slot never reaches budgetEnd before this check.
-          const shopWidth = width * 0.8;
-          // Keep the top fixed below the awning; lift the bottom so the
-          // sill (WINDOW_SILL_DROP × height below the glass) clears the
-          // plinth: bottom - DROP × (top - bottom) >= PLINTH_HEIGHT.
-          const top = main.sy * SHOPFRONT_TOP_FRACTION;
-          const bottom = Math.max(
-            main.sy * SHOPFRONT_BOTTOM_FRACTION,
-            (PLINTH_HEIGHT + WINDOW_SILL_DROP * top) / (1 + WINDOW_SILL_DROP),
-          );
-          const shopHeight = top - bottom;
-          const centreY = lift + main.oy + (top + bottom) / 2;
-          const [fx, fz] = faceOffset(0, depth / 2, face);
+      // layoutWindows caps each building at WINDOWS_PER_TILE, the slots
+      // reserved per tile, so the capacity check is only a safety net.
+      for (const w of layoutWindows(
+        building.parts,
+        building.face,
+        building.zone,
+        building.density,
+      )) {
+        if (slot >= capacity) break;
+        // Deterministically leave ~1/3 of windows dark (framed, no glow).
+        const dark = !w.shopfront && (index * 7 + w.id * 13 + building.variant) % 3 === 0;
+        rotation.makeRotationY(w.face * QUARTER_TURN);
+        matrix.copy(rotation);
+        matrix.scale(this.frameScale.set(w.width, w.height, 1));
+        matrix.setPosition(cx + w.x, lift + w.y - w.height / 2, cz + w.z);
+        this.windowFramesMesh.setMatrixAt(slot++, matrix);
+        if (lit && !dark) {
+          const [gx, gz] = faceOffset(0, GLOW_PROUD, w.face);
           matrix.copy(rotation);
-          matrix.scale(this.shopfrontScale.set(shopWidth, shopHeight, 1));
-          matrix.setPosition(cx + fx, centreY - shopHeight / 2, cz + fz);
-          this.windowFramesMesh.setMatrixAt(slot++, matrix);
-          if (lit) {
-            const [gx, gz] = faceOffset(0, depth / 2 + GLOW_PROUD, face);
-            matrix.copy(rotation);
-            matrix.scale(
-              this.shopfrontScale.set(shopWidth / WINDOW_WIDTH, shopHeight / WINDOW_HEIGHT, 1),
-            );
-            matrix.setPosition(cx + gx, centreY, cz + gz);
-            this.windowsMesh.setMatrixAt(glowSlot++, matrix);
-          }
-          continue;
-        }
-        const cols = Math.min(3, Math.max(1, Math.round(width / 0.24)));
-        const rows = Math.min(4, Math.max(1, Math.round(main.sy / 0.28)));
-        const colLx = Array.from(
-          { length: cols },
-          (_, c) => ((c + 0.5) / cols - 0.5) * width * 0.8,
-        );
-        for (let col = 0; col < cols; col++) {
-          for (let row = 0; row < rows; row++) {
-            windowId++;
-            // Deterministically leave ~1/3 of windows dark (framed, no glow).
-            const dark = (index * 7 + windowId * 13 + building.variant) % 3 === 0;
-            const localY = main.oy + ((row + 0.55) / rows) * main.sy * 0.82;
-            let lx = colLx[col];
-            if (isStreet && doorLx !== undefined) {
-              // A quad overlapping the real door rectangle is nudged to
-              // whichever side keeps it on the facade and clear of the
-              // other columns; if neither side manages that, the quad is
-              // dropped instead of sinking behind the door or doubling up
-              // on a neighbour.
-              const doorLeft = doorLx - DOOR.width / 2;
-              const doorRight = doorLx + DOOR.width / 2;
-              const quadLeft = lx - WINDOW_WIDTH / 2;
-              const quadRight = lx + WINDOW_WIDTH / 2;
-              const quadBottom = localY - WINDOW_HEIGHT / 2;
-              const quadTop = localY + WINDOW_HEIGHT / 2;
-              const doorBottom = main.oy;
-              const doorTop = main.oy + DOOR.height;
-              const intersectsDoor =
-                quadLeft < doorRight &&
-                quadRight > doorLeft &&
-                quadBottom < doorTop &&
-                quadTop > doorBottom;
-              if (intersectsDoor) {
-                // Nudge to the nearer side of the door that still fits the
-                // facade; drop the quad if neither side fits, or if the
-                // chosen side lands within a frame width of another column
-                // (which would overlap a neighbour's frame instead).
-                const nudge = DOOR.width / 2 + WINDOW_WIDTH / 2 + 0.01;
-                const rightLx = doorLx + nudge;
-                const leftLx = doorLx - nudge;
-                const rightFits = Math.abs(rightLx) + FRAME_WIDTH / 2 < width / 2;
-                const leftFits = Math.abs(leftLx) + FRAME_WIDTH / 2 < width / 2;
-                let nudgedLx: number | undefined;
-                if (rightFits && leftFits) {
-                  nudgedLx = Math.abs(rightLx - lx) <= Math.abs(leftLx - lx) ? rightLx : leftLx;
-                } else if (rightFits) {
-                  nudgedLx = rightLx;
-                } else if (leftFits) {
-                  nudgedLx = leftLx;
-                }
-                if (nudgedLx === undefined) continue;
-                if (
-                  colLx.some((other, i) => i !== col && Math.abs(nudgedLx! - other) < FRAME_WIDTH)
-                )
-                  continue;
-                lx = nudgedLx;
-              }
-            }
-            if (slot >= budgetEnd) break;
-            const [fx, fz] = faceOffset(lx, depth / 2, face);
-            matrix.copy(rotation);
-            matrix.scale(this.frameScale);
-            matrix.setPosition(cx + fx, lift + localY - WINDOW_HEIGHT / 2, cz + fz);
-            this.windowFramesMesh.setMatrixAt(slot++, matrix);
-            if (lit && !dark) {
-              const [gx, gz] = faceOffset(lx, depth / 2 + GLOW_PROUD, face);
-              matrix.copy(rotation);
-              matrix.setPosition(cx + gx, lift + localY, cz + gz);
-              this.windowsMesh.setMatrixAt(glowSlot++, matrix);
-            }
-          }
+          matrix.scale(this.frameScale.set(w.width / WINDOW_WIDTH, w.height / WINDOW_HEIGHT, 1));
+          matrix.setPosition(cx + w.x + gx, lift + w.y, cz + w.z + gz);
+          this.windowsMesh.setMatrixAt(glowSlot++, matrix);
         }
       }
     }
