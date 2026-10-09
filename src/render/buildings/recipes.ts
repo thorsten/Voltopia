@@ -848,6 +848,7 @@ function industrial(
     sawTooth(w, d, h, 0, -0.04);
     parts.push(box(w + 0.02, 0.03, d + 0.02, 0, h * 0.5, -0.04, trim, { accent: true }));
     parts.push(onStreetFace(body, face, 0.3, h * 0.6, 0.02, 0, trim));
+    // The silo stands clear of the saw-tooth's front eave (its overhang included).
     parts.push({
       kind: PartKind.Cylinder,
       sx: 0.18,
@@ -855,7 +856,7 @@ function industrial(
       sz: 0.18,
       ox: 0.3,
       oy: 0,
-      oz: 0.3,
+      oz: 0.3 + ROOF_OVERHANG,
       turn: 0,
       color: ACCENT.waterTank,
       accent: true,

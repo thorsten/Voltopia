@@ -438,6 +438,33 @@ describe('building recipes', () => {
     }
   });
 
+  it('never lets a factory cylinder pass through a roof it stands beside', () => {
+    // Footprints compared as squares (sx × sz). A cylinder standing on the
+    // roof plane (a chimney: base at the roof's eave) rises through it by
+    // design; anything based lower (silo, tank) must clear the roof or sit
+    // at or above its top.
+    const violations: string[] = [];
+    const isRoof = (p: BuildingPart) =>
+      p.kind === PartKind.GableRoof || p.kind === PartKind.HipRoof || p.kind === PartKind.ShedRoof;
+    for (const { zone, density, variant, face, index, parts } of allRecipes(SAMPLE)) {
+      if (zone !== Zone.Industrial) continue;
+      const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+      for (const c of parts.filter((p) => p.kind === PartKind.Cylinder)) {
+        for (const r of parts.filter(isRoof)) {
+          // At or above the eave covers "at or above the roof's top" too.
+          if (c.oy >= r.oy - 1e-9) continue;
+          const [rx, rz] = r.turn % 2 === 0 ? [r.sx / 2, r.sz / 2] : [r.sz / 2, r.sx / 2];
+          const overlapX = Math.abs(c.ox - r.ox) < c.sx / 2 + rx - 1e-9;
+          const overlapZ = Math.abs(c.oz - r.oz) < c.sz / 2 + rz - 1e-9;
+          if (overlapX && overlapZ) {
+            violations.push(`${tag}: cylinder at (${c.ox}, ${c.oz}) passes through a roof`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('gives factories a saw-tooth roof: two gable parts side by side on the hall', () => {
     for (const { zone, parts } of allRecipes(SAMPLE)) {
       if (zone !== Zone.Industrial) continue;
