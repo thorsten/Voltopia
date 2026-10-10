@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Voltopia main window: events, external links, save export",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    "opener:default",
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$DOWNLOAD/**" }, { "path": "$DOCUMENT/**" }]
+    }
+  ]
+}

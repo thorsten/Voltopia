@@ -16,3 +16,7 @@ playwright-report
 
 # SDD scratch workspace (subagent-driven-development)
 .superpowers/
+
+# Tauri (Rust target dir and generated schemas; gen/apple IS committed)
+src-tauri/target/
+src-tauri/gen/schemas/
