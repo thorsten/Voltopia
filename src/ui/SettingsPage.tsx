@@ -4,6 +4,7 @@ import { saveFromJson, saveToJson } from '../storage/serialization.ts';
 import type { SaveStorage } from '../storage/storage.ts';
 import { Modal } from './Modal.tsx';
 import { useI18n } from './i18n.tsx';
+import { exportTextFile } from './platform.ts';
 import type { AppSettings } from './settings.ts';
 
 const SLOT_IDS = ['slot1', 'slot2', 'slot3'] as const;
@@ -60,13 +61,10 @@ export function SettingsPage({
 
   const exportSave = async (): Promise<void> => {
     const snapshot = await requestSnapshot();
-    const blob = new Blob([saveToJson(snapshot)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `voltopia-save-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    await exportTextFile(
+      `voltopia-save-${new Date().toISOString().slice(0, 10)}.json`,
+      saveToJson(snapshot),
+    );
   };
 
   const importSave = async (file: File): Promise<void> => {
