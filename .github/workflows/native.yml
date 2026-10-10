@@ -1,0 +1,46 @@
+name: Native app (macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Unsigned (ad-hoc) bundle: fine for local installs and testers who
+      # right-click → Open. Signing/notarization is a follow-up.
+      - name: Build macOS app
+        run: pnpm tauri build --bundles app,dmg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: voltopia-macos
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app
+          retention-days: 14
