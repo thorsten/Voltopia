@@ -16,15 +16,21 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "audit:prod": "pnpm audit --prod --audit-level high",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.2",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
+    "@tauri-apps/plugin-fs": "^2.6.0",
+    "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.186.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@tauri-apps/cli": "^2.12.1",
     "@types/node": "^26.6.3",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
