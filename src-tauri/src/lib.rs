@@ -1,9 +1,9 @@
 use tauri::Emitter;
 use tauri::Manager;
 
-/// Grace period before Rust quits on its own; longer than the 2 s
-/// frontend save timeout.
-const QUIT_FALLBACK_SECS: u64 = 3;
+/// Grace period before Rust quits on its own; longer than the frontend's
+/// 2 s snapshot timeout plus a slow IndexedDB write.
+const QUIT_FALLBACK_SECS: u64 = 5;
 
 /// Last resort: if the frontend never answers `close-requested` (boot
 /// screen, reload, crashed React tree), quit anyway after a grace period.

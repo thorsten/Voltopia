@@ -135,8 +135,7 @@ pnpm tauri ios dev 'iPad Pro 13-inch (M4)'   # iPad simulator
 pnpm tauri ios build --export-method debugging  # install on your own iPad
 ```
 
-Builds are unsigned; macOS users open the `.dmg` and right-click → Open
-once. Save games live in the app's own storage; use Settings → Export /
+Builds are ad-hoc signed, not notarized: on first launch macOS blocks the app; allow it under System Settings → Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine /Applications/Voltopia.app`. Save games live in the app's own storage; use Settings → Export /
 Import to move a city between browser and app.
 
 ## License

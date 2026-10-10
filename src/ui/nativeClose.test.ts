@@ -10,15 +10,16 @@ function harness(persist = vi.fn(async () => {}), closeApp = vi.fn(async () => {
     timers.push(fn);
     return 0;
   }) as unknown as typeof setTimeout;
+  const clearTimer = vi.fn() as unknown as typeof clearTimeout;
   const onSaveData = (l: (save: SaveGame) => void) => {
     listener = l;
     return () => {
       listener = null;
     };
   };
-  const handle = createCloseHandler({ send, onSaveData, persist, closeApp, setTimer });
+  const handle = createCloseHandler({ send, onSaveData, persist, closeApp, setTimer, clearTimer });
   const save = {} as SaveGame;
-  return { handle, send, closeApp, persist, timers, emitSave: () => listener?.(save) };
+  return { handle, send, closeApp, persist, timers, clearTimer, emitSave: () => listener?.(save) };
 }
 
 describe('createCloseHandler', () => {
@@ -46,8 +47,29 @@ describe('createCloseHandler', () => {
         throw new Error('disk');
       }),
     );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     h.handle();
     h.emitSave();
+    await vi.waitFor(() => expect(h.closeApp).toHaveBeenCalledOnce());
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it('does not time out once a snapshot has arrived', async () => {
+    let resolvePersist: () => void = () => {};
+    const persist = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePersist = resolve;
+        }),
+    );
+    const h = harness(persist);
+    h.handle();
+    h.emitSave();
+    expect(h.clearTimer).toHaveBeenCalledOnce();
+    await Promise.resolve();
+    expect(h.closeApp).not.toHaveBeenCalled();
+    resolvePersist();
     await vi.waitFor(() => expect(h.closeApp).toHaveBeenCalledOnce());
   });
 
@@ -66,6 +88,7 @@ describe('createCloseHandler', () => {
       .fn<() => Promise<void>>()
       .mockRejectedValueOnce(new Error('ipc'))
       .mockResolvedValue(undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const h = harness(undefined, closeApp);
     h.handle();
     h.emitSave();
@@ -74,6 +97,8 @@ describe('createCloseHandler', () => {
       h.handle();
       expect(h.send).toHaveBeenCalledTimes(2);
     });
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 
   it('exposes the timeout constant', () => {

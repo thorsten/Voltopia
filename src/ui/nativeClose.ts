@@ -11,13 +11,15 @@ export interface CloseDeps {
   closeApp: () => Promise<void>;
   timeoutMs?: number;
   setTimer?: typeof setTimeout;
+  clearTimer?: typeof clearTimeout;
 }
 
 /**
  * The desktop quit handshake: Rust holds the window open and emits
  * `close-requested`; we ask the worker for a snapshot, persist it, and
- * call `close_app`. A timeout makes sure a stalled worker cannot make the
- * app unquittable. Idempotent while a close is pending.
+ * call `close_app`. The timeout only guards a stalled worker: it is cleared
+ * once a snapshot arrives, so a slow but successful write is not cut off
+ * (the Rust fallback bounds the total). Idempotent while a close is pending.
  */
 export function createCloseHandler({
   send,
@@ -26,12 +28,14 @@ export function createCloseHandler({
   closeApp,
   timeoutMs = CLOSE_SAVE_TIMEOUT_MS,
   setTimer = setTimeout,
+  clearTimer = clearTimeout,
 }: CloseDeps): () => void {
   let pending = false;
   return () => {
     if (pending) return;
     pending = true;
     let done = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let unsubscribe: () => void = () => {};
     const finish = (): void => {
       if (done) return;
@@ -43,11 +47,12 @@ export function createCloseHandler({
       });
     };
     unsubscribe = onSaveData((save) => {
+      clearTimer(timer);
       persist(save)
         .catch((error) => console.warn('Save on quit failed', error))
         .finally(finish);
     });
-    setTimer(finish, timeoutMs);
+    timer = setTimer(finish, timeoutMs);
     send({ type: 'requestSave' });
   };
 }

@@ -32,15 +32,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Unsigned (ad-hoc) bundle: fine for local installs and testers who
-      # right-click → Open. Signing/notarization is a follow-up.
+      # Ad-hoc signed bundle (signingIdentity "-"): fine for local installs and testers. The .app is not uploaded because the artefact zip drops exec bits and symlinks; the .dmg is the deliverable. Notarization is a follow-up.
       - name: Build macOS app
         run: pnpm tauri build --bundles app,dmg
 
       - uses: actions/upload-artifact@v7
         with:
           name: voltopia-macos
-          path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/macos/*.app
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
           retention-days: 14

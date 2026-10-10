@@ -109,7 +109,7 @@ body,
   grid-template-columns: clamp(150px, 18vw, 240px) minmax(0, 1fr) clamp(180px, 21vw, 290px);
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
-  /* No outer padding: the plates dock straight into the edges and corners
+  /* No fixed outer padding, only the safe-area insets: the plates dock straight into the edges and corners
      of the viewport, RTS-style, instead of floating as cards. On desktop
      env() is 0, so the docking is unchanged; on iPad the islands clear the
      rounded corners and the home indicator. */
