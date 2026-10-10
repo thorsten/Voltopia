@@ -1,4 +1,5 @@
 use tauri::Emitter;
+use tauri::Manager;
 
 /// Called by the frontend once the autosave has been written (or timed
 /// out) after a `close-requested` event. Desktop only: iPadOS suspends
@@ -24,6 +25,19 @@ pub fn run() {
                 let _ = window.emit("close-requested", ());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Voltopia");
+        .build(tauri::generate_context!())
+        .expect("error while building Voltopia")
+        .run(|app, event| {
+            // Cmd+Q (and the Quit menu item) arrive here with `code: None`.
+            // Hold the exit until the frontend has autosaved; it answers
+            // with `close_app`, whose `exit(0)` carries `Some(0)` and passes.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
+                if code.is_none() {
+                    api.prevent_exit();
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.emit("close-requested", ());
+                    }
+                }
+            }
+        });
 }

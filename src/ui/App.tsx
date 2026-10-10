@@ -12,6 +12,7 @@ import { HelpPage } from './HelpPage.tsx';
 import { ImprintPage } from './ImprintPage.tsx';
 import { rejectionKey, useI18n, type Locale } from './i18n.tsx';
 import { GameView } from './GameView.tsx';
+import { invokeCloseApp, listenForNativeClose } from './nativeClose.ts';
 import { GoalsPanel } from './GoalsPanel.tsx';
 import { Minimap } from './Minimap.tsx';
 import { OverlayToggle } from './OverlayToggle.tsx';
@@ -187,7 +188,15 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     };
     window.addEventListener('keydown', onKeyDown);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    // Desktop app: Cmd+Q waits for one last autosave (see nativeClose.ts).
+    const stopNativeClose = listenForNativeClose({
+      send,
+      onSaveData,
+      persist: (save) => storage.save(save),
+      closeApp: invokeCloseApp,
+    });
     return () => {
+      stopNativeClose();
       unsubscribe();
       clearInterval(timer);
       window.removeEventListener('keydown', onKeyDown);
