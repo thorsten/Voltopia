@@ -37,7 +37,10 @@ export function createCloseHandler({
       if (done) return;
       done = true;
       unsubscribe();
-      void closeApp();
+      closeApp().catch((error) => {
+        console.warn('close_app failed', error);
+        pending = false;
+      });
     };
     unsubscribe = onSaveData((save) => {
       persist(save)
@@ -55,12 +58,14 @@ export function listenForNativeClose(deps: CloseDeps, native = isNativeApp()): (
   let unlisten: (() => void) | null = null;
   let cancelled = false;
   const handler = createCloseHandler(deps);
-  void import('@tauri-apps/api/event').then(({ listen }) =>
-    listen('close-requested', handler).then((off) => {
-      if (cancelled) off();
-      else unlisten = off;
-    }),
-  );
+  void import('@tauri-apps/api/event')
+    .then(({ listen }) =>
+      listen('close-requested', handler).then((off) => {
+        if (cancelled) off();
+        else unlisten = off;
+      }),
+    )
+    .catch((error) => console.warn('Native close listener failed', error));
   return () => {
     cancelled = true;
     unlisten?.();

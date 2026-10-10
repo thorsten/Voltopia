@@ -1,9 +1,23 @@
 use tauri::Emitter;
 use tauri::Manager;
 
+/// Grace period before Rust quits on its own; longer than the 2 s
+/// frontend save timeout.
+const QUIT_FALLBACK_SECS: u64 = 3;
+
+/// Last resort: if the frontend never answers `close-requested` (boot
+/// screen, reload, crashed React tree), quit anyway after a grace period.
+fn exit_after_grace(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(QUIT_FALLBACK_SECS));
+        app.exit(0);
+    });
+}
+
 /// Called by the frontend once the autosave has been written (or timed
 /// out) after a `close-requested` event. Desktop only: iPadOS suspends
-/// the app instead of quitting it.
+/// the app instead of quitting it. `exit_after_grace` covers a frontend
+/// that never calls this.
 #[tauri::command]
 fn close_app(app: tauri::AppHandle) {
     app.exit(0);
@@ -22,6 +36,7 @@ pub fn run() {
             // app never becomes unquittable.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
+                exit_after_grace(window.app_handle().clone());
                 let _ = window.emit("close-requested", ());
             }
         })
@@ -34,6 +49,7 @@ pub fn run() {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
                 if code.is_none() {
                     api.prevent_exit();
+                    exit_after_grace(app.clone());
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.emit("close-requested", ());
                     }

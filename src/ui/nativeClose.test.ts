@@ -2,10 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SaveGame } from '../shared/types.ts';
 import { CLOSE_SAVE_TIMEOUT_MS, createCloseHandler } from './nativeClose.ts';
 
-function harness(persist = vi.fn(async () => {})) {
+function harness(persist = vi.fn(async () => {}), closeApp = vi.fn(async () => {})) {
   let listener: ((save: SaveGame) => void) | null = null;
   const send = vi.fn();
-  const closeApp = vi.fn(async () => {});
   const timers: Array<() => void> = [];
   const setTimer = ((fn: () => void) => {
     timers.push(fn);
@@ -60,6 +59,21 @@ describe('createCloseHandler', () => {
     h.emitSave();
     h.timers.forEach((t) => t());
     await vi.waitFor(() => expect(h.closeApp).toHaveBeenCalledOnce());
+  });
+
+  it('allows a new close request after close_app fails', async () => {
+    const closeApp = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('ipc'))
+      .mockResolvedValue(undefined);
+    const h = harness(undefined, closeApp);
+    h.handle();
+    h.emitSave();
+    await vi.waitFor(() => expect(closeApp).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      h.handle();
+      expect(h.send).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('exposes the timeout constant', () => {
