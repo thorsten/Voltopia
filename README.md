@@ -131,7 +131,7 @@ and Xcode command line tools; for iPad also Xcode and
 ```bash
 pnpm tauri dev                     # macOS window with hot reload
 pnpm tauri build                   # .app + .dmg in src-tauri/target/release/bundle/
-pnpm tauri ios dev 'iPad Pro 13-inch (M4)'   # iPad simulator
+pnpm tauri ios dev 'iPad Pro 13-inch (M5)'   # iPad simulator
 pnpm tauri ios build --export-method debugging  # install on your own iPad
 ```
 

@@ -17,7 +17,7 @@ pnpm audit:prod   # fails on high/critical advisories in prod deps only
 pnpm build        # production build (includes typecheck)
 pnpm tauri dev    # native macOS window (Mac only)
 pnpm tauri build  # .app + .dmg (Mac only)
-pnpm tauri ios dev 'iPad Pro 13-inch (M4)'  # iPad simulator (Mac only)
+pnpm tauri ios dev 'iPad Pro 13-inch (M5)'  # iPad simulator (Mac only)
 ```
 
 A pre-commit hook (simple-git-hooks, installed via `pnpm install`) runs
