@@ -122,6 +122,23 @@ The worker sends only tile diffs and global stats to the main thread,
 never the full state. See `docs/idea.md` for the design document and
 `docs/plan.md` for the implementation plan.
 
+## Native app (macOS / iPadOS)
+
+The same build runs as a Tauri app. Requirements: Rust (rustup, stable)
+and Xcode command line tools; for iPad also Xcode and
+`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
+
+```bash
+pnpm tauri dev                     # macOS window with hot reload
+pnpm tauri build                   # .app + .dmg in src-tauri/target/release/bundle/
+pnpm tauri ios dev 'iPad Pro 13-inch (M4)'   # iPad simulator
+pnpm tauri ios build --export-method debugging  # install on your own iPad
+```
+
+Builds are unsigned; macOS users open the `.dmg` and right-click → Open
+once. Save games live in the app's own storage; use Settings → Export /
+Import to move a city between browser and app.
+
 ## License
 
 [MIT](LICENSE)

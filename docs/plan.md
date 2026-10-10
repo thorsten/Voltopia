@@ -210,6 +210,17 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [x] Playwright e2e: boot, draw road, paint zone, building appears, save/reload persists
 - [x] Coverage check ≥90% on `src/sim`. Final commit + summary.
 
+## Native app (macOS / iPadOS)
+
+- [x] Tauri v2 shell in `src-tauri/` (opener/dialog/fs plugins, CSP, capabilities); PWA plugin skipped under `TAURI_ENV_PLATFORM`
+- [x] Native save export through a dialog (`src/ui/platform.ts`)
+- [x] Autosave on quit: `close-requested` handshake, 2 s JS timeout, 3 s Rust fallback
+- [x] iPad viewport + safe-area aware HUD
+- [x] CI workflow `.github/workflows/native.yml` builds the unsigned macOS app on tags and on demand
+- [ ] Mac: `pnpm tauri ios init`, set `TARGETED_DEVICE_FAMILY '2'`, commit `src-tauri/gen/apple`
+- [ ] Mac: verify first `pnpm tauri dev` / `pnpm tauri build`; commit `Cargo.lock`
+- [ ] Follow-up: Developer ID signing + notarization
+
 ## Testing Strategy
 
 - Sim is pure & deterministic → unit tests drive everything: same seed ⇒ identical state hashes after N ticks
