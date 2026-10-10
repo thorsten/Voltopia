@@ -71,6 +71,9 @@ body,
   height: 100%;
   overflow: hidden;
   background: #0e1620;
+  /* iPad: no rubber-banding, no long-press link sheet over the map. */
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
 }
 
 .app {
@@ -107,8 +110,11 @@ body,
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   /* No outer padding: the plates dock straight into the edges and corners
-     of the viewport, RTS-style, instead of floating as cards. */
-  padding: 0;
+     of the viewport, RTS-style, instead of floating as cards. On desktop
+     env() is 0, so the docking is unchanged; on iPad the islands clear the
+     rounded corners and the home indicator. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
   /* The layer itself must not swallow clicks meant for the map. */
   pointer-events: none;
 }
