@@ -55,9 +55,35 @@ describe('model kit', () => {
     near(across.min, [-0.2, 0, -0.15]);
     near(across.max, [0.2, 0.1, 0.15]);
     // Top vertices lie on the ridge line: x = 0 for a z ridge, z = 0 for an x ridge.
-    const pos = gable(0.4, 0.1, 0.3, 0, 0.05, 0, 0x00ff00).getAttribute('position');
-    for (let i = 0; i < pos.count; i++)
-      if (pos.getY(i) > 0.0999) expect(Math.abs(pos.getZ(i))).toBeLessThan(1e-6);
+    // Checked for both calls, since a square footprint (w === d here) makes
+    // the bounding-box assertions above identical for either orientation.
+    const xRidgePos = gable(0.4, 0.1, 0.3, 0, 0.05, 0, 0x00ff00).getAttribute('position');
+    for (let i = 0; i < xRidgePos.count; i++)
+      if (xRidgePos.getY(i) > 0.0999) expect(Math.abs(xRidgePos.getZ(i))).toBeLessThan(1e-6);
+    const zRidgePos = gable(0.4, 0.1, 0.3, 0, 0.05, 0, 0x00ff00, 'z').getAttribute('position');
+    for (let i = 0; i < zRidgePos.count; i++)
+      if (zRidgePos.getY(i) > 0.0999) expect(Math.abs(zRidgePos.getX(i))).toBeLessThan(1e-6);
+  });
+  it('gable: ridge direction follows ridgeAlong with a non-square footprint', () => {
+    // w != d: the base footprint is w (x) by d (z) regardless of
+    // ridgeAlong, so a bounding-box check can't distinguish orientation
+    // even with asymmetric dimensions. Pin the apex's span along each
+    // axis instead: a mutant that ignores ridgeAlong and always builds
+    // the x-ridge orientation gives the z-ridge call an apex spanning
+    // w/2 on x (not d/2 on z), which this catches.
+    const w = 0.4,
+      d = 0.2;
+    const xRidge = gable(w, 0.1, d, 0, 0.05, 0, 0x00ff00, 'x').getAttribute('position');
+    let xApexSpan = 0;
+    for (let i = 0; i < xRidge.count; i++)
+      if (xRidge.getY(i) > 0.0999) xApexSpan = Math.max(xApexSpan, Math.abs(xRidge.getX(i)));
+    expect(xApexSpan).toBeCloseTo(w / 2, 5);
+
+    const zRidge = gable(w, 0.1, d, 0, 0.05, 0, 0x00ff00, 'z').getAttribute('position');
+    let zApexSpan = 0;
+    for (let i = 0; i < zRidge.count; i++)
+      if (zRidge.getY(i) > 0.0999) zApexSpan = Math.max(zApexSpan, Math.abs(zRidge.getZ(i)));
+    expect(zApexSpan).toBeCloseTo(d / 2, 5);
   });
   it('tilted: rotates about the part centre around x', () => {
     const g = tilted(box(0.2, 0.02, 0.4, 0, 0.3, 0, 0xffffff), Math.PI / 2);
