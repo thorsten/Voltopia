@@ -163,6 +163,55 @@ and night recognisable at city zoom; windows lit, aviation lights
 blinking, yard lamps; nothing floating on slopes; station and hydro
 plants still face their track or water; frame time unchanged.
 
+### Results (2026-10-11)
+
+`pnpm format && pnpm typecheck && pnpm lint && pnpm format:check &&
+pnpm coverage && pnpm build` all pass (94 test files, 1616 tests;
+coverage on `src/sim` and `src/shared` well above the 90% gate). The
+slowest single test is `full gameplay integration > grows a powered
+city and balances energy over days` (`src/sim/integration.test.ts`) at
+7.79 s — under the 15 s budget, nothing to fix.
+
+`node scripts/smoke.mjs` fails in this sandbox with `error while
+loading shared libraries: libnspr4.so: cannot open shared object file`
+— a missing system library for headless Chromium, not an app or test
+regression; needs the Mac.
+
+Part and vertex counts per `plantModel(type)` (measured with a
+temporary script, deleted after), plus the tree and bench ground
+props, all within `MAX_PARTS_PER_PLANT_MODEL = 24`:
+
+| Type            | Parts | Vertices |
+| --------------- | ----: | -------: |
+| HydrogenPlant   |    15 |     1836 |
+| BiogasPlant     |    12 |     1800 |
+| HeatPlant       |    12 |     1404 |
+| GeothermalPlant |    15 |     1188 |
+| Substation      |    21 |     1080 |
+| RailYard        |    15 |      960 |
+| HeatStore       |     8 |      936 |
+| WindTurbine     |     6 |      756 |
+| PumpedStorage   |     9 |      756 |
+| TidalPlant      |    15 |      756 |
+| BusDepot        |    13 |      672 |
+| PoliceStation   |    15 |      648 |
+| FreightTerminal |    16 |      576 |
+| SolarFarm       |    15 |      540 |
+| TrainStation    |    12 |      528 |
+| ChargingHub     |    14 |      504 |
+| FireStation     |    10 |      468 |
+| LogisticsDepot  |    13 |      468 |
+| Battery         |    12 |      432 |
+| RunOfRiver      |    11 |      384 |
+| Tree (prop)     |     3 |      288 |
+| Bench (prop)    |     3 |      108 |
+| Park            |     0 |        0 |
+
+Park has no merged geometry (`geometry: null`, as designed — it draws
+only lawn pads, trees and benches as ground props). The heaviest model
+is `HydrogenPlant` at 1836 vertices, 15 parts — comfortably under the
+24-part cap.
+
 ## Out of scope
 
 Curtailment/offline/damage states on the models, fan and steam
