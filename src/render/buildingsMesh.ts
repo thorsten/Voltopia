@@ -16,7 +16,12 @@ import {
 } from './buildings/recipes.ts';
 import { BlockAllocator } from './buildings/blocks.ts';
 import { type AccentSink, type AccentState, accentAnchors } from './buildings/accents.ts';
-import { WINDOW_PROUD, windowGeometry } from './buildings/windows.ts';
+import {
+  WINDOW_COLOR,
+  WINDOW_PROUD,
+  windowGeometry,
+  windowGlowOpacity,
+} from './buildings/windows.ts';
 import {
   WINDOWS_PER_TILE,
   WINDOW_HEIGHT,
@@ -26,7 +31,6 @@ import {
 } from './buildings/windowLayout.ts';
 
 const GROW_ANIMATION_SECONDS = 0.45;
-const WINDOW_COLOR = 0xffc978;
 /**
  * The night glow quad sits over the glass (2 × WINDOW_PROUD) but behind
  * the mullions (3 × WINDOW_PROUD), so the cross still reads at night.
@@ -204,7 +208,7 @@ export class BuildingsMesh implements DiffLayer {
 
   /** Warm window lights fade in with the night. */
   setEnvironment(environment: RenderEnvironment): void {
-    const opacity = Math.max(0, environment.nightFactor - 0.25) / 0.75;
+    const opacity = windowGlowOpacity(environment.nightFactor);
     this.windowsMaterial.opacity = opacity * 0.95;
     this.windowsMesh.visible = opacity > 0.02;
   }

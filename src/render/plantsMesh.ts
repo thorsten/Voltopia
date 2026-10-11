@@ -7,6 +7,7 @@ import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
 import { GrowingMesh } from './plants/growingMesh.ts';
+import { PlantLights } from './plants/lights.ts';
 import type { PlantModel } from './plants/models.ts';
 import {
   ROTOR_RADIUS,
@@ -108,10 +109,24 @@ function setupSolid(mesh: THREE.InstancedMesh): void {
 }
 
 /**
+ * Draw `count` instances and flag only those for re-upload (as
+ * `GrowingMesh.commit`). The range never goes empty: three.js reads an
+ * empty range list as "upload everything".
+ */
+function uploadDrawn(mesh: THREE.InstancedMesh, count: number): void {
+  mesh.count = count;
+  const attr = mesh.instanceMatrix;
+  attr.clearUpdateRanges();
+  attr.addUpdateRange(0, Math.max(1, count) * attr.itemSize);
+  if (count > 0) attr.needsUpdate = true;
+}
+
+/**
  * All plants and service buildings: one instanced mesh per type drawing
  * its detailed model, a plinth under each, park lawns with trees and
  * benches, spinning turbine rotors (speed proportional to wind output)
- * and battery state-of-charge fill bars.
+ * battery state-of-charge fill bars, and window frames with night
+ * glow, aviation and yard lamps on energised plants.
  */
 export class PlantsMesh implements DiffLayer {
   /** Concrete or gravel slab under every non-park plant, reaching down to the ground. */
@@ -123,6 +138,8 @@ export class PlantsMesh implements DiffLayer {
   readonly rotorMesh: THREE.InstancedMesh;
   /** Front bars showing each battery's state of charge. */
   readonly socFillMesh: THREE.InstancedMesh;
+  /** Window frames, night glow, aviation and yard lamps. */
+  readonly lights: PlantLights;
   private readonly typeMeshes = new Map<PlantType, GrowingMesh>();
   private readonly modelMaterial = surfaceMaterial({ vertexColors: true });
   private readonly gridSize: number;
@@ -130,6 +147,8 @@ export class PlantsMesh implements DiffLayer {
   private readonly terrain: Uint8Array;
   /** Track mask per tile, for turning the rail plants toward their halt. */
   private readonly rail: Uint8Array;
+  /** 1 where the tile is on a grid island (lights on), per tile. */
+  private readonly energised: Uint8Array;
   private readonly placedPlants: PlacedPlant[] = [];
   /** Rotor hubs in world space, with the turbine's yaw. */
   private readonly rotors: Array<{ hub: THREE.Vector3; yaw: number }> = [];
@@ -161,6 +180,8 @@ export class PlantsMesh implements DiffLayer {
     const capacity = gridSize * gridSize;
     this.terrain = new Uint8Array(capacity);
     this.rail = new Uint8Array(capacity);
+    this.energised = new Uint8Array(capacity);
+    this.lights = new PlantLights(scene);
 
     this.plinths = new GrowingMesh(scene, baseBox(), surfaceMaterial(), setupSolid);
     this.treeMesh = new GrowingMesh(scene, treeGeometry(), this.modelMaterial, setupSolid);
@@ -210,7 +231,15 @@ export class PlantsMesh implements DiffLayer {
   applyDiffs(diffs: TileDiff[]): void {
     let changed = false;
     let socChanged = false;
+    let lightsChanged = false;
     for (const diff of diffs) {
+      // Only whether the tile is energised matters, not which island.
+      const energised = (diff.island ?? 0) > 0 ? 1 : 0;
+      if (this.energised[diff.index] !== energised) {
+        this.energised[diff.index] = energised;
+        // Lights hang on plants; a new plant rebuilds anyway.
+        if (diff.tileType === TileType.Plant) lightsChanged = true;
+      }
       if (this.terrain[diff.index] !== diff.terrain) {
         this.terrain[diff.index] = diff.terrain;
         changed = true;
@@ -238,15 +267,22 @@ export class PlantsMesh implements DiffLayer {
         this.stateOfCharge.delete(diff.index);
       }
     }
-    if (changed) this.rebuild();
-    else if (socChanged) this.writeSocFills();
+    if (changed) {
+      this.rebuild();
+      return;
+    }
+    if (socChanged) this.writeSocFills();
+    // Power on or off only switches the lights; the models stay.
+    if (lightsChanged) this.rebuildLights();
   }
 
   setEnvironment(environment: RenderEnvironment): void {
     this.rotorSpeedFactor = environment.windFactor;
+    this.lights.setNight(environment.nightFactor);
   }
 
   update(deltaSeconds: number): void {
+    this.lights.update(deltaSeconds);
     if (this.rotors.length === 0) return;
     // Rotor speed is proportional to wind output (still below cut-in).
     const speed =
@@ -380,10 +416,14 @@ export class PlantsMesh implements DiffLayer {
     this.plinths.commit(plinthSlot);
     this.treeMesh.commit(treeSlot);
     this.benchMesh.commit(benchSlot);
-    this.parkPads.count = padSlot;
-    this.parkPads.instanceMatrix.needsUpdate = true;
+    uploadDrawn(this.parkPads, padSlot);
     this.writeRotors();
     this.writeSocFills();
+    this.rebuildLights();
+  }
+
+  private rebuildLights(): void {
+    this.lights.rebuild(this.placedPlants, (index) => this.energised[index] !== 0);
   }
 
   /**
@@ -457,8 +497,7 @@ export class PlantsMesh implements DiffLayer {
       this.matrix.setPosition(hub.x, hub.y, hub.z);
       this.rotorMesh.setMatrixAt(i, this.matrix);
     }
-    this.rotorMesh.count = this.rotors.length;
-    this.rotorMesh.instanceMatrix.needsUpdate = true;
+    uploadDrawn(this.rotorMesh, this.rotors.length);
   }
 
   /** Bar on each battery cabinet front showing that battery's state of charge. */
@@ -470,7 +509,6 @@ export class PlantsMesh implements DiffLayer {
       this.matrix.compose(base, this.quaternion, this.scale.set(fill.w, height, fill.d));
       this.socFillMesh.setMatrixAt(i, this.matrix);
     }
-    this.socFillMesh.count = this.socFills.length;
-    this.socFillMesh.instanceMatrix.needsUpdate = true;
+    uploadDrawn(this.socFillMesh, this.socFills.length);
   }
 }

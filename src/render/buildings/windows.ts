@@ -12,6 +12,17 @@ export const WINDOW_FRAME_SCALE = 1.18;
 /** Vertex budget of one window (four planes and a box). */
 export const WINDOW_MAX_VERTICES = 48;
 
+/** Warm window glow at night (zone buildings and plants). */
+export const WINDOW_COLOR = 0xffc978;
+
+/** Nightfall below which windows stay dark; the glow ramps up to full from here. */
+const GLOW_START = 0.25;
+
+/** Window glow opacity 0..1 for a night factor 0..1: dark until dusk deepens, full at night. */
+export function windowGlowOpacity(nightFactor: number): number {
+  return Math.max(0, nightFactor - GLOW_START) / (1 - GLOW_START);
+}
+
 export const FRAME = 0xf2efe8;
 export const GLASS = 0x2b3440;
 export const SILL = 0xd8d4cc;

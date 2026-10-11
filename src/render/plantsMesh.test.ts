@@ -3,12 +3,15 @@ import * as THREE from 'three';
 import type { TileDiff } from '../shared/types.ts';
 import { PlantType, Terrain, TileType } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
+import type { RenderEnvironment } from './renderer.ts';
 import { PLINTH_RISE, PlantsMesh, plantYaw, type PlantSite } from './plantsMesh.ts';
 import { plantModel, turnToward } from './plants/models.ts';
 import { LINE_PRESENT } from '../shared/grid.ts';
 
 const SIZE = 8;
 const at = (x: number, z: number) => z * SIZE + x;
+const env = (nightFactor: number, windFactor: number): RenderEnvironment =>
+  ({ nightFactor, windFactor }) as RenderEnvironment;
 const NO_SITE: PlantSite = { riverAlongZ: false, lakeDx: 0, lakeDz: 0, trackDx: 0, trackDz: 0 };
 
 function field(levelOf: (x: number, z: number) => number): ElevationField {
@@ -23,7 +26,12 @@ function field(levelOf: (x: number, z: number) => number): ElevationField {
   return f;
 }
 
-function plant(index: number, plantType: PlantType, terrain: Terrain = Terrain.Land): TileDiff {
+function plant(
+  index: number,
+  plantType: PlantType,
+  terrain: Terrain = Terrain.Land,
+  island = 0,
+): TileDiff {
   return {
     index,
     tileType: TileType.Plant,
@@ -31,6 +39,8 @@ function plant(index: number, plantType: PlantType, terrain: Terrain = Terrain.L
     terrain,
     density: 0,
     elevation: 0,
+    rail: 0,
+    island,
   } as TileDiff;
 }
 
@@ -50,6 +60,8 @@ function terrainTile(index: number, terrain: Terrain): TileDiff {
     terrain,
     density: 0,
     elevation: 0,
+    rail: 0,
+    island: 0,
   } as TileDiff;
 }
 
@@ -446,6 +458,20 @@ describe('wind turbine rotors', () => {
     expect(rotor.p.y).toBeCloseTo(flat.centerY(at(2, 5)) + PLINTH_RISE + hub.y, 6);
     expect(rotor.p.z).toBeCloseTo(5.5 + hub.z, 6);
   });
+
+  it('uploads only the drawn rotors when they turn', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([
+      plant(at(2, 5), PlantType.WindTurbine),
+      plant(at(4, 5), PlantType.WindTurbine),
+    ]);
+    mesh.setEnvironment(env(0, 1));
+    const version = mesh.rotorMesh.instanceMatrix.version;
+    mesh.update(0.1);
+    const attr = mesh.rotorMesh.instanceMatrix;
+    expect(attr.version).toBeGreaterThan(version);
+    expect(attr.updateRanges).toEqual([{ start: 0, count: 2 * 16 }]);
+  });
 });
 
 describe('battery state-of-charge fills', () => {
@@ -494,12 +520,78 @@ describe('battery state-of-charge fills', () => {
     expect(after[1]).toBeCloseTo(0.04 + fill.maxH * 0.5, 6);
   });
 
+  it('moves the fill on a stored-only diff without rebuilding the model', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([battery(A, 0)]);
+    const model = mesh.meshOf(PlantType.Battery)!;
+    const version = model.instanceMatrix.version;
+    mesh.applyDiffs([battery(A, 1)]);
+    expect(model.instanceMatrix.version).toBe(version);
+    expect(fillHeights(mesh)[0]).toBeCloseTo(0.04 + fill.maxH, 6);
+    expect(mesh.socFillMesh.instanceMatrix.updateRanges).toEqual([{ start: 0, count: 16 }]);
+  });
+
   it('drops the fill when the battery is bulldozed', () => {
     const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
     mesh.applyDiffs([battery(A, 1)]);
     expect(mesh.socFillMesh.count).toBe(1);
     mesh.applyDiffs([bulldozed(A)]);
     expect(mesh.socFillMesh.count).toBe(0);
+  });
+});
+
+describe('night lights', () => {
+  const flat = field(() => 0);
+  const lit = (Object.values(PlantType) as PlantType[]).find(
+    (t) =>
+      t !== PlantType.None && plantModel(t).windows.length > 0 && plantModel(t).lamps.length > 0,
+  )!;
+  const windows = plantModel(lit).windows.length;
+  const lamps = plantModel(lit).lamps;
+
+  it('frames the windows of an unpowered plant but lights nothing', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([plant(at(1, 1), lit, Terrain.Land, 0)]);
+    expect(mesh.lights.frames.mesh.count).toBe(windows);
+    expect(mesh.lights.glow.mesh.count).toBe(0);
+    expect(mesh.lights.aviation.mesh.count + mesh.lights.yard.mesh.count).toBe(0);
+  });
+
+  it('switches glow and lamps with the island, without rebuilding the models', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([plant(at(1, 1), lit, Terrain.Land, 1)]);
+    expect(mesh.lights.glow.mesh.count).toBe(windows);
+    expect(mesh.lights.aviation.mesh.count + mesh.lights.yard.mesh.count).toBe(lamps.length);
+    const model = mesh.meshOf(lit)!;
+    const version = model.instanceMatrix.version;
+    const plinths = mesh.plinths.mesh.instanceMatrix.version;
+
+    mesh.applyDiffs([plant(at(1, 1), lit, Terrain.Land, 0)]);
+    expect(mesh.lights.glow.mesh.count).toBe(0);
+    expect(mesh.lights.aviation.mesh.count + mesh.lights.yard.mesh.count).toBe(0);
+    expect(mesh.lights.frames.mesh.count).toBe(windows);
+    expect(model.instanceMatrix.version).toBe(version);
+    expect(mesh.plinths.mesh.instanceMatrix.version).toBe(plinths);
+
+    // Another island number is still powered: nothing changes.
+    mesh.applyDiffs([plant(at(1, 1), lit, Terrain.Land, 2)]);
+    const glow = mesh.lights.glow.mesh.instanceMatrix.version;
+    mesh.applyDiffs([plant(at(1, 1), lit, Terrain.Land, 3)]);
+    expect(mesh.lights.glow.mesh.instanceMatrix.version).toBe(glow);
+  });
+
+  it('forwards the night and the blink clock', () => {
+    const mesh = new PlantsMesh(new THREE.Scene(), SIZE, flat);
+    mesh.applyDiffs([plant(at(1, 1), lit, Terrain.Land, 1)]);
+    mesh.setEnvironment(env(0, 0));
+    expect(mesh.lights.glow.mesh.visible).toBe(false);
+    mesh.setEnvironment(env(1, 0));
+    expect(mesh.lights.glow.mesh.visible).toBe(true);
+    mesh.update(0.5);
+    const aviation = mesh.lights.aviation.mesh.material as THREE.MeshBasicMaterial;
+    expect(aviation.opacity).toBe(1);
+    mesh.update(1.0);
+    expect(aviation.opacity).toBe(0);
   });
 });
 
