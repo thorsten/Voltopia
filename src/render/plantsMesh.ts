@@ -6,93 +6,36 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
+import { GrowingMesh } from './plants/growingMesh.ts';
+import type { PlantModel } from './plants/models.ts';
+import {
+  ROTOR_RADIUS,
+  benchGeometry,
+  plantModel,
+  treeGeometry,
+  turnToward,
+} from './plants/models.ts';
 
-const MAX_BOX_PARTS_PER_PLANT = 8;
+/** Plinth top and model base above the tile-centre lift. */
+export const PLINTH_RISE = 0.015;
+
 const ROTOR_MAX_SPEED_RAD_PER_S = 6;
-const HUB_HEIGHT = 0.85;
-const DOME_RADIUS = 0.3;
-const DOME_SQUASH = 0.75;
-const DOME_BASE = 0.12;
-const BIOGAS_DOME_TOP = DOME_BASE + DOME_RADIUS * DOME_SQUASH;
+/** Wind output below which the rotors stand still (cut-in). */
+const ROTOR_CUT_IN = 0.05;
+/** Phase offset between neighbouring rotors, so they do not spin in lockstep. */
+const ROTOR_PHASE_STEP = 0.7;
+const ROTOR_BLADE = { thickness: 0.015, chord: 0.05 };
+const ROTOR_COLOR = 0xe8eaec;
 /** Park lawn: a near-full-tile decal, thin like a road pad. */
 const PARK_PAD_SIZE = 0.94;
 const PARK_PAD_HEIGHT = 0.03;
+const PARK_GRASS_COLOR = 0x7cb35e;
+/** Empty-battery fill bar height, so an empty battery still shows a sliver. */
+const SOC_FILL_MIN_HEIGHT = 0.04;
+const SOC_FILL_COLOR = 0x7be07f;
 
-export interface BoxPart {
-  sx: number;
-  sy: number;
-  sz: number;
-  ox: number;
-  oy: number;
-  oz: number;
-  color: number;
-  /** Rotation around the x axis (e.g. tilted solar panels). */
-  rotX?: number;
-}
-
-const COLORS = {
-  pedestal: 0x8a9099,
-  panel: 0x2b3d66,
-  pole: 0xe8eaec,
-  nacelle: 0xd5d8db,
-  batteryCabinet: 0x4d6b57,
-  batteryFrame: 0x3a4048,
-  biogasTank: 0x6c7f5a,
-  biogasDome: 0x93ab6d,
-  hubCanopy: 0x58b7a4,
-  hubPillar: 0x3a4048,
-  parkGrass: 0x7cb35e,
-  treeTrunk: 0x6e4f36,
-  treeFoliage: 0x3f7d46,
-  treeFoliageLight: 0x549a54,
-  weir: 0x9aa3ad,
-  powerhouse: 0x5d6b7a,
-  penstock: 0x7a8593,
-  waterLight: 0x7fb6dd,
-  fireHall: 0xc0392b,
-  fireRoof: 0xf4f1ec,
-  fireTower: 0x8e2a1f,
-  policeBlock: 0x2f5fa8,
-  policeRoof: 0xd7dde8,
-  policeLight: 0x7fd0ff,
-  depotHall: 0x8d99a6,
-  depotRoof: 0xe4e7ea,
-  depotDoor: 0x3a4048,
-  depotRamp: 0x6f7a86,
-  busHall: 0x5b8fc7,
-  hydrogenTank: 0xe6ebee,
-  hydrogenBand: 0x54b8c9,
-  hydrogenHall: 0x9aa3ad,
-  busRoof: 0xe4e7ea,
-  busDoor: 0x3a4048,
-  busApron: 0x6f7a86,
-  tidalHousing: 0x4d6b73,
-  tidalPylon: 0x9aa3ad,
-  tidalBuoy: 0xe8a23a,
-  geoHall: 0x6b5f57,
-  geoTower: 0xd7d2c8,
-  geoWellhead: 0xb5482f,
-  heatHall: 0x7a4a3a,
-  heatStack: 0xd9822b,
-  heatRoof: 0xe4e7ea,
-  storeTank: 0xc9a227,
-  storePlinth: 0x6f7a86,
-  storeCap: 0xe6ebee,
-  substationYard: 0x6f7a86,
-  substationBox: 0x4b5563,
-  substationInsulator: 0xd7dde8,
-  fencePost: 0x9aa3ad,
-  platform: 0x9a9da3,
-  stationRoof: 0xd84a3a,
-  stationPost: 0x3a4048,
-  gantry: 0xd9a441,
-  container: 0x4f6b3a,
-  yardHall: 0x6e5a9e,
-  yardRoof: 0xe4e7ea,
-} as const;
-
-/** Where a plant stands: which neighbours are water (for hydro shapes). */
-interface PlantSite {
+/** Where a plant stands: which neighbours are water or track (for turning the model). */
+export interface PlantSite {
   /** River continues north/south of the tile (else east/west). */
   riverAlongZ: boolean;
   /** Direction to the nearest lake neighbour (0,0 when none). */
@@ -106,367 +49,111 @@ interface PlantSite {
   trackDz: number;
 }
 
-/**
- * Turn parts drawn with their track side at +z toward the track at
- * (dx, dz): a quarter turn swaps the footprints and permutes the
- * offsets, a half turn mirrors them. No track leaves them as drawn.
- */
-export function orientToTrack(parts: BoxPart[], dx: number, dz: number): BoxPart[] {
-  if (dz === 1 || (dx === 0 && dz === 0)) return parts;
-  return parts.map((p) => {
-    if (dz === -1) return { ...p, ox: -p.ox, oz: -p.oz };
-    if (dx === 1) return { ...p, sx: p.sz, sz: p.sx, ox: p.oz, oz: -p.ox };
-    return { ...p, sx: p.sz, sz: p.sx, ox: -p.oz, oz: p.ox };
-  });
+/** A drawn plant with its world pose: model base at (x, y, z), turned by yaw about +y. */
+export interface PlacedPlant {
+  index: number;
+  type: PlantType;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
 }
 
-/** Static box parts per plant type (rotors/domes/fills are separate). */
-function plantBoxParts(plant: PlantType, site: PlantSite): BoxPart[] {
-  switch (plant) {
-    case PlantType.SolarFarm: {
-      const rows: BoxPart[] = [];
-      for (let i = 0; i < 3; i++) {
-        rows.push({
-          sx: 0.8,
-          sy: 0.02,
-          sz: 0.24,
-          ox: 0,
-          oy: 0.14,
-          oz: -0.3 + i * 0.3,
-          color: COLORS.panel,
-          rotX: -0.5,
-        });
-        rows.push({
-          sx: 0.8,
-          sy: 0.1,
-          sz: 0.04,
-          ox: 0,
-          oy: 0,
-          oz: -0.3 + i * 0.3,
-          color: COLORS.pedestal,
-        });
-      }
-      return rows;
-    }
-    case PlantType.WindTurbine:
-      return [
-        { sx: 0.07, sy: HUB_HEIGHT, sz: 0.07, ox: 0, oy: 0, oz: 0, color: COLORS.pole },
-        {
-          sx: 0.1,
-          sy: 0.09,
-          sz: 0.2,
-          ox: 0,
-          oy: HUB_HEIGHT,
-          oz: 0.03,
-          color: COLORS.nacelle,
-        },
-      ];
-    case PlantType.Battery:
-      return [
-        { sx: 0.55, sy: 0.5, sz: 0.4, ox: 0, oy: 0, oz: 0, color: COLORS.batteryCabinet },
-        { sx: 0.62, sy: 0.06, sz: 0.46, ox: 0, oy: 0.5, oz: 0, color: COLORS.batteryFrame },
-      ];
-    case PlantType.BiogasPlant:
-      return [{ sx: 0.34, sy: 0.34, sz: 0.34, ox: 0.22, oy: 0, oz: 0.2, color: COLORS.biogasTank }];
-    case PlantType.ChargingHub:
-      return [
-        { sx: 0.08, sy: 0.45, sz: 0.08, ox: -0.3, oy: 0, oz: -0.3, color: COLORS.hubPillar },
-        { sx: 0.08, sy: 0.45, sz: 0.08, ox: 0.3, oy: 0, oz: -0.3, color: COLORS.hubPillar },
-        { sx: 0.9, sy: 0.05, sz: 0.9, ox: 0, oy: 0.45, oz: 0, color: COLORS.hubCanopy },
-        { sx: 0.2, sy: 0.35, sz: 0.12, ox: 0, oy: 0, oz: 0.32, color: COLORS.batteryFrame },
-      ];
-    case PlantType.Park:
-      // The lawn is not a part: it is laid as two ground-fitted prisms in
-      // rebuild(), like a road pad, so it never floats on a slope.
-      return [
-        // three low-poly trees: trunk + foliage cube each
-        { sx: 0.05, sy: 0.16, sz: 0.05, ox: -0.24, oy: 0.03, oz: -0.2, color: COLORS.treeTrunk },
-        { sx: 0.22, sy: 0.26, sz: 0.22, ox: -0.24, oy: 0.17, oz: -0.2, color: COLORS.treeFoliage },
-        { sx: 0.05, sy: 0.2, sz: 0.05, ox: 0.22, oy: 0.03, oz: -0.05, color: COLORS.treeTrunk },
-        {
-          sx: 0.26,
-          sy: 0.32,
-          sz: 0.26,
-          ox: 0.22,
-          oy: 0.2,
-          oz: -0.05,
-          color: COLORS.treeFoliageLight,
-        },
-        { sx: 0.05, sy: 0.13, sz: 0.05, ox: -0.05, oy: 0.03, oz: 0.28, color: COLORS.treeTrunk },
-        { sx: 0.18, sy: 0.2, sz: 0.18, ox: -0.05, oy: 0.14, oz: 0.28, color: COLORS.treeFoliage },
-      ];
-    case PlantType.RunOfRiver: {
-      // A weir across the river with a small powerhouse at one bank.
-      const across = site.riverAlongZ;
-      return [
-        {
-          sx: across ? 0.96 : 0.3,
-          sy: 0.2,
-          sz: across ? 0.3 : 0.96,
-          ox: 0,
-          oy: 0,
-          oz: 0,
-          color: COLORS.weir,
-        },
-        {
-          sx: across ? 0.9 : 0.08,
-          sy: 0.26,
-          sz: across ? 0.08 : 0.9,
-          ox: 0,
-          oy: 0,
-          oz: 0,
-          color: COLORS.waterLight,
-        },
-        {
-          sx: 0.3,
-          sy: 0.34,
-          sz: 0.3,
-          ox: across ? 0.3 : 0,
-          oy: 0,
-          oz: across ? 0 : 0.3,
-          color: COLORS.powerhouse,
-        },
-      ];
-    }
-    case PlantType.PumpedStorage: {
-      // Powerhouse with a penstock pipe running toward the lake.
-      const alongX = site.lakeDx !== 0;
-      return [
-        { sx: 0.6, sy: 0.45, sz: 0.5, ox: 0, oy: 0, oz: 0, color: COLORS.powerhouse },
-        { sx: 0.66, sy: 0.05, sz: 0.56, ox: 0, oy: 0.45, oz: 0, color: COLORS.batteryFrame },
-        {
-          sx: alongX ? 0.5 : 0.12,
-          sy: 0.1,
-          sz: alongX ? 0.12 : 0.5,
-          ox: site.lakeDx * 0.3,
-          oy: 0.3,
-          oz: site.lakeDz * 0.3,
-          color: COLORS.penstock,
-        },
-        {
-          sx: alongX ? 0.5 : 0.12,
-          sy: 0.1,
-          sz: alongX ? 0.12 : 0.5,
-          ox: site.lakeDx * 0.3,
-          oy: 0.16,
-          oz: site.lakeDz * 0.3,
-          color: COLORS.penstock,
-        },
-      ];
-    }
-    case PlantType.FireStation:
-      return [
-        // Hall with a white roof stripe and a hose tower at the back.
-        { sx: 0.8, sy: 0.36, sz: 0.6, ox: 0, oy: 0, oz: 0.05, color: COLORS.fireHall },
-        { sx: 0.84, sy: 0.05, sz: 0.64, ox: 0, oy: 0.36, oz: 0.05, color: COLORS.fireRoof },
-        { sx: 0.2, sy: 0.62, sz: 0.2, ox: 0.25, oy: 0, oz: -0.3, color: COLORS.fireTower },
-        { sx: 0.24, sy: 0.04, sz: 0.24, ox: 0.25, oy: 0.62, oz: -0.3, color: COLORS.fireRoof },
-      ];
-    case PlantType.PoliceStation:
-      return [
-        // Blue block with a pale roof and a light bar.
-        { sx: 0.74, sy: 0.42, sz: 0.66, ox: 0, oy: 0, oz: 0, color: COLORS.policeBlock },
-        { sx: 0.78, sy: 0.05, sz: 0.7, ox: 0, oy: 0.42, oz: 0, color: COLORS.policeRoof },
-        { sx: 0.3, sy: 0.06, sz: 0.1, ox: 0, oy: 0.47, oz: 0, color: COLORS.policeLight },
-      ];
-    case PlantType.LogisticsDepot:
-      return [
-        // Flat warehouse with a pale roof, a dark roller door and a loading ramp.
-        { sx: 0.84, sy: 0.3, sz: 0.62, ox: 0, oy: 0, oz: 0.06, color: COLORS.depotHall },
-        { sx: 0.88, sy: 0.04, sz: 0.66, ox: 0, oy: 0.3, oz: 0.06, color: COLORS.depotRoof },
-        { sx: 0.3, sy: 0.22, sz: 0.03, ox: -0.15, oy: 0, oz: -0.26, color: COLORS.depotDoor },
-        { sx: 0.5, sy: 0.06, sz: 0.2, ox: 0, oy: 0, oz: -0.36, color: COLORS.depotRamp },
-      ];
-    case PlantType.BusDepot:
-      return [
-        // Long garage hall with a pale roof, a wide door and a bus apron.
-        { sx: 0.86, sy: 0.32, sz: 0.5, ox: 0, oy: 0, oz: 0.12, color: COLORS.busHall },
-        { sx: 0.9, sy: 0.04, sz: 0.54, ox: 0, oy: 0.32, oz: 0.12, color: COLORS.busRoof },
-        { sx: 0.5, sy: 0.24, sz: 0.03, ox: 0, oy: 0, oz: -0.14, color: COLORS.busDoor },
-        { sx: 0.8, sy: 0.03, sz: 0.24, ox: 0, oy: 0, oz: -0.3, color: COLORS.busApron },
-      ];
-    case PlantType.HydrogenPlant:
-      return [
-        // Horizontal storage tank (stepped boxes fake the round shell)
-        // with a teal H2 band, next to the electrolyser hall and a vent.
-        { sx: 0.62, sy: 0.2, sz: 0.3, ox: -0.12, oy: 0.06, oz: 0.24, color: COLORS.hydrogenTank },
-        { sx: 0.54, sy: 0.3, sz: 0.24, ox: -0.12, oy: 0.02, oz: 0.24, color: COLORS.hydrogenTank },
-        { sx: 0.1, sy: 0.34, sz: 0.26, ox: -0.12, oy: 0, oz: 0.24, color: COLORS.hydrogenBand },
-        { sx: 0.7, sy: 0.34, sz: 0.44, ox: 0, oy: 0, oz: -0.2, color: COLORS.hydrogenHall },
-        { sx: 0.74, sy: 0.04, sz: 0.48, ox: 0, oy: 0.34, oz: -0.2, color: COLORS.depotRoof },
-        { sx: 0.07, sy: 0.56, sz: 0.07, ox: 0.28, oy: 0, oz: -0.3, color: COLORS.batteryFrame },
-      ];
-    case PlantType.TidalPlant:
-      return [
-        // Submerged turbine housing with a slim pylon and a surface buoy.
-        { sx: 0.5, sy: 0.14, sz: 0.34, ox: 0, oy: 0.02, oz: 0, color: COLORS.tidalHousing },
-        { sx: 0.08, sy: 0.4, sz: 0.08, ox: 0, oy: 0.14, oz: 0, color: COLORS.tidalPylon },
-        { sx: 0.22, sy: 0.12, sz: 0.22, ox: 0, oy: 0.5, oz: 0, color: COLORS.tidalBuoy },
-      ];
-    case PlantType.GeothermalPlant:
-      return [
-        // Turbine hall, a wellhead stub and the cooling tower above it.
-        { sx: 0.6, sy: 0.24, sz: 0.4, ox: -0.08, oy: 0, oz: 0.1, color: COLORS.geoHall },
-        { sx: 0.12, sy: 0.3, sz: 0.12, ox: 0.28, oy: 0, oz: -0.22, color: COLORS.geoWellhead },
-        { sx: 0.3, sy: 0.5, sz: 0.3, ox: 0.2, oy: 0, oz: 0.22, color: COLORS.geoTower },
-      ];
-    case PlantType.HeatPlant:
-      return [
-        // A low pump hall with a flat roof and one tall slim stack.
-        { sx: 0.7, sy: 0.26, sz: 0.46, ox: -0.06, oy: 0, oz: 0.06, color: COLORS.heatHall },
-        { sx: 0.74, sy: 0.04, sz: 0.5, ox: -0.06, oy: 0.26, oz: 0.06, color: COLORS.heatRoof },
-        { sx: 0.1, sy: 0.62, sz: 0.1, ox: 0.3, oy: 0, oz: -0.26, color: COLORS.heatStack },
-      ];
-    case PlantType.HeatStore:
-      return [
-        // A wide cylinder faked by two stepped boxes on a plinth, capped white.
-        { sx: 0.7, sy: 0.06, sz: 0.7, ox: 0, oy: 0, oz: 0, color: COLORS.storePlinth },
-        { sx: 0.56, sy: 0.4, sz: 0.56, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
-        { sx: 0.46, sy: 0.4, sz: 0.64, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
-        { sx: 0.64, sy: 0.4, sz: 0.46, ox: 0, oy: 0.06, oz: 0, color: COLORS.storeTank },
-        { sx: 0.5, sy: 0.05, sz: 0.5, ox: 0, oy: 0.46, oz: 0, color: COLORS.storeCap },
-      ];
-    case PlantType.Substation:
-      return [
-        { sx: 0.84, sy: 0.03, sz: 0.84, ox: 0, oy: 0, oz: 0, color: COLORS.substationYard },
-        ...[-0.38, 0.38].flatMap((px) =>
-          [-0.38, 0.38].map((pz) => ({
-            sx: 0.04,
-            sy: 0.22,
-            sz: 0.04,
-            ox: px,
-            oy: 0.03,
-            oz: pz,
-            color: COLORS.fencePost,
-          })),
-        ),
-        { sx: 0.36, sy: 0.3, sz: 0.26, ox: 0, oy: 0.03, oz: 0.05, color: COLORS.substationBox },
-        {
-          sx: 0.05,
-          sy: 0.14,
-          sz: 0.05,
-          ox: -0.08,
-          oy: 0.33,
-          oz: 0.05,
-          color: COLORS.substationInsulator,
-        },
-        {
-          sx: 0.05,
-          sy: 0.14,
-          sz: 0.05,
-          ox: 0.08,
-          oy: 0.33,
-          oz: 0.05,
-          color: COLORS.substationInsulator,
-        },
-      ];
-    // The three rail plants are drawn with the track at +z and turned
-    // toward the track they actually stand beside.
+/**
+ * Yaw that turns a plant model (drawn with its water/track side at +z,
+ * see `plants/models.ts`) to its site. Exported for tests.
+ */
+export function plantYaw(type: PlantType, site: PlantSite): number {
+  switch (type) {
+    case PlantType.RunOfRiver:
+      return site.riverAlongZ ? 0 : Math.PI / 2;
+    case PlantType.PumpedStorage:
+      return turnToward(site.lakeDx, site.lakeDz);
     case PlantType.TrainStation:
-      return orientToTrack(
-        [
-          // Platform slab along the track, two posts and a red roof over the waiting area.
-          { sx: 0.9, sy: 0.08, sz: 0.44, ox: 0, oy: 0, oz: 0.1, color: COLORS.platform },
-          { sx: 0.05, sy: 0.3, sz: 0.05, ox: -0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
-          { sx: 0.05, sy: 0.3, sz: 0.05, ox: 0.3, oy: 0.08, oz: 0.1, color: COLORS.stationPost },
-          { sx: 0.8, sy: 0.04, sz: 0.4, ox: 0, oy: 0.38, oz: 0.1, color: COLORS.stationRoof },
-        ],
-        site.trackDx,
-        site.trackDz,
-      );
     case PlantType.FreightTerminal:
-      return orientToTrack(
-        [
-          // Apron, a gantry crane along the track and a container on the track side.
-          { sx: 0.9, sy: 0.05, sz: 0.9, ox: 0, oy: 0, oz: 0, color: COLORS.platform },
-          { sx: 0.06, sy: 0.5, sz: 0.06, ox: -0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
-          { sx: 0.06, sy: 0.5, sz: 0.06, ox: 0.35, oy: 0.05, oz: 0, color: COLORS.gantry },
-          { sx: 0.8, sy: 0.06, sz: 0.1, ox: 0, oy: 0.55, oz: 0, color: COLORS.gantry },
-          { sx: 0.4, sy: 0.18, sz: 0.2, ox: 0, oy: 0.05, oz: 0.2, color: COLORS.container },
-        ],
-        site.trackDx,
-        site.trackDz,
-      );
     case PlantType.RailYard:
-      return orientToTrack(
-        [
-          // Long shed with a pale roof and a wide door facing the track.
-          { sx: 0.9, sy: 0.36, sz: 0.5, ox: 0, oy: 0, oz: -0.1, color: COLORS.yardHall },
-          { sx: 0.94, sy: 0.04, sz: 0.54, ox: 0, oy: 0.36, oz: -0.1, color: COLORS.yardRoof },
-          { sx: 0.5, sy: 0.28, sz: 0.03, ox: 0, oy: 0, oz: 0.16, color: COLORS.busDoor },
-        ],
-        site.trackDx,
-        site.trackDz,
-      );
+      return turnToward(site.trackDx, site.trackDz);
     default:
-      return [];
+      return 0;
   }
-}
-
-/** Blade length, measured from the hub outward. */
-const ROTOR_RADIUS = 0.42;
-
-/**
- * How high a plant rises above its tile. Site-independent: the hydro
- * shapes change orientation with the river/lake, never height.
- */
-export function plantHeight(plant: PlantType): number {
-  const site: PlantSite = { riverAlongZ: false, lakeDx: 0, lakeDz: 0, trackDx: 0, trackDz: 0 };
-  let top = 0;
-  for (const part of plantBoxParts(plant, site)) top = Math.max(top, part.oy + part.sy);
-  // Rotor and dome are separate meshes, so they are not in the box parts.
-  if (plant === PlantType.WindTurbine) top = Math.max(top, HUB_HEIGHT + ROTOR_RADIUS);
-  if (plant === PlantType.BiogasPlant) top = Math.max(top, BIOGAS_DOME_TOP);
-  return top;
 }
 
 /** Three thin blades merged into one rotor geometry, hub at the origin. */
 function createRotorGeometry(): THREE.BufferGeometry {
   const blades: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 3; i++) {
-    const blade = new THREE.BoxGeometry(0.015, ROTOR_RADIUS, 0.05);
+    const blade = new THREE.BoxGeometry(ROTOR_BLADE.thickness, ROTOR_RADIUS, ROTOR_BLADE.chord);
     blade.translate(0, ROTOR_RADIUS / 2, 0);
     blade.rotateX((i * 2 * Math.PI) / 3);
     blades.push(blade);
   }
   const merged = mergeGeometries(blades);
-  // Blades live in the yz-plane and spin around the x axis.
+  // Blades live in the yz-plane; turned to the xy-plane they spin around z.
   merged.rotateY(Math.PI / 2);
   return merged;
 }
 
+/** Unit box with its base at y = 0 (plinths, fill bars). */
+function baseBox(): THREE.BufferGeometry {
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  geometry.translate(0, 0.5, 0);
+  return geometry;
+}
+
+/** Instance transforms span the grid; the base-geometry bounds would cull them. */
+function setupSolid(mesh: THREE.InstancedMesh): void {
+  mesh.frustumCulled = false;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+}
+
 /**
- * All energy plants: instanced static parts, spinning turbine rotors
- * (speed proportional to wind output), biogas domes, and battery
- * state-of-charge fill bars.
+ * All plants and service buildings: one instanced mesh per type drawing
+ * its detailed model, a plinth under each, park lawns with trees and
+ * benches, spinning turbine rotors (speed proportional to wind output)
+ * and battery state-of-charge fill bars.
  */
 export class PlantsMesh implements DiffLayer {
-  readonly boxMesh: THREE.InstancedMesh;
+  /** Concrete or gravel slab under every non-park plant, reaching down to the ground. */
+  readonly plinths: GrowingMesh;
   /** Park lawns: two prisms per park, each flush with one ground triangle. */
   readonly parkPads: THREE.InstancedMesh;
-  private readonly rotorMesh: THREE.InstancedMesh;
-  private readonly domeMesh: THREE.InstancedMesh;
-  /** Front bars showing each battery's state of charge (public for tests). */
+  readonly treeMesh: GrowingMesh;
+  readonly benchMesh: GrowingMesh;
+  readonly rotorMesh: THREE.InstancedMesh;
+  /** Front bars showing each battery's state of charge. */
   readonly socFillMesh: THREE.InstancedMesh;
+  private readonly typeMeshes = new Map<PlantType, GrowingMesh>();
+  private readonly modelMaterial = surfaceMaterial({ vertexColors: true });
   private readonly gridSize: number;
   private readonly plants = new Map<number, PlantType>();
   private readonly terrain: Uint8Array;
   /** Track mask per tile, for turning the rail plants toward their halt. */
   private readonly rail: Uint8Array;
-  private readonly rotorPositions: THREE.Vector3[] = [];
+  private readonly placedPlants: PlacedPlant[] = [];
+  /** Rotor hubs in world space, with the turbine's yaw. */
+  private readonly rotors: Array<{ hub: THREE.Vector3; yaw: number }> = [];
   private rotorAngle = 0;
   private rotorSpeedFactor = 0;
-  /** Drawn battery cabinets, in instance order, with the tile each stands on. */
-  private readonly batteryPositions: Array<{ position: THREE.Vector3; index: number }> = [];
+  /** Drawn fill bars, in instance order: world base, yaw and the tile it reads. */
+  private readonly socFills: Array<{
+    base: THREE.Vector3;
+    yaw: number;
+    index: number;
+    fill: NonNullable<PlantModel['socFill']>;
+  }> = [];
   /** Per-tile state of charge 0..1, from the tile diffs. */
   private readonly stateOfCharge = new Map<number, number>();
   private readonly matrix = new THREE.Matrix4();
+  private readonly spin = new THREE.Matrix4();
   private readonly quaternion = new THREE.Quaternion();
   private readonly scale = new THREE.Vector3();
   private readonly position = new THREE.Vector3();
+  private readonly color = new THREE.Color();
+  private static readonly UP = new THREE.Vector3(0, 1, 0);
 
   constructor(
-    scene: THREE.Scene,
+    private readonly scene: THREE.Scene,
     gridSize: number,
     private readonly elevation: ElevationField,
   ) {
@@ -475,23 +162,13 @@ export class PlantsMesh implements DiffLayer {
     this.terrain = new Uint8Array(capacity);
     this.rail = new Uint8Array(capacity);
 
-    const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-    boxGeometry.translate(0, 0.5, 0);
-    this.boxMesh = new THREE.InstancedMesh(
-      boxGeometry,
-      surfaceMaterial(),
-      capacity * MAX_BOX_PARTS_PER_PLANT,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.boxMesh.frustumCulled = false;
-    this.boxMesh.castShadow = true;
-    this.boxMesh.count = 0;
-    scene.add(this.boxMesh);
+    this.plinths = new GrowingMesh(scene, baseBox(), surfaceMaterial(), setupSolid);
+    this.treeMesh = new GrowingMesh(scene, treeGeometry(), this.modelMaterial, setupSolid);
+    this.benchMesh = new GrowingMesh(scene, benchGeometry(), this.modelMaterial, setupSolid);
 
     this.parkPads = new THREE.InstancedMesh(
       createHalfTilePrism(),
-      surfaceMaterial({ color: COLORS.parkGrass }),
+      surfaceMaterial({ color: PARK_GRASS_COLOR }),
       capacity * 2,
     );
     // Instance transforms live across the whole grid; the base geometry's
@@ -503,40 +180,31 @@ export class PlantsMesh implements DiffLayer {
 
     this.rotorMesh = new THREE.InstancedMesh(
       createRotorGeometry(),
-      surfaceMaterial({ color: COLORS.pole }),
+      surfaceMaterial({ color: ROTOR_COLOR }),
       capacity,
     );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
     this.rotorMesh.frustumCulled = false;
     this.rotorMesh.count = 0;
     scene.add(this.rotorMesh);
 
-    const domeGeometry = new THREE.SphereGeometry(DOME_RADIUS, 10, 6);
-    this.domeMesh = new THREE.InstancedMesh(
-      domeGeometry,
-      surfaceMaterial({ color: COLORS.biogasDome }),
-      capacity,
-    );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.domeMesh.frustumCulled = false;
-    this.domeMesh.castShadow = true;
-    this.domeMesh.count = 0;
-    scene.add(this.domeMesh);
-
-    const fillGeometry = new THREE.BoxGeometry(1, 1, 1);
-    fillGeometry.translate(0, 0.5, 0);
     this.socFillMesh = new THREE.InstancedMesh(
-      fillGeometry,
-      new THREE.MeshBasicMaterial({ color: 0x7be07f }),
+      baseBox(),
+      new THREE.MeshBasicMaterial({ color: SOC_FILL_COLOR }),
       capacity,
     );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
     this.socFillMesh.frustumCulled = false;
     this.socFillMesh.count = 0;
     scene.add(this.socFillMesh);
+  }
+
+  /** The mesh drawing a plant type; undefined for types without geometry or none placed yet. */
+  meshOf(type: PlantType): THREE.InstancedMesh | undefined {
+    return this.typeMeshes.get(type)?.mesh;
+  }
+
+  /** Placed plants in rebuild order with their world pose (for the lights). */
+  get placed(): ReadonlyArray<Readonly<PlacedPlant>> {
+    return this.placedPlants;
   }
 
   applyDiffs(diffs: TileDiff[]): void {
@@ -579,30 +247,108 @@ export class PlantsMesh implements DiffLayer {
   }
 
   update(deltaSeconds: number): void {
-    if (this.rotorPositions.length === 0) return;
-    // Rotor speed is proportional to wind output (cut-in below ~10%).
+    if (this.rotors.length === 0) return;
+    // Rotor speed is proportional to wind output (still below cut-in).
     const speed =
-      this.rotorSpeedFactor > 0.05 ? ROTOR_MAX_SPEED_RAD_PER_S * this.rotorSpeedFactor : 0;
+      this.rotorSpeedFactor > ROTOR_CUT_IN ? ROTOR_MAX_SPEED_RAD_PER_S * this.rotorSpeedFactor : 0;
     if (speed === 0) return;
     this.rotorAngle = (this.rotorAngle + speed * deltaSeconds) % (2 * Math.PI);
     this.writeRotors();
   }
 
-  private rebuild(): void {
-    let boxSlot = 0;
-    let domeSlot = 0;
-    let padSlot = 0;
-    this.rotorPositions.length = 0;
-    this.batteryPositions.length = 0;
-    const color = new THREE.Color();
+  /** The growing mesh for a type with geometry, created on first use. */
+  private typeMesh(type: PlantType): GrowingMesh | undefined {
+    let holder = this.typeMeshes.get(type);
+    if (!holder) {
+      const geometry = plantModel(type).geometry;
+      if (!geometry) return undefined;
+      holder = new GrowingMesh(this.scene, geometry, this.modelMaterial, setupSolid);
+      this.typeMeshes.set(type, holder);
+    }
+    return holder;
+  }
 
-    for (const [index, plant] of this.plants) {
+  /** Rebuild every plant instance; cost proportional to the number of plants. */
+  private rebuild(): void {
+    // 1. Capacity: count per type, plinths and park props first.
+    const perType = new Map<PlantType, number>();
+    let plinthCount = 0;
+    let treeCount = 0;
+    let benchCount = 0;
+    for (const type of this.plants.values()) {
+      perType.set(type, (perType.get(type) ?? 0) + 1);
+    }
+    for (const [type, n] of perType) {
+      const model = plantModel(type);
+      this.typeMesh(type)?.ensure(n);
+      if (model.plinth) plinthCount += n;
+      for (const p of model.groundProps ?? []) {
+        if (p.kind === 'tree') treeCount += n;
+        else benchCount += n;
+      }
+    }
+    this.plinths.ensure(plinthCount);
+    this.treeMesh.ensure(treeCount);
+    this.benchMesh.ensure(benchCount);
+
+    // 2. Instances.
+    const slots = new Map<PlantType, number>();
+    let plinthSlot = 0;
+    let treeSlot = 0;
+    let benchSlot = 0;
+    let padSlot = 0;
+    this.placedPlants.length = 0;
+    this.rotors.length = 0;
+    this.socFills.length = 0;
+
+    for (const [index, type] of this.plants) {
+      const model = plantModel(type);
       const cx = (index % this.gridSize) + 0.5;
       const cz = Math.floor(index / this.gridSize) + 0.5;
       const lift = this.elevation.centerY(index);
-      const site = this.siteOf(index);
-      const isPark = plant === PlantType.Park;
-      if (isPark) {
+      const yaw = plantYaw(type, this.siteOf(index));
+      const base = lift + PLINTH_RISE;
+      this.placedPlants.push({ index, type, x: cx, y: base, z: cz, yaw });
+
+      if (model.plinth) {
+        // Plinths are axis-aligned boxes; yaws are quarter turns.
+        const quarter = Math.abs(Math.sin(yaw)) > 0.5;
+        const sx = quarter ? model.plinth.sz : model.plinth.sx;
+        const sz = quarter ? model.plinth.sx : model.plinth.sz;
+        // Keeps its top, reaches down to the lowest ground under its
+        // footprint so nothing floats on the downhill side of a slope.
+        const bottom = Math.min(lift, this.lowestGroundUnder(cx, cz, sx, sz));
+        this.matrix.makeScale(sx, base - bottom, sz);
+        this.matrix.setPosition(cx, bottom, cz);
+        this.plinths.mesh.setMatrixAt(plinthSlot, this.matrix);
+        this.plinths.mesh.setColorAt(plinthSlot, this.color.setHex(model.plinth.color));
+        plinthSlot++;
+      }
+
+      const holder = this.typeMesh(type);
+      if (holder) {
+        const slot = slots.get(type) ?? 0;
+        this.quaternion.setFromAxisAngle(PlantsMesh.UP, yaw);
+        this.position.set(cx, base, cz);
+        this.matrix.compose(this.position, this.quaternion, this.scale.set(1, 1, 1));
+        holder.mesh.setMatrixAt(slot, this.matrix);
+        slots.set(type, slot + 1);
+      }
+
+      if (model.rotorHub) {
+        const { x, y, z } = model.rotorHub;
+        const hub = new THREE.Vector3(x, y, z).applyAxisAngle(PlantsMesh.UP, yaw);
+        this.rotors.push({ hub: hub.add(this.position.set(cx, base, cz)), yaw });
+      }
+      if (model.socFill) {
+        // The bar stands proud of the face: its back on the anchor.
+        const fill = model.socFill;
+        const anchor = new THREE.Vector3(fill.x, fill.y, fill.z + fill.d / 2);
+        anchor.applyAxisAngle(PlantsMesh.UP, yaw).add(this.position.set(cx, base, cz));
+        this.socFills.push({ base: anchor, yaw, index, fill });
+      }
+
+      if (type === PlantType.Park) {
         // Lawn flush with the ground on both triangles of the tile.
         for (const high of [false, true]) {
           composePrismOnGround(
@@ -617,50 +363,25 @@ export class PlantsMesh implements DiffLayer {
           this.parkPads.setMatrixAt(padSlot++, this.matrix);
         }
       }
-      for (const part of plantBoxParts(plant, site)) {
-        // Trees stand on the ground where they are; everything else keeps
-        // the tile-centre lift its recipe was tuned for.
-        const partLift = isPark ? this.elevation.surfaceY(cx + part.ox, cz + part.oz) : lift;
-        let baseY = part.oy + partLift;
-        let sizeY = part.sy;
-        if (part.oy === 0 && part.rotX === undefined && !isPark) {
-          // Foundation: a box that stands on the ground keeps its top but
-          // drops its bottom to the lowest ground under its footprint, so
-          // nothing floats on the downhill side of a sloped tile (the
-          // uphill side simply sinks in).
-          const bottom = Math.min(
-            partLift,
-            this.lowestGroundUnder(cx + part.ox, cz + part.oz, part.sx, part.sz),
-          );
-          sizeY = partLift + part.sy - bottom;
-          baseY = bottom;
-        }
-        this.position.set(cx + part.ox, baseY, cz + part.oz);
-        this.quaternion.setFromEuler(new THREE.Euler(part.rotX ?? 0, 0, 0));
-        this.scale.set(part.sx, sizeY, part.sz);
-        this.matrix.compose(this.position, this.quaternion, this.scale);
-        this.boxMesh.setMatrixAt(boxSlot, this.matrix);
-        this.boxMesh.setColorAt(boxSlot, color.setHex(part.color));
-        boxSlot++;
-      }
-      if (plant === PlantType.WindTurbine) {
-        this.rotorPositions.push(new THREE.Vector3(cx, HUB_HEIGHT + lift, cz + 0.09));
-      } else if (plant === PlantType.BiogasPlant) {
-        this.matrix.makeScale(1, DOME_SQUASH, 1);
-        this.matrix.setPosition(cx - 0.12, DOME_BASE + lift, cz - 0.05);
-        this.domeMesh.setMatrixAt(domeSlot++, this.matrix);
-      } else if (plant === PlantType.Battery) {
-        this.batteryPositions.push({ position: new THREE.Vector3(cx, lift, cz), index });
+      for (const p of model.groundProps ?? []) {
+        // Each prop stands on the ground at its own spot.
+        const x = cx + p.x;
+        const z = cz + p.z;
+        this.position.set(x, this.elevation.surfaceY(x, z), z);
+        this.quaternion.setFromAxisAngle(PlantsMesh.UP, p.turn);
+        this.matrix.compose(this.position, this.quaternion, this.scale.setScalar(p.scale));
+        if (p.kind === 'tree') this.treeMesh.mesh.setMatrixAt(treeSlot++, this.matrix);
+        else this.benchMesh.mesh.setMatrixAt(benchSlot++, this.matrix);
       }
     }
 
-    this.boxMesh.count = boxSlot;
-    this.boxMesh.instanceMatrix.needsUpdate = true;
+    // 3. Commit every mesh (types with no plants left draw nothing).
+    for (const [type, holder] of this.typeMeshes) holder.commit(slots.get(type) ?? 0);
+    this.plinths.commit(plinthSlot);
+    this.treeMesh.commit(treeSlot);
+    this.benchMesh.commit(benchSlot);
     this.parkPads.count = padSlot;
     this.parkPads.instanceMatrix.needsUpdate = true;
-    if (this.boxMesh.instanceColor) this.boxMesh.instanceColor.needsUpdate = true;
-    this.domeMesh.count = domeSlot;
-    this.domeMesh.instanceMatrix.needsUpdate = true;
     this.writeRotors();
     this.writeSocFills();
   }
@@ -728,26 +449,28 @@ export class PlantsMesh implements DiffLayer {
   }
 
   private writeRotors(): void {
-    for (let i = 0; i < this.rotorPositions.length; i++) {
-      const hub = this.rotorPositions[i];
-      this.matrix.makeRotationZ(this.rotorAngle + i * 0.7);
+    for (let i = 0; i < this.rotors.length; i++) {
+      const { hub, yaw } = this.rotors[i];
+      this.matrix.makeRotationY(yaw);
+      this.spin.makeRotationZ(this.rotorAngle + i * ROTOR_PHASE_STEP);
+      this.matrix.multiply(this.spin);
       this.matrix.setPosition(hub.x, hub.y, hub.z);
       this.rotorMesh.setMatrixAt(i, this.matrix);
     }
-    this.rotorMesh.count = this.rotorPositions.length;
+    this.rotorMesh.count = this.rotors.length;
     this.rotorMesh.instanceMatrix.needsUpdate = true;
   }
 
-  /** Front bar on each battery cabinet showing that battery's state of charge. */
+  /** Bar on each battery cabinet front showing that battery's state of charge. */
   private writeSocFills(): void {
-    for (let i = 0; i < this.batteryPositions.length; i++) {
-      const { position: p, index } = this.batteryPositions[i];
-      const height = 0.04 + 0.42 * (this.stateOfCharge.get(index) ?? 0);
-      this.matrix.makeScale(0.1, height, 0.03);
-      this.matrix.setPosition(p.x + 0.18, 0.03 + p.y, p.z + 0.2);
+    for (let i = 0; i < this.socFills.length; i++) {
+      const { base, yaw, index, fill } = this.socFills[i];
+      const height = SOC_FILL_MIN_HEIGHT + fill.maxH * (this.stateOfCharge.get(index) ?? 0);
+      this.quaternion.setFromAxisAngle(PlantsMesh.UP, yaw);
+      this.matrix.compose(base, this.quaternion, this.scale.set(fill.w, height, fill.d));
       this.socFillMesh.setMatrixAt(i, this.matrix);
     }
-    this.socFillMesh.count = this.batteryPositions.length;
+    this.socFillMesh.count = this.socFills.length;
     this.socFillMesh.instanceMatrix.needsUpdate = true;
   }
 }

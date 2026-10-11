@@ -218,6 +218,8 @@ function biogasPlant(): PlantModel {
 const WEIR = { w: 0.96, h: 0.2, d: 0.3 };
 const RIVER_HOUSE = { x0: 0.2, x1: 0.49, h: 0.26, d: 0.34, roofH: 0.08 };
 const PIER_X = [-0.36, -0.13, 0.1];
+/** Deep enough to carry the powerhouse, the piers and the trash rack in front of the intake. */
+const RIVER_PLINTH = { sx: WEIR.w, sz: 0.4 };
 
 function runOfRiver(): PlantModel {
   const houseW = RIVER_HOUSE.x1 - RIVER_HOUSE.x0;
@@ -247,7 +249,7 @@ function runOfRiver(): PlantModel {
   return {
     geometry,
     parts: n,
-    plinth: { sx: 0.96, sz: 0.3, color: C.CONCRETE },
+    plinth: { ...RIVER_PLINTH, color: C.CONCRETE },
     windows: [win(0.28, 0.1, houseFront, 0), win(0.41, 0.1, houseFront, 0)],
     lamps: [],
   };
@@ -612,6 +614,8 @@ const STORE_BANDS = [0.12, 0.25, 0.38];
 const STORE_STAIR = { x: 0.31, w: 0.04, run: 0.3, rise: 0.47 };
 /** Landing at the stair head: from inside the tank wall out to the stair's outer edge. */
 const STORE_LANDING = { x0: 0.15, d: 0.08 };
+/** Long along z so the district-heating pipe runs out over it to the tile edge. */
+const STORE_PLINTH = { sx: 0.7, sz: 0.96 };
 
 function heatStore(): PlantModel {
   const capTop = STORE_TANK.h + STORE_CAP;
@@ -642,7 +646,7 @@ function heatStore(): PlantModel {
   return {
     geometry,
     parts,
-    plinth: { sx: 0.7, sz: 0.7, color: C.CONCRETE },
+    plinth: { ...STORE_PLINTH, color: C.CONCRETE },
     windows: [],
     lamps: [{ x: 0, y: capTop, z: 0, kind: 'aviation' }],
   };

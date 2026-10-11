@@ -56,6 +56,10 @@ const YARD = [
   PlantType.LogisticsDepot,
 ];
 const AVIATION = [PlantType.WindTurbine, PlantType.HeatStore];
+/** Parts reaching below this height count as standing on the ground. */
+const LOW_PART_HEIGHT = 0.12;
+/** Trim at the tile edge may overhang a full plinth by this much (a 0.015 gap at most). */
+const EDGE_OVERHANG = 0.03;
 
 function distinctColours(g: THREE.BufferGeometry): number {
   const c = g.getAttribute('color');
@@ -85,6 +89,25 @@ describe('plant models', () => {
       expect(m.plinth.sz).toBeLessThanOrEqual(1);
     }
   });
+  // The model base sits PLINTH_RISE above the ground: anything near the
+  // ground beyond the plinth would hover. The tidal buoy stands in the
+  // sea, whose surface never drops below the model base.
+  it.each(TYPES.filter((t) => t !== PlantType.TidalPlant))(
+    'type %i: low parts stand on the plinth',
+    (type) => {
+      const m = plantModel(type);
+      if (!m.geometry || !m.plinth) return;
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        if (pos.getY(i) > LOW_PART_HEIGHT) continue;
+        const overhang = Math.max(
+          Math.abs(pos.getX(i)) - m.plinth.sx / 2,
+          Math.abs(pos.getZ(i)) - m.plinth.sz / 2,
+        );
+        expect(overhang, `vertex ${i}`).toBeLessThanOrEqual(EDGE_OVERHANG + 1e-6);
+      }
+    },
+  );
   it.each(TYPES)('type %i: as tall as before (±0.05)', (type) => {
     expect(Math.abs(plantHeight(type) - HEIGHT[type])).toBeLessThanOrEqual(0.05);
   });
