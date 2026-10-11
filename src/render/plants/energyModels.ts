@@ -1,10 +1,11 @@
 import { PlantType } from '../../shared/types.ts';
-import { WINDOW_HEIGHT, WINDOW_WIDTH } from '../buildings/windowLayout.ts';
 import { box, cone, cylinder, dome, gable, merge, sphere, tilted, tube } from '../modelKit.ts';
-import type { Face, LampAnchor, PlantModel, WindowAnchor } from './models.ts';
+import { FULL_PLINTH, TONE, win, yardLamp } from './common.ts';
+import type { PlantModel } from './models.ts';
 
-/** Shared palette: today's plant colours plus a few structural tones. */
+/** Shared palette: today's plant colours plus the structural tones. */
 const C = {
+  ...TONE,
   pedestal: 0x8a9099,
   panel: 0x2b3d66,
   pole: 0xe8eaec,
@@ -23,7 +24,6 @@ const C = {
   hydrogenHall: 0x9aa3ad,
   hallRoof: 0xe4e7ea,
   tidalHousing: 0x4d6b73,
-  tidalPylon: 0x9aa3ad,
   tidalBuoy: 0xe8a23a,
   gantry: 0xd9a441,
   geoHall: 0x6b5f57,
@@ -36,38 +36,7 @@ const C = {
   storePlinth: 0x6f7a86,
   storeCap: 0xe6ebee,
   fencePost: 0x9aa3ad,
-  CONCRETE: 0x9a9da3,
-  GRAVEL: 0x8a8478,
-  STEEL: 0x6f7a86,
-  ROOF_DARK: 0x4b5563,
-  GLASS: 0x2b3440,
 } as const;
-
-/** Plinth size for models that fill most of their tile. */
-const FULL_PLINTH = 0.92;
-/** Yard lamp: pole height and its section. */
-const LAMP_POLE_HEIGHT = 0.4;
-const LAMP_POLE_SIZE = 0.02;
-
-/** A standard-size window with its glass bottom at y on a wall facing `face`. */
-function win(x: number, y: number, z: number, face: Face): WindowAnchor {
-  return { x, y, z, face, w: WINDOW_WIDTH, h: WINDOW_HEIGHT };
-}
-
-/** Yard lamp pole standing at (x, z); returns the part and the lamp at its top. */
-function yardLamp(x: number, z: number) {
-  const part = box(
-    LAMP_POLE_SIZE,
-    LAMP_POLE_HEIGHT,
-    LAMP_POLE_SIZE,
-    x,
-    LAMP_POLE_HEIGHT / 2,
-    z,
-    C.batteryFrame,
-  );
-  const lamp: LampAnchor = { x, y: LAMP_POLE_HEIGHT, z, kind: 'yard' };
-  return { part, lamp };
-}
 
 // --- Solar farm -------------------------------------------------------------
 
@@ -77,6 +46,8 @@ const SOLAR_PANEL = { w: 0.74, h: 0.02, d: 0.24, y: 0.12 };
 const SOLAR_POST_X = 0.28;
 const SOLAR_POST_TOP = 0.11;
 const SOLAR_RAIL_Z = 0.47;
+/** Low mesh fence standing on the ground front and back. */
+const SOLAR_FENCE_HEIGHT = 0.06;
 
 function solarFarm(): PlantModel {
   const parts = [];
@@ -95,9 +66,9 @@ function solarFarm(): PlantModel {
   }
   // Inverter beside the rows.
   parts.push(box(0.08, 0.1, 0.12, 0.43, 0.05, -0.15, C.batteryFrame));
-  // Low fence rails front and back.
+  // Low mesh fence front and back, standing on the ground.
   for (const z of [-SOLAR_RAIL_Z, SOLAR_RAIL_Z])
-    parts.push(box(0.9, 0.04, 0.015, 0, 0.04, z, C.fencePost));
+    parts.push(box(0.9, SOLAR_FENCE_HEIGHT, 0.015, 0, SOLAR_FENCE_HEIGHT / 2, z, C.fencePost));
   const { geometry, parts: n } = merge(parts);
   return {
     geometry,
@@ -355,12 +326,17 @@ const H2_HALL = { w: 0.62, h: 0.34, d: 0.44, x: -0.12, z: -0.2 };
 const H2_ROOF = 0.04;
 const H2_TANK = { r: 0.08, l: 0.4, x: -0.15, y: 0.11, z: [0.16, 0.36] };
 const H2_SPHERE = { r: 0.12, x: 0.3, z: 0.26, skirt: 0.07 };
+/** Pipe bridge: runs at y over x, ends in a drop onto the first tank (sinking 0.01 into it). */
+const H2_PIPE = { r: 0.015, x: 0, y: 0.26 };
 const H2_STACK = { r: 0.03, h: 0.56, x: 0.36, z: -0.36 };
 
 function hydrogenPlant(): PlantModel {
   const hallFront = H2_HALL.z + H2_HALL.d / 2;
   const hallBack = H2_HALL.z - H2_HALL.d / 2;
   const hallEast = H2_HALL.x + H2_HALL.w / 2;
+  const tankTop = H2_TANK.y + H2_TANK.r - 0.01;
+  const dropH = H2_PIPE.y + H2_PIPE.r - tankTop;
+  const pipeEnd = H2_TANK.z[0] + H2_PIPE.r;
   const parts = [
     box(H2_HALL.w, H2_HALL.h, H2_HALL.d, H2_HALL.x, H2_HALL.h / 2, H2_HALL.z, C.hydrogenHall),
     box(
@@ -389,9 +365,17 @@ function hydrogenPlant(): PlantModel {
       H2_SPHERE.z,
       C.hydrogenTank,
     ),
-    // Pipe bridge from the hall front to the tank field.
-    tube(0.015, 0.3, 0.1, 0.26, hallFront + 0.13, C.STEEL, 'z'),
-    box(0.02, 0.26, 0.02, 0.1, 0.13, hallFront + 0.27, C.STEEL),
+    // Pipe bridge from the hall front to the first tank, dropping onto its top.
+    tube(
+      H2_PIPE.r,
+      pipeEnd - hallFront,
+      H2_PIPE.x,
+      H2_PIPE.y,
+      (hallFront + pipeEnd) / 2,
+      C.STEEL,
+      'z',
+    ),
+    cylinder(H2_PIPE.r, dropH, H2_PIPE.x, tankTop + dropH / 2, H2_TANK.z[0], C.STEEL),
     // Vent stack beside the hall.
     cylinder(H2_STACK.r, H2_STACK.h, H2_STACK.x, H2_STACK.h / 2, H2_STACK.z, C.batteryFrame),
     cylinder(H2_STACK.r + 0.01, 0.03, H2_STACK.x, 0.2, H2_STACK.z, C.hydrogenBand),
@@ -624,28 +608,32 @@ function heatPlant(): PlantModel {
 const STORE_TANK = { r: 0.28, h: 0.49 };
 const STORE_CAP = 0.02;
 const STORE_BANDS = [0.12, 0.25, 0.38];
-const STORE_STAIR = { x: 0.31, w: 0.04, run: 0.4, rise: 0.47 };
+/** Stair beside the east wall (inner edge just clear of the bands), rising toward +z. */
+const STORE_STAIR = { x: 0.31, w: 0.04, run: 0.3, rise: 0.47 };
+/** Landing at the stair head: from inside the tank wall out to the stair's outer edge. */
+const STORE_LANDING = { x0: 0.15, d: 0.08 };
 
 function heatStore(): PlantModel {
   const capTop = STORE_TANK.h + STORE_CAP;
   const stairLen = Math.hypot(STORE_STAIR.run, STORE_STAIR.rise);
   const stairAngle = Math.atan2(STORE_STAIR.rise, STORE_STAIR.run);
+  const landingW = STORE_STAIR.x + STORE_STAIR.w / 2 - STORE_LANDING.x0;
   const { geometry, parts } = merge([
     cylinder(STORE_TANK.r, STORE_TANK.h, 0, STORE_TANK.h / 2, 0, C.storeTank),
     ...STORE_BANDS.map((y) => cylinder(STORE_TANK.r + 0.008, 0.025, 0, y, 0, C.storePlinth)),
     cone(STORE_TANK.r, 0.06, STORE_CAP, 0, STORE_TANK.h + STORE_CAP / 2, 0, C.storeCap),
-    // Stair up the east side, rising toward +z, with a landing at the top.
+    // Stair up the east side, rising toward +z, with a landing that meets the tank wall.
     tilted(
       box(STORE_STAIR.w, 0.012, stairLen, STORE_STAIR.x, STORE_STAIR.rise / 2 + 0.006, 0, C.STEEL),
       -stairAngle,
     ),
     box(
-      0.06,
+      landingW,
       0.012,
-      0.08,
-      STORE_STAIR.x - 0.01,
+      STORE_LANDING.d,
+      STORE_LANDING.x0 + landingW / 2,
       STORE_STAIR.rise,
-      STORE_STAIR.run / 2 + 0.03,
+      STORE_STAIR.run / 2 + STORE_LANDING.d / 2,
       C.STEEL,
     ),
     // District-heating connection at the foot.

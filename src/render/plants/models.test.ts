@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { PlantType } from '../../shared/types.ts';
-import { MAX_PARTS_PER_PLANT_MODEL, plantHeight, plantModel, turnToward } from './models.ts';
+import {
+  BENCH_HEIGHT,
+  MAX_PARTS_PER_PLANT_MODEL,
+  TREE_HEIGHT,
+  benchGeometry,
+  plantHeight,
+  plantModel,
+  treeGeometry,
+  turnToward,
+} from './models.ts';
 
 const HEIGHT: Record<number, number> = {
   [PlantType.SolarFarm]: 0.16,
@@ -26,21 +35,26 @@ const HEIGHT: Record<number, number> = {
   [PlantType.FreightTerminal]: 0.61,
   [PlantType.RailYard]: 0.4,
 };
-const ENERGY = [
-  PlantType.SolarFarm,
-  PlantType.WindTurbine,
-  PlantType.Battery,
-  PlantType.BiogasPlant,
-  PlantType.RunOfRiver,
-  PlantType.PumpedStorage,
+const TYPES = Object.values(PlantType).filter((t) => t !== PlantType.None);
+const STAFFED = [
   PlantType.HydrogenPlant,
-  PlantType.TidalPlant,
   PlantType.GeothermalPlant,
   PlantType.HeatPlant,
-  PlantType.HeatStore,
+  PlantType.FireStation,
+  PlantType.PoliceStation,
+  PlantType.LogisticsDepot,
+  PlantType.BusDepot,
+  PlantType.TrainStation,
+  PlantType.FreightTerminal,
+  PlantType.RailYard,
 ];
-const TYPES = ENERGY; // Task 3: all 21 types
-const STAFFED = [PlantType.HydrogenPlant, PlantType.GeothermalPlant, PlantType.HeatPlant]; // Task 3 adds the services
+const YARD = [
+  PlantType.Substation,
+  PlantType.TrainStation,
+  PlantType.FreightTerminal,
+  PlantType.RailYard,
+  PlantType.LogisticsDepot,
+];
 const AVIATION = [PlantType.WindTurbine, PlantType.HeatStore];
 
 function distinctColours(g: THREE.BufferGeometry): number {
@@ -79,18 +93,27 @@ describe('plant models', () => {
     for (const w of m.windows) {
       expect(Math.abs(w.x)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(w.z)).toBeLessThanOrEqual(0.5);
-      // A ray from just in front of the glass centre back into the wall hits the model within 0.01.
+      const label = `window at ${w.x},${w.y},${w.z} face ${w.face}`;
       const yaw = (w.face * Math.PI) / 2;
       const normal = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-      const origin = new THREE.Vector3(w.x, w.y + w.h / 2, w.z).addScaledVector(normal, 0.05);
-      const ray = new THREE.Raycaster(origin, normal.clone().negate(), 0, 0.06);
+      const glass = new THREE.Vector3(w.x, w.y + w.h / 2, w.z);
       const mesh = new THREE.Mesh(
         m.geometry!,
         new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
       );
-      const hit = ray.intersectObject(mesh)[0];
-      expect(hit, `window at ${w.x},${w.y},${w.z} face ${w.face}`).toBeDefined();
-      expect(hit.distance).toBeGreaterThan(0.04);
+      // A ray from just in front of the glass centre back into the wall hits the model within 0.01 ...
+      const origin = glass.clone().addScaledVector(normal, 0.05);
+      const hit = new THREE.Raycaster(origin, normal.clone().negate(), 0, 0.06).intersectObject(
+        mesh,
+      )[0];
+      expect(hit, label).toBeDefined();
+      expect(hit.distance, label).toBeGreaterThan(0.04);
+      // ... on a wall that faces the window's way (a flipped face would hit the wall from inside) ...
+      expect(hit.face!.normal.dot(normal), label).toBeGreaterThan(0.9);
+      // ... and nothing stands right in front of the glass.
+      const front = glass.clone().addScaledVector(normal, 0.001);
+      const blocked = new THREE.Raycaster(front, normal, 0, 0.02).intersectObject(mesh);
+      expect(blocked, label).toHaveLength(0);
     }
   });
   it.each(STAFFED)('type %i: staffed buildings have at least two windows', (type) => {
@@ -103,6 +126,40 @@ describe('plant models', () => {
     g.computeBoundingBox();
     // On the structure's top (for the turbine: the nacelle, below the rotor tip).
     for (const l of lamps) expect(l.y).toBeGreaterThanOrEqual(g.boundingBox!.max.y - 0.1);
+  });
+  it.each(YARD)('type %i: has yard lamps', (type) => {
+    expect(plantModel(type).lamps.some((l) => l.kind === 'yard')).toBe(true);
+  });
+  it('park: ground props only — trees in three sizes and benches, no plinth', () => {
+    const m = plantModel(PlantType.Park);
+    expect(m.geometry).toBeNull();
+    expect(m.plinth).toBeUndefined();
+    const trees = m.groundProps!.filter((p) => p.kind === 'tree');
+    expect(new Set(trees.map((t) => t.scale)).size).toBe(3);
+    expect(m.groundProps!.some((p) => p.kind === 'bench')).toBe(true);
+    for (const p of m.groundProps!) {
+      expect(Math.abs(p.x)).toBeLessThanOrEqual(0.42);
+      expect(Math.abs(p.z)).toBeLessThanOrEqual(0.42);
+    }
+  });
+  it.each([PlantType.TrainStation, PlantType.FreightTerminal, PlantType.RailYard])(
+    'type %i: drawn with the track side at +z (platform/loading edge at z > 0.25)',
+    (type) => {
+      const g = plantModel(type).geometry!;
+      g.computeBoundingBox();
+      expect(g.boundingBox!.max.z).toBeGreaterThan(0.25);
+    },
+  );
+  it.each([
+    ['tree', treeGeometry, TREE_HEIGHT],
+    ['bench', benchGeometry, BENCH_HEIGHT],
+  ] as const)('%s prop: vertex-coloured, base on the ground, stated height', (_, build, height) => {
+    const g = build();
+    expect(g.getAttribute('color').count).toBe(g.getAttribute('position').count);
+    expect(distinctColours(g)).toBeGreaterThanOrEqual(2);
+    g.computeBoundingBox();
+    expect(g.boundingBox!.min.y).toBeCloseTo(0, 6);
+    expect(g.boundingBox!.max.y).toBeCloseTo(height, 6);
   });
   it('wind turbine: rotor hub on the nacelle front, rotor tip sets the height', () => {
     const m = plantModel(PlantType.WindTurbine);

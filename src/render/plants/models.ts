@@ -16,15 +16,64 @@
  */
 import type * as THREE from 'three';
 import { PlantType } from '../../shared/types.ts';
+import { box, cone, cylinder, merge } from '../modelKit.ts';
 import { energyModels } from './energyModels.ts';
 import { serviceModels } from './serviceModels.ts';
 
 export const MAX_PARTS_PER_PLANT_MODEL = 24;
 /** Blade length of the wind turbine rotor, measured from the hub outward. */
 export const ROTOR_RADIUS = 0.42;
-/** Tree prop height at scale 1. */
-export const TREE_HEIGHT = 0.26;
+/**
+ * Tree prop height at scale 1. The park's largest tree (scale 1.25) tops
+ * out at 0.525, matching today's tallest park tree (0.52).
+ */
+export const TREE_HEIGHT = 0.42;
 export const BENCH_HEIGHT = 0.04;
+
+const PROP_COLOR = {
+  trunk: 0x6e4f36,
+  foliage: 0x3f7d46,
+  foliageLight: 0x549a54,
+  benchSeat: 0x8a6a48,
+  benchLeg: 0x3a4048,
+} as const;
+/** Tree at scale 1: trunk, a wide lower cone, and a smaller upper cone reaching TREE_HEIGHT. */
+const TREE = {
+  trunk: { r: 0.02, h: 0.12 },
+  lower: { r: 0.13, base: 0.08, h: 0.22 },
+  upper: { r: 0.095, base: 0.26 },
+};
+/** Bench: a seat slab on two legs. */
+const BENCH = { w: 0.12, d: 0.04, seat: 0.012, legW: 0.012, legD: 0.034, legX: 0.045 };
+
+/** Tree prop (park), base at y = 0, height TREE_HEIGHT at scale 1. */
+export function treeGeometry(): THREE.BufferGeometry {
+  const upperH = TREE_HEIGHT - TREE.upper.base;
+  return merge([
+    cylinder(TREE.trunk.r, TREE.trunk.h, 0, TREE.trunk.h / 2, 0, PROP_COLOR.trunk),
+    cone(
+      TREE.lower.r,
+      0,
+      TREE.lower.h,
+      0,
+      TREE.lower.base + TREE.lower.h / 2,
+      0,
+      PROP_COLOR.foliage,
+    ),
+    cone(TREE.upper.r, 0, upperH, 0, TREE.upper.base + upperH / 2, 0, PROP_COLOR.foliageLight),
+  ]).geometry;
+}
+
+/** Bench prop (park), base at y = 0, height BENCH_HEIGHT; the seat runs along x. */
+export function benchGeometry(): THREE.BufferGeometry {
+  const legH = BENCH_HEIGHT - BENCH.seat;
+  return merge([
+    box(BENCH.w, BENCH.seat, BENCH.d, 0, legH + BENCH.seat / 2, 0, PROP_COLOR.benchSeat),
+    ...[-BENCH.legX, BENCH.legX].map((x) =>
+      box(BENCH.legW, legH, BENCH.legD, x, legH / 2, 0, PROP_COLOR.benchLeg),
+    ),
+  ]).geometry;
+}
 
 /** Model face direction as quarter turns: 0 = +z, 1 = +x, 2 = −z, 3 = −x (yaw = face · π/2). */
 export type Face = 0 | 1 | 2 | 3;
