@@ -298,6 +298,46 @@ Collected 2026-09-24; roughly in the order we want to build them.
   with a surplus to sell and is a bill worth paying on the one that
   goes short.
 
+### Next ideas (collected 2026-10-11)
+
+Everything above has shipped. These are the candidates for what comes
+next, roughly in the order we would build them; the first two reuse
+the existing simulation without new balance risk and give the finished
+feature set real play goals.
+
+- **Scenarios / campaign**: fixed maps with a starting situation and a
+  goal set on top of the existing goals system — "island without an
+  import link", "survive a winter Dunkelflaute", "electrify an old
+  town", "storm season with a fragile wind fleet". Each scenario fixes
+  seed, size, disaster intensity and starting funds and ends with a win
+  screen that scores the chosen metrics.
+- **Save slots**: today there is one autosave. Named slots with load,
+  delete and export/import in the web build as well as the native app.
+- **Grid-frequency minigame**: inertia and reserve power as a
+  mechanic — a sudden plant outage or storm cut-out drops the
+  frequency, batteries and demand response hold it, too little reserve
+  cascades into a blackout. Already noted under demand response, never
+  built.
+- **Policies / ordinances**: rooftop-PV mandate for new buildings,
+  night-time tariff, speed limit, combustion-car ban, mandatory smart
+  meters — each a toggle with a cost, a happiness effect and a sim
+  effect.
+- **Finance**: loans and bonds with interest, subsidies for renewables,
+  a grid-fee model. Today the tax slider is the only lever.
+- **Neighbouring cities**: the market is abstract. Concrete neighbours
+  with their own generation mix, supply contracts and interconnectors
+  whose capacity the player buys.
+- **Cycling and walking**: bike lanes and pedestrian streets that
+  replace short car trips and lower the charging peak.
+- **Annual report / statistics replay**: multi-year time series,
+  comparison of two saves, CSV export.
+- **Difficulty and sandbox modes**: unlimited money, disasters off,
+  faster time.
+- **Share a city**: seed plus compressed save as a URL.
+- **Onboarding for the later systems**: the tutorial covers the basics;
+  smart meters, demand response, grid islands, hydrogen and the heat
+  sector each deserve a short guided introduction.
+
 ## Way of Working
 
 - Start with a short architecture and implementation plan and wait for my
