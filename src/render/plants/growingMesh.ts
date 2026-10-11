@@ -4,6 +4,28 @@ import * as THREE from 'three';
 export const PLANT_CAPACITY_START = 16;
 
 /**
+ * Flags the first `count` instances of an instanced attribute for
+ * re-upload. The range never goes empty: three.js reads an empty range
+ * list as "upload everything".
+ */
+function flagRange(attr: THREE.InstancedBufferAttribute, count: number): void {
+  attr.clearUpdateRanges();
+  attr.addUpdateRange(0, Math.max(1, count) * attr.itemSize);
+  if (count > 0) attr.needsUpdate = true;
+}
+
+/**
+ * Draw `count` instances of an InstancedMesh with no instance colour (a
+ * plain mesh outside a `GrowingMesh`, e.g. rotors or fill bars) and flag
+ * only those for re-upload. `GrowingMesh.commit` uses this for the
+ * matrix half and adds the colour attribute itself when the mesh has one.
+ */
+export function uploadDrawn(mesh: THREE.InstancedMesh, count: number): void {
+  mesh.count = count;
+  flagRange(mesh.instanceMatrix, count);
+}
+
+/**
  * An InstancedMesh whose capacity grows on demand. Growing replaces the
  * mesh (an InstancedMesh cannot be resized): the new one is set up
  * through `setup`, takes over the written instances and the old one
@@ -56,14 +78,8 @@ export class GrowingMesh {
    * everything".
    */
   commit(count: number): void {
-    const mesh = this.current;
-    mesh.count = count;
-    for (const attr of [mesh.instanceMatrix, mesh.instanceColor]) {
-      if (!attr) continue;
-      attr.clearUpdateRanges();
-      attr.addUpdateRange(0, Math.max(1, count) * attr.itemSize);
-      if (count > 0) attr.needsUpdate = true;
-    }
+    uploadDrawn(this.current, count);
+    if (this.current.instanceColor) flagRange(this.current.instanceColor, count);
   }
 
   private create(capacity: number): THREE.InstancedMesh {

@@ -6,8 +6,9 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
-import { GrowingMesh } from './plants/growingMesh.ts';
+import { GrowingMesh, uploadDrawn } from './plants/growingMesh.ts';
 import { PlantLights } from './plants/lights.ts';
+import type { LitPlant } from './plants/lights.ts';
 import type { PlantModel } from './plants/models.ts';
 import {
   ROTOR_RADIUS,
@@ -50,15 +51,12 @@ export interface PlantSite {
   trackDz: number;
 }
 
-/** A drawn plant with its world pose: model base at (x, y, z), turned by yaw about +y. */
-export interface PlacedPlant {
-  index: number;
-  type: PlantType;
-  x: number;
-  y: number;
-  z: number;
-  yaw: number;
-}
+/**
+ * A drawn plant with its world pose: model base at (x, y, z), turned by
+ * yaw about +y. Same shape as `LitPlant` (`plants/lights.ts`) — the
+ * lights read the poses this mesh places.
+ */
+export type PlacedPlant = LitPlant;
 
 /**
  * Yaw that turns a plant model (drawn with its water/track side at +z,
@@ -106,19 +104,6 @@ function setupSolid(mesh: THREE.InstancedMesh): void {
   mesh.frustumCulled = false;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-}
-
-/**
- * Draw `count` instances and flag only those for re-upload (as
- * `GrowingMesh.commit`). The range never goes empty: three.js reads an
- * empty range list as "upload everything".
- */
-function uploadDrawn(mesh: THREE.InstancedMesh, count: number): void {
-  mesh.count = count;
-  const attr = mesh.instanceMatrix;
-  attr.clearUpdateRanges();
-  attr.addUpdateRange(0, Math.max(1, count) * attr.itemSize);
-  if (count > 0) attr.needsUpdate = true;
 }
 
 /**

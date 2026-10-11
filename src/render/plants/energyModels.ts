@@ -11,7 +11,6 @@ const C = {
   pole: 0xe8eaec,
   nacelle: 0xd5d8db,
   batteryCabinet: 0x4d6b57,
-  batteryFrame: 0x3a4048,
   biogasTank: 0x6c7f5a,
   biogasDome: 0x93ab6d,
   silage: 0x8b7d3a,
@@ -35,7 +34,6 @@ const C = {
   storeTank: 0xc9a227,
   storePlinth: 0x6f7a86,
   storeCap: 0xe6ebee,
-  fencePost: 0x9aa3ad,
 } as const;
 
 // --- Solar farm -------------------------------------------------------------
@@ -65,10 +63,10 @@ function solarFarm(): PlantModel {
       parts.push(box(0.025, SOLAR_POST_TOP, 0.025, x, SOLAR_POST_TOP / 2, z, C.STEEL));
   }
   // Inverter beside the rows.
-  parts.push(box(0.08, 0.1, 0.12, 0.43, 0.05, -0.15, C.batteryFrame));
+  parts.push(box(0.08, 0.1, 0.12, 0.43, 0.05, -0.15, C.FRAME));
   // Low mesh fence front and back, standing on the ground.
   for (const z of [-SOLAR_RAIL_Z, SOLAR_RAIL_Z])
-    parts.push(box(0.9, SOLAR_FENCE_HEIGHT, 0.015, 0, SOLAR_FENCE_HEIGHT / 2, z, C.fencePost));
+    parts.push(box(0.9, SOLAR_FENCE_HEIGHT, 0.015, 0, SOLAR_FENCE_HEIGHT / 2, z, C.FENCE));
   const { geometry, parts: n } = merge(parts);
   return {
     geometry,
@@ -132,7 +130,7 @@ function battery(): PlantModel {
         x,
         CABINET.h + CABINET_CAP / 2,
         CABINET.z,
-        C.batteryFrame,
+        C.FRAME,
       ),
     );
     // Vent louvre strip on the door, beside the SoC bar.
@@ -277,10 +275,10 @@ function pumpedStorage(): PlantModel {
       0,
       PUMP_HOUSE.h + PUMP_ROOF / 2,
       PUMP_HOUSE.z,
-      C.batteryFrame,
+      C.FRAME,
     ),
     // Gate door on the back wall.
-    box(0.16, 0.2, 0.01, 0, 0.1, back - 0.005, C.batteryFrame),
+    box(0.16, 0.2, 0.01, 0, 0.1, back - 0.005, C.FRAME),
     // Penstocks toward the lake (+z), with a wall collar each.
     ...[-PENSTOCK.x, PENSTOCK.x].flatMap((x) => [
       tube(PENSTOCK.r, pipeLen, x, PENSTOCK.y, pipeZ, C.penstock, 'z'),
@@ -303,7 +301,7 @@ function pumpedStorage(): PlantModel {
       0,
       VALVE_HOUSE.h + 0.015,
       VALVE_HOUSE.z,
-      C.batteryFrame,
+      C.FRAME,
     ),
   ];
   const { geometry, parts: n } = merge(parts);
@@ -379,7 +377,7 @@ function hydrogenPlant(): PlantModel {
     ),
     cylinder(H2_PIPE.r, dropH, H2_PIPE.x, tankTop + dropH / 2, H2_TANK.z[0], C.STEEL),
     // Vent stack beside the hall.
-    cylinder(H2_STACK.r, H2_STACK.h, H2_STACK.x, H2_STACK.h / 2, H2_STACK.z, C.batteryFrame),
+    cylinder(H2_STACK.r, H2_STACK.h, H2_STACK.x, H2_STACK.h / 2, H2_STACK.z, C.FRAME),
     cylinder(H2_STACK.r + 0.01, 0.03, H2_STACK.x, 0.2, H2_STACK.z, C.hydrogenBand),
   ];
   const lamp = yardLamp(0.45, -0.05);
@@ -431,7 +429,7 @@ function tidalPlant(): PlantModel {
         C.ROOF_DARK,
       ),
       // Sluice gate on the sea face (+z) below each house.
-      box(0.16, 0.14, 0.01, x, 0.09, BARRAGE.d / 2 + 0.005, C.batteryFrame),
+      box(0.16, 0.14, 0.01, x, 0.09, BARRAGE.d / 2 + 0.005, C.FRAME),
     ]),
     // Gate-lifting gantry portal at the east end.
     ...[-TIDAL_GANTRY.legZ, TIDAL_GANTRY.legZ].map((z) =>
@@ -578,16 +576,9 @@ function heatPlant(): PlantModel {
     tube(0.03, 0.2, east + 0.09, 0.08, 0.18, C.heatStack, 'x'),
     // Small stack with a band.
     cylinder(HEAT_STACK.r, HEAT_STACK.h, HEAT_STACK.x, HEAT_STACK.h / 2, HEAT_STACK.z, C.heatStack),
-    cylinder(
-      HEAT_STACK.r + 0.008,
-      0.03,
-      HEAT_STACK.x,
-      HEAT_STACK.h - 0.06,
-      HEAT_STACK.z,
-      C.batteryFrame,
-    ),
+    cylinder(HEAT_STACK.r + 0.008, 0.03, HEAT_STACK.x, HEAT_STACK.h - 0.06, HEAT_STACK.z, C.FRAME),
     // Door on the front.
-    box(0.12, 0.18, 0.01, 0.18, 0.09, front + 0.005, C.batteryFrame),
+    box(0.12, 0.18, 0.01, 0.18, 0.09, front + 0.005, C.FRAME),
   ];
   const { geometry, parts: n } = merge(parts);
   const sill = 0.1;

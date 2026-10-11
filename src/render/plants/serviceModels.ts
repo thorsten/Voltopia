@@ -8,7 +8,6 @@ const C = {
   ...TONE,
   asphalt: 0x5a5f66,
   hubCanopy: 0x58b7a4,
-  hubPillar: 0x3a4048,
   hubScreen: 0x7be0c8,
   fireHall: 0xc0392b,
   fireRoof: 0xf4f1ec,
@@ -19,12 +18,10 @@ const C = {
   policeCar: 0xf0f2f4,
   depotHall: 0x8d99a6,
   depotRoof: 0xe4e7ea,
-  depotDoor: 0x3a4048,
   depotRamp: 0x6f7a86,
   van: 0xf0c419,
   busHall: 0x5b8fc7,
   busRoof: 0xe4e7ea,
-  busDoor: 0x3a4048,
   bus: 0x4a9a6a,
   washBrush: 0x54b8c9,
   substationBox: 0x4b5563,
@@ -34,7 +31,6 @@ const C = {
   safetyLine: 0xe8c33a,
   stationWall: 0xd9cbb0,
   stationRoof: 0xd84a3a,
-  stationPost: 0x3a4048,
   clockFace: 0xf4f1ec,
   gantry: 0xd9a441,
   containerGreen: 0x4f6b3a,
@@ -88,7 +84,7 @@ function chargingHub(): PlantModel {
     ),
     ...[-HUB_COLUMN.x, HUB_COLUMN.x].flatMap((x) =>
       HUB_COLUMN.z.map((z) =>
-        box(HUB_COLUMN.size, soffit, HUB_COLUMN.size, x, soffit / 2, z, C.hubPillar),
+        box(HUB_COLUMN.size, soffit, HUB_COLUMN.size, x, soffit / 2, z, C.FRAME),
       ),
     ),
     // Charger pillars facing the bays (+z), each with a screen.
@@ -100,7 +96,7 @@ function chargingHub(): PlantModel {
         x,
         HUB_CHARGER.h / 2,
         HUB_CHARGER.z,
-        C.hubPillar,
+        C.FRAME,
       ),
       box(
         HUB_SCREEN.w,
@@ -381,7 +377,7 @@ function logisticsDepot(): PlantModel {
       C.depotRamp,
     ),
     ...DEPOT_DOOR.x.map((x) =>
-      frontDoor(DEPOT_DOOR.w, DEPOT_DOOR.h, x, front, C.depotDoor, DEPOT_DOCK.h),
+      frontDoor(DEPOT_DOOR.w, DEPOT_DOOR.h, x, front, C.FRAME, DEPOT_DOCK.h),
     ),
     box(
       DEPOT_OFFICE.w,
@@ -473,7 +469,7 @@ function busDepot(): PlantModel {
       BUS_SHED.z,
       C.busRoof,
     ),
-    ...BUS_DOOR.x.map((x) => frontDoor(BUS_DOOR.w, BUS_DOOR.h, x, front, C.busDoor)),
+    ...BUS_DOOR.x.map((x) => frontDoor(BUS_DOOR.w, BUS_DOOR.h, x, front, C.FRAME)),
     box(
       BUS_OFFICE.w,
       BUS_OFFICE.h,
@@ -663,7 +659,7 @@ function trainStation(): PlantModel {
         x,
         PLATFORM.h + columnH / 2,
         canopyZ,
-        C.stationPost,
+        C.FRAME,
       ),
     ),
     box(STATION.w, STATION.h, stationD, 0, STATION.h / 2, stationZ, C.stationWall),
@@ -678,7 +674,7 @@ function trainStation(): PlantModel {
     ),
     // Entrance onto the platform.
     frontDoor(0.08, 0.15, 0, PLATFORM.z0, C.FRAME, PLATFORM.h),
-    cylinder(CLOCK.r, CLOCK.postH, CLOCK.x, PLATFORM.h + CLOCK.postH / 2, CLOCK.z, C.stationPost),
+    cylinder(CLOCK.r, CLOCK.postH, CLOCK.x, PLATFORM.h + CLOCK.postH / 2, CLOCK.z, C.FRAME),
     box(CLOCK.size, CLOCK.size, CLOCK.d, CLOCK.x, clockY + CLOCK.size / 2, CLOCK.z, C.clockFace),
     poleLamp.part,
   ];

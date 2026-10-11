@@ -17,7 +17,7 @@ export const TONE = {
 /** Plinth size for models that fill most of their tile. */
 export const FULL_PLINTH = 0.92;
 /** Yard lamp: default pole height and its section. */
-export const LAMP_POLE_HEIGHT = 0.4;
+const LAMP_POLE_HEIGHT = 0.4;
 const LAMP_POLE_SIZE = 0.02;
 
 /** A standard-size window with its glass bottom at y on a wall facing `face`. */
