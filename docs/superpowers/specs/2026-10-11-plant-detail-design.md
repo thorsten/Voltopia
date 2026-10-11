@@ -42,12 +42,13 @@ The vehicle builder's primitives move here and grow:
 
 - `box(w, h, d, x, y, z, color)`, `cylinder(r, h, x, y, z, color,
 segments?)` (upright), `tube(r, l, x, y, z, color, axis)` (lying),
-  `dome(r, squash, x, y, z, color)`, `gable(w, h, d, x, y, z, color,
-turn?)` (prism roof), `cone(rBottom, rTop, h, x, y, z, color)`
-  (tapered tower).
+  `sphere(r, x, y, z, color)`, `dome(r, squash, x, y, z, color)`,
+  `gable(w, h, d, x, y, z, color, ridgeAlong?)` (prism roof),
+  `cone(rBottom, rTop, h, x, y, z, color)` (tapered tower).
 - `merge(parts): { geometry, parts }` merges with a `color` attribute
-  and returns the part count. Named rotation helper `turned(geometry,
-quarterTurns)`.
+  and returns the part count. `tilted(geometry, angleX)` rotates a
+  finished primitive about its own centre; turning a whole model to its
+  site is the instance matrix, not a kit helper.
 - `src/render/vehicles/models.ts` imports `box`/`tube`/`merge` from the
   kit; vehicle geometry is unchanged (the existing vehicle model tests
   prove it).
@@ -127,7 +128,11 @@ Model contents (≤ 24 parts each):
 - **Windows:** `plantWindowFrames` (lit, `windowGeometry()` from part 3,
   visible day and night) and `plantWindowGlow` (night-only, MeshBasic,
   same opacity curve as zone buildings), one instance per model window
-  anchor. Glow only when the tile's `island > 0`.
+  anchor. Glow only when the tile's `island > 0`. Plants run that curve
+  at full strength and show it as soon as it is above zero (zone
+  buildings dim it to 95% and hide it below 2%) — deliberately a little
+  brighter, since plants and service buildings are staffed around the
+  clock.
 - **Lamps:** one `plantLamps` `InstancedMesh` (small emissive-look
   MeshBasic quads/spheres, instance colour red for `aviation`, warm
   white for `yard`), opacity from the night factor; aviation lamps blink
@@ -176,6 +181,13 @@ city and balances energy over days` (`src/sim/integration.test.ts`) at
 loading shared libraries: libnspr4.so: cannot open shared object file`
 — a missing system library for headless Chromium, not an app or test
 regression; needs the Mac.
+
+The kit migration left the tank wagon's tube at the kit's
+`ROUND_SEGMENTS = 12` rather than the vehicle code's previous 8, and
+kit boxes are non-indexed (36 vertices) rather than the previous
+indexed `BoxGeometry` (24): the shape, colours and bounds are
+unchanged (the vehicle model tests pass unmodified) but the vertex
+count is slightly higher.
 
 Part and vertex counts per `plantModel(type)` (measured with a
 temporary script, deleted after), plus the tree and bench ground
