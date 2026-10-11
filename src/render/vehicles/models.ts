@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { box as part, merge, tube } from '../modelKit.ts';
 
 /** Upper bound on boxes per model, so 220 cars stay cheap. */
 export const MAX_PARTS_PER_MODEL = 16;
@@ -30,54 +30,8 @@ export interface VehicleModel {
   length: number;
 }
 
-const scratch = new THREE.Color();
-
-/** A box of size (w along x, h, d along z) centred at (x, y, z) with one vertex colour. */
-function part(
-  w: number,
-  h: number,
-  d: number,
-  x: number,
-  y: number,
-  z: number,
-  color: number,
-): THREE.BufferGeometry {
-  const g = new THREE.BoxGeometry(w, h, d);
-  g.translate(x, y, z);
-  scratch.setHex(color);
-  const n = g.getAttribute('position').count;
-  const colors = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) colors.set([scratch.r, scratch.g, scratch.b], i * 3);
-  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return g;
-}
-
-const TUBE_SEGMENTS = 8;
-
-/** A cylinder along x (radius r, length l) centred at (x, y, z), for tank wagons. */
-function tube(
-  r: number,
-  l: number,
-  x: number,
-  y: number,
-  z: number,
-  color: number,
-): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(r, r, l, TUBE_SEGMENTS);
-  g.rotateZ(Math.PI / 2);
-  g.translate(x, y, z);
-  scratch.setHex(color);
-  const n = g.getAttribute('position').count;
-  const colors = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) colors.set([scratch.r, scratch.g, scratch.b], i * 3);
-  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return g;
-}
-
 function model(parts: THREE.BufferGeometry[], length: number): VehicleModel {
-  const geometry = mergeGeometries(parts);
-  if (!geometry) throw new Error('vehicle model: parts do not merge');
-  return { geometry, parts: parts.length, length };
+  return { ...merge(parts), length };
 }
 
 /** Tyre size and ride height shared by road vehicles. */
