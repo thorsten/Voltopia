@@ -58,13 +58,14 @@ quarterTurns)`.
 
 ```ts
 interface PlantModel {
-  geometry: THREE.BufferGeometry; // vertex colours, base at y = 0, centred
+  geometry: THREE.BufferGeometry | null; // vertex colours, base at y = 0, centred; null for the park
   parts: number; // ≤ MAX_PARTS_PER_PLANT_MODEL = 24
-  footprint: { sx: number; sz: number }; // plinth size on the ground
-  windows: WindowAnchor[]; // façade slots (position, normal, scale)
+  plinth?: { sx: number; sz: number; color: number }; // absent for the park
+  windows: WindowAnchor[]; // glass bottom-centre on a wall, face as quarter turn, size
   lamps: LampAnchor[]; // { x, y, z, kind: 'aviation' | 'yard' }
-  socFill?: { x: number; z: number; w: number; d: number; h: number }; // battery only
   rotorHub?: { x: number; y: number; z: number }; // wind only
+  socFill?: { x: number; y: number; z: number; w: number; d: number; maxH: number }; // battery only
+  groundProps?: GroundProp[]; // park: trees and benches, each on its own ground
 }
 ```
 
@@ -84,7 +85,7 @@ Model contents (≤ 24 parts each):
 | Battery         | container row with vent grilles, transformer, cable trays (fill bar stays) |
 | BiogasPlant     | digester with dome, second tank, silo clamp, pipes, flare stack            |
 | ChargingHub     | canopy on columns, chargers, cabinet, parking marks                        |
-| Park            | trees in three sizes, path, benches (lawn pads stay)                       |
+| Park            | trees in three sizes and benches as ground props (lawn pads stay)          |
 | RunOfRiver      | weir with gates, powerhouse with gable, trash rack                         |
 | PumpedStorage   | powerhouse, two penstocks toward the lake, valve house                     |
 | FireStation     | hall with three doors, hose tower, roof overhang, flagpole                 |
@@ -108,11 +109,14 @@ Model contents (≤ 24 parts each):
   `receiveShadow`, `frustumCulled = false`. Capacity grows on demand
   (start `PLANT_CAPACITY_START = 16`, doubling; a grown mesh replaces
   the old one in the scene), so 21 types never preallocate a whole map.
-- Slopes: a `plinths` `InstancedMesh` (unit box, instance colour
-  `PLINTH_COLOR`) draws one plinth per plant with the model's footprint,
-  top at the tile-centre lift, bottom at the lowest ground under the
+- Slopes: a `plinths` `InstancedMesh` (unit box, instance colour from
+  the model's `plinth.color`: concrete, gravel or asphalt) draws one
+  plinth per plant with the model's footprint, top at the tile-centre
+  lift + `PLINTH_RISE (0.015)`, bottom at the lowest ground under the
   footprint (today's foundation rule). The model sits on the plinth top.
-  Parks keep their ground-hugging lawn pads and per-tree ground height.
+  Parks have no plinth: lawn pads hug the ground as today, and trees and
+  benches are instanced ground props, each at its own ground height (the
+  planned path is dropped — a flat path cannot follow a sloped lawn).
 - The old shared box mesh, `BoxPart` lists and the biogas `domeMesh` are
   removed. Rotor, state-of-charge fill and lawn pads stay, placed from
   the model's anchors.
