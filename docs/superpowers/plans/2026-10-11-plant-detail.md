@@ -1,6 +1,6 @@
 # Plant and Service Building Detail Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Give all 21 `PlantType`s a detailed, recognisable vertex-coloured model and night lights (lit windows, blinking aviation lights, yard lamps), render-only.
 
@@ -40,7 +40,7 @@ Spec: `docs/superpowers/specs/2026-10-11-plant-detail-design.md`.
 
 ### Task 0: Branch
 
-- [ ] `git checkout -b feature/plant-detail` from `main` (spec 55f3c5b and this plan committed on `main` first).
+- [x] `git checkout -b feature/plant-detail` from `main` (spec 55f3c5b and this plan committed on `main` first).
 
 ---
 
@@ -128,7 +128,7 @@ export function merge(parts: THREE.BufferGeometry[]): Model;
 export const ROUND_SEGMENTS = 12;
 ```
 
-- [ ] **Step 1: Write the failing tests** (`src/render/modelKit.test.ts`)
+- [x] **Step 1: Write the failing tests** (`src/render/modelKit.test.ts`)
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -212,9 +212,9 @@ describe('model kit', () => {
 });
 ```
 
-- [ ] **Step 2:** Run `./node_modules/.bin/vitest run src/render/modelKit.test.ts` — FAIL (module missing).
+- [x] **Step 2:** Run `./node_modules/.bin/vitest run src/render/modelKit.test.ts` — FAIL (module missing).
 
-- [ ] **Step 3: Implement `src/render/modelKit.ts`**
+- [x] **Step 3: Implement `src/render/modelKit.ts`**
 
 ```ts
 import * as THREE from 'three';
@@ -364,9 +364,9 @@ export function merge(parts: THREE.BufferGeometry[]): Model {
 
 Note: `ExtrudeGeometry` is non-indexed and has a `uv` attribute; `finish` deletes it. Its flat-shaded normals come from `computeVertexNormals` on non-indexed data (per-face). If the test for `gable` bounds fails on orientation, fix the rotation, not the test.
 
-- [ ] **Step 4:** Run the kit test — PASS.
-- [ ] **Step 5: Move vehicles onto the kit.** In `src/render/vehicles/models.ts` delete `part`, `tube`, `model`, `scratch`, `TUBE_SEGMENTS`; `import { box as part, tube, merge } from '../modelKit.ts'`; replace `model(parts, length)` with `({ ...merge(parts), length })`. Keep `MAX_PARTS_PER_MODEL` and the exported colours. Tank wagon tubes keep 8 segments if their test pins the vertex count — otherwise `ROUND_SEGMENTS` is fine. Run `./node_modules/.bin/vitest run src/render/vehicles src/render/vehiclesMesh.test.ts` — all PASS unchanged.
-- [ ] **Step 6:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `refactor(render): shared model kit with round primitives; vehicles use it`.
+- [x] **Step 4:** Run the kit test — PASS.
+- [x] **Step 5: Move vehicles onto the kit.** In `src/render/vehicles/models.ts` delete `part`, `tube`, `model`, `scratch`, `TUBE_SEGMENTS`; `import { box as part, tube, merge } from '../modelKit.ts'`; replace `model(parts, length)` with `({ ...merge(parts), length })`. Keep `MAX_PARTS_PER_MODEL` and the exported colours. Tank wagon tubes keep 8 segments if their test pins the vertex count — otherwise `ROUND_SEGMENTS` is fine. Run `./node_modules/.bin/vitest run src/render/vehicles src/render/vehiclesMesh.test.ts` — all PASS unchanged.
+- [x] **Step 6:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `refactor(render): shared model kit with round primitives; vehicles use it`.
 
 ---
 
@@ -447,7 +447,7 @@ Heights today (the ±0.05 target):
 
 Plinth: model base sits on the plinth top; `plantsMesh` places the plinth top at tile lift + `PLINTH_RISE` (Task 4) and the model at the same height, so model heights stay measured from y = 0.
 
-- [ ] **Step 1: Write the failing tests** (`src/render/plants/models.test.ts`) — table-driven over the types implemented so far; Task 3 widens `TYPES` to all 21:
+- [x] **Step 1: Write the failing tests** (`src/render/plants/models.test.ts`) — table-driven over the types implemented so far; Task 3 widens `TYPES` to all 21:
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -584,11 +584,11 @@ describe('plant models', () => {
 });
 ```
 
-- [ ] **Step 2:** Run `./node_modules/.bin/vitest run src/render/plants` — FAIL.
+- [x] **Step 2:** Run `./node_modules/.bin/vitest run src/render/plants` — FAIL.
 
-- [ ] **Step 3: Implement `models.ts`** (registry, `turnToward = (dx, dz) => (dx === 0 && dz === 0 ? 0 : Math.atan2(dx, dz))`, cache in a `Map`, `plantHeight` = max of geometry bbox top, `rotorHub.y + ROTOR_RADIUS`, and `max(prop.scale × TREE_HEIGHT)` over ground props). Registry merges `energyModels` and `serviceModels`; a missing type throws `plant model missing for type N`.
+- [x] **Step 3: Implement `models.ts`** (registry, `turnToward = (dx, dz) => (dx === 0 && dz === 0 ? 0 : Math.atan2(dx, dz))`, cache in a `Map`, `plantHeight` = max of geometry bbox top, `rotorHub.y + ROTOR_RADIUS`, and `max(prop.scale × TREE_HEIGHT)` over ground props). Registry merges `energyModels` and `serviceModels`; a missing type throws `plant model missing for type N`.
 
-- [ ] **Step 4: Implement the energy models** in `energyModels.ts` as `export const energyModels: Partial<Record<PlantType, () => PlantModel>>`. Shared colours in a `const C = {...}` block reusing today's palette in `plantsMesh.ts` `COLORS` (copy the values you use), plus `CONCRETE 0x9a9da3`, `GRAVEL 0x8a8478`, `STEEL 0x6f7a86`, `ROOF_DARK 0x4b5563`, `GLASS 0x2b3440`. Content per type (≤ 24 parts, heights per the table):
+- [x] **Step 4: Implement the energy models** in `energyModels.ts` as `export const energyModels: Partial<Record<PlantType, () => PlantModel>>`. Shared colours in a `const C = {...}` block reusing today's palette in `plantsMesh.ts` `COLORS` (copy the values you use), plus `CONCRETE 0x9a9da3`, `GRAVEL 0x8a8478`, `STEEL 0x6f7a86`, `ROOF_DARK 0x4b5563`, `GLASS 0x2b3440`. Content per type (≤ 24 parts, heights per the table):
 
 | Type            | Parts (guide)                                                                                                                            | Anchors                                                                                                                          |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -606,8 +606,8 @@ describe('plant models', () => {
 
 Write one builder per type (`function windTurbine(): PlantModel`), named constants for dimensions shared with anchors (e.g. `HUB_HEIGHT = 0.85`, `NACELLE`), and assert nothing in the builders — the tests do that.
 
-- [ ] **Step 5:** Run the plant model tests — PASS. Inspect the part count printout: add `console.table` temporarily if helpful, then remove it.
-- [ ] **Step 6:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): plant model registry and detailed energy plant models`.
+- [x] **Step 5:** Run the plant model tests — PASS. Inspect the part count printout: add `console.table` temporarily if helpful, then remove it.
+- [x] **Step 6:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): plant model registry and detailed energy plant models`.
 
 ---
 
@@ -622,7 +622,7 @@ Write one builder per type (`function windTurbine(): PlantModel`), named constan
 - Consumes: Task 2's `PlantModel`, anchors, kit, `TREE_HEIGHT`, `BENCH_HEIGHT`.
 - Produces: `serviceModels` entries for ChargingHub, Park, FireStation, PoliceStation, LogisticsDepot, BusDepot, Substation, TrainStation, FreightTerminal, RailYard.
 
-- [ ] **Step 1: Widen the tests:** `TYPES` = all 21 types (`Object.values(PlantType).filter((t) => t !== PlantType.None)`); `STAFFED` adds FireStation, PoliceStation, LogisticsDepot, BusDepot, TrainStation, FreightTerminal, RailYard; add:
+- [x] **Step 1: Widen the tests:** `TYPES` = all 21 types (`Object.values(PlantType).filter((t) => t !== PlantType.None)`); `STAFFED` adds FireStation, PoliceStation, LogisticsDepot, BusDepot, TrainStation, FreightTerminal, RailYard; add:
 
 ```ts
 const YARD = [
@@ -659,8 +659,8 @@ it.each([PlantType.TrainStation, PlantType.FreightTerminal, PlantType.RailYard])
 
 Also export from `models.ts` the two prop geometries Task 4 instances: `treeGeometry(): THREE.BufferGeometry` (trunk + foliage `cone` and a second smaller cone, height `TREE_HEIGHT` at scale 1, base y = 0) and `benchGeometry()` (seat + 2 legs, height `BENCH_HEIGHT`), both via the kit; test that both carry colours and have the stated heights.
 
-- [ ] **Step 2:** Run — FAIL.
-- [ ] **Step 3: Implement** (≤ 24 parts, heights per the table):
+- [x] **Step 2:** Run — FAIL.
+- [x] **Step 3: Implement** (≤ 24 parts, heights per the table):
 
 | Type            | Parts (guide)                                                                                                                           | Anchors                                                                                                    |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -675,8 +675,8 @@ Also export from `models.ts` the two prop geometries Task 4 instances: `treeGeom
 | FreightTerminal | container stacks (3 colours), gantry crane (2 legs + beam to 0.61) spanning toward +z, office                                           | ≥ 2 windows; yard lamp; plinth gravel                                                                      |
 | RailYard        | engine shed with `gable` roof and 2 doors on +z, sand tower, inspection pit strip                                                       | ≥ 2 windows; yard lamp; plinth gravel                                                                      |
 
-- [ ] **Step 4:** Run the plant model tests — PASS.
-- [ ] **Step 5:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): detailed service, grid and rail plant models`.
+- [x] **Step 4:** Run the plant model tests — PASS.
+- [x] **Step 5:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): detailed service, grid and rail plant models`.
 
 ---
 
@@ -738,8 +738,8 @@ class PlantsMesh {
 
 `plantYaw`: RunOfRiver → `riverAlongZ ? 0 : Math.PI / 2`; PumpedStorage → `turnToward(lakeDx, lakeDz)`; TrainStation, FreightTerminal, RailYard → `turnToward(trackDx, trackDz)`; others → 0.
 
-- [ ] **Step 1: GrowingMesh test + implementation.** Test: starting capacity 16; `ensure(17)` gives capacity 32 and the scene contains exactly one mesh of this holder; `frustumCulled` false after growth (set by `setup`); `commit(3)` sets `count` 3 and the matrix update range to `{ start: 0, count: 48 }`. Implement with `new THREE.InstancedMesh(geometry, material, capacity)`, `setup(mesh)`, `mesh.count = 0`, `scene.add`; on growth `scene.remove(old)`, `old.dispose()`.
-- [ ] **Step 2: Adapt `plantsMesh.test.ts` first** (failing): keep the park, battery and rail-facing describes and rewrite their assertions to the new structure; replace the "foundations" describe:
+- [x] **Step 1: GrowingMesh test + implementation.** Test: starting capacity 16; `ensure(17)` gives capacity 32 and the scene contains exactly one mesh of this holder; `frustumCulled` false after growth (set by `setup`); `commit(3)` sets `count` 3 and the matrix update range to `{ start: 0, count: 48 }`. Implement with `new THREE.InstancedMesh(geometry, material, capacity)`, `setup(mesh)`, `mesh.count = 0`, `scene.add`; on growth `scene.remove(old)`, `old.dispose()`.
+- [x] **Step 2: Adapt `plantsMesh.test.ts` first** (failing): keep the park, battery and rail-facing describes and rewrite their assertions to the new structure; replace the "foundations" describe:
 
 ```ts
 describe('plant plinths on sloped ground', () => {
@@ -777,14 +777,14 @@ describe('model orientation', () => {
 
 Write each body concretely in the test file (use the existing `field`, `plant`, `park`, `at` helpers and today's slope fields). Park tests: pads unchanged; "stands every tree on the ground at its own spot" now reads `treeMesh.mesh` matrices (each tree y = `surfaceY(x, z)`); add "puts benches on the ground". Battery fill tests unchanged in intent (fill follows `stored`; bar sits at the model's `socFill` anchor). Substation test: one `Substation` instance and one plinth. Delete the `orientToTrack` unit test (function removed; `turnToward` is covered in Task 2).
 
-- [ ] **Step 3: Rewrite `plantsMesh.ts`.** Keep: `applyDiffs` bookkeeping (terrain, rail, plants, state of charge), `siteOf`, `lowestGroundUnder`, park pads, rotor mesh and `update` rotor spin, battery fill mesh. Remove: `BoxPart`, `COLORS` (only `parkGrass` and the rotor colour stay as constants), `plantBoxParts`, `orientToTrack`, the shared box mesh, `domeMesh`, `plantHeight` (re-export from `./plants/models.ts` for compatibility is NOT needed — update `renderer.ts`). Per type with geometry: a `GrowingMesh` created lazily with `surfaceMaterial({ vertexColors: true })`, setup `frustumCulled = false; castShadow = true; receiveShadow = true`. `rebuild()`:
+- [x] **Step 3: Rewrite `plantsMesh.ts`.** Keep: `applyDiffs` bookkeeping (terrain, rail, plants, state of charge), `siteOf`, `lowestGroundUnder`, park pads, rotor mesh and `update` rotor spin, battery fill mesh. Remove: `BoxPart`, `COLORS` (only `parkGrass` and the rotor colour stay as constants), `plantBoxParts`, `orientToTrack`, the shared box mesh, `domeMesh`, `plantHeight` (re-export from `./plants/models.ts` for compatibility is NOT needed — update `renderer.ts`). Per type with geometry: a `GrowingMesh` created lazily with `surfaceMaterial({ vertexColors: true })`, setup `frustumCulled = false; castShadow = true; receiveShadow = true`. `rebuild()`:
   1. Count plants per type; `ensure` each mesh, the plinths, trees and benches.
   2. For each plant: `lift = elevation.centerY(index)`, `yaw = plantYaw(type, site)`, `base = lift + PLINTH_RISE`. If the model has a plinth: footprint `sx, sz` swapped when `|sin yaw| ≈ 1`; bottom `min(lift, lowestGroundUnder(cx, cz, sx', sz'))`; plinth matrix = position `(cx, bottom, cz)`, scale `(sx', base - bottom, sz')` on a unit box translated to base y = 0, instance colour `plinth.color`. Model matrix = `compose((cx, base, cz), quaternion(yaw about y), (1,1,1))`. Record `placed`.
   3. Rotor: hub anchor rotated by yaw, `+ (cx, base, cz)`. Battery fill: `socFill` anchor rotated by yaw; scale `(w, 0.04 + maxH × soc, d)`.
   4. Park: pads as today; each ground prop at `(cx + p.x, surfaceY(cx + p.x, cz + p.z), cz + p.z)`, scale `p.scale`, yaw `p.turn`, into `treeMesh`/`benchMesh` (both `surfaceMaterial({ vertexColors: true })`, cast shadow).
   5. `commit` every mesh (types with no plants → count 0).
-- [ ] **Step 4:** Run `./node_modules/.bin/vitest run src/render/plantsMesh.test.ts src/render/plants` — PASS. Run `node scripts/smoke.mjs` — the app boots headless.
-- [ ] **Step 5:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): draw plants from their detailed models with plinths and turns`.
+- [x] **Step 4:** Run `./node_modules/.bin/vitest run src/render/plantsMesh.test.ts src/render/plants` — PASS. Run `node scripts/smoke.mjs` — the app boots headless.
+- [x] **Step 5:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): draw plants from their detailed models with plinths and turns`.
 
 ---
 
@@ -828,23 +828,23 @@ export class PlantLights {
 
 Frames are written for every placed window (powered or not); glow, aviation and yard lamps only for plants where `powered(index)` (tile `island > 0`). Window world pose: anchor rotated by the plant yaw, face yaw = plant yaw + `face × π/2`; frame matrix = position on the wall, rotation face yaw, scale `(w, h, 1)` on `windowGeometry()`; glow = `PlaneGeometry(1, 1)` translated to base y = 0, same pose pushed `GLOW_PROUD` along the face normal, scale `(w, h, 1)`. Meshes invisible when their opacity is 0.
 
-- [ ] **Step 1: Tests** (`lights.test.ts` with a stub `placed` list; `plantsMesh.test.ts` end-to-end):
+- [x] **Step 1: Tests** (`lights.test.ts` with a stub `placed` list; `plantsMesh.test.ts` end-to-end):
   - frames count = Σ windows of placed plants, including an unpowered one; glow count = Σ windows of powered plants only;
   - a frame of a turned station faces the turned direction (normal of the matrix ≈ rotated face normal);
   - `setNight(0)`: glow, yard and aviation meshes invisible; `setNight(1)`: visible, glow opacity 1;
   - aviation blink: with `setNight(1)`, after `update(0.5)` opacity 1, after another `update(1.0)` (phase 0.75) opacity 0; every aviation lamp shares the phase;
   - `PlantsMesh`: a diff that only changes `island` from 1 to 0 removes the plant's glow and lamps without rebuilding the models (spy on `GrowingMesh.prototype.ensure` for the type mesh or compare matrices);
   - `buildingsMesh.test.ts` stays green (shared opacity helper).
-- [ ] **Step 2:** Run — FAIL.
-- [ ] **Step 3: Implement** `lights.ts`; in `PlantsMesh` track `island` per plant tile in `applyDiffs` (a change of `island > 0` only → `lights.rebuild` without `rebuild()`), call `lights.rebuild(this.placed, …)` at the end of `rebuild()`, forward `setEnvironment` (`lights.setNight(environment.nightFactor)`) and `update` (`lights.update(dt)` before the rotor early-return).
-- [ ] **Step 4:** Run the tests — PASS.
-- [ ] **Step 5:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): plant window frames, night glow, aviation and yard lamps`.
+- [x] **Step 2:** Run — FAIL.
+- [x] **Step 3: Implement** `lights.ts`; in `PlantsMesh` track `island` per plant tile in `applyDiffs` (a change of `island > 0` only → `lights.rebuild` without `rebuild()`), call `lights.rebuild(this.placed, …)` at the end of `rebuild()`, forward `setEnvironment` (`lights.setNight(environment.nightFactor)`) and `update` (`lights.update(dt)` before the rotor early-return).
+- [x] **Step 4:** Run the tests — PASS.
+- [x] **Step 5:** `pnpm format && pnpm typecheck && pnpm lint && pnpm test`; commit `feat(render): plant window frames, night glow, aviation and yard lamps`.
 
 ---
 
 ### Task 6: Full checks and the Mac hand-off
 
-- [ ] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — PASS; record the slowest test under coverage (< ~15 s).
-- [ ] `node scripts/smoke.mjs` — PASS.
-- [ ] Add "Results (2026-10-11)" to the spec's Testing section: part count and vertex count per model (table), slowest test; commit `docs: record plant-detail checks`.
-- [ ] Mac checklist for the user: every plant and service type by day and night at city zoom — recognisable; window frames by day, glow at night, dark without grid; aviation lights blink in sync on turbines and heat stores; yard lamps; plinths on slopes, nothing floating; stations face their track, hydro faces the water; frame time unchanged vs `main`.
+- [x] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — PASS; record the slowest test under coverage (< ~15 s).
+- [x] `node scripts/smoke.mjs` — PASS.
+- [x] Add "Results (2026-10-11)" to the spec's Testing section: part count and vertex count per model (table), slowest test; commit `docs: record plant-detail checks`.
+- [x] Mac checklist for the user: every plant and service type by day and night at city zoom — recognisable; window frames by day, glow at night, dark without grid; aviation lights blink in sync on turbines and heat stores; yard lamps; plinths on slopes, nothing floating; stations face their track, hydro faces the water; frame time unchanged vs `main`.
