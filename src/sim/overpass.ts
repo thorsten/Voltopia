@@ -15,6 +15,7 @@ import {
   snapshotTile,
   Terrain,
   TileType,
+  withNeighbors,
   type SimState,
   type UndoEntry,
 } from './state.ts';
@@ -57,12 +58,29 @@ function crossingRoadAxis(state: SimState, index: number): Axis | null {
   return road;
 }
 
-/** Whether `index` can serve as a ramp of an overpass at `deck`: a plain road tile. */
+/** The connection bit from a ramp at `ramp` toward its deck at `deck` (4-neighbours). */
+function bitToward(state: SimState, ramp: number, deck: number): number {
+  const dx = tileX(deck, state.size) - tileX(ramp, state.size);
+  const dy = tileY(deck, state.size) - tileY(ramp, state.size);
+  if (dx > 0) return DIR_E;
+  if (dx < 0) return DIR_W;
+  return dy > 0 ? DIR_S : DIR_N;
+}
+
+/**
+ * Whether `index` can serve as a ramp of an overpass at `deck`: a plain
+ * road tile whose road runs straight along the axis or dead-ends at the
+ * deck — a ramp with a side arm would be drawn without it and cars
+ * turning off it would meet the slope mid-height.
+ */
 function isRampRoom(state: SimState, index: number, deck: number, axis: Axis): boolean {
   if (index < 0) return false;
   const { layers } = state;
   if (layers.tileType[index] !== TileType.Road) return false;
   if (layers.rail[index] !== 0) return false;
+  const road = layers.roadMask[index] & SIDES;
+  if (road !== (axis === 'ns' ? AXIS_NS : AXIS_EW) && road !== bitToward(state, index, deck))
+    return false;
   if (layers.terrain[index] === Terrain.River) return false;
   if (layers.overpass[index] !== 0) return false;
   // Not already the ramp of an overpass on its other side along the same axis.
@@ -109,33 +127,43 @@ export function buildOverpasses(state: SimState, tiles: number[]): BuildResult {
   const { layers } = state;
   const fresh = tiles.filter((index) => layers.overpass[index] === 0);
   if (fresh.length === 0) return {};
-  const buildable = fresh.filter((index) => overpassRejection(state, index) === null);
-  if (buildable.length === 0) {
-    return { rejected: overpassRejection(state, fresh[0]) ?? 'needsLevelCrossing' };
-  }
-  const cost = buildable.length * BALANCE.costs.overpass;
-  if (cost > state.money) return { rejected: 'notEnoughMoney' };
-
-  const undo: UndoEntry = {
-    moneyDelta: cost,
-    tiles: buildable.map((index) => snapshotTile(state, index)),
-  };
-  state.money -= cost;
-  for (const index of buildable) {
+  // Tile by tile, each one set before the next is checked, so two
+  // crossings of one drag cannot both claim the road tile between them.
+  const built: number[] = [];
+  const snapshots: UndoEntry['tiles'] = [];
+  let firstRejection: string | null = null;
+  for (const index of fresh) {
+    if (layers.overpass[index] !== 0) continue;
+    const rejection = overpassRejection(state, index);
+    if (rejection !== null) {
+      firstRejection ??= rejection;
+      continue;
+    }
+    snapshots.push(snapshotTile(state, index));
     layers.overpass[index] = 1;
-    markDirty(state, index);
+    built.push(index);
   }
-  state.undoStack.push(undo);
+  if (built.length === 0) return { rejected: firstRejection ?? 'needsLevelCrossing' };
+  const cost = built.length * BALANCE.costs.overpass;
+  if (cost > state.money) {
+    for (const index of built) layers.overpass[index] = 0;
+    return { rejected: 'notEnoughMoney' };
+  }
+  state.money -= cost;
+  for (const index of built) markDirty(state, index);
+  state.undoStack.push({ moneyDelta: cost, tiles: snapshots });
   return {};
 }
 
 /**
- * Drop every overpass among `tiles` whose crossing or ramp room is gone
- * (no refund). Callers pass the edited tiles plus their 4-neighbours.
+ * Drop every overpass whose crossing or ramp room is gone (no refund).
+ * Callers pass the edited tiles plus their 4-neighbours; one more ring
+ * is checked here, since a road arm two tiles from a deck changes its
+ * ramp's mask.
  */
 export function clearInvalidOverpasses(state: SimState, tiles: Iterable<number>): void {
   const { layers } = state;
-  for (const index of tiles) {
+  for (const index of withNeighbors(state, [...tiles])) {
     if (layers.overpass[index] === 0) continue;
     if (overpassStillValid(state, index)) continue;
     layers.overpass[index] = 0;
