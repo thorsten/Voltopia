@@ -12,8 +12,10 @@ import { GrowingMesh } from './plants/growingMesh.ts';
 
 const CABLE_COLOR = 0x2b2f33;
 const CABLE_THICKNESS = 0.012;
-/** Pieces each conductor is drawn in, along its sag curve. */
-export const CABLE_SEGMENTS = 6;
+/** Pieces each conductor is drawn in, along its sag curve: four still read as a sag. */
+export const CABLE_SEGMENTS = 4;
+/** Sides of a conductor's cross-section: a triangular tube, the cheapest that reads round. */
+const CABLE_SIDES = 3;
 /** How far a conductor hangs below the straight chord at mid-span. */
 export const CABLE_SAG = 0.06;
 const DIRECTION_BITS = DIR_N | DIR_E | DIR_S | DIR_W;
@@ -101,6 +103,39 @@ export function conductorPoints(a: THREE.Vector3, b: THREE.Vector3): THREE.Vecto
   return points;
 }
 
+/**
+ * A conductor piece: a unit-length tube along x (centred on the origin)
+ * with a CABLE_SIDES-sided cross-section about CABLE_THICKNESS across,
+ * open ends (neighbouring pieces close the gaps) and smooth radial
+ * normals — 2 triangles per side.
+ */
+export function conductorGeometry(): THREE.BufferGeometry {
+  const radius = CABLE_THICKNESS / 2;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  for (const x of [-0.5, 0.5]) {
+    for (let k = 0; k < CABLE_SIDES; k++) {
+      const a = (2 * Math.PI * k) / CABLE_SIDES;
+      const y = Math.cos(a);
+      const z = Math.sin(a);
+      positions.push(x, radius * y, radius * z);
+      normals.push(0, y, z);
+    }
+  }
+  const index: number[] = [];
+  for (let k = 0; k < CABLE_SIDES; k++) {
+    const next = (k + 1) % CABLE_SIDES;
+    // Counter-clockwise seen from outside: start ring k, next; end ring k, next.
+    const [a, b, c, d] = [k, next, CABLE_SIDES + k, CABLE_SIDES + next];
+    index.push(a, b, d, a, d, c);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setIndex(index);
+  return geometry;
+}
+
 /** Instance transforms span the grid; the base-geometry bounds would cull them. */
 function setupPylon(mesh: THREE.InstancedMesh): void {
   mesh.frustumCulled = false;
@@ -166,7 +201,7 @@ export class PowerLinesMesh implements DiffLayer {
     this.poles = new GrowingMesh(scene, pylonModel('pole').geometry, pylonMaterial, setupPylon);
     this.conductors = new GrowingMesh(
       scene,
-      new THREE.BoxGeometry(1, CABLE_THICKNESS, CABLE_THICKNESS),
+      conductorGeometry(),
       surfaceMaterial({ color: CABLE_COLOR }),
       setupConductor,
     );
@@ -313,7 +348,7 @@ export class PowerLinesMesh implements DiffLayer {
     this.conductors.commit(segmentCount);
   }
 
-  /** Set the dummy to a unit conductor box stretched from `a` to `b`. */
+  /** Set the dummy to a unit conductor piece stretched from `a` to `b`. */
   private placeSegment(a: THREE.Vector3, b: THREE.Vector3): void {
     const dx = b.x - a.x;
     const dy = b.y - a.y;

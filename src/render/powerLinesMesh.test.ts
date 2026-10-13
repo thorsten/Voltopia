@@ -363,4 +363,14 @@ describe('PowerLinesMesh', () => {
     const avenue = footOf(layer.poles.mesh, 0);
     expect(avenue.z).toBeLessThan(street.z);
   });
+
+  it('keeps a span within its triangle budget', () => {
+    const tiles = baseTiles();
+    lineAlongX(tiles, 0, 1);
+    const mesh = layerWith(tiles).layer.conductors.mesh;
+    const geometry = mesh.geometry;
+    const triangles = (geometry.index?.count ?? geometry.getAttribute('position').count) / 3;
+    // One span: three conductors of CABLE_SEGMENTS pieces each.
+    expect(mesh.count * triangles).toBeLessThanOrEqual(3 * 4 * 6);
+  });
 });
