@@ -10,12 +10,18 @@ import { composeBoxOnGround, composePrismOnGround, createHalfTilePrism } from '.
 import { surfaceMaterial } from './materials.ts';
 
 const ROAD_HEIGHT = 0.05;
-const CENTER_SIZE = 0.62;
+/** Width of a street's centre pad and arms (the roadway). */
+export const CENTER_SIZE = 0.62;
 /** Instances per road tile: 1 center + up to 4 arms. */
 const INSTANCES_PER_TILE = 5;
 
 /** Avenue tiles get a wider pad and arms than streets. */
-const AVENUE_CENTER_SIZE = 0.8;
+export const AVENUE_CENTER_SIZE = 0.8;
+
+/** Half the roadway width of a road tile: its pad and arms are this far either side of the centre line. */
+export function roadHalfWidth(roadClass: number): number {
+  return (roadClass === RoadClass.Avenue ? AVENUE_CENTER_SIZE : CENTER_SIZE) / 2;
+}
 /** Width of the solid centre line painted along avenue arms. */
 const LINE_WIDTH = 0.022;
 /** Avenue centre line: dashes per arm (centre to tile edge) and their length. */

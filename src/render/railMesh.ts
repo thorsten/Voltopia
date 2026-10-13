@@ -12,6 +12,7 @@ import {
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer } from './renderer.ts';
 import { surfaceMaterial } from './materials.ts';
+import { roadHalfWidth } from './roadsMesh.ts';
 
 const BALLAST_COLOR = 0x8a8075;
 const RAIL_COLOR = 0x4a4d52;
@@ -32,13 +33,18 @@ const DECK_WIDTH = 0.5;
 /** Railings along a rail bridge, like the road bridges' (roadsMesh). */
 const PARAPET_HEIGHT = 0.12;
 const PARAPET_THICKNESS = 0.03;
-/** Level-crossing furniture: a white post with a raised red bar and a signal head, per approach. */
+/**
+ * Level-crossing furniture: a white post with a raised red bar and a
+ * signal head, per approach. The bar's length is set per crossing so the
+ * lowered bar ends at the road's centre line.
+ */
 const BARRIER_POST = { sx: 0.06, sy: 0.14, sz: 0.06 } as const;
-const BARRIER_BAR = { sx: 0.04, sy: 0.46, sz: 0.04 } as const;
+const BARRIER_BAR = { sx: 0.04, sz: 0.04 } as const;
 const SIGNAL_HEAD = { sx: 0.08, sy: 0.1, sz: 0.05 } as const;
-/** The post stands this far from the tile centre along the road and beside the lane. */
+/** The post stands this far from the tile centre along the road … */
 const BARRIER_ALONG_ROAD = 0.42;
-const BARRIER_BESIDE_LANE = 0.3;
+/** … and this far off the roadway's edge, so the raised bar is clear of the lane. */
+const BARRIER_CLEARANCE = 0.02;
 /** Seconds a bar takes to travel between raised and lowered. */
 const BARRIER_SWEEP_SECONDS = 0.6;
 /** The signal head alternates lit/dark over this period while the crossing is closed. */
@@ -61,6 +67,8 @@ interface CrossingBarrier {
   px: number;
   pz: number;
   pivotY: number;
+  /** Length of the bar: from the post to the road's centre line. */
+  length: number;
   yaw: number;
   /** 0 = raised, 1 = lowered flat across the road. */
   progress: number;
@@ -142,6 +150,7 @@ export class RailMesh implements DiffLayer {
   private readonly masks: Uint8Array;
   private readonly tileTypes: Uint8Array;
   private readonly terrains: Uint8Array;
+  private readonly roadClasses: Uint8Array;
   private readonly dummy = new THREE.Object3D();
 
   constructor(
@@ -153,6 +162,7 @@ export class RailMesh implements DiffLayer {
     this.masks = new Uint8Array(tiles);
     this.tileTypes = new Uint8Array(tiles);
     this.terrains = new Uint8Array(tiles);
+    this.roadClasses = new Uint8Array(tiles);
     const make = (geometry: THREE.BufferGeometry, color: number, count: number) => {
       const mesh = new THREE.InstancedMesh(geometry, surfaceMaterial({ color }), count);
       mesh.frustumCulled = false;
@@ -190,6 +200,10 @@ export class RailMesh implements DiffLayer {
       }
       if (this.terrains[diff.index] !== diff.terrain) {
         this.terrains[diff.index] = diff.terrain;
+        if (diff.rail !== 0) changed = true;
+      }
+      if (this.roadClasses[diff.index] !== diff.roadClass) {
+        this.roadClasses[diff.index] = diff.roadClass;
         if (diff.rail !== 0) changed = true;
       }
     }
@@ -281,7 +295,7 @@ export class RailMesh implements DiffLayer {
     this.euler.set(0, barrier.yaw, barrier.side * barrier.progress * (Math.PI / 2));
     this.dummy.position.set(barrier.px, barrier.pivotY, barrier.pz);
     this.dummy.quaternion.setFromEuler(this.euler);
-    this.dummy.scale.set(BARRIER_BAR.sx, BARRIER_BAR.sy, BARRIER_BAR.sz);
+    this.dummy.scale.set(BARRIER_BAR.sx, barrier.length, BARRIER_BAR.sz);
     this.dummy.updateMatrix();
     this.barrierBars.setMatrixAt(slot, this.dummy.matrix);
   }
@@ -368,10 +382,13 @@ export class RailMesh implements DiffLayer {
         // A road crossing a straight track: a barrier on the right-hand
         // side of each approach (traffic keeps right), its bar raised, a
         // signal head on the post. Decoration — cars and trains ignore
-        // each other.
+        // each other. The post stands just off the roadway; its bar
+        // reaches from there to the road's centre line.
+        const beside =
+          roadHalfWidth(this.roadClasses[index]) + BARRIER_POST.sx / 2 + BARRIER_CLEARANCE;
         for (const s of [-1, 1]) {
-          const px = alongX ? x + s * BARRIER_BESIDE_LANE : x + s * BARRIER_ALONG_ROAD;
-          const pz = alongX ? z + s * BARRIER_ALONG_ROAD : z - s * BARRIER_BESIDE_LANE;
+          const px = alongX ? x + s * beside : x + s * BARRIER_ALONG_ROAD;
+          const pz = alongX ? z + s * BARRIER_ALONG_ROAD : z - s * beside;
           const ground = this.groundY(index, px, pz);
           const yaw = alongX ? 0 : Math.PI / 2;
           this.placeBox(this.barrierPosts, barriers, px, ground, pz, BARRIER_POST, yaw);
@@ -379,7 +396,7 @@ export class RailMesh implements DiffLayer {
             this.signalHeads,
             barriers,
             px,
-            ground + BARRIER_POST.sy + BARRIER_BAR.sy - SIGNAL_HEAD.sy,
+            ground + BARRIER_POST.sy + beside - SIGNAL_HEAD.sy,
             pz,
             SIGNAL_HEAD,
             yaw,
@@ -395,6 +412,7 @@ export class RailMesh implements DiffLayer {
             px,
             pz,
             pivotY: ground + BARRIER_POST.sy,
+            length: beside,
             yaw,
             progress: 0,
             lit: false,

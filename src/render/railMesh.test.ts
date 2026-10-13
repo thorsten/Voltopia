@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { DIR_E, DIR_N, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
+import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import {
+  RoadClass,
   Terrain,
   TileType,
   VehicleKind,
@@ -10,6 +11,7 @@ import {
 } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { RailMesh } from './railMesh.ts';
+import { roadHalfWidth } from './roadsMesh.ts';
 
 const SIZE = 8;
 const at = (x: number, y: number) => y * SIZE + x;
@@ -184,14 +186,60 @@ describe('RailMesh', () => {
 
 describe('RailMesh level-crossing barriers', () => {
   /** A straight east-west crossing at (3, 2) with its road running north-south. */
-  function crossing() {
+  function crossing(roadClass: number = RoadClass.Street) {
     const tiles = baseTiles();
     tiles[at(2, 2)].rail = LINE_PRESENT | DIR_E;
     tiles[at(3, 2)].rail = LINE_PRESENT | DIR_E | DIR_W;
     tiles[at(3, 2)].tileType = TileType.Road;
-    tiles[at(3, 2)].roadMask = 5;
+    tiles[at(3, 2)].roadMask = DIR_N | DIR_S;
+    tiles[at(3, 2)].roadClass = roadClass;
     tiles[at(4, 2)].rail = LINE_PRESENT | DIR_W;
     return sceneWith(tiles);
+  }
+
+  /** A straight north-south crossing at (3, 3) with its road running east-west. */
+  function crossingAlongZ(roadClass: number) {
+    const tiles = baseTiles();
+    tiles[at(3, 3)].rail = LINE_PRESENT | DIR_N | DIR_S;
+    tiles[at(3, 3)].tileType = TileType.Road;
+    tiles[at(3, 3)].roadMask = DIR_E | DIR_W;
+    tiles[at(3, 3)].roadClass = roadClass;
+    return sceneWith(tiles);
+  }
+
+  for (const roadClass of [RoadClass.Street, RoadClass.Avenue]) {
+    const label = roadClass === RoadClass.Avenue ? 'an avenue' : 'a street';
+    const half = roadHalfWidth(roadClass);
+
+    it(`stands the posts beside the roadway of ${label}, inside the tile`, () => {
+      // Track along x: the road runs along z, so the lateral offset is in x.
+      for (const [{ barrierPosts }, lateralOf] of [
+        [crossing(roadClass), (p: THREE.Vector3) => p.x - 3.5],
+        [crossingAlongZ(roadClass), (p: THREE.Vector3) => p.z - 3.5],
+      ] as const) {
+        expect(barrierPosts.count).toBe(2);
+        for (const slot of [0, 1]) {
+          const post = instanceOf(barrierPosts, slot);
+          const lateral = Math.abs(lateralOf(post.position));
+          const halfPost = post.scale.x / 2;
+          expect(lateral - halfPost).toBeGreaterThan(half);
+          expect(lateral + halfPost).toBeLessThanOrEqual(0.5);
+        }
+      }
+    });
+
+    it(`lowers the bar of ${label} to the road's centre line`, () => {
+      const { mesh, barrierBars } = crossing(roadClass);
+      mesh.setTrains([train(5, 2.5)]);
+      mesh.update(1, 1);
+      for (const slot of [0, 1]) {
+        const bar = instanceOf(barrierBars, slot);
+        const tip = new THREE.Vector3(0, 1, 0).applyMatrix4(
+          new THREE.Matrix4().compose(bar.position, bar.quaternion, bar.scale),
+        );
+        expect(Math.abs(tip.x - 3.5)).toBeLessThan(0.03);
+      }
+    });
   }
 
   /** World direction the bar points in (its local +y axis after rotation). */
