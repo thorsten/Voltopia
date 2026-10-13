@@ -10,6 +10,12 @@ import { box, cone, merge } from '../modelKit.ts';
 
 export type PylonKind = 'lattice' | 'pole';
 export const MAX_PARTS_PER_PYLON = 20;
+/**
+ * The lattice legs run on this far below y = 0 into the ground: the foot
+ * stands on the ground under the tower's centre, and on a slope the legs
+ * on the low side would otherwise float above it.
+ */
+export const FOUNDATION_DEPTH = 0.06;
 
 export interface PylonModel {
   /** Base y = 0, origin at the foot, arms along local x. */
@@ -56,8 +62,14 @@ const POLE = {
   outerX: 0.095,
 } as const;
 
-/** Thin box from `a` to `b` (a strut), `t` thick; cut flat where it meets the ground. */
-function strut(a: THREE.Vector3, b: THREE.Vector3, t: number, color: number): THREE.BufferGeometry {
+/** Thin box from `a` to `b` (a strut), `t` thick; cut flat at `floor` (the ground, or below it). */
+function strut(
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  t: number,
+  color: number,
+  floor = 0,
+): THREE.BufferGeometry {
   const dir = new THREE.Vector3().subVectors(b, a);
   const g = box(t, dir.length(), t, 0, 0, 0, color);
   g.applyQuaternion(
@@ -67,7 +79,7 @@ function strut(a: THREE.Vector3, b: THREE.Vector3, t: number, color: number): TH
   g.translate(mid.x, mid.y, mid.z);
   const position = g.getAttribute('position');
   for (let i = 0; i < position.count; i++) {
-    if (position.getY(i) < 0) position.setY(i, 0);
+    if (position.getY(i) < floor) position.setY(i, floor);
   }
   return g;
 }
@@ -80,15 +92,17 @@ function lattice(): PylonModel {
   const L = LATTICE;
   const parts: THREE.BufferGeometry[] = [];
   const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-  // Four tapered legs.
+  // Four tapered legs, continued FOUNDATION_DEPTH into the ground.
+  const buriedHalf = latticeHalf(-FOUNDATION_DEPTH);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       parts.push(
         strut(
-          v(sx * L.footHalf, 0, sz * L.footHalf),
+          v(sx * buriedHalf, -FOUNDATION_DEPTH, sz * buriedHalf),
           v(sx * L.topHalf, L.top, sz * L.topHalf),
           L.leg,
           COLOR.steel,
+          -FOUNDATION_DEPTH,
         ),
       );
     }
