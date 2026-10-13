@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { DECK_SIZE, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
+import { DECK_SIZE, OVERPASS_LIFT, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
 import { KERB_WIDTH, LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
 
 const SIZE = 5;
@@ -213,4 +213,93 @@ describe('RoadsMesh bus shelters', () => {
       });
     }
   }
+});
+
+/** An east-west track under a north-south street with an overpass at (2, 2). */
+function overpassRoad(): TileDiff[] {
+  const list = tiles();
+  road(list, 2, 0, DIR_S);
+  road(list, 2, 1, DIR_N | DIR_S);
+  road(list, 2, 2, DIR_N | DIR_S);
+  road(list, 2, 3, DIR_N | DIR_S);
+  road(list, 2, 4, DIR_N);
+  Object.assign(list[at(2, 2)], { rail: LINE_PRESENT | DIR_E | DIR_W, overpass: 1 });
+  return list;
+}
+
+function positionOf(mesh: THREE.InstancedMesh, slot: number): THREE.Vector3 {
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(slot, matrix);
+  return new THREE.Vector3().setFromMatrixPosition(matrix);
+}
+
+describe('RoadsMesh overpass', () => {
+  it('lifts the road surface on the deck and along the ramps', () => {
+    const layer = layerWith(overpassRoad());
+    expect(layer.lift(2.5, 2.5)).toBeCloseTo(OVERPASS_LIFT, 6);
+    // North ramp (2,1): far edge at z = 1, deck edge at z = 2.
+    expect(layer.lift(2.5, 1.0)).toBeCloseTo(0, 6);
+    expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 2, 6);
+    expect(layer.lift(2.5, 1.999999)).toBeCloseTo(OVERPASS_LIFT, 4);
+    // South ramp (2,3): deck edge at z = 3, far edge at z = 4.
+    expect(layer.lift(2.5, 3.25)).toBeCloseTo(OVERPASS_LIFT * 0.75, 6);
+    // Plain road and off-road: nothing.
+    expect(layer.lift(2.5, 0.5)).toBe(0);
+    expect(layer.lift(5.5, 5.5)).toBe(0);
+  });
+
+  it('draws a deck with two railings on the overpass and walls on both ramps', () => {
+    const layer = layerWith(overpassRoad());
+    // One deck slab for the overpass tile plus one wedge per ramp.
+    expect(layer.decks.count).toBe(3);
+    // Two railings on the deck, two walls per ramp.
+    expect(layer.rails.mesh.count).toBe(6);
+    // Instances follow tile order: north ramp wedge, deck, south ramp wedge.
+    const deck = positionOf(layer.decks, 1);
+    expect(Math.floor(deck.z)).toBe(2);
+    expect(deck.y).toBeGreaterThan(OVERPASS_LIFT - 0.05);
+    // The wedges sit under the ramps, centred half-way up.
+    expect(positionOf(layer.decks, 0).y).toBeCloseTo(OVERPASS_LIFT / 2 - 0.02, 2);
+  });
+
+  it('keeps lamps, kerbs, stripes and shelters off deck and ramps', () => {
+    const list = overpassRoad();
+    list[at(2, 1)].busStop = 1;
+    const layer = layerWith(list);
+    // Lamps stand on every other tile: (2,0) and (2,4) only ((2,2) is the deck, (2,1)/(2,3) ramps).
+    expect(layer.lampPoles.mesh.count).toBe(2);
+    expect(layer.shelters.count).toBe(0);
+    // Kerbs: the two plain dead ends only (5 pieces each).
+    expect(layer.kerbs.mesh.count).toBe(10);
+  });
+
+  it('turns a road tile into a ramp when the overpass appears beside it, and back', () => {
+    const list = overpassRoad();
+    list[at(2, 2)].overpass = 0;
+    const layer = layerWith(list);
+    expect(layer.lift(2.5, 1.5)).toBe(0);
+    layer.applyDiffs([{ ...list[at(2, 2)], overpass: 1 }]);
+    expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 2, 6);
+    layer.applyDiffs([{ ...list[at(2, 2)], overpass: 0 }]);
+    expect(layer.lift(2.5, 1.5)).toBe(0);
+  });
+
+  it('a ramp pad is pitched toward the deck', () => {
+    const layer = layerWith(overpassRoad());
+    // The ramp pad is the single `mesh` instance whose centre lies in tile (2,1).
+    let pitched = 0;
+    const matrix = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    for (let slot = 0; slot < layer.mesh.count; slot++) {
+      layer.mesh.getMatrixAt(slot, matrix);
+      matrix.decompose(p, q, s);
+      if (Math.floor(p.z) !== 1 || Math.floor(p.x) !== 2) continue;
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      expect(forward.y).toBeGreaterThan(0.2); // +z (toward the deck) climbs
+      pitched++;
+    }
+    expect(pitched).toBe(1);
+  });
 });

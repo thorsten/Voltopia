@@ -49,6 +49,13 @@ const KERB_COLOR = 0xc9c6bd;
 const KERB_RISE = 0.015;
 
 /** Kerbs and zebra stripes lie flat: transforms span the grid, so no culling; no shadows. */
+/** Railings and ramp walls stand up and cast shadows; transforms span the grid, so no culling. */
+function setupRailing(mesh: THREE.InstancedMesh): void {
+  mesh.frustumCulled = false;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+}
+
 function setupFlat(mesh: THREE.InstancedMesh): void {
   mesh.frustumCulled = false;
   mesh.castShadow = false;
@@ -89,6 +96,10 @@ const DECK_COLOR = 0x8a9099;
 const RAIL_COLOR = 0xd8d8d0;
 export const DECK_SIZE = 0.96;
 const DECK_HEIGHT = 0.04;
+/** Road surface of an overpass deck above the tile's ground; ramps climb to it over one tile. */
+export const OVERPASS_LIFT = 0.3;
+const RAMP_PITCH = Math.atan2(OVERPASS_LIFT, 1);
+const RAMP_STRETCH = Math.hypot(1, OVERPASS_LIFT);
 /** Thickness of a bridge railing, standing on the deck's edge. */
 export const RAIL_THICKNESS = 0.06;
 const RAIL_HEIGHT = 0.14;
@@ -122,8 +133,10 @@ export class RoadsMesh implements DiffLayer {
   /** The lamps' glows, under each housing. */
   readonly lampHeads: GrowingMesh;
   private readonly lampHeadMaterial: THREE.MeshBasicMaterial;
-  private readonly decks: THREE.InstancedMesh;
-  private readonly rails: THREE.InstancedMesh;
+  /** Deck slabs under river bridges and overpasses, wedges under ramps. */
+  readonly decks: THREE.InstancedMesh;
+  /** Railings of bridges and decks, walls of ramps. */
+  readonly rails: GrowingMesh;
   readonly shelters: THREE.InstancedMesh;
   private readonly signs: THREE.InstancedMesh;
   private readonly signMaterial: THREE.MeshBasicMaterial;
@@ -135,6 +148,12 @@ export class RoadsMesh implements DiffLayer {
   /** Track mask per tile: a road tile with track is a level crossing. */
   private readonly track: Uint8Array;
   private readonly matrix = new THREE.Matrix4();
+  /** 1 where a road overpass carries the road over the track. */
+  private readonly overpass: Uint8Array;
+  private readonly rampEuler = new THREE.Euler();
+  private readonly rampQuaternion = new THREE.Quaternion();
+  private readonly rampPosition = new THREE.Vector3();
+  private readonly rampScale = new THREE.Vector3();
 
   constructor(
     scene: THREE.Scene,
@@ -147,6 +166,7 @@ export class RoadsMesh implements DiffLayer {
     this.terrain = new Uint8Array(gridSize * gridSize);
     this.busStops = new Uint8Array(gridSize * gridSize);
     this.track = new Uint8Array(gridSize * gridSize);
+    this.overpass = new Uint8Array(gridSize * gridSize);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = surfaceMaterial({ color: PALETTE.road });
     this.mesh = new THREE.InstancedMesh(
@@ -250,19 +270,15 @@ export class RoadsMesh implements DiffLayer {
     this.decks.count = 0;
     scene.add(this.decks);
 
-    // Bridges are bounded by the river, not the grid: the river is one
-    // tile wide and crosses the map once (roughly gridSize tiles, with
-    // margin for width/meanders), at most 2 rails per tile.
-    this.rails = new THREE.InstancedMesh(
+    // River bridges are bounded by the river (roughly gridSize tiles);
+    // overpasses add railings and ramp walls on demand, so the mesh grows.
+    this.rails = new GrowingMesh(
+      scene,
       deckGeometry,
       surfaceMaterial({ color: RAIL_COLOR }),
+      setupRailing,
       gridSize * 4,
     );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.rails.frustumCulled = false;
-    this.rails.count = 0;
-    scene.add(this.rails);
   }
 
   /** Streetlamps and stop signs glow warmly at night. */
@@ -298,6 +314,11 @@ export class RoadsMesh implements DiffLayer {
         this.track[diff.index] = diff.rail;
         if (mask >= 0) changed = true;
       }
+      const overpass = diff.tileType === TileType.Road ? diff.overpass : 0;
+      if (this.overpass[diff.index] !== overpass) {
+        this.overpass[diff.index] = overpass;
+        changed = true;
+      }
     }
     if (changed) this.rebuild();
   }
@@ -314,6 +335,32 @@ export class RoadsMesh implements DiffLayer {
       const isAvenue = this.roadClasses[index] === RoadClass.Avenue;
       const size = isAvenue ? AVENUE_CENTER_SIZE : CENTER_SIZE;
       const armLength = (1 - size) / 2;
+
+      const ramp = this.rampOf(index);
+      if (ramp) {
+        // One pitched carriageway from the far edge up to the deck edge.
+        this.rampMatrix(index, ramp, 0, 0, 1, ROAD_HEIGHT, size, 0);
+        this.mesh.setMatrixAt(count++, this.matrix);
+        if (isAvenue) {
+          const dashes = 2 * LINE_DASHES_PER_ARM;
+          const gap = (1 - dashes * LINE_DASH_LENGTH) / dashes;
+          for (let dash = 0; dash < dashes; dash++) {
+            const a = -0.5 + gap / 2 + LINE_DASH_LENGTH / 2 + dash * (LINE_DASH_LENGTH + gap);
+            this.rampMatrix(
+              index,
+              ramp,
+              a,
+              0,
+              LINE_DASH_LENGTH,
+              LINE_HEIGHT,
+              LINE_WIDTH,
+              ROAD_HEIGHT,
+            );
+            this.centreLines.setMatrixAt(lineCount++, this.matrix);
+          }
+        }
+        continue;
+      }
 
       if (this.isBridge(index)) {
         this.setInstance(count++, index, x, z, size, size);
@@ -387,7 +434,7 @@ export class RoadsMesh implements DiffLayer {
     let stripeCount = 0;
     for (let index = 0; index < this.roadMasks.length; index++) {
       const mask = this.roadMasks[index];
-      if (mask < 0 || this.isBridge(index)) continue;
+      if (mask < 0 || this.isBridge(index) || this.rampOf(index)) continue;
       const size = roadHalfWidth(this.roadClasses[index]) * 2;
       // No kerb across the rails where the track leaves a level crossing.
       const kerbs = kerbPieces(mask, size, this.track[index] & TRACK_SIDES);
@@ -443,6 +490,8 @@ export class RoadsMesh implements DiffLayer {
       if ((x + y) % 2 !== 0) continue;
       // Level crossings carry their own barriers and signals at the corners.
       if (this.track[index] !== 0) continue;
+      // No lamp on an overpass deck or its ramps.
+      if (this.overpass[index] !== 0 || this.rampOf(index)) continue;
       // Avenues are wide enough to reach the usual corner: step back to the kerb.
       const offset = kerbsideCorner(this.roadClasses[index]);
       // A straight bridge has railings along its sides: an avenue's lamp
@@ -454,9 +503,7 @@ export class RoadsMesh implements DiffLayer {
       const px = x + corner;
       const pz = y + corner;
       // Poles stand upright on the ground under their own corner.
-      const lift = this.isBridge(index)
-        ? this.elevation.maxCornerY(index)
-        : this.elevation.surfaceY(px, pz);
+      const lift = this.isBridge(index) ? this.flatLift(index) : this.elevation.surfaceY(px, pz);
       this.lampPoles.ensure(count + 1);
       this.lampHeads.ensure(count + 1);
       this.matrix.copy(yaw).setPosition(px, lift, pz);
@@ -475,6 +522,8 @@ export class RoadsMesh implements DiffLayer {
     for (let index = 0; index < this.busStops.length; index++) {
       const mask = this.roadMasks[index];
       if (this.busStops[index] === 0 || mask < 0) continue;
+      // No shelter on an overpass deck or its ramps; the stop keeps its sign.
+      if (this.overpass[index] !== 0 || this.rampOf(index)) continue;
       const railed = this.isBridge(index) && hasRailings(mask);
       const { dx, dz, yaw } = shelterPlacement(
         mask,
@@ -483,9 +532,7 @@ export class RoadsMesh implements DiffLayer {
       );
       const px = (index % this.gridSize) + 0.5 + dx;
       const pz = Math.floor(index / this.gridSize) + 0.5 + dz;
-      const lift = this.isBridge(index)
-        ? this.elevation.maxCornerY(index)
-        : this.elevation.surfaceY(px, pz);
+      const lift = this.isBridge(index) ? this.flatLift(index) : this.elevation.surfaceY(px, pz);
       this.matrix.makeRotationY(yaw);
       this.matrix.setPosition(px, lift, pz);
       this.shelters.setMatrixAt(count, this.matrix);
@@ -513,19 +560,32 @@ export class RoadsMesh implements DiffLayer {
   private rebuildBridges(): void {
     let deckCount = 0;
     let railCount = 0;
+    const offset = DECK_SIZE / 2 - RAIL_THICKNESS / 2;
     for (let index = 0; index < this.roadMasks.length; index++) {
       const mask = this.roadMasks[index];
-      if (mask < 0 || this.terrain[index] !== Terrain.River) continue;
+      if (mask < 0) continue;
+      const ramp = this.rampOf(index);
+      if (ramp) {
+        // A wedge under the pitched carriageway and a low wall per side.
+        this.rampMatrix(index, ramp, 0, 0, 1, DECK_HEIGHT, DECK_SIZE, -DECK_HEIGHT);
+        this.decks.setMatrixAt(deckCount++, this.matrix);
+        for (const side of [-1, 1]) {
+          this.rails.ensure(railCount + 1);
+          this.rampMatrix(index, ramp, 0, side * offset, 1, RAIL_HEIGHT, RAIL_THICKNESS, 0);
+          this.rails.mesh.setMatrixAt(railCount++, this.matrix);
+        }
+        continue;
+      }
+      if (!this.isBridge(index)) continue;
       const x = (index % this.gridSize) + 0.5;
       const z = Math.floor(index / this.gridSize) + 0.5;
-      const lift = this.elevation.maxCornerY(index);
+      const lift = this.flatLift(index);
       this.matrix.makeScale(DECK_SIZE, DECK_HEIGHT, DECK_SIZE);
       this.matrix.setPosition(x, DECK_HEIGHT / 2 + lift, z);
       this.decks.setMatrixAt(deckCount++, this.matrix);
 
       if (!hasRailings(mask)) continue;
       const alongZ = (mask & (DIR_N | DIR_S)) !== 0 && (mask & (DIR_E | DIR_W)) === 0;
-      const offset = DECK_SIZE / 2 - RAIL_THICKNESS / 2;
       for (const side of [-1, 1]) {
         if (alongZ) {
           this.matrix.makeScale(RAIL_THICKNESS, RAIL_HEIGHT, DECK_SIZE);
@@ -534,18 +594,95 @@ export class RoadsMesh implements DiffLayer {
           this.matrix.makeScale(DECK_SIZE, RAIL_HEIGHT, RAIL_THICKNESS);
           this.matrix.setPosition(x, RAIL_HEIGHT / 2 + lift, z + side * offset);
         }
-        this.rails.setMatrixAt(railCount++, this.matrix);
+        this.rails.ensure(railCount + 1);
+        this.rails.mesh.setMatrixAt(railCount++, this.matrix);
       }
     }
     this.decks.count = deckCount;
-    this.rails.count = railCount;
     this.decks.instanceMatrix.needsUpdate = true;
-    this.rails.instanceMatrix.needsUpdate = true;
+    this.rails.commit(railCount);
   }
 
-  /** Bridges are flat slabs at the bank's height; everything else lies on the ground triangles. */
+  /**
+   * Bridges (over the river) and overpass decks are flat slabs at
+   * `flatLift`; everything else lies on the ground triangles.
+   */
   private isBridge(index: number): boolean {
-    return this.terrain[index] === Terrain.River;
+    return this.terrain[index] === Terrain.River || this.overpass[index] !== 0;
+  }
+
+  /** Height of a flat tile's road base: the bank for a river bridge, the lifted deck for an overpass. */
+  private flatLift(index: number): number {
+    return this.elevation.maxCornerY(index) + (this.overpass[index] !== 0 ? OVERPASS_LIFT : 0);
+  }
+
+  /** Step from a ramp tile toward its deck, or null when the tile is no ramp. */
+  private rampOf(index: number): { dx: number; dz: number } | null {
+    if (this.roadMasks[index] < 0 || this.overpass[index] !== 0) return null;
+    const x = index % this.gridSize;
+    const z = Math.floor(index / this.gridSize);
+    for (const { dx, dy, bit } of DIRECTIONS) {
+      const nx = x + dx;
+      const nz = z + dy;
+      if (nx < 0 || nz < 0 || nx >= this.gridSize || nz >= this.gridSize) continue;
+      const deck = nz * this.gridSize + nx;
+      if (this.overpass[deck] === 0 || this.roadMasks[deck] < 0) continue;
+      // The deck's road must point back at this tile.
+      const back = dx > 0 ? DIR_W : dx < 0 ? DIR_E : dy > 0 ? DIR_N : DIR_S;
+      if ((this.roadMasks[deck] & back) !== 0 && (this.roadMasks[index] & bit) !== 0)
+        return { dx, dz: dy };
+    }
+    return null;
+  }
+
+  /** Extra height of the road surface over the ground at a world point (0 off deck and ramps). */
+  lift(x: number, y: number): number {
+    const size = this.gridSize;
+    const tx = Math.floor(x);
+    const tz = Math.floor(y);
+    if (tx < 0 || tz < 0 || tx >= size || tz >= size) return 0;
+    const index = tz * size + tx;
+    if (this.overpass[index] !== 0 && this.roadMasks[index] >= 0) return OVERPASS_LIFT;
+    const ramp = this.rampOf(index);
+    if (!ramp) return 0;
+    const fx = x - tx;
+    const fz = y - tz;
+    const t = ramp.dx > 0 ? fx : ramp.dx < 0 ? 1 - fx : ramp.dz > 0 ? fz : 1 - fz;
+    return OVERPASS_LIFT * t;
+  }
+
+  /**
+   * A box on a ramp: centred `a` along the ramp (−0.5 far edge … +0.5 deck
+   * edge) and `across` beside its centre line, its base `baseLift` above
+   * the ramp surface, pitched with the ramp and stretched to its length.
+   */
+  private rampMatrix(
+    index: number,
+    ramp: { dx: number; dz: number },
+    a: number,
+    across: number,
+    sizeAlong: number,
+    sizeY: number,
+    sizeAcross: number,
+    baseLift: number,
+  ): void {
+    const cx = (index % this.gridSize) + 0.5;
+    const cz = Math.floor(index / this.gridSize) + 0.5;
+    const ground = this.elevation.maxCornerY(index);
+    const y = ground + OVERPASS_LIFT * (a + 0.5) + baseLift + sizeY / 2;
+    const alongX = ramp.dx !== 0;
+    const px = cx + (alongX ? ramp.dx * a : across);
+    const pz = cz + (alongX ? across : ramp.dz * a);
+    // Rz(+θ) lifts the +x end; Rx(−θ) lifts the +z end.
+    this.rampEuler.set(alongX ? 0 : -ramp.dz * RAMP_PITCH, 0, alongX ? ramp.dx * RAMP_PITCH : 0);
+    this.rampQuaternion.setFromEuler(this.rampEuler);
+    this.rampScale.set(
+      alongX ? sizeAlong * RAMP_STRETCH : sizeAcross,
+      sizeY,
+      alongX ? sizeAcross : sizeAlong * RAMP_STRETCH,
+    );
+    this.rampPosition.set(px, y, pz);
+    this.matrix.compose(this.rampPosition, this.rampQuaternion, this.rampScale);
   }
 
   private setInstance(
@@ -558,7 +695,7 @@ export class RoadsMesh implements DiffLayer {
   ): void {
     if (this.isBridge(index)) {
       this.matrix.makeScale(sizeX, ROAD_HEIGHT, sizeZ);
-      this.matrix.setPosition(x, ROAD_HEIGHT / 2 + this.elevation.maxCornerY(index), z);
+      this.matrix.setPosition(x, ROAD_HEIGHT / 2 + this.flatLift(index), z);
     } else {
       composeBoxOnGround(this.matrix, this.elevation, index, x, z, sizeX, ROAD_HEIGHT, sizeZ, 0);
     }
@@ -575,11 +712,7 @@ export class RoadsMesh implements DiffLayer {
   ): void {
     if (this.isBridge(index)) {
       this.matrix.makeScale(sizeX, LINE_HEIGHT, sizeZ);
-      this.matrix.setPosition(
-        x,
-        ROAD_HEIGHT + LINE_HEIGHT / 2 + this.elevation.maxCornerY(index),
-        z,
-      );
+      this.matrix.setPosition(x, ROAD_HEIGHT + LINE_HEIGHT / 2 + this.flatLift(index), z);
     } else {
       composeBoxOnGround(
         this.matrix,
