@@ -124,6 +124,21 @@ sleepers and line-side signals that show whether a block is occupied.
 - Render-only: nothing under `src/sim`, `src/shared`, `src/storage`,
   `src/agent` changes.
 
+Results (2026-10-13): triangles per item — lattice pylon 228 (19
+parts, legs sunk `FOUNDATION_DEPTH` 0.06), concrete pole 80, one span
+72 (3 conductors × 4 open triangular tubes), streetlamp ≈ 72, kerb and
+zebra piece 12, signal mast 4 parts. `pnpm coverage` 1 730 tests green,
+build green. Review fixes on the branch: level-crossing barriers beside
+the roadway and ballast beyond it (user report from the Mac), crossing
+rails laid on the asphalt (`CROSSING_LIFT = ROAD_HEIGHT + 0.002`, they
+were buried before), poles clear of barriers, kerbs, avenues and track
+(pole beside the track opposite the signal mast instead of a lattice
+over it), lamps skipped on railed avenue bridges, bus shelters beyond
+the kerb (on avenues the roof still overhangs the roadway edge by about
+0.05), signal aspects evaluated only when vehicles moved. Known edge
+case: a road tile without a north arm but with S and W arms and an
+x-axis track puts the shelter in the pole's corner.
+
 Acceptance on the Mac (the user): lattice pylons in the country, poles
 in town, three sagging conductors that follow slopes and turn corners
 cleanly; kerbs and zebra crossings read at city zoom; new lamps glow at

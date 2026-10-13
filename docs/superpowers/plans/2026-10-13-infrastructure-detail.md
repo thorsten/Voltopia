@@ -117,7 +117,7 @@ export class RailSignals { constructor(scene: THREE.Scene); rebuild(...); setVeh
 
 ### Task 7: Review, full checks, Mac hand-off
 
-- [ ] Independent review of the branch; fix findings (one commit each).
-- [ ] `pnpm format:check && pnpm lint && pnpm coverage && pnpm build` — PASS; record the slowest test; temporary probe for instance/triangle counts on a generated 128² city (deleted afterwards).
-- [ ] "Results (2026-10-13)" in the spec; tick the plan; commit `docs: record infrastructure-detail checks`.
+- [x] Independent review of the branch; fix findings (one commit each).
+- [x] `pnpm format:check && pnpm lint && pnpm coverage && pnpm build` — PASS; record the slowest test; temporary probe for instance/triangle counts on a generated 128² city (deleted afterwards).
+- [x] "Results (2026-10-13)" in the spec; tick the plan; commit `docs: record infrastructure-detail checks`.
 - [ ] Mac checklist (see spec "Acceptance").
