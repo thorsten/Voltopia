@@ -19,6 +19,7 @@ function tiles(): TileDiff[] {
     terrain: Terrain.Land,
     elevation: 0,
     rail: 0,
+    overpass: 0,
   })) as unknown as TileDiff[];
 }
 

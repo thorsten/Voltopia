@@ -204,6 +204,7 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.busStop[tile.index] = tile.busStop;
     layers.powerLine[tile.index] = tile.powerLine;
     layers.rail[tile.index] = tile.rail;
+    layers.overpass[tile.index] = tile.overpass;
     layers.zone[tile.index] = tile.zone;
     layers.density[tile.index] = tile.density;
     layers.variant[tile.index] = tile.variant;

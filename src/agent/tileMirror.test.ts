@@ -40,6 +40,7 @@ function emptyDiff(index: number): TileDiff {
     stopState: 0,
     transitCover: 0,
     rail: 0,
+    overpass: 0,
     railCover: 0,
     stationState: 0,
   };
@@ -110,6 +111,7 @@ describe('TileMirror', () => {
         stopState: 0,
         transitCover: 0,
         rail: 0,
+        overpass: 0,
         railCover: 0,
         stationState: 0,
       },

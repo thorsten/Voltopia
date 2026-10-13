@@ -227,6 +227,7 @@ export interface UndoEntry {
     plantType: number;
     busStop: number;
     rail: number;
+    overpass: number;
     forest: number;
     damage: number;
   }>;
@@ -308,6 +309,8 @@ export interface TileLayers {
   transitCover: Uint8Array;
   /** Track mask per tile (0 = none, else LINE_PRESENT | connection bits). Persisted. */
   rail: Uint8Array;
+  /** 1 on a level crossing upgraded to a road overpass (persisted). */
+  overpass: Uint8Array;
   /** Track network number 1.. of this track tile; 0 = no track. Derived, not persisted. */
   railNetwork: Uint16Array;
   /** Ticks since a passenger train last halted at this station, saturating. Derived. */
@@ -636,6 +639,7 @@ export function createTileLayers(size: number): TileLayers {
     stopAge: new Uint16Array(tiles),
     transitCover: new Uint8Array(tiles),
     rail: new Uint8Array(tiles),
+    overpass: new Uint8Array(tiles),
     railNetwork: new Uint16Array(tiles),
     stationAge: new Uint16Array(tiles).fill(MAX_RAIL_AGE),
     terminalAge: new Uint16Array(tiles).fill(MAX_RAIL_AGE),
@@ -851,6 +855,7 @@ export function snapshotTile(state: SimState, index: number): UndoEntry['tiles']
     plantType: layers.plantType[index],
     busStop: layers.busStop[index],
     rail: layers.rail[index],
+    overpass: layers.overpass[index],
     forest: layers.forest[index],
     damage: layers.damage[index],
   };
@@ -906,6 +911,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
         layers.busStop[index] !== 0 ? stopStateOfAge(layers.stopAge[index]) : StopState.Served,
       transitCover: layers.transitCover[index],
       rail: layers.rail[index],
+      overpass: layers.overpass[index],
       railCover: layers.railStation[index] >= 0 ? 1 : 0,
       stationState:
         layers.tileType[index] === TileType.Plant &&

@@ -47,6 +47,8 @@ export const BALANCE = {
      */
     railPerTile: 10,
     railBridgePerTile: 60,
+    /** Upgrade of a level crossing to a road overpass (deck plus two ramps). */
+    overpass: 150,
     zonePerTile: 5,
     insulation: 4_000,
     plant: {
