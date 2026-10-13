@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { DIR_E, DIR_N, DIR_S, DIR_W } from '../shared/grid.ts';
+import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../shared/grid.ts';
 import { crossingIsClosed, type CrossingTrain } from '../shared/levelCrossing.ts';
 import {
   Terrain,
@@ -10,7 +10,8 @@ import {
   type VehicleState,
 } from '../shared/types.ts';
 import type { ElevationField } from './elevationField.ts';
-import type { DiffLayer } from './renderer.ts';
+import type { DiffLayer, RenderEnvironment } from './renderer.ts';
+import { RailSignals } from './infrastructure/railSignals.ts';
 import { surfaceMaterial } from './materials.ts';
 import { box } from './modelKit.ts';
 import { roadHalfWidth } from './roadsMesh.ts';
@@ -62,6 +63,13 @@ const SIGNAL_BLINK_DUTY = 0.5;
 /** Instance colours of the signal head: dark when the crossing is open, red when it is closed. */
 const SIGNAL_DARK = 0x2b2f33;
 const SIGNAL_LIT = 0xe0402c;
+/** Every rail vehicle occupies a signal block; only locomotives close crossings. */
+const RAIL_VEHICLES: ReadonlySet<number> = new Set([
+  VehicleKind.Locomotive,
+  VehicleKind.Wagon,
+  VehicleKind.FreightLocomotive,
+  VehicleKind.FreightWagon,
+]);
 
 /** One barrier of a level crossing: a post, the bar that swings down and its signal head. */
 interface CrossingBarrier {
@@ -164,7 +172,8 @@ const DIRECTION_ANGLE: ReadonlyArray<{ bit: number; angle: number }> = [
  * ballast across the roadway of road tiles (level crossing), ballasted
  * again from the road edge to the tile edge, with a barrier post, a raised
  * bar and a signal head per approach; a deck with parapets under tiles
- * that bridge the river. Rebuilt from the diffs like the lines.
+ * that bridge the river; line-side occupancy signals at stations and
+ * junctions (`RailSignals`). Rebuilt from the diffs like the lines.
  */
 export class RailMesh implements DiffLayer {
   private readonly segments: THREE.InstancedMesh;
@@ -178,6 +187,9 @@ export class RailMesh implements DiffLayer {
   private readonly barriers: CrossingBarrier[] = [];
   /** Locomotive positions in world coordinates, from the last tick. */
   private readonly trains: CrossingTrain[] = [];
+  /** Positions of every rail vehicle (locomotives and wagons), for the signals. */
+  private readonly railVehicles: CrossingTrain[] = [];
+  readonly signals: RailSignals;
   private reducedMotion = false;
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly color = new THREE.Color();
@@ -185,6 +197,7 @@ export class RailMesh implements DiffLayer {
   private readonly tileTypes: Uint8Array;
   private readonly terrains: Uint8Array;
   private readonly roadClasses: Uint8Array;
+  private readonly plantTypes: Uint8Array;
   /** Road connection bits per tile (0 off the road). */
   private readonly roadMasks: Uint8Array;
   private readonly dummy = new THREE.Object3D();
@@ -200,6 +213,7 @@ export class RailMesh implements DiffLayer {
     this.terrains = new Uint8Array(tiles);
     this.roadClasses = new Uint8Array(tiles);
     this.roadMasks = new Uint8Array(tiles);
+    this.plantTypes = new Uint8Array(tiles);
     const make = (
       geometry: THREE.BufferGeometry,
       color: number,
@@ -229,6 +243,8 @@ export class RailMesh implements DiffLayer {
     this.barrierBars = make(standingBoxGeometry(), BARRIER_BAR_COLOR, tiles * 2);
     // White base colour: the head's own colour is per instance, so it can blink.
     this.signalHeads = make(standingBoxGeometry(), 0xffffff, tiles * 2);
+    this.signals = new RailSignals(scene);
+    this.signals.setVehicles(this.railVehicles);
   }
 
   hasRail(index: number): boolean {
@@ -259,8 +275,25 @@ export class RailMesh implements DiffLayer {
         this.roadClasses[diff.index] = diff.roadClass;
         if (diff.rail !== 0) changed = true;
       }
+      if (this.plantTypes[diff.index] !== diff.plantType) {
+        this.plantTypes[diff.index] = diff.plantType;
+        // A station next to the track gives that track a signal.
+        if (this.besideTrack(diff.index)) changed = true;
+      }
     }
     if (changed) this.rebuild();
+  }
+
+  /** Whether a 4-neighbour of the tile carries track. */
+  private besideTrack(index: number): boolean {
+    const x = index % this.gridSize;
+    const y = Math.floor(index / this.gridSize);
+    return DIRECTIONS.some(({ dx, dy }) => {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= this.gridSize || ny >= this.gridSize) return false;
+      return this.masks[ny * this.gridSize + nx] !== 0;
+    });
   }
 
   /** Ground under a point of a track tile: the deck top on a river tile, the terrain elsewhere. */
@@ -326,15 +359,23 @@ export class RailMesh implements DiffLayer {
 
   /**
    * Train positions of the last tick, so the crossings can see them
-   * coming. Wagons are left out: a locomotive leads every train.
+   * coming (locomotives only: one leads every train) and the signals
+   * see every occupied block (wagons too).
    */
   setTrains(vehicles: readonly VehicleState[]): void {
     this.trains.length = 0;
+    this.railVehicles.length = 0;
     for (const vehicle of vehicles) {
-      if (vehicle.kind !== VehicleKind.Locomotive && vehicle.kind !== VehicleKind.FreightLocomotive)
-        continue;
-      this.trains.push({ x: vehicle.x, y: vehicle.y });
+      if (!RAIL_VEHICLES.has(vehicle.kind)) continue;
+      this.railVehicles.push({ x: vehicle.x, y: vehicle.y });
+      if (vehicle.kind === VehicleKind.Locomotive || vehicle.kind === VehicleKind.FreightLocomotive)
+        this.trains.push({ x: vehicle.x, y: vehicle.y });
     }
+  }
+
+  /** Signal lamps glow brighter at night. */
+  setEnvironment(environment: RenderEnvironment): void {
+    this.signals.setNight(environment.nightFactor);
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -347,6 +388,7 @@ export class RailMesh implements DiffLayer {
    * motion a bar jumps to its end state and the head holds its colour.
    */
   update(deltaSeconds: number, nowSeconds: number): void {
+    this.signals.update();
     if (this.barriers.length === 0) return;
     const step = this.reducedMotion ? 1 : deltaSeconds / BARRIER_SWEEP_SECONDS;
     const litPhase =
@@ -537,6 +579,14 @@ export class RailMesh implements DiffLayer {
     this.barrierBars.count = barriers;
     this.signalHeads.count = barriers;
     if (this.signalHeads.instanceColor) this.signalHeads.instanceColor.needsUpdate = true;
+    this.signals.rebuild(
+      this.masks,
+      this.tileTypes,
+      this.terrains,
+      this.plantTypes,
+      this.gridSize,
+      this.elevation,
+    );
     for (const mesh of [
       this.segments,
       this.crossings,

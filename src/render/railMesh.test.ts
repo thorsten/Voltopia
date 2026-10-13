@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import {
+  PlantType,
   RoadClass,
   Terrain,
   TileType,
@@ -12,6 +13,7 @@ import {
 import { ElevationField } from './elevationField.ts';
 import { RailMesh, SLEEPER_COLOR } from './railMesh.ts';
 import { roadHalfWidth } from './roadsMesh.ts';
+import { SIGNAL_GREEN, SIGNAL_RED } from './infrastructure/railSignals.ts';
 
 const SIZE = 8;
 const at = (x: number, y: number) => y * SIZE + x;
@@ -417,5 +419,58 @@ describe('RailMesh level-crossing barriers', () => {
       return color.getHex();
     });
     expect(new Set(colors).size).toBeGreaterThan(1);
+  });
+});
+
+describe('RailMesh occupancy signals', () => {
+  /** A straight east-west line along row 2 with a station south of (3,2). */
+  function lineWithStation(stationFirst: boolean) {
+    const tiles = baseTiles();
+    for (let x = 0; x < SIZE; x++) {
+      tiles[at(x, 2)].rail = LINE_PRESENT | (x > 0 ? DIR_W : 0) | (x < SIZE - 1 ? DIR_E : 0);
+    }
+    const station = tiles[at(3, 3)];
+    const scene = new THREE.Scene();
+    const field = new ElevationField(SIZE);
+    field.applyDiffs(tiles);
+    const mesh = new RailMesh(scene, SIZE, field);
+    if (stationFirst) {
+      Object.assign(station, { tileType: TileType.Plant, plantType: PlantType.TrainStation });
+      mesh.applyDiffs(tiles);
+    } else {
+      mesh.applyDiffs(tiles);
+      // The station is built next to existing track: only its own tile changes.
+      Object.assign(station, { tileType: TileType.Plant, plantType: PlantType.TrainStation });
+      mesh.applyDiffs([station]);
+    }
+    return mesh;
+  }
+
+  const lampHex = (mesh: RailMesh) => {
+    const color = new THREE.Color();
+    mesh.signals.lamps.mesh.getColorAt(0, color);
+    return color.getHex();
+  };
+
+  it('signals beside a station built next to the track', () => {
+    expect(lineWithStation(true).signals.masts.mesh.count).toBe(1);
+    expect(lineWithStation(false).signals.masts.mesh.count).toBe(1);
+  });
+
+  it('shows red while a wagon is in the block and green once it has left', () => {
+    const mesh = lineWithStation(true);
+    const wagon = (x: number): VehicleState => ({
+      id: 2,
+      x,
+      y: 2.5,
+      angle: 0,
+      kind: VehicleKind.FreightWagon,
+    });
+    mesh.setTrains([wagon(4.5)]);
+    mesh.update(0.016, 0.016);
+    expect(lampHex(mesh)).toBe(SIGNAL_RED);
+    mesh.setTrains([wagon(6.5)]);
+    mesh.update(0.016, 0.032);
+    expect(lampHex(mesh)).toBe(SIGNAL_GREEN);
   });
 });

@@ -82,6 +82,11 @@ export class GrowingMesh {
     if (this.current.instanceColor) flagRange(this.current.instanceColor, count);
   }
 
+  /** Flag only the first `count` instance colours for re-upload (matrices untouched). */
+  commitColors(count: number): void {
+    if (this.current.instanceColor) flagRange(this.current.instanceColor, count);
+  }
+
   private create(capacity: number): THREE.InstancedMesh {
     const mesh = new THREE.InstancedMesh(this.geometry, this.material, capacity);
     this.setup(mesh);

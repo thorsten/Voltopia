@@ -112,8 +112,8 @@ export class RailSignals { constructor(scene: THREE.Scene); rebuild(...); setVeh
 - Mast model (`modelKit`: mast ≈ 0.32, head box, hood) in a `GrowingMesh`, placed `SIGNAL_OFFSET = 0.25` beside the track (straight along x → +z side; along z → +x side; other → (+x, +z) diagonal), yawed to face along the track; lamp spheres (`MeshBasicMaterial`, transparent) in a `GrowingMesh` with instance colours `SIGNAL_GREEN = 0x3ddc84`, `SIGNAL_RED = 0xe0402c`; opacity `SIGNAL_DAY_OPACITY = 0.45 + (1 − 0.45)·night`.
 - `blockOccupied`: any vehicle with max(|x − (tx+0.5)|, |y − (ty+0.5)|) ≤ SIGNAL_BLOCK_TILES. Check vehicle coordinates convention in `RailMesh.setTrains`/`crossingIsClosed` (tile centres) and match it.
 - `RailMesh`: record `plantType` per tile; `setTrains` also stores all rail vehicles (Locomotive, Wagon, FreightLocomotive, FreightWagon) for `signals.setVehicles`; `rebuild` calls `signals.rebuild`; `setEnvironment` → `setNight`; `update` → `signals.update()` which recomputes aspects and uploads colours only when one changed.
-- [ ] Tests: signal at a station neighbour and at a junction; none on a plain straight, a road crossing or a bridge; wagon within the block → red, leaves → green; second `update` without change does not bump the colour attribute version; day opacity 0.45, night 1; masts cast shadow, lamps do not.
-- [ ] Implement; checks; commit `feat(render): line-side signals that show occupancy`.
+- [x] Tests: signal at a station neighbour and at a junction; none on a plain straight, a road crossing or a bridge; wagon within the block → red, leaves → green; second `update` without change does not bump the colour attribute version; day opacity 0.45, night 1; masts cast shadow, lamps do not.
+- [x] Implement; checks; commit `feat(render): line-side signals that show occupancy`.
 
 ### Task 7: Review, full checks, Mac hand-off
 
