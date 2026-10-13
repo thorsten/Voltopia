@@ -372,6 +372,7 @@ export class RailMesh implements DiffLayer {
       if (vehicle.kind === VehicleKind.Locomotive || vehicle.kind === VehicleKind.FreightLocomotive)
         this.trains.push({ x: vehicle.x, y: vehicle.y });
     }
+    this.signals.setVehicles(this.railVehicles);
   }
 
   /** Signal lamps glow brighter at night. */

@@ -131,6 +131,30 @@ describe('RailSignals', () => {
     expect(signals.lamps.mesh.instanceColor!.version).toBe(version);
   });
 
+  it('evaluates the aspects only after new vehicles or a rebuild', () => {
+    const signals = signalsFor(withStation());
+    let scans = 0;
+    /** Vehicles that count every scan over them. */
+    const counted = (list: Array<{ x: number; y: number }>) =>
+      Object.assign([...list], {
+        [Symbol.iterator]() {
+          scans++;
+          return list[Symbol.iterator]();
+        },
+      });
+    signals.setVehicles(counted([{ x: 4.5, y: 2.5 }]));
+    signals.update();
+    expect(scans).toBe(1);
+    expect(lampHex(signals, 0)).toBe(SIGNAL_RED);
+    signals.update();
+    signals.update();
+    expect(scans).toBe(1);
+    signals.setVehicles(counted([{ x: 0.5, y: 2.5 }]));
+    signals.update();
+    expect(scans).toBe(2);
+    expect(lampHex(signals, 0)).toBe(SIGNAL_GREEN);
+  });
+
   it('glows brighter at night; masts cast shadows, lamps do not', () => {
     const signals = signalsFor(withStation());
     signals.setNight(0);

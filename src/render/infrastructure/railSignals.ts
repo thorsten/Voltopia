@@ -159,6 +159,8 @@ export class RailSignals {
   /** Shown aspect per signal: true = red. */
   private red: boolean[] = [];
   private vehicles: ReadonlyArray<{ x: number; y: number }> = [];
+  /** Whether the vehicles changed since the aspects were last evaluated. */
+  private dirty = false;
   private gridSize = 0;
   private readonly matrix = new THREE.Matrix4();
   private readonly lampOffset = new THREE.Vector3();
@@ -234,19 +236,32 @@ export class RailSignals {
     }
     this.masts.commit(count);
     this.lamps.commit(count);
+    // Every aspect was just evaluated against the current vehicles.
+    this.dirty = false;
   }
 
-  /** Rail vehicle positions of the last tick (tile coordinates). */
+  /**
+   * Rail vehicle positions of the last tick (tile coordinates). Call it
+   * again after changing the list in place: the next update evaluates
+   * the aspects only then.
+   */
   setVehicles(vehicles: ReadonlyArray<{ x: number; y: number }>): void {
     this.vehicles = vehicles;
+    this.dirty = true;
   }
 
   setNight(nightFactor: number): void {
     this.lampMaterial.opacity = SIGNAL_DAY_OPACITY + (1 - SIGNAL_DAY_OPACITY) * nightFactor;
   }
 
-  /** Re-evaluate every aspect; upload the colours only when one changed. */
+  /**
+   * Re-evaluate every aspect once new vehicles have arrived (vehicles
+   * move once per sim tick, frames come far more often); upload the
+   * colours only when one changed.
+   */
   update(): void {
+    if (!this.dirty) return;
+    this.dirty = false;
     let changed = false;
     for (let slot = 0; slot < this.tiles.length; slot++) {
       const red = blockOccupied(this.tiles[slot], this.gridSize, this.vehicles);
