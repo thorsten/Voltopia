@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import type * as THREE from 'three';
+import type { RenderEnvironment } from './renderer.ts';
 import type { TileDiff } from '../shared/types.ts';
 import { Terrain } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
@@ -76,5 +78,29 @@ describe('sandy shores', () => {
     const [ir, ig, ib] = cornerColor(ground, 3, 3);
     expect(ir).toBe(ig);
     expect(ig).toBe(ib);
+  });
+
+  const snow = (snowCover: number) => ({ phase: 0, snowCover }) as RenderEnvironment;
+
+  it('fades the sand tint out under snow', () => {
+    const ground = lakeGround();
+    ground.setEnvironment(snow(1));
+    const [r, g, b] = cornerColor(ground, 2, 2);
+    expect(r).toBe(b);
+    expect(g).toBe(b);
+    ground.setEnvironment(snow(0));
+    const [tr, , tb] = cornerColor(ground, 2, 2);
+    expect(tr).not.toBeCloseTo(tb, 5);
+  });
+
+  it('does not rewrite the shore colours for a small snow change', () => {
+    const ground = lakeGround();
+    const colors = ground.ground.geometry.attributes.color as THREE.BufferAttribute;
+    ground.setEnvironment(snow(0.5));
+    const version = colors.version;
+    const before = cornerColor(ground, 2, 2);
+    ground.setEnvironment(snow(0.52));
+    expect(colors.version).toBe(version);
+    expect(cornerColor(ground, 2, 2)).toEqual(before);
   });
 });

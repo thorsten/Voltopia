@@ -39,6 +39,12 @@ const MAX_TERRAIN_Y = BALANCE.terrain.maxLevel * LEVEL_HEIGHT;
  * in a float vertex colour.
  */
 const SAND_TINT = new THREE.Color(1.38, 1.05, 1.15);
+/**
+ * Snow cover change that rewrites the shore colours: snow fades the sand
+ * tint out (near-white snow × tint would clip to pink), but rewriting on
+ * every tiny step would re-upload the colour buffer every frame.
+ */
+const SNOW_TINT_STEP = 0.05;
 
 /**
  * Height-field ground spanning [0, size] x [0, size], with a grid overlay
@@ -53,6 +59,11 @@ export class GroundMesh implements DiffLayer {
   /** Terrain per tile, recorded from diffs, for the shore tint. */
   private readonly terrain: Uint8Array;
   private appliedVersion = -1;
+  /** Shore vertices and their relief shade, from the last height rebuild. */
+  private shoreVertices: number[] = [];
+  private shoreShades: number[] = [];
+  /** Snow cover the shore colours were last written for. */
+  private tintSnow = 0;
 
   constructor(size: number, field: ElevationField) {
     this.size = size;
@@ -102,6 +113,26 @@ export class GroundMesh implements DiffLayer {
 
   setEnvironment(environment: RenderEnvironment): void {
     groundColor(this.ground.material.color, environment.phase, environment.snowCover);
+    const snow = THREE.MathUtils.clamp(environment.snowCover, 0, 1);
+    // Small steps are skipped, but a bare or fully snowed state is always reached.
+    const settled = (snow === 0 || snow === 1) && snow !== this.tintSnow;
+    if (!settled && Math.abs(snow - this.tintSnow) <= SNOW_TINT_STEP) return;
+    this.tintSnow = snow;
+    this.writeShoreColors();
+    this.ground.geometry.attributes.color.needsUpdate = true;
+  }
+
+  /** Paint the shore vertices sandy, the tint faded toward none by snow. */
+  private writeShoreColors(): void {
+    const color = this.ground.geometry.attributes.color;
+    const sand = 1 - this.tintSnow;
+    const r = 1 + (SAND_TINT.r - 1) * sand;
+    const g = 1 + (SAND_TINT.g - 1) * sand;
+    const b = 1 + (SAND_TINT.b - 1) * sand;
+    this.shoreVertices.forEach((vertex, i) => {
+      const shade = this.shoreShades[i];
+      color.setXYZ(vertex, shade * r, shade * g, shade * b);
+    });
   }
 
   setGridVisible(visible: boolean): void {
@@ -112,18 +143,21 @@ export class GroundMesh implements DiffLayer {
     const position = this.ground.geometry.attributes.position;
     const color = this.ground.geometry.attributes.color;
     const maxY = MAX_TERRAIN_Y;
+    this.shoreVertices = [];
+    this.shoreShades = [];
     for (let i = 0; i < position.count; i++) {
       const vx = Math.round(position.getX(i));
       const vz = Math.round(position.getZ(i));
       const y = this.field.cornerY(vx, vz);
       position.setY(i, y);
       const shade = SHADE_LOW + SHADE_SPAN * (maxY > 0 ? y / maxY : 0);
+      color.setXYZ(i, shade, shade, shade);
       if (this.isShore(vx, vz)) {
-        color.setXYZ(i, shade * SAND_TINT.r, shade * SAND_TINT.g, shade * SAND_TINT.b);
-      } else {
-        color.setXYZ(i, shade, shade, shade);
+        this.shoreVertices.push(i);
+        this.shoreShades.push(shade);
       }
     }
+    this.writeShoreColors();
     position.needsUpdate = true;
     color.needsUpdate = true;
     this.ground.geometry.computeVertexNormals();
