@@ -43,8 +43,11 @@ const connections = (mask: number) => DIRECTIONS.filter(({ bit }) => (mask & bit
  * whose ends overlap the tile's crease by half a kerb width; laid on the
  * triangle of their centre, that end sits a hair off the ground on
  * slopes, which the kerb's rise hides.
+ *
+ * Pad sides in `openSides` (direction bits) stay open: at a level
+ * crossing that is where the track leaves the tile.
  */
-export function kerbPieces(mask: number, padSize: number): FlatPiece[] {
+export function kerbPieces(mask: number, padSize: number, openSides = 0): FlatPiece[] {
   const half = padSize / 2;
   const armLength = (1 - padSize) / 2;
   const edge = half - KERB_WIDTH / 2 + KERB_OVERHANG;
@@ -52,6 +55,7 @@ export function kerbPieces(mask: number, padSize: number): FlatPiece[] {
   const pieces: FlatPiece[] = [];
   for (const { dx, dy, bit } of DIRECTIONS) {
     if ((mask & bit) === 0) {
+      if ((openSides & bit) !== 0) continue;
       pieces.push(
         dx !== 0
           ? { cx: dx * edge, cz: 0, sizeX: KERB_WIDTH, sizeZ: padSize }

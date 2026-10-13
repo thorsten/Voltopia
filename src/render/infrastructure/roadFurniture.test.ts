@@ -53,6 +53,15 @@ describe('kerbPieces', () => {
     expect(padSide(pieces, 'E', STREET)).toHaveLength(0);
   });
 
+  it('leaves open pad sides open but keeps the arm kerbs', () => {
+    const pieces = kerbPieces(DIR_N | DIR_S, STREET, DIR_E | DIR_W);
+    expect(pieces).toHaveLength(4);
+    expect(padSide(pieces, 'E', STREET)).toHaveLength(0);
+    expect(padSide(pieces, 'W', STREET)).toHaveLength(0);
+    // An open side that carries an arm changes nothing.
+    expect(kerbPieces(DIR_E | DIR_W, STREET, DIR_E)).toHaveLength(6);
+  });
+
   it('keeps every piece inside the tile and widens with the avenue pad', () => {
     for (let mask = 0; mask < 16; mask++) {
       for (const pad of [STREET, AVENUE])

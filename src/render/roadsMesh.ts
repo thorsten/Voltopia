@@ -38,6 +38,9 @@ const LINE_DASH_LENGTH = 0.15;
 const LINE_COLOR = 0xe8e2c8;
 const LINE_HEIGHT = 0.012;
 
+/** Connection bits of a track mask (the rest flag presence). */
+const TRACK_SIDES = DIR_N | DIR_E | DIR_S | DIR_W;
+
 const KERB_COLOR = 0xc9c6bd;
 /** Kerbs stand this far above the asphalt. */
 const KERB_RISE = 0.015;
@@ -375,7 +378,8 @@ export class RoadsMesh implements DiffLayer {
       const mask = this.roadMasks[index];
       if (mask < 0 || this.isBridge(index)) continue;
       const size = roadHalfWidth(this.roadClasses[index]) * 2;
-      const kerbs = kerbPieces(mask, size);
+      // No kerb across the rails where the track leaves a level crossing.
+      const kerbs = kerbPieces(mask, size, this.track[index] & TRACK_SIDES);
       this.kerbs.ensure(kerbCount + kerbs.length);
       for (const piece of kerbs) {
         this.layFlat(index, piece, ROAD_HEIGHT + KERB_RISE, 0);

@@ -67,7 +67,33 @@ describe('RoadsMesh kerbs and zebra crossings', () => {
     list[at(2, 2)].rail = LINE_PRESENT | DIR_N | DIR_S;
     const layer = layerWith(list);
     expect(layer.stripes.mesh.count).toBe(0);
-    expect(layer.kerbs.mesh.count).toBe(3 * 5 + 7);
+    // The south pad side stays open where the track leaves the tile.
+    expect(layer.kerbs.mesh.count).toBe(3 * 5 + 6);
+  });
+});
+
+describe('RoadsMesh kerbs at level crossings', () => {
+  it('keeps kerbs off the rails but keeps the arm kerbs', () => {
+    const list = tiles();
+    road(list, 2, 1, DIR_S);
+    road(list, 2, 2, DIR_N | DIR_S);
+    road(list, 2, 3, DIR_N);
+    list[at(2, 2)].rail = LINE_PRESENT | DIR_E | DIR_W;
+    const layer = layerWith(list);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+    let onCrossing = 0;
+    for (let slot = 0; slot < layer.kerbs.mesh.count; slot++) {
+      layer.kerbs.mesh.getMatrixAt(slot, matrix);
+      matrix.decompose(position, new THREE.Quaternion(), scale);
+      if (position.x < 2 || position.x > 3 || position.z < 2 || position.z > 3) continue;
+      onCrossing++;
+      // The track's centre line runs along z = 2.5.
+      expect(Math.abs(position.z - 2.5)).toBeGreaterThan(scale.z / 2);
+    }
+    // Two kerbs along each of the two arms.
+    expect(onCrossing).toBe(4);
   });
 });
 
