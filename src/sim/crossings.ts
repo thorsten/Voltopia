@@ -7,8 +7,9 @@ import { runningTrains } from './trains.ts';
 /**
  * Level crossings closed by an approaching train this tick, as tile
  * indices. Only straight crossings count — those are the ones that carry
- * barriers (render/railMesh.ts draws none on a junction), so what stops
- * a car is always what a player can see coming down.
+ * barriers (render/railMesh.ts draws none on a junction) — and a road
+ * overpass has none — so what stops a car is always what a player can
+ * see coming down.
  *
  * Derived from the trains, not from a grid pass: each train looks a few
  * tiles along its own axis, so the cost is a handful of lookups per
@@ -19,7 +20,7 @@ export function closedCrossings(state: SimState): Set<number> {
   const trains = runningTrains(state);
   if (trains.length === 0) return closed;
   const reach = Math.ceil(BALANCE.rail.crossingApproachTiles);
-  const { tileType, rail } = state.layers;
+  const { tileType, rail, overpass } = state.layers;
   for (const train of trains) {
     const tx = Math.floor(train.x);
     const ty = Math.floor(train.y);
@@ -34,6 +35,8 @@ export function closedCrossings(state: SimState): Set<number> {
       const index = tileIndex(x, y, state.size);
       if (closed.has(index)) continue;
       if (tileType[index] !== TileType.Road) continue;
+      // A road overpass carries the road over the track: nothing to close.
+      if (overpass[index] !== 0) continue;
       const mask = rail[index];
       if ((mask & LINE_PRESENT) === 0) continue;
       const bits = mask & (DIR_N | DIR_E | DIR_S | DIR_W);

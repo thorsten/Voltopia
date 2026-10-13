@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { closedCrossings } from './crossings.ts';
+import { buildOverpasses } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads } from './roads.ts';
 import { createSimState, TrainKind, TrainPhase, type SimState, type Train } from './state.ts';
@@ -73,6 +74,18 @@ describe('closedCrossings', () => {
     buildRail(state, [at(5, 7)]);
     runningTrain(state, 6, 8.5);
     expect(closedCrossings(state).size).toBe(0);
+  });
+
+  it('never closes an overpass, while the plain crossing beside it still closes', () => {
+    const state = crossingTown();
+    // A second north-south road two tiles east crosses the same track.
+    buildRoads(
+      state,
+      Array.from({ length: 12 }, (_, i) => at(7, i + 2)),
+    );
+    buildOverpasses(state, [at(5, 8)]);
+    runningTrain(state, 6, 8.5);
+    expect([...closedCrossings(state)]).toEqual([at(7, 8)]);
   });
 
   it('ignores track that does not cross a road', () => {
