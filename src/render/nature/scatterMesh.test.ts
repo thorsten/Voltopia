@@ -154,4 +154,24 @@ describe('ScatterMesh', () => {
       expect(mesh(scene, name).instanceMatrix.count).toBeLessThan((SIZE * SIZE * 3) / 10);
     }
   });
+
+  it('moves props onto changed ground', () => {
+    const { scene, field, layer, diffs } = freeMap();
+    const raised = diffs.map((d) => ({ ...d, elevation: (d.index % SIZE) % 3 }));
+    field.applyDiffs(raised);
+    layer.applyDiffs(raised);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    let lifted = 0;
+    for (const name of MESHES) {
+      const props = mesh(scene, name);
+      for (let i = 0; i < props.count; i++) {
+        props.getMatrixAt(i, matrix);
+        position.setFromMatrixPosition(matrix);
+        expect(position.y).toBeCloseTo(field.surfaceY(position.x, position.z), 6);
+        if (position.y > 0) lifted++;
+      }
+    }
+    expect(lifted).toBeGreaterThan(0);
+  });
 });

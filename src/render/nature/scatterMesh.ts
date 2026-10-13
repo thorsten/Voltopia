@@ -122,7 +122,8 @@ export class ScatterMesh implements DiffLayer {
   private readonly free: Uint8Array;
   private bushCount = 0;
   private rockCount = 0;
-  private built = false;
+  /** Elevation version of the last build; -1 before the first one. */
+  private builtVersion = -1;
   private readonly bushTint = BUSH_GREEN.clone();
   private readonly matrix = new THREE.Matrix4();
   private readonly position = new THREE.Vector3();
@@ -163,7 +164,8 @@ export class ScatterMesh implements DiffLayer {
   }
 
   applyDiffs(diffs: TileDiff[]): void {
-    let changed = !this.built;
+    // The ground moved under the props (e.g. terraforming): stand them on it again.
+    let changed = this.builtVersion !== this.elevation.version;
     for (const diff of diffs) {
       const free = isFree(diff) ? 1 : 0;
       if (this.free[diff.index] === free) continue;
@@ -171,7 +173,7 @@ export class ScatterMesh implements DiffLayer {
       changed = true;
     }
     if (!changed) return;
-    this.built = true;
+    this.builtVersion = this.elevation.version;
     this.rebuild();
   }
 

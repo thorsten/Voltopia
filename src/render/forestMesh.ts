@@ -163,6 +163,8 @@ export class ForestMesh implements DiffLayer {
   private readonly scale = new THREE.Vector3();
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly scratch = new THREE.Color();
+  /** Elevation version the trees were last stood on. */
+  private builtVersion: number;
 
   constructor(
     scene: THREE.Scene,
@@ -183,6 +185,7 @@ export class ForestMesh implements DiffLayer {
       color: FOLIAGE_KEYS[1].clone(),
       count: 0,
     };
+    this.builtVersion = elevation.version;
   }
 
   /** Trees currently drawn per species. */
@@ -210,7 +213,11 @@ export class ForestMesh implements DiffLayer {
         changed = true;
       }
     }
-    if (changed) this.rebuild();
+    // The ground moved under the trees: stand them on it again.
+    if (this.builtVersion !== this.elevation.version) changed = true;
+    if (!changed) return;
+    this.builtVersion = this.elevation.version;
+    this.rebuild();
   }
 
   /** A mesh that grows with the woods (a full-map capacity would waste memory). */

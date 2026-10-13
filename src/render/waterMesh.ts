@@ -90,6 +90,8 @@ export class WaterMesh implements DiffLayer {
   private nightFactor = 0;
   private reducedMotion = false;
   private tideLevel = 0;
+  /** Elevation version the water was last laid on. */
+  private builtVersion: number;
 
   constructor(
     scene: THREE.Scene,
@@ -142,6 +144,7 @@ export class WaterMesh implements DiffLayer {
     this.inlandFoam = this.createFoam('inlandFoam', 1);
     this.seaFoam = this.createFoam('seaFoam', 1);
     this.setSeaSurface(SEA_MEAN_HEIGHT);
+    this.builtVersion = elevation.version;
   }
 
   /** Shore edges drawn with foam, inland (lake, river) and on the coast. */
@@ -157,7 +160,11 @@ export class WaterMesh implements DiffLayer {
         changed = true;
       }
     }
-    if (changed) this.rebuild();
+    // The ground moved under the water: lay it on the new bed.
+    if (this.builtVersion !== this.elevation.version) changed = true;
+    if (!changed) return;
+    this.builtVersion = this.elevation.version;
+    this.rebuild();
   }
 
   setEnvironment(environment: RenderEnvironment): void {
