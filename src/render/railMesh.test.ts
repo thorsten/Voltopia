@@ -118,7 +118,8 @@ describe('RailMesh', () => {
     const { segments, crossings, decks, parapets, barrierPosts, barrierBars, signalHeads } =
       sceneWith(tiles);
     expect(crossings.count).toBe(2);
-    expect(segments.count).toBe(2);
+    // The neighbours' half-segments plus ballast beyond the roadway on both sides of the crossing.
+    expect(segments.count).toBe(4);
     expect(decks.count).toBe(1);
     // The straight span over the river gets a parapet per side …
     expect(parapets.count).toBe(2);
@@ -181,6 +182,74 @@ describe('RailMesh', () => {
     const { mesh, segments } = sceneWith(tiles);
     mesh.applyDiffs([{ ...tiles[at(2, 2)], rail: 0 }]);
     expect(segments.count).toBe(0);
+  });
+});
+
+describe('RailMesh crossing ballast', () => {
+  /** Horizontal distance from the tile centre (cx, cz) to both ends of a half-segment instance. */
+  function extent(mesh: THREE.InstancedMesh, slot: number, cx: number, cz: number) {
+    const { position, quaternion, scale } = instanceOf(mesh, slot);
+    // The segment geometry runs 0.5 along local +x from its origin.
+    const end = new THREE.Vector3(0.5 * scale.x, 0, 0).applyQuaternion(quaternion).add(position);
+    const flat = (p: THREE.Vector3) => Math.hypot(p.x - cx, p.z - cz);
+    return { from: flat(position), to: flat(end), startY: position.y, endY: end.y };
+  }
+
+  for (const roadClass of [RoadClass.Street, RoadClass.Avenue]) {
+    const label = roadClass === RoadClass.Avenue ? 'an avenue' : 'a street';
+    const half = roadHalfWidth(roadClass);
+
+    it(`ballasts a straight crossing of ${label} from the road edge to the tile edge`, () => {
+      const tiles = baseTiles();
+      tiles[at(3, 3)].rail = LINE_PRESENT | DIR_N | DIR_S;
+      tiles[at(3, 3)].tileType = TileType.Road;
+      tiles[at(3, 3)].roadMask = DIR_E | DIR_W;
+      tiles[at(3, 3)].roadClass = roadClass;
+      const { segments, crossings, centres } = sceneWith(tiles);
+      expect(segments.count).toBe(2);
+      expect(crossings.count).toBe(2);
+      expect(centres.count).toBe(0);
+      for (const slot of [0, 1]) {
+        const ballast = extent(segments, slot, 3.5, 3.5);
+        expect(Math.abs(ballast.from - half)).toBeLessThan(0.01);
+        expect(Math.abs(ballast.to - 0.5)).toBeLessThan(0.01);
+        // Flush rails stop where the roadway does.
+        const flush = extent(crossings, slot, 3.5, 3.5);
+        expect(flush.from).toBeLessThan(0.01);
+        expect(Math.abs(flush.to - half)).toBeLessThan(0.01);
+        // The ballasted rails meet the flush ones at the road edge without
+        // a step beyond the crossing lift (rails sit BALLAST_HEIGHT = 0.04
+        // above a ballasted piece, CROSSING_LIFT = 0.012 above the ground on
+        // the road), and the piece reaches the ground at the tile edge, where
+        // the neighbour's track starts.
+        const ballastRailTop = ballast.startY + 0.04;
+        const flushRailTop = flush.endY;
+        expect(Math.abs(ballastRailTop - flushRailTop)).toBeLessThanOrEqual(0.012);
+        expect(ballast.endY).toBeCloseTo(0, 6);
+      }
+    });
+  }
+
+  it('ballasts every track arm of a junction crossing that leaves the roadway', () => {
+    const tiles = baseTiles();
+    // Track east, west and north; the road runs north-south, so only the
+    // east and west arms leave the roadway.
+    tiles[at(3, 3)].rail = LINE_PRESENT | DIR_E | DIR_W | DIR_N;
+    tiles[at(3, 3)].tileType = TileType.Road;
+    tiles[at(3, 3)].roadMask = DIR_N | DIR_S;
+    const { segments, crossings, barrierPosts } = sceneWith(tiles);
+    expect(crossings.count).toBe(3);
+    expect(segments.count).toBe(2);
+    expect(barrierPosts.count).toBe(0);
+    const half = roadHalfWidth(RoadClass.Street);
+    for (const slot of [0, 1]) {
+      const ballast = extent(segments, slot, 3.5, 3.5);
+      expect(Math.abs(ballast.from - half)).toBeLessThan(0.01);
+      expect(Math.abs(ballast.to - 0.5)).toBeLessThan(0.01);
+    }
+    // The north arm runs along the road: flush all the way to the edge.
+    const north = extent(crossings, 1, 3.5, 3.5);
+    expect(Math.abs(north.to - 0.5)).toBeLessThan(0.01);
   });
 });
 

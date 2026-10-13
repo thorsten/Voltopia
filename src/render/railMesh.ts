@@ -128,7 +128,8 @@ const DIRECTION_ANGLE: ReadonlyArray<{ bit: number; angle: number }> = [
  * isolated tile gets an east and a west stub), each pitched from the
  * tile centre to its edge so a line follows the ground over a slope and
  * meets its neighbour at the edge; a centre block; rails without
- * ballast on road tiles (level crossing) with a barrier post, a raised
+ * ballast across the roadway of road tiles (level crossing), ballasted
+ * again from the road edge to the tile edge, with a barrier post, a raised
  * bar and a signal head per approach; a deck with parapets under tiles
  * that bridge the river. Rebuilt from the diffs like the lines.
  */
@@ -151,6 +152,8 @@ export class RailMesh implements DiffLayer {
   private readonly tileTypes: Uint8Array;
   private readonly terrains: Uint8Array;
   private readonly roadClasses: Uint8Array;
+  /** Road connection bits per tile (0 off the road). */
+  private readonly roadMasks: Uint8Array;
   private readonly dummy = new THREE.Object3D();
 
   constructor(
@@ -163,6 +166,7 @@ export class RailMesh implements DiffLayer {
     this.tileTypes = new Uint8Array(tiles);
     this.terrains = new Uint8Array(tiles);
     this.roadClasses = new Uint8Array(tiles);
+    this.roadMasks = new Uint8Array(tiles);
     const make = (geometry: THREE.BufferGeometry, color: number, count: number) => {
       const mesh = new THREE.InstancedMesh(geometry, surfaceMaterial({ color }), count);
       mesh.frustumCulled = false;
@@ -202,6 +206,11 @@ export class RailMesh implements DiffLayer {
         this.terrains[diff.index] = diff.terrain;
         if (diff.rail !== 0) changed = true;
       }
+      const roadMask = diff.tileType === TileType.Road ? diff.roadMask : 0;
+      if (this.roadMasks[diff.index] !== roadMask) {
+        this.roadMasks[diff.index] = roadMask;
+        if (diff.rail !== 0) changed = true;
+      }
       if (this.roadClasses[diff.index] !== diff.roadClass) {
         this.roadClasses[diff.index] = diff.roadClass;
         if (diff.rail !== 0) changed = true;
@@ -215,6 +224,43 @@ export class RailMesh implements DiffLayer {
     return this.terrains[index] === Terrain.River
       ? this.elevation.maxCornerY(index) + DECK_HEIGHT
       : this.elevation.surfaceY(x, z);
+  }
+
+  /** Ground height `distance` from the tile centre (x, z) in the direction of `angle`. */
+  private groundAlong(
+    index: number,
+    x: number,
+    z: number,
+    angle: number,
+    distance: number,
+  ): number {
+    return this.groundY(index, x + distance * Math.cos(angle), z - distance * Math.sin(angle));
+  }
+
+  /**
+   * A piece of half-segment geometry from `from` to `to` along `angle`
+   * (distances from the tile centre), pitched from `fromY` to `toY` and
+   * stretched to the slope length, so track follows the ground and two
+   * neighbours meet at the shared edge point.
+   */
+  private placePiece(
+    mesh: THREE.InstancedMesh,
+    slot: number,
+    x: number,
+    z: number,
+    angle: number,
+    from: number,
+    fromY: number,
+    to: number,
+    toY: number,
+  ): void {
+    const run = to - from;
+    const rise = toY - fromY;
+    this.dummy.position.set(x + from * Math.cos(angle), fromY, z - from * Math.sin(angle));
+    this.dummy.rotation.set(0, angle, Math.atan2(rise, run));
+    this.dummy.scale.set(Math.hypot(run, rise) / 0.5, 1, 1);
+    this.dummy.updateMatrix();
+    mesh.setMatrixAt(slot, this.dummy.matrix);
   }
 
   /** A standing box of the given size at (x, y, z), yawed by `angle`. */
@@ -330,20 +376,34 @@ export class RailMesh implements DiffLayer {
         bits === 0
           ? [DIRECTION_ANGLE[0], DIRECTION_ANGLE[2]]
           : DIRECTION_ANGLE.filter((d) => (bits & d.bit) !== 0);
-      for (const { angle } of directions) {
-        // Pitch the half-segment from the centre height to the edge
-        // midpoint's height and stretch it to reach the edge, so track
-        // climbs a slope instead of floating over the downhill half, and
-        // two neighbours meet at the shared edge point.
-        const ex = x + 0.5 * Math.cos(angle);
-        const ez = z - 0.5 * Math.sin(angle);
-        const edgeY = this.groundY(index, ex, ez) + lift;
-        const rise = edgeY - centreY;
-        this.dummy.position.set(x, centreY, z);
-        this.dummy.rotation.set(0, angle, Math.atan2(rise, 0.5));
-        this.dummy.scale.set(Math.hypot(0.5, rise) / 0.5, 1, 1);
-        this.dummy.updateMatrix();
-        target.setMatrixAt(onRoad ? crossings++ : segments++, this.dummy.matrix);
+      const roadHalf = onRoad ? roadHalfWidth(this.roadClasses[index]) : 0;
+      for (const { bit, angle } of directions) {
+        // A track arm that leaves the roadway (the road has no arm that
+        // way) is flush only across the road and ballasted beyond it.
+        const roadEdge = onRoad && (this.roadMasks[index] & bit) === 0 ? roadHalf : 0.5;
+        const edgeY = this.groundAlong(index, x, z, angle, roadEdge) + lift;
+        this.placePiece(
+          target,
+          onRoad ? crossings++ : segments++,
+          x,
+          z,
+          angle,
+          0,
+          centreY,
+          roadEdge,
+          edgeY,
+        );
+        if (roadEdge < 0.5) {
+          // The ballasted piece starts sunk by the ballast height less the
+          // crossing lift, so its rails continue the flush rails' top at the
+          // road edge, and ramps up to its usual height at the tile edge,
+          // where the neighbour's track starts. The 0.028 ramp (about 8° on a
+          // street, 16° on an avenue's shorter stretch) reads better than a
+          // step at the road edge of more than twice the crossing lift.
+          const startY = edgeY - BALLAST_HEIGHT;
+          const tileEdgeY = this.groundAlong(index, x, z, angle, 0.5);
+          this.placePiece(this.segments, segments++, x, z, angle, roadEdge, startY, 0.5, tileEdgeY);
+        }
       }
       if (!onRoad) {
         this.dummy.position.set(x, centreY, z);
