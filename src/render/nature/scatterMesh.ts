@@ -34,9 +34,8 @@ const PROP_RADIUS = 0.12;
 /** Prop centres keep this far from the edges, so props stay inside their tile. */
 const PROP_INSET = PROP_MARGIN + PROP_RADIUS * PROP_SCALE_MAX;
 
-/** Facets: props are many and small, so coarse; rocks read as chiselled. */
-const BUSH_SEGMENTS = 8;
-const ROCK_SEGMENTS = 6;
+/** Facets: props are many and small, so coarse (rocks read as chiselled). */
+const PROP_SEGMENTS = 6;
 
 /** Bush (~0.09 high): a round main dome with two smaller ones leaning on it. */
 const BUSH_RADIUS = 0.08;
@@ -74,16 +73,16 @@ const groundDome = (
 
 function bushModel(): Model {
   return merge([
-    groundDome(BUSH_RADIUS, BUSH_SQUASH, 0, 0, BUSH_WHITE, BUSH_SEGMENTS),
-    ...BUSH_SIDES.map(([x, z]) => groundDome(BUSH_SIDE_RADIUS, 1, x, z, BUSH_WHITE, BUSH_SEGMENTS)),
+    groundDome(BUSH_RADIUS, BUSH_SQUASH, 0, 0, BUSH_WHITE, PROP_SEGMENTS),
+    ...BUSH_SIDES.map(([x, z]) => groundDome(BUSH_SIDE_RADIUS, 1, x, z, BUSH_WHITE, PROP_SEGMENTS)),
   ]);
 }
 
 function rockModel(): Model {
   const [x, z] = ROCK_SIDE;
   return merge([
-    groundDome(ROCK_RADIUS, ROCK_SQUASH, 0, 0, ROCK_COLOR, ROCK_SEGMENTS),
-    groundDome(ROCK_SIDE_RADIUS, ROCK_SIDE_SQUASH, x, z, ROCK_COLOR, ROCK_SEGMENTS),
+    groundDome(ROCK_RADIUS, ROCK_SQUASH, 0, 0, ROCK_COLOR, PROP_SEGMENTS),
+    groundDome(ROCK_SIDE_RADIUS, ROCK_SIDE_SQUASH, x, z, ROCK_COLOR, PROP_SEGMENTS),
   ]);
 }
 
@@ -192,7 +191,8 @@ export class ScatterMesh implements DiffLayer {
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.
     mesh.frustumCulled = false;
-    mesh.castShadow = true;
+    // Props are small and many: their shadows would cost more than they show.
+    mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.count = 0;
     scene.add(mesh);

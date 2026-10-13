@@ -47,6 +47,12 @@ function mesh(scene: THREE.Scene, name: string): THREE.InstancedMesh {
 
 const MESHES = ['scatter-bushes', 'scatter-rocks'];
 
+/** Most triangles one prop may cost: a third of the map carries props. */
+const BUSH_TRIANGLE_BUDGET = 100;
+const ROCK_TRIANGLE_BUDGET = 64;
+
+const triangles = (m: THREE.InstancedMesh) => m.geometry.getAttribute('position').count / 3;
+
 function matrices(m: THREE.InstancedMesh): number[] {
   return Array.from(m.instanceMatrix.array.slice(0, m.count * 16));
 }
@@ -123,5 +129,16 @@ describe('ScatterMesh', () => {
     expect(high.rocks).toBeGreaterThan(high.bushes);
     const low = freeMap(SIZE, () => 0).layer.counts;
     expect(low.bushes).toBeGreaterThan(low.rocks);
+  });
+
+  it('keeps each prop model within its triangle budget', () => {
+    const { scene } = freeMap();
+    expect(triangles(mesh(scene, 'scatter-bushes'))).toBeLessThanOrEqual(BUSH_TRIANGLE_BUDGET);
+    expect(triangles(mesh(scene, 'scatter-rocks'))).toBeLessThanOrEqual(ROCK_TRIANGLE_BUDGET);
+  });
+
+  it('casts no shadows from props', () => {
+    const { scene } = freeMap();
+    for (const name of MESHES) expect(mesh(scene, name).castShadow).toBe(false);
   });
 });

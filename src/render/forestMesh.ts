@@ -13,6 +13,8 @@ const TREES_BY_STAGE = [0, 2, 3, 5];
 const MAX_TREES_PER_TILE = TREES_BY_STAGE[TREES_BY_STAGE.length - 1];
 /** Facets of trunks and crowns: trees are many, so rounder than a box but cheap. */
 const TREE_SEGMENTS = 8;
+/** Broadleaf crown spheres are coarser still: two per tree, the costliest part. */
+const BROADLEAF_SEGMENTS = 6;
 /** Per-tree size variation around the stage size (±). */
 const SIZE_JITTER = 0.15;
 /** Share of conifers on the lowest and on the highest elevation level. */
@@ -124,8 +126,15 @@ function broadleafModels(): { trunk: Model; crown: Model } {
       ),
     ]),
     crown: merge([
-      sphere(BROADLEAF_CROWN_RADIUS, 0, BROADLEAF_CROWN_Y, 0, CROWN_WHITE, s),
-      sphere(BROADLEAF_TOP_RADIUS, BROADLEAF_TOP_OFFSET, BROADLEAF_TOP_Y, 0, CROWN_WHITE, s),
+      sphere(BROADLEAF_CROWN_RADIUS, 0, BROADLEAF_CROWN_Y, 0, CROWN_WHITE, BROADLEAF_SEGMENTS),
+      sphere(
+        BROADLEAF_TOP_RADIUS,
+        BROADLEAF_TOP_OFFSET,
+        BROADLEAF_TOP_Y,
+        0,
+        CROWN_WHITE,
+        BROADLEAF_SEGMENTS,
+      ),
     ]),
   };
 }
@@ -165,14 +174,14 @@ export class ForestMesh implements DiffLayer {
     const conifer = coniferModels();
     const broadleaf = broadleafModels();
     this.conifer = {
-      trunks: this.instanced(scene, conifer.trunk, capacity, 'forest-conifer-trunks'),
-      crowns: this.instanced(scene, conifer.crown, capacity, 'forest-conifer-crowns'),
+      trunks: this.instanced(scene, conifer.trunk, capacity, 'forest-conifer-trunks', false),
+      crowns: this.instanced(scene, conifer.crown, capacity, 'forest-conifer-crowns', true),
       color: coniferColor(new THREE.Color(), 0),
       count: 0,
     };
     this.broadleaf = {
-      trunks: this.instanced(scene, broadleaf.trunk, capacity, 'forest-broadleaf-trunks'),
-      crowns: this.instanced(scene, broadleaf.crown, capacity, 'forest-broadleaf-crowns'),
+      trunks: this.instanced(scene, broadleaf.trunk, capacity, 'forest-broadleaf-trunks', false),
+      crowns: this.instanced(scene, broadleaf.crown, capacity, 'forest-broadleaf-crowns', true),
       color: FOLIAGE_KEYS[1].clone(),
       count: 0,
     };
@@ -211,6 +220,7 @@ export class ForestMesh implements DiffLayer {
     model: Model,
     capacity: number,
     name: string,
+    castShadow: boolean,
   ): THREE.InstancedMesh {
     const mesh = new THREE.InstancedMesh(
       model.geometry,
@@ -221,7 +231,8 @@ export class ForestMesh implements DiffLayer {
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.
     mesh.frustumCulled = false;
-    mesh.castShadow = true;
+    // Thin trunks hide under their crown's shadow; only crowns cast one.
+    mesh.castShadow = castShadow;
     mesh.receiveShadow = true;
     mesh.count = 0;
     scene.add(mesh);

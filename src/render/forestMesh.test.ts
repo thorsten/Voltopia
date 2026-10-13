@@ -42,6 +42,11 @@ function matrices(m: THREE.InstancedMesh): number[] {
   return Array.from(m.instanceMatrix.array.slice(0, m.count * 16));
 }
 
+/** Most triangles one tree (trunk and crown) may cost: forests hold thousands. */
+const TREE_TRIANGLE_BUDGET = 96;
+
+const triangles = (m: THREE.InstancedMesh) => m.geometry.getAttribute('position').count / 3;
+
 const autumn = (snowCover: number) => ({ phase: 0.6, snowCover }) as RenderEnvironment;
 
 describe('ForestMesh', () => {
@@ -136,5 +141,22 @@ describe('ForestMesh', () => {
     expect(total(layer)).toBe(10);
     layer.applyDiffs([{ index: 0, forest: 0 } as TileDiff]);
     expect(total(layer)).toBe(5);
+  });
+
+  it('keeps every tree model within its triangle budget', () => {
+    const { scene } = woods(() => 0);
+    for (const species of ['conifer', 'broadleaf']) {
+      const trunk = mesh(scene, `forest-${species}-trunks`);
+      const crown = mesh(scene, `forest-${species}-crowns`);
+      expect(triangles(trunk) + triangles(crown)).toBeLessThanOrEqual(TREE_TRIANGLE_BUDGET);
+    }
+  });
+
+  it('lets only the crowns cast shadows', () => {
+    const { scene } = woods(() => 0);
+    for (const species of ['conifer', 'broadleaf']) {
+      expect(mesh(scene, `forest-${species}-trunks`).castShadow).toBe(false);
+      expect(mesh(scene, `forest-${species}-crowns`).castShadow).toBe(true);
+    }
   });
 });
