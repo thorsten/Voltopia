@@ -71,6 +71,10 @@ function sceneWith(diffs: TileDiff[]) {
     barrierPosts: instanced[5],
     barrierBars: instanced[6],
     signalHeads: instanced[7],
+    bendNeg: instanced[8],
+    bendPos: instanced[9],
+    crossingBendNeg: instanced[10],
+    crossingBendPos: instanced[11],
   };
 }
 
@@ -149,6 +153,56 @@ describe('RailMesh', () => {
     expect(barrierPosts.count).toBe(0);
     expect(decks.count).toBe(1);
     expect(parapets.count).toBe(0);
+  });
+
+  it('a bend closes its outer corner and does not cross its inner rails', () => {
+    const tiles = baseTiles();
+    tiles[at(3, 3)].rail = LINE_PRESENT | DIR_E | DIR_S;
+    const { segments, bendNeg, bendPos, crossings } = sceneWith(tiles);
+    expect(segments.count).toBe(0);
+    expect(crossings.count).toBe(0);
+    expect(bendNeg.count).toBe(1);
+    expect(bendPos.count).toBe(1);
+    // The east half runs +x; its partner leaves to the south (+z), so
+    // its inner rail lies at +z and the half lands in the +z bend mesh.
+    const east = instanceOf(bendPos, 0);
+    const south = instanceOf(bendNeg, 0);
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(east.quaternion).x).toBeCloseTo(1, 6);
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(south.quaternion).z).toBeCloseTo(1, 6);
+    expect(east.scale.x).toBeCloseTo(1, 6);
+    // In the bend geometry the outer rail reaches past the centre to the
+    // outer corner, while the inner rail starts short of the centre; the
+    // ballast and sleepers under them keep the plain footprint.
+    const railMinX = (mesh: THREE.InstancedMesh, sign: number) => {
+      const position = mesh.geometry.getAttribute('position');
+      let min = Infinity;
+      for (let i = 0; i < position.count; i++)
+        if (position.getY(i) > 0.045 && Math.sign(position.getZ(i)) === sign)
+          min = Math.min(min, position.getX(i));
+      return min;
+    };
+    expect(railMinX(bendPos, -1)).toBeCloseTo(-0.105, 6);
+    expect(railMinX(bendPos, 1)).toBeCloseTo(0.075, 6);
+    expect(railMinX(bendNeg, 1)).toBeCloseTo(-0.105, 6);
+    expect(railMinX(bendNeg, -1)).toBeCloseTo(0.075, 6);
+    bendPos.geometry.computeBoundingBox();
+    expect(bendPos.geometry.boundingBox!.max.x).toBeCloseTo(0.5, 6);
+    expect(bendPos.geometry.boundingBox!.max.y).toBeCloseTo(0.07, 6);
+  });
+
+  it('a bend on a road tile is flush to the tile edge, without ballast or barriers', () => {
+    const tiles = baseTiles();
+    tiles[at(3, 3)].rail = LINE_PRESENT | DIR_W | DIR_N;
+    tiles[at(3, 3)].tileType = TileType.Road;
+    tiles[at(3, 3)].roadMask = 5;
+    const { segments, crossings, crossingBendNeg, crossingBendPos, barrierPosts } =
+      sceneWith(tiles);
+    expect(segments.count).toBe(0);
+    expect(crossings.count).toBe(0);
+    expect(crossingBendNeg.count).toBe(1);
+    expect(crossingBendPos.count).toBe(1);
+    expect(instanceOf(crossingBendNeg, 0).scale.x).toBeCloseTo(1, 6);
+    expect(barrierPosts.count).toBe(0);
   });
 
   it('pitches a half-segment up a slope and stretches it to the edge', () => {

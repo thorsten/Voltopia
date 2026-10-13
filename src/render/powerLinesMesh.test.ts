@@ -268,7 +268,8 @@ describe('PowerLinesMesh', () => {
     const instanced = scene.children.filter(
       (child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh,
     );
-    return { rail, segments: instanced[0], centres: instanced[2] };
+    // Ballasted halves: straights in the first mesh, bends in their two own.
+    return { rail, segments: [instanced[0], instanced[8], instanced[9]], centres: instanced[2] };
   }
 
   const trackCases: Array<[string, number, [number, number]]> = [
@@ -301,9 +302,11 @@ describe('PowerLinesMesh', () => {
       expect(pole.maxX).toBeLessThan(3);
       expect(pole.minZ).toBeGreaterThan(2);
       expect(pole.maxZ).toBeLessThan(3);
-      expect(segments.count).toBeGreaterThan(0);
-      for (let slot = 0; slot < segments.count; slot++) {
-        expect(overlaps(pole, instanceFootprint(segments, slot))).toBe(false);
+      expect(segments.reduce((sum, mesh) => sum + mesh.count, 0)).toBe(2);
+      for (const mesh of segments) {
+        for (let slot = 0; slot < mesh.count; slot++) {
+          expect(overlaps(pole, instanceFootprint(mesh, slot))).toBe(false);
+        }
       }
       expect(overlaps(pole, instanceFootprint(centres, 0))).toBe(false);
       expect(rail.signals.masts.mesh.count).toBe(1);

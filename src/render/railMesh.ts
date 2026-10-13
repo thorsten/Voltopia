@@ -99,10 +99,45 @@ function frac(value: number): number {
 }
 
 /**
+ * Which side of a half-segment a bend's partner half leaves toward, in
+ * the half's local frame (pointing +x): -1 or +1 along z, 0 on a
+ * straight or at a junction.
+ */
+type BendSide = -1 | 0 | 1;
+
+/**
+ * Where a rail of a half-segment starts, measured from the tile centre
+ * along +x. On a straight both rails start at the centre. In a bend the
+ * inner rail stops short of the centre so the two inner rails meet at
+ * their corner instead of crossing, and the outer rail reaches past the
+ * centre to the outer corner so the two outer rails close it.
+ */
+function railStart(inner: BendSide, side: -1 | 1): number {
+  if (inner === 0) return 0;
+  return side === inner ? GAUGE - RAIL_WIDTH / 2 : -(GAUGE + RAIL_WIDTH / 2);
+}
+
+/** The two rails of a half-segment from their starts to the tile edge, their base at `y`. */
+function railGeometries(inner: BendSide, y: number, color: number): THREE.BufferGeometry[] {
+  return ([-1, 1] as const).map((side) => {
+    const start = railStart(inner, side);
+    return box(
+      0.5 - start,
+      RAIL_HEIGHT,
+      RAIL_WIDTH,
+      (0.5 + start) / 2,
+      y + RAIL_HEIGHT / 2,
+      side * GAUGE,
+      color,
+    );
+  });
+}
+
+/**
  * Half a tile of track from the centre to one edge, pointing +x, on a
  * ballast bed with sleepers under the rails. Vertex-coloured.
  */
-function ballastedSegmentGeometry(): THREE.BufferGeometry {
+function ballastedSegmentGeometry(inner: BendSide): THREE.BufferGeometry {
   const parts = [
     box(0.5, BALLAST_HEIGHT, BALLAST_WIDTH, 0.25, BALLAST_HEIGHT / 2, 0, BALLAST_COLOR),
   ];
@@ -120,23 +155,13 @@ function ballastedSegmentGeometry(): THREE.BufferGeometry {
       ),
     );
   }
-  for (const side of [-GAUGE, GAUGE]) {
-    parts.push(
-      box(0.5, RAIL_HEIGHT, RAIL_WIDTH, 0.25, TRACKBED_HEIGHT + RAIL_HEIGHT / 2, side, RAIL_COLOR),
-    );
-  }
+  parts.push(...railGeometries(inner, TRACKBED_HEIGHT, RAIL_COLOR));
   return mergeGeometries(parts);
 }
 
 /** Half a tile of bare rails from the centre to one edge, pointing +x (level crossings). */
-function crossingSegmentGeometry(): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  for (const side of [-GAUGE, GAUGE]) {
-    const rail = new THREE.BoxGeometry(0.5, RAIL_HEIGHT, RAIL_WIDTH);
-    rail.translate(0.25, RAIL_HEIGHT / 2, side);
-    parts.push(rail);
-  }
-  return mergeGeometries(parts);
+function crossingSegmentGeometry(inner: BendSide): THREE.BufferGeometry {
+  return mergeGeometries(railGeometries(inner, 0, RAIL_COLOR));
 }
 
 /** The ballast block under a tile's centre, so curves and crossings close; level with the bed, so the sleepers show. */
@@ -172,13 +197,18 @@ const DIRECTION_ANGLE: ReadonlyArray<{ bit: number; angle: number }> = [
  * meets its neighbour at the edge; a centre block; rails without
  * ballast across the roadway of road tiles (level crossing), ballasted
  * again from the road edge to the tile edge, with a barrier post, a raised
- * bar and a signal head per approach; a deck with parapets under tiles
+ * bar and a signal head per approach; a bend's rails mitred at the
+ * corner; a deck with parapets under tiles
  * that bridge the river; line-side occupancy signals at stations and
  * junctions (`RailSignals`). Rebuilt from the diffs like the lines.
  */
 export class RailMesh implements DiffLayer {
   private readonly segments: THREE.InstancedMesh;
   private readonly crossings: THREE.InstancedMesh;
+  /** Ballasted halves of a bend whose inner side is local -z (index 0) or +z (index 1). */
+  private readonly bends: readonly [THREE.InstancedMesh, THREE.InstancedMesh];
+  /** The same for bends on a road tile: bare rails. */
+  private readonly crossingBends: readonly [THREE.InstancedMesh, THREE.InstancedMesh];
   private readonly centres: THREE.InstancedMesh;
   private readonly decks: THREE.InstancedMesh;
   private readonly parapets: THREE.InstancedMesh;
@@ -230,13 +260,15 @@ export class RailMesh implements DiffLayer {
       return mesh;
     };
     // White base colour: ballast, sleepers and rails come from the vertex colours.
-    this.segments = make(
-      ballastedSegmentGeometry(),
-      0xffffff,
-      tiles * 4,
-      surfaceMaterial({ vertexColors: true }),
-    );
-    this.crossings = make(crossingSegmentGeometry(), RAIL_COLOR, tiles * 4);
+    const ballasted = (inner: BendSide, count: number) =>
+      make(
+        ballastedSegmentGeometry(inner),
+        0xffffff,
+        count,
+        surfaceMaterial({ vertexColors: true }),
+      );
+    this.segments = ballasted(0, tiles * 4);
+    this.crossings = make(crossingSegmentGeometry(0), RAIL_COLOR, tiles * 4);
     this.centres = make(centreGeometry(), BALLAST_COLOR, tiles);
     this.decks = make(new THREE.BoxGeometry(1, DECK_HEIGHT, DECK_WIDTH), DECK_COLOR, tiles);
     this.parapets = make(standingBoxGeometry(), PARAPET_COLOR, tiles * 2);
@@ -244,6 +276,11 @@ export class RailMesh implements DiffLayer {
     this.barrierBars = make(standingBoxGeometry(), BARRIER_BAR_COLOR, tiles * 2);
     // White base colour: the head's own colour is per instance, so it can blink.
     this.signalHeads = make(standingBoxGeometry(), 0xffffff, tiles * 2);
+    this.bends = [ballasted(-1, tiles * 2), ballasted(1, tiles * 2)];
+    this.crossingBends = [
+      make(crossingSegmentGeometry(-1), RAIL_COLOR, tiles * 2),
+      make(crossingSegmentGeometry(1), RAIL_COLOR, tiles * 2),
+    ];
     this.signals = new RailSignals(scene);
     this.signals.setVehicles(this.railVehicles);
   }
@@ -443,6 +480,8 @@ export class RailMesh implements DiffLayer {
     this.barriers.length = 0;
     let segments = 0;
     let crossings = 0;
+    const bends = [0, 0];
+    const crossingBends = [0, 0];
     let centres = 0;
     let decks = 0;
     let parapets = 0;
@@ -456,7 +495,6 @@ export class RailMesh implements DiffLayer {
       const onRiver = this.terrains[index] === Terrain.River;
       const lift = onRoad ? CROSSING_LIFT : 0;
       const centreY = this.groundY(index, x, z) + lift;
-      const target = onRoad ? this.crossings : this.segments;
       const bits = mask & (DIR_N | DIR_E | DIR_S | DIR_W);
       const alongX = (bits & (DIR_E | DIR_W)) !== 0 && (bits & (DIR_N | DIR_S)) === 0;
       const alongZ = (bits & (DIR_N | DIR_S)) !== 0 && (bits & (DIR_E | DIR_W)) === 0;
@@ -464,23 +502,31 @@ export class RailMesh implements DiffLayer {
         bits === 0
           ? [DIRECTION_ANGLE[0], DIRECTION_ANGLE[2]]
           : DIRECTION_ANGLE.filter((d) => (bits & d.bit) !== 0);
+      const bend = bits !== 0 && directions.length === 2 && !alongX && !alongZ;
       const roadHalf = onRoad ? roadHalfWidth(this.roadClasses[index]) : 0;
       for (const { bit, angle } of directions) {
         // A track arm that leaves the roadway (the road has no arm that
-        // way) is flush only across the road and ballasted beyond it.
-        const roadEdge = onRoad && (this.roadMasks[index] & bit) === 0 ? roadHalf : 0.5;
+        // way) is flush only across the road and ballasted beyond it. A
+        // bend stays flush to the tile edge: the piece is scaled to its
+        // run, which would shrink the mitre at the corner.
+        const roadEdge = onRoad && !bend && (this.roadMasks[index] & bit) === 0 ? roadHalf : 0.5;
         const edgeY = this.groundAlong(index, x, z, angle, roadEdge) + lift;
-        this.placePiece(
-          target,
-          onRoad ? crossings++ : segments++,
-          x,
-          z,
-          angle,
-          0,
-          centreY,
-          roadEdge,
-          edgeY,
-        );
+        let target: THREE.InstancedMesh;
+        let slot: number;
+        if (!bend) {
+          target = onRoad ? this.crossings : this.segments;
+          slot = onRoad ? crossings++ : segments++;
+        } else {
+          // The partner half leaves at angle b; its direction (cos b, -sin b)
+          // projects onto this half's local z axis (sin a, cos a) as
+          // sin(a - b): +1 when it lies at local +z, -1 at local -z.
+          const partner = directions[0].angle === angle ? directions[1] : directions[0];
+          const inner = Math.sin(angle - partner.angle) > 0 ? 1 : 0;
+          const counts = onRoad ? crossingBends : bends;
+          target = (onRoad ? this.crossingBends : this.bends)[inner];
+          slot = counts[inner]++;
+        }
+        this.placePiece(target, slot, x, z, angle, 0, centreY, roadEdge, edgeY);
         if (roadEdge < 0.5) {
           // The ballasted piece starts the crossing lift less the trackbed
           // height above the ground, so its rails continue the flush rails'
@@ -574,6 +620,10 @@ export class RailMesh implements DiffLayer {
     }
     this.segments.count = segments;
     this.crossings.count = crossings;
+    this.bends[0].count = bends[0];
+    this.bends[1].count = bends[1];
+    this.crossingBends[0].count = crossingBends[0];
+    this.crossingBends[1].count = crossingBends[1];
     this.centres.count = centres;
     this.decks.count = decks;
     this.parapets.count = parapets;
@@ -592,6 +642,8 @@ export class RailMesh implements DiffLayer {
     for (const mesh of [
       this.segments,
       this.crossings,
+      ...this.bends,
+      ...this.crossingBends,
       this.centres,
       this.decks,
       this.parapets,
