@@ -36,7 +36,7 @@ Spec: `docs/superpowers/specs/2026-10-11-nature-detail-design.md`.
 
 ### Task 0: Branch
 
-- [ ] Commit the aligned spec and this plan on `main`, then `git checkout -b feature/nature-detail`.
+- [x] Commit the aligned spec and this plan on `main`, then `git checkout -b feature/nature-detail`.
 
 ---
 
@@ -142,6 +142,6 @@ export function applyRipples(material: THREE.MeshStandardMaterial): RippleUnifor
 
 ### Task 7: Full checks and the Mac hand-off
 
-- [ ] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — PASS; record the slowest test under coverage.
-- [ ] Add "Results (2026-10-13)" to the spec's Testing section (instance counts on a generated 128² map: trees per species, bushes, rocks, foam edges; slowest test); tick this plan; commit `docs: record nature-detail checks`.
+- [x] `pnpm format && pnpm typecheck && pnpm lint && pnpm format:check && pnpm coverage && pnpm build` — PASS; record the slowest test under coverage.
+- [x] Add "Results (2026-10-13)" to the spec's Testing section (instance counts on a generated 128² map: trees per species, bushes, rocks, foam edges; slowest test); tick this plan; commit `docs: record nature-detail checks`.
 - [ ] Mac checklist for the user: mixed woods, darker on the hills; bushes and rocks on free land that vanish when building; moving highlights on lake, river and sea (and frozen with reduced motion); foam along shores, rising with the tide; sandy edges incl. in winter/snow; `node scripts/smoke.mjs`; frame time unchanged vs `main` at 128².

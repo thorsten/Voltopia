@@ -131,6 +131,22 @@ true })`, cast and receive shadows, `frustumCulled = false`, bounded
 - Render-only: nothing under `src/sim`, `src/shared`, `src/storage`,
   `src/agent` changes.
 
+Results (2026-10-13), generated 128² map (seed 7), measured with a
+temporary headless probe:
+
+| Item                       | Instances | Triangles each |
+| -------------------------- | --------- | -------------- |
+| Conifer                    | 6 734     | 64             |
+| Broadleaf                  | 5 291     | 80             |
+| Bush                       | 3 988     | 90             |
+| Rock                       | 4 714     | 60             |
+| Foam strips (inland / sea) | 412 / 158 | 2              |
+
+About 1.5 M triangles per pass for trees and props; trunks, bushes and
+rocks cast no shadows (review fix). A full scatter or forest rebuild
+takes about 3 ms; instance meshes grow on demand. Slowest test under
+`pnpm coverage`: 13.5 s (`src/sim/integration.test.ts`, unchanged).
+
 Acceptance on the Mac (the user): woods read as mixed conifer and
 broadleaf, darker on the hills; free land has bushes and rocks that
 vanish when building; water shows moving highlights, foam at the shores
