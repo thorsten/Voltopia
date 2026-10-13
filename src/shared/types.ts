@@ -990,6 +990,7 @@ export interface SaveGame {
     busStop?: ArrayBuffer;
     /** Track layer; absent in saves from before railways. */
     rail?: ArrayBuffer;
+    overpass?: ArrayBuffer;
     /** Forest layer; absent in saves from before woods (treeless map). */
     forest?: ArrayBuffer;
     /** Geothermal hotspot layer; absent in saves from before geothermal power. */

@@ -1337,6 +1337,7 @@ export function serializeState(state: SimState): SaveGame {
       reservoirHeat: copyBuffer(layers.reservoirHeat),
       damage: copyBuffer(layers.damage),
       rail: copyBuffer(layers.rail),
+      overpass: copyBuffer(layers.overpass),
     },
     trains: state.trains
       .filter((train) => train.yard >= 0)
@@ -1448,6 +1449,7 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.roadClass) state.layers.roadClass.set(new Uint8Array(save.layers.roadClass));
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
   if (save.layers.rail) state.layers.rail.set(new Uint8Array(save.layers.rail));
+  if (save.layers.overpass) state.layers.overpass.set(new Uint8Array(save.layers.overpass));
   if (save.layers.damage) state.layers.damage.set(new Uint8Array(save.layers.damage));
   // A save from before disasters keeps its calm: the city only faces them
   // when it was founded with an intensity (see NewGameOptions).

@@ -305,6 +305,15 @@ describe('save game JSON export/import', () => {
     expect(plain.layers.busStop).toBeUndefined();
   });
 
+  it('round-trips the optional overpass layer and tolerates its absence', () => {
+    const save = makeSave();
+    save.layers.overpass = new Uint8Array(save.size * save.size).fill(1).buffer as ArrayBuffer;
+    const restored = saveFromJson(saveToJson(save));
+    expect(new Uint8Array(restored.layers.overpass!)).toEqual(new Uint8Array(save.layers.overpass));
+    const legacy = saveFromJson(saveToJson(makeSave()));
+    expect(legacy.layers.overpass).toBeUndefined();
+  });
+
   it('round-trips railTicks, the rail layer and a train', () => {
     const save = makeSave();
     save.railTicks = 42;

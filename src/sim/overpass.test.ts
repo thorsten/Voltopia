@@ -4,7 +4,14 @@ import { tileIndex } from '../shared/grid.ts';
 import { buildOverpasses, overpassRejection } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
-import { collectDiffs, createSimState, Terrain, type SimState } from './state.ts';
+import {
+  collectDiffs,
+  createSimState,
+  deserializeState,
+  serializeState,
+  Terrain,
+  type SimState,
+} from './state.ts';
 
 const SIZE = 16;
 const at = (x: number, y: number) => tileIndex(x, y, SIZE);
@@ -151,5 +158,23 @@ describe('overpass removal', () => {
     bulldozeTiles(state, [at(5, 9)]);
     undoLastAction(state);
     expect(state.layers.overpass[CROSSING]).toBe(1);
+  });
+});
+
+describe('overpass save games', () => {
+  it('survives serialize → deserialize', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    const restored = deserializeState(serializeState(state));
+    expect(restored.layers.overpass[CROSSING]).toBe(1);
+  });
+
+  it('loads a save without the layer as all zeros', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    const save = serializeState(state);
+    delete save.layers.overpass;
+    const restored = deserializeState(save);
+    expect(restored.layers.overpass.every((v) => v === 0)).toBe(true);
   });
 });
