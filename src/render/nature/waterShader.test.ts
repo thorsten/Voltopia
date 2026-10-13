@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { applyRipples, WATER_ROUGHNESS } from './waterShader.ts';
+import {
+  applyRipples,
+  RIPPLE_FREQUENCIES,
+  RIPPLE_PERIOD,
+  RIPPLE_SPEED,
+  WATER_ROUGHNESS,
+} from './waterShader.ts';
 
 /** The slice of three's WebGLProgramParametersWithUniforms the patch touches. */
 interface StubShader {
@@ -43,5 +49,15 @@ describe('applyRipples', () => {
       shader.fragmentShader.indexOf('#include <normal_fragment_begin>'),
     );
     expect(shader.uniforms.rippleTime).toBe(uniforms.time);
+  });
+});
+
+describe('RIPPLE_PERIOD', () => {
+  it('is the common period of the three waves', () => {
+    expect(RIPPLE_PERIOD).toBeCloseTo((20 * Math.PI) / RIPPLE_SPEED, 9);
+    for (const frequency of RIPPLE_FREQUENCIES) {
+      const cycles = (RIPPLE_PERIOD * RIPPLE_SPEED * frequency) / (2 * Math.PI);
+      expect(cycles).toBeCloseTo(Math.round(cycles), 9);
+    }
   });
 });

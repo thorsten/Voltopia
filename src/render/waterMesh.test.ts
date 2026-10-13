@@ -7,6 +7,7 @@ import { createSimState, type SimState } from '../sim/state.ts';
 import { generateTerrain } from '../sim/terrain.ts';
 import { generateWater } from '../sim/water.ts';
 import type { RenderEnvironment } from './renderer.ts';
+import { RIPPLE_PERIOD } from './nature/waterShader.ts';
 import { WATER_HEIGHT, WATER_THICKNESS, WaterMesh } from './waterMesh.ts';
 
 /** Water top above its bed beyond WATER_HEIGHT: the slab's thickness. */
@@ -157,6 +158,13 @@ describe('water ripples', () => {
     const before = mesh.rippleTime;
     mesh.update(0.5, 0);
     expect(mesh.rippleTime).toBeCloseTo(before + 0.5, 6);
+  });
+
+  it('wrap at the common wave period', () => {
+    const mesh = water(false);
+    mesh.update(1e7, 0);
+    expect(mesh.rippleTime).toBeGreaterThanOrEqual(0);
+    expect(mesh.rippleTime).toBeLessThan(RIPPLE_PERIOD);
   });
 
   it('freeze when motion is reduced', () => {

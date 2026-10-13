@@ -6,7 +6,7 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
-import { applyRipples, type RippleUniforms } from './nature/waterShader.ts';
+import { applyRipples, RIPPLE_PERIOD, type RippleUniforms } from './nature/waterShader.ts';
 import { uploadDrawn } from './plants/growingMesh.ts';
 
 /**
@@ -182,7 +182,10 @@ export class WaterMesh implements DiffLayer {
   }
 
   update(deltaSeconds: number, nowSeconds: number): void {
-    if (!this.reducedMotion) this.ripples.time.value += deltaSeconds;
+    if (!this.reducedMotion) {
+      // Wrapped at the waves' common period: seamless, and float32 keeps its precision.
+      this.ripples.time.value = (this.ripples.time.value + deltaSeconds) % RIPPLE_PERIOD;
+    }
     const wobble = this.reducedMotion ? 0 : WOBBLE_AMPLITUDE * Math.sin(nowSeconds * WOBBLE_SPEED);
     const brightness = (1 + wobble) * (1 - NIGHT_DIM * this.nightFactor);
     this.material.color.setScalar(brightness);

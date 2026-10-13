@@ -9,7 +9,30 @@ export const WATER_ROUGHNESS = 0.35;
 /** Angular frequency of the base wave, in radians per tile. */
 const RIPPLE_SCALE = 4.0;
 /** Phase speed of the base wave, in radians per second. */
-const RIPPLE_SPEED = 1.2;
+export const RIPPLE_SPEED = 1.2;
+/** Frequency of each of the three waves relative to the base wave. */
+export const RIPPLE_FREQUENCIES = [1, 1.7, 2.6] as const;
+/** Largest whole number of base-wave cycles searched for a common period. */
+const MAX_PERIOD_CYCLES = 1000;
+/** Tolerance when testing a cycle count against whole wave cycles. */
+const PERIOD_EPSILON = 1e-9;
+
+/**
+ * Seconds after which all three waves are back in phase: the smallest
+ * whole number of base-wave cycles k for which every frequency × k is a
+ * whole number too (10 for 1, 1.7, 2.6). The ripple clock wraps at it,
+ * so it never grows into float32 precision trouble.
+ */
+function commonPeriod(): number {
+  for (let cycles = 1; cycles <= MAX_PERIOD_CYCLES; cycles++) {
+    const whole = RIPPLE_FREQUENCIES.every(
+      (f) => Math.abs(f * cycles - Math.round(f * cycles)) < PERIOD_EPSILON,
+    );
+    if (whole) return (2 * Math.PI * cycles) / RIPPLE_SPEED;
+  }
+  throw new Error('ripple frequencies share no common period');
+}
+export const RIPPLE_PERIOD = commonPeriod();
 /** Scale of the summed wave slopes: small, so the water tilts only a few degrees. */
 const RIPPLE_STRENGTH = 0.12;
 
@@ -48,7 +71,7 @@ const float RIPPLE_STRENGTH = ${glslFloat(RIPPLE_STRENGTH)};
 const vec2 RIPPLE_DIR_A = vec2(0.8, 0.6);
 const vec2 RIPPLE_DIR_B = vec2(-0.385, 0.923);
 const vec2 RIPPLE_DIR_C = vec2(-0.471, -0.882);
-const vec3 RIPPLE_FREQUENCY = vec3(1.0, 1.7, 2.6);
+const vec3 RIPPLE_FREQUENCY = vec3(${RIPPLE_FREQUENCIES.map(glslFloat).join(', ')});
 const vec3 RIPPLE_WEIGHT = vec3(1.0, 0.6, 0.35);
 
 // Slope (d/dx, d/dz) of one wave weight * sin(phase), per unit of its amplitude.
