@@ -5,7 +5,8 @@ import { TileType, Zone } from '../shared/types.ts';
 import type { DiffLayer } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { surfaceMaterial } from './materials.ts';
-import { pylonModel, type PylonKind } from './infrastructure/pylonModels.ts';
+import { POLE_FOOT_RADIUS, pylonModel, type PylonKind } from './infrastructure/pylonModels.ts';
+import { signalSide } from './infrastructure/railSignals.ts';
 import { GrowingMesh } from './plants/growingMesh.ts';
 
 const CABLE_COLOR = 0x2b2f33;
@@ -17,6 +18,37 @@ export const CABLE_SAG = 0.06;
 /** On a road tile the pylon stands at the north-west kerb so cars pass. */
 const KERB_OFFSET = 0.12;
 const DIRECTION_BITS = DIR_N | DIR_E | DIR_S | DIR_W;
+/** Half the width of the track's ballast bed (railMesh BALLAST_WIDTH / 2). */
+const BALLAST_HALF_WIDTH = 0.15;
+/**
+ * On a track tile (off the road) the pole stands this far beside the
+ * track's centre line: clear of the ballast with room to spare, so its
+ * arms, too, mostly keep clear of the trains.
+ */
+export const TRACK_POLE_OFFSET = BALLAST_HALF_WIDTH + POLE_FOOT_RADIUS + 0.12;
+
+/**
+ * Offset (from the tile centre) of the pole on a track tile: on the side
+ * of the track opposite the signal mast's (railSignals.ts — a mast stands
+ * there on signal tiles, and the side is kept elsewhere so a station
+ * built later moves the pole with its signal). Straight track along x →
+ * the other z side, along z → the other x side; curves and junctions →
+ * the diagonal corner opposite the mast's, which no track arm crosses.
+ */
+export function trackPoleOffset(
+  rail: number,
+  plantEast: boolean,
+  plantSouth: boolean,
+): { dx: number; dz: number } {
+  const bits = rail & DIRECTION_BITS;
+  const alongX = (bits & (DIR_N | DIR_S)) === 0;
+  const alongZ = (bits & (DIR_E | DIR_W)) === 0 && bits !== 0;
+  const { sx, sz } = signalSide(plantEast, plantSouth);
+  return {
+    dx: alongX ? 0 : -sx * TRACK_POLE_OFFSET,
+    dz: alongZ ? 0 : -sz * TRACK_POLE_OFFSET,
+  };
+}
 
 /**
  * Corner (signs of the x and z offset from the tile centre) of the pole
@@ -91,7 +123,7 @@ interface Pylon {
 
 /**
  * Instanced power lines: a lattice pylon on open land or a concrete pole
- * in town on every line tile, and three sagging conductors per
+ * in town or beside a track on every line tile, and three sagging conductors per
  * connection. Conductors are drawn for the east and south bits only, so
  * every span is drawn exactly once. Dead lines look like live ones; the
  * supply overlay shows whether they carry power.
@@ -154,7 +186,8 @@ export class PowerLinesMesh implements DiffLayer {
       if (this.tileTypes[i] !== diff.tileType || this.zones[i] !== diff.zone) {
         this.tileTypes[i] = diff.tileType;
         this.zones[i] = diff.zone;
-        if (hasLine) changed = true;
+        // A plant east or south of a line on track moves that pole.
+        if (hasLine || this.lineWestOrNorth(i)) changed = true;
       }
       if (this.rails[i] !== diff.rail) {
         this.rails[i] = diff.rail;
@@ -170,19 +203,37 @@ export class PowerLinesMesh implements DiffLayer {
     if (changed || (lifted && this.masks.some((mask) => mask !== 0))) this.rebuild();
   }
 
-  /** Kind, foot position (kerb on roads, centre elsewhere) and yaw of a tile's pylon. */
+  /** Whether the tile's west or north neighbour carries a line. */
+  private lineWestOrNorth(index: number): boolean {
+    const west = index % this.gridSize > 0 && this.masks[index - 1] !== 0;
+    const north = index >= this.gridSize && this.masks[index - this.gridSize] !== 0;
+    return west || north;
+  }
+
+  /** Whether a tile in the grid holds a plant. */
+  private plantAt(tx: number, tz: number): boolean {
+    if (tx < 0 || tz < 0 || tx >= this.gridSize || tz >= this.gridSize) return false;
+    return this.tileTypes[tz * this.gridSize + tx] === TileType.Plant;
+  }
+
+  /** Kind, foot position (kerb on roads, beside the track on tracks, centre elsewhere) and yaw of a tile's pylon. */
   private pylonAt(index: number): Pylon {
     const tx = index % this.gridSize;
     const tz = Math.floor(index / this.gridSize);
     const type = this.tileTypes[index];
-    const town =
-      type === TileType.Road || type === TileType.Plant || this.zones[index] !== Zone.None;
+    const rail = this.rails[index];
+    // Lines never share a tile with a plant (sim buildRejection).
+    const town = type === TileType.Road || rail !== 0 || this.zones[index] !== Zone.None;
     let x = tx + 0.5;
     let z = tz + 0.5;
     if (type === TileType.Road) {
       const { sx, sz } = roadPoleCorner(this.rails[index]);
       x += sx * (0.5 - KERB_OFFSET);
       z += sz * (0.5 - KERB_OFFSET);
+    } else if (rail !== 0) {
+      const { dx, dz } = trackPoleOffset(rail, this.plantAt(tx + 1, tz), this.plantAt(tx, tz + 1));
+      x += dx;
+      z += dz;
     }
     // The foot stands on the ground under it: on a slope the kerb corner
     // sits well above or below the tile's nominal level.

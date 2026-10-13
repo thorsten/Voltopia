@@ -1,6 +1,6 @@
 /**
  * Power-line supports: a steel lattice pylon for open land and a slim
- * concrete pole for town (roads, zones, plants).
+ * concrete pole for town (roads, zones, tracks).
  *
  * Conventions: units are tiles; origin at the foot; base at y = 0; the
  * cross-arms run along local x, so the line itself runs along local z.

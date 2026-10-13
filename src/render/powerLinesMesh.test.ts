@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
-import { RoadClass, Terrain, TileType, Zone, type TileDiff } from '../shared/types.ts';
+import { PlantType, RoadClass, Terrain, TileType, Zone, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { POLE_FOOT_RADIUS } from './infrastructure/pylonModels.ts';
 import { RailMesh } from './railMesh.ts';
@@ -152,12 +152,12 @@ describe('conductor points', () => {
 });
 
 describe('PowerLinesMesh', () => {
-  it('puts poles on road, zone and plant tiles and lattice pylons elsewhere', () => {
+  it('puts poles on road, zone and track tiles and lattice pylons elsewhere', () => {
     const tiles = baseTiles();
     lineAlongX(tiles, 0, 3);
     tiles[at(1, 1)].tileType = TileType.Road;
     tiles[at(2, 1)].zone = Zone.Residential;
-    tiles[at(3, 1)].tileType = TileType.Plant;
+    tiles[at(3, 1)].rail = LINE_PRESENT | DIR_N | DIR_S;
     const { layer } = layerWith(tiles);
     expect(layer.lattice.mesh.count).toBe(1);
     expect(layer.poles.mesh.count).toBe(3);
@@ -257,4 +257,74 @@ describe('PowerLinesMesh', () => {
       });
     }
   }
+
+  /** Rail layer for the same tiles, with its instanced meshes in creation order. */
+  function railWith(tiles: TileDiff[], field: ElevationField) {
+    const scene = new THREE.Scene();
+    const rail = new RailMesh(scene, SIZE, field);
+    rail.applyDiffs(tiles);
+    const instanced = scene.children.filter(
+      (child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh,
+    );
+    return { rail, segments: instanced[0], centres: instanced[2] };
+  }
+
+  const trackCases: Array<[string, number, [number, number]]> = [
+    // A station south of a track along x flips its signal to the north side.
+    ['a straight track along x', DIR_E | DIR_W, [2, 3]],
+    // A station east of a track along z flips its signal to the west side.
+    ['a straight track along z', DIR_N | DIR_S, [3, 2]],
+    // A curve keeps its signal in the default south-east corner.
+    ['a curve', DIR_N | DIR_E, [1, 2]],
+  ];
+  for (const [label, track, [plantX, plantY]] of trackCases) {
+    it(`stands a pole beside ${label}, clear of the ballast and the signal`, () => {
+      const tiles = baseTiles();
+      Object.assign(tiles[at(2, 2)], {
+        rail: LINE_PRESENT | track,
+        powerLine: LINE_PRESENT,
+      });
+      Object.assign(tiles[at(plantX, plantY)], {
+        tileType: TileType.Plant,
+        plantType: PlantType.TrainStation,
+      });
+      const { layer, field } = layerWith(tiles);
+      const { rail, segments, centres } = railWith(tiles, field);
+      expect(layer.lattice.mesh.count).toBe(0);
+      expect(layer.poles.mesh.count).toBe(1);
+      const foot = footOf(layer.poles.mesh, 0);
+      const pole = poleFootprint(foot);
+      // Inside its own tile.
+      expect(pole.minX).toBeGreaterThan(2);
+      expect(pole.maxX).toBeLessThan(3);
+      expect(pole.minZ).toBeGreaterThan(2);
+      expect(pole.maxZ).toBeLessThan(3);
+      expect(segments.count).toBeGreaterThan(0);
+      for (let slot = 0; slot < segments.count; slot++) {
+        expect(overlaps(pole, instanceFootprint(segments, slot))).toBe(false);
+      }
+      expect(overlaps(pole, instanceFootprint(centres, 0))).toBe(false);
+      expect(rail.signals.masts.mesh.count).toBe(1);
+      expect(overlaps(pole, instanceFootprint(rail.signals.masts.mesh, 0))).toBe(false);
+    });
+  }
+
+  it('moves the pole when a station next to the track flips its signal', () => {
+    const tiles = baseTiles();
+    Object.assign(tiles[at(2, 2)], {
+      rail: LINE_PRESENT | DIR_E | DIR_W,
+      powerLine: LINE_PRESENT,
+    });
+    const { layer } = layerWith(tiles);
+    const before = footOf(layer.poles.mesh, 0);
+    // The station is built later: only its own tile changes.
+    const station = {
+      ...tiles[at(2, 3)],
+      tileType: TileType.Plant,
+      plantType: PlantType.TrainStation,
+    };
+    layer.applyDiffs([station]);
+    const after = footOf(layer.poles.mesh, 0);
+    expect(Math.sign(before.z - 2.5)).toBe(-Math.sign(after.z - 2.5));
+  });
 });

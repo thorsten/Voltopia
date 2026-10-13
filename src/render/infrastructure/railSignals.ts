@@ -110,6 +110,15 @@ export function blockOccupied(
   return false;
 }
 
+/**
+ * Side of the track a signal mast takes (signs of its x and z offset):
+ * away from a plant to the east / south, else the default +x / +z side.
+ * Straight track uses one of the two, curves and junctions both.
+ */
+export function signalSide(plantEast: boolean, plantSouth: boolean): { sx: number; sz: number } {
+  return { sx: plantEast ? -1 : 1, sz: plantSouth ? -1 : 1 };
+}
+
 /** Signal mast: a foot, a slim mast, a head box at the top and a hood over the lamp. */
 function mastGeometry(): THREE.BufferGeometry {
   const { foot, mast, head, hood } = MAST;
@@ -205,9 +214,7 @@ export class RailSignals {
       const bits = masks[index] & (DIR_N | DIR_E | DIR_S | DIR_W);
       const alongX = (bits & (DIR_N | DIR_S)) === 0;
       const alongZ = (bits & (DIR_E | DIR_W)) === 0 && bits !== 0;
-      // Away from a plant to the east / south, else the default +x / +z side.
-      const sx = plantAt(tx + 1, ty) ? -1 : 1;
-      const sz = plantAt(tx, ty + 1) ? -1 : 1;
+      const { sx, sz } = signalSide(plantAt(tx + 1, ty), plantAt(tx, ty + 1));
       const px = tx + 0.5 + (alongX ? 0 : sx * SIGNAL_OFFSET);
       const pz = ty + 0.5 + (alongZ ? 0 : sz * SIGNAL_OFFSET);
       const yaw = (DIRECTION_YAW.find(({ bit }) => (bits & bit) !== 0) ?? DIRECTION_YAW[0]).yaw;
