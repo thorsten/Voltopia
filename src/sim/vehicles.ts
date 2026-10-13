@@ -68,6 +68,9 @@ export interface Mover {
 
 export type MoveResult = 'moving' | 'waiting' | 'arrived' | 'lost';
 
+/** Slack in tile units under which a mover counts as on the centre it heads for. */
+const REACH_EPSILON = 1e-9;
+
 function parkAt(state: SimState, mover: Mover, tile: number): void {
   mover.x = tileX(tile, state.size) + 0.5;
   mover.y = tileY(tile, state.size) + 0.5;
@@ -105,10 +108,12 @@ export function vehicleLane(state: SimState, mover: Mover): number {
 
 /**
  * Move one tick along the path at `step` tiles per tick (avenue tiles
- * are faster). Enforces lane capacity with the gridlock breaker, keeps
- * the occupancy map current, drains the battery. 'lost' when the next
- * path tile is no longer a road; 'arrived' after the last tile, with the
- * path cleared and the lane released.
+ * are faster). The remainder of the step carries across a tile centre
+ * within the same call, so reaching a centre never slows the mover
+ * (which read as a stutter at every tile). Enforces lane capacity with
+ * the gridlock breaker, keeps the occupancy map current, drains the
+ * battery. 'lost' when the next path tile is no longer a road; 'arrived'
+ * after the last tile, with the path cleared and the lane released.
  */
 export function advanceAlongPath(
   state: SimState,
@@ -116,61 +121,68 @@ export function advanceAlongPath(
   step: number,
   occupancy: Map<number, number>,
 ): MoveResult {
-  const target = mover.path[mover.pathIndex];
-  if (target === undefined || state.layers.tileType[target] !== TileType.Road) return 'lost';
-
-  const targetX = tileX(target, state.size) + 0.5;
-  const targetY = tileY(target, state.size) + 0.5;
-  const dx = targetX - mover.x;
-  const dy = targetY - mover.y;
-  const distance = Math.hypot(dx, dy);
-
-  // Congestion: entering a lane that is full means waiting — unless the
-  // wait has gone on so long that this is a gridlock, in which case the
-  // mover squeezes past so traffic never freezes for good.
-  const currentTile = vehicleTile(state, mover);
-  const stride =
-    state.layers.roadClass[currentTile] === RoadClass.Avenue
+  const startTile = vehicleTile(state, mover);
+  let remaining =
+    state.layers.roadClass[startTile] === RoadClass.Avenue
       ? step * BALANCE.vehicles.avenueSpeedFactor
       : step;
-  const move = Math.min(stride, distance);
-  const nextX = distance <= stride ? targetX : mover.x + (dx / distance) * move;
-  const nextY = distance <= stride ? targetY : mover.y + (dy / distance) * move;
-  const nextTile = tileIndex(Math.floor(nextX), Math.floor(nextY), state.size);
-  if (nextTile !== currentTile) {
-    const heading = headingOf(currentTile, nextTile, state.size);
-    const nextLane = laneKey(nextTile, heading);
-    const full = (occupancy.get(nextLane) ?? 0) >= laneCapacity(state, nextTile);
-    // A level crossing with its barriers down stops road traffic the same
-    // way a full lane does — the gridlock breaker included, so a train
-    // stalled on the crossing for want of power cannot shut a street for
-    // good.
-    const barred = state.closedCrossings.has(nextTile);
-    if ((full || barred) && mover.waitTicks < BALANCE.vehicles.maxWaitTicks) {
-      mover.waitTicks++;
-      return 'waiting';
+  let moved = 0;
+  while (remaining > REACH_EPSILON) {
+    const target = mover.path[mover.pathIndex];
+    if (target === undefined || state.layers.tileType[target] !== TileType.Road) return 'lost';
+
+    const targetX = tileX(target, state.size) + 0.5;
+    const targetY = tileY(target, state.size) + 0.5;
+    const dx = targetX - mover.x;
+    const dy = targetY - mover.y;
+    const distance = Math.hypot(dx, dy);
+    const reaches = distance <= remaining + REACH_EPSILON;
+    const move = reaches ? distance : remaining;
+    const nextX = reaches ? targetX : mover.x + (dx / distance) * move;
+    const nextY = reaches ? targetY : mover.y + (dy / distance) * move;
+
+    // Congestion: entering a lane that is full means waiting — unless the
+    // wait has gone on so long that this is a gridlock, in which case the
+    // mover squeezes past so traffic never freezes for good.
+    const currentTile = vehicleTile(state, mover);
+    const nextTile = tileIndex(Math.floor(nextX), Math.floor(nextY), state.size);
+    if (nextTile !== currentTile) {
+      const heading = headingOf(currentTile, nextTile, state.size);
+      const nextLane = laneKey(nextTile, heading);
+      const full = (occupancy.get(nextLane) ?? 0) >= laneCapacity(state, nextTile);
+      // A level crossing with its barriers down stops road traffic the same
+      // way a full lane does — the gridlock breaker included, so a train
+      // stalled on the crossing for want of power cannot shut a street for
+      // good.
+      const barred = state.closedCrossings.has(nextTile);
+      if ((full || barred) && mover.waitTicks < BALANCE.vehicles.maxWaitTicks) {
+        mover.waitTicks++;
+        return moved > 0 ? 'moving' : 'waiting';
+      }
+      const currentLane = vehicleLane(state, mover);
+      occupancy.set(currentLane, Math.max(0, (occupancy.get(currentLane) ?? 1) - 1));
+      occupancy.set(nextLane, (occupancy.get(nextLane) ?? 0) + 1);
     }
-    const currentLane = vehicleLane(state, mover);
-    occupancy.set(currentLane, Math.max(0, (occupancy.get(currentLane) ?? 1) - 1));
-    occupancy.set(nextLane, (occupancy.get(nextLane) ?? 0) + 1);
-  }
-  mover.waitTicks = 0;
+    mover.waitTicks = 0;
 
-  mover.x = nextX;
-  mover.y = nextY;
-  if (move > 1e-9) {
-    mover.angle = Math.atan2(dy, dx);
-    mover.charge = Math.max(0, mover.charge - move * BALANCE.vehicles.batteryDrainPerTile);
-  }
+    mover.x = nextX;
+    mover.y = nextY;
+    if (move > 1e-9) {
+      mover.angle = Math.atan2(dy, dx);
+      mover.charge = Math.max(0, mover.charge - move * BALANCE.vehicles.batteryDrainPerTile);
+    }
+    moved += move;
+    remaining -= move;
 
-  if (distance <= stride) {
-    mover.pathIndex++;
-    if (mover.pathIndex >= mover.path.length) {
-      const lane = vehicleLane(state, mover);
-      occupancy.set(lane, Math.max(0, (occupancy.get(lane) ?? 1) - 1));
-      mover.path = [];
-      mover.pathIndex = 0;
-      return 'arrived';
+    if (reaches) {
+      mover.pathIndex++;
+      if (mover.pathIndex >= mover.path.length) {
+        const lane = vehicleLane(state, mover);
+        occupancy.set(lane, Math.max(0, (occupancy.get(lane) ?? 1) - 1));
+        mover.path = [];
+        mover.pathIndex = 0;
+        return 'arrived';
+      }
     }
   }
   return 'moving';
@@ -469,21 +481,24 @@ function decideCharging(
 
 /**
  * Reset a vehicle's trip clock and note its free-flow duration (avenues
- * count faster). Mirrors driveAlongPath exactly: the first driving tick
- * always snaps onto path[0] (the vehicle already sits there, parked),
- * then each further tile is paid for by the SOURCE tile's road class,
- * quantised the same way driveAlongPath quantises movement (whole
- * ticks, rounded up), so an empty road reports a ratio of exactly 1.
+ * count faster). Mirrors advanceAlongPath exactly: the vehicle starts on
+ * path[0]'s centre and each tick covers a stride set by the road class
+ * of the tile it starts the tick on, the remainder carrying across tile
+ * centres, so an empty road reports a ratio of exactly 1.
  */
 function startTripClock(state: SimState, vehicle: Vehicle, step: number): void {
   vehicle.tripTicks = 0;
-  let ticks = 1; // the first driving tick snaps onto path[0]
-  for (let i = 0; i < vehicle.path.length - 1; i++) {
+  const last = vehicle.path.length - 1;
+  let along = 0; // tiles travelled from path[0]'s centre
+  let ticks = 0;
+  while (along < last - 1e-9) {
+    // The tile under the vehicle: centres sit at whole offsets, so the
+    // tile changes halfway between them.
+    const tile = vehicle.path[Math.min(last, Math.floor(along + 0.5))];
     const factor =
-      state.layers.roadClass[vehicle.path[i]] === RoadClass.Avenue
-        ? BALANCE.vehicles.avenueSpeedFactor
-        : 1;
-    ticks += Math.ceil(1 / (step * factor));
+      state.layers.roadClass[tile] === RoadClass.Avenue ? BALANCE.vehicles.avenueSpeedFactor : 1;
+    along += step * factor;
+    ticks++;
   }
   vehicle.tripFreeFlowTicks = Math.max(1, ticks);
 }

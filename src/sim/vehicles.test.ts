@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import { tileIndex } from '../shared/grid.ts';
+import { tileIndex, tileX, tileY } from '../shared/grid.ts';
 import { PlantType, RoadClass, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { islandOf } from './powerGrid.ts';
@@ -22,9 +22,11 @@ import {
 import { transitStats } from './transit.ts';
 import { updateTrafficLoad } from './traffic.ts';
 import {
+  advanceAlongPath,
   chargingDemand,
   chargingDemandByIsland,
   drivingVehicles,
+  type Mover,
   isRider,
   ridesRail,
   surplusAvailable,
@@ -86,6 +88,58 @@ function runHours(state: SimState, hours: number): void {
 function stepVehicles(state: SimState): void {
   updateTrafficLoad(state, vehiclesStep(state));
 }
+
+describe('advanceAlongPath', () => {
+  function moverOn(path: number[]): Mover {
+    return {
+      x: tileX(path[0], SIZE) + 0.5,
+      y: tileY(path[0], SIZE) + 0.5,
+      angle: 0,
+      path,
+      pathIndex: 1,
+      charge: 1,
+      waitTicks: 0,
+    };
+  }
+
+  it('covers the full step every tick, carrying the remainder past a tile centre', () => {
+    const state = commuterTown();
+    const path = findRoadPath(state, at(3, 10), at(18, 10))!;
+    const mover = moverOn(path);
+    const step = 0.4;
+    for (let tick = 0; tick < 10; tick++) {
+      const { x, y } = mover;
+      expect(advanceAlongPath(state, mover, step, new Map())).toBe('moving');
+      expect(Math.hypot(mover.x - x, mover.y - y)).toBeCloseTo(step, 9);
+    }
+    expect(mover.x).toBeCloseTo(3.5 + 4, 9);
+  });
+
+  it('turns a corner mid-step without losing distance', () => {
+    const state = createSimState(1, SIZE);
+    buildRoads(state, [at(5, 5), at(6, 5), at(7, 5), at(7, 6), at(7, 7)]);
+    const path = findRoadPath(state, at(5, 5), at(7, 7))!;
+    const mover = moverOn(path);
+    // 0.3 per tick from 5.5: tick 7 reaches 7.6 along the path, which is
+    // the corner at (7.5, 5.5) with 0.1 to spare, spent heading south.
+    for (let tick = 0; tick < 7; tick++) advanceAlongPath(state, mover, 0.3, new Map());
+    expect(mover.x).toBeCloseTo(7.5, 9);
+    expect(mover.y).toBeCloseTo(5.6, 9);
+    expect(mover.angle).toBeCloseTo(Math.PI / 2, 9);
+    expect(mover.charge).toBeCloseTo(1 - 2.1 * BALANCE.vehicles.batteryDrainPerTile, 9);
+  });
+
+  it('arrives on the last tile centre and never overshoots it', () => {
+    const state = createSimState(1, SIZE);
+    buildRoads(state, [at(5, 5), at(6, 5)]);
+    const mover = moverOn([at(5, 5), at(6, 5)]);
+    expect(advanceAlongPath(state, mover, 0.4, new Map())).toBe('moving');
+    expect(advanceAlongPath(state, mover, 0.4, new Map())).toBe('moving');
+    expect(advanceAlongPath(state, mover, 0.4, new Map())).toBe('arrived');
+    expect(mover.x).toBeCloseTo(6.5, 9);
+    expect(mover.path).toEqual([]);
+  });
+});
 
 describe('findRoadPath', () => {
   it('finds a connected path along roads', () => {
