@@ -103,8 +103,8 @@ export function applyRipples(material: THREE.MeshStandardMaterial): RippleUnifor
 - `GroundMesh` keeps `terrain: Uint8Array(size²)`; `applyDiffs(diffs)` records `diff.terrain` and rebuilds when terrain changed or the field version changed (one rebuild per call at most).
 - In `rebuildHeights`, per vertex (vx, vz): look at the up to four adjacent tiles; when at least one is water (`!== Terrain.Land`) and at least one is land, multiply the shade by `SAND_TINT` per channel; otherwise grey shade as today.
 - Expose nothing new; tests read `ground.geometry.attributes.color` and find a vertex by its rounded x/z.
-- [ ] Tests: 6×6 map, lake at tiles (2,2),(3,2),(2,3),(3,3): corner (3,3) (inside the lake, all four tiles water) is grey (r = g = b); corner (2,2) (one lake tile, three land) is tinted (r ≠ b); corner (0,0) inland is grey; a second identical diff batch does not rebuild (`computeVertexNormals` spy not called again); diffs arriving before the elevation field changes still tint (order independence).
-- [ ] Implement; checks; commit `feat(render): sandy shores`.
+- [x] Tests: 6×6 map, lake at tiles (2,2),(3,2),(2,3),(3,3): corner (3,3) (inside the lake, all four tiles water) is grey (r = g = b); corner (2,2) (one lake tile, three land) is tinted (r ≠ b); corner (0,0) inland is grey; a second identical diff batch does not rebuild (`computeVertexNormals` spy not called again); diffs arriving before the elevation field changes still tint (order independence).
+- [x] Implement; checks; commit `feat(render): sandy shores`.
 
 ---
 

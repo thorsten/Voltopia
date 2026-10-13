@@ -4,6 +4,7 @@ import { PALETTE } from './scene.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
 import { BALANCE } from '../shared/constants.ts';
 import { surfaceMaterial } from './materials.ts';
+import { Terrain, type TileDiff } from '../shared/types.ts';
 
 const SEASON_KEYS = [
   new THREE.Color(PALETTE.groundSpring),
@@ -32,6 +33,12 @@ const SHADE_LOW = 0.92;
 const SHADE_SPAN = 0.1;
 /** Ground height at the highest elevation level, for the shade ramp. */
 const MAX_TERRAIN_Y = BALANCE.terrain.maxLevel * LEVEL_HEIGHT;
+/**
+ * Warm multiplier on corners where water meets land: summer ground
+ * (`PALETTE.groundSummer`) × tint ≈ sand `0xdbcd91`. Values > 1 are fine
+ * in a float vertex colour.
+ */
+const SAND_TINT = new THREE.Color(1.38, 1.05, 1.15);
 
 /**
  * Height-field ground spanning [0, size] x [0, size], with a grid overlay
@@ -43,11 +50,14 @@ export class GroundMesh implements DiffLayer {
   private readonly gridLines: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly field: ElevationField;
   private readonly size: number;
+  /** Terrain per tile, recorded from diffs, for the shore tint. */
+  private readonly terrain: Uint8Array;
   private appliedVersion = -1;
 
   constructor(size: number, field: ElevationField) {
     this.size = size;
     this.field = field;
+    this.terrain = new Uint8Array(size * size);
     this.group = new THREE.Group();
 
     const geometry = new THREE.PlaneGeometry(size, size, size, size);
@@ -74,8 +84,17 @@ export class GroundMesh implements DiffLayer {
     this.rebuildHeights();
   }
 
-  applyDiffs(): void {
-    if (this.field.version !== this.appliedVersion) {
+  applyDiffs(diffs: TileDiff[]): void {
+    let terrainChanged = false;
+    for (const diff of diffs) {
+      // A diff without terrain counts as land, as in ElevationField.
+      const terrain = diff.terrain ?? Terrain.Land;
+      if (this.terrain[diff.index] !== terrain) {
+        this.terrain[diff.index] = terrain;
+        terrainChanged = true;
+      }
+    }
+    if (terrainChanged || this.field.version !== this.appliedVersion) {
       this.appliedVersion = this.field.version;
       this.rebuildHeights();
     }
@@ -99,13 +118,32 @@ export class GroundMesh implements DiffLayer {
       const y = this.field.cornerY(vx, vz);
       position.setY(i, y);
       const shade = SHADE_LOW + SHADE_SPAN * (maxY > 0 ? y / maxY : 0);
-      color.setXYZ(i, shade, shade, shade);
+      if (this.isShore(vx, vz)) {
+        color.setXYZ(i, shade * SAND_TINT.r, shade * SAND_TINT.g, shade * SAND_TINT.b);
+      } else {
+        color.setXYZ(i, shade, shade, shade);
+      }
     }
     position.needsUpdate = true;
     color.needsUpdate = true;
     this.ground.geometry.computeVertexNormals();
     this.ground.geometry.computeBoundingSphere();
     this.rebuildGridHeights();
+  }
+
+  /** True when corner (vx, vz) touches both a water and a land tile. */
+  private isShore(vx: number, vz: number): boolean {
+    const size = this.size;
+    let water = false;
+    let land = false;
+    for (let z = vz - 1; z <= vz; z++) {
+      for (let x = vx - 1; x <= vx; x++) {
+        if (x < 0 || z < 0 || x >= size || z >= size) continue;
+        if (this.terrain[z * size + x] === Terrain.Land) land = true;
+        else water = true;
+      }
+    }
+    return water && land;
   }
 
   /** One line segment per tile edge, slightly above the ground. */
