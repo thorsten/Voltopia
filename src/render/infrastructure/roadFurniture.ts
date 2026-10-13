@@ -104,11 +104,13 @@ export function zebraPieces(mask: number, padSize: number): FlatPiece[] {
 /** How far the lamp's arm reaches out from the pole (local +x). */
 export const LAMP_REACH = 0.18;
 export const MAX_PARTS_PER_LAMP = 6;
+/** Side of the lamp's square foot. */
+export const LAMP_FOOT_SIZE = 0.04;
 
 const LAMP = {
   color: 0x3a4048,
   housingColor: 0x565d66,
-  footSize: 0.04,
+  footSize: LAMP_FOOT_SIZE,
   footHeight: 0.03,
   poleRadius: 0.013,
   poleHeight: 0.3,

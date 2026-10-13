@@ -12,6 +12,7 @@ import { GrowingMesh } from './plants/growingMesh.ts';
 import {
   KERB_WIDTH,
   kerbPieces,
+  LAMP_FOOT_SIZE,
   lampModel,
   zebraPieces,
   type FlatPiece,
@@ -85,9 +86,10 @@ function setupGlow(mesh: THREE.InstancedMesh): void {
 
 const DECK_COLOR = 0x8a9099;
 const RAIL_COLOR = 0xd8d8d0;
-const DECK_SIZE = 0.96;
+export const DECK_SIZE = 0.96;
 const DECK_HEIGHT = 0.04;
-const RAIL_THICKNESS = 0.06;
+/** Thickness of a bridge railing, standing on the deck's edge. */
+export const RAIL_THICKNESS = 0.06;
 const RAIL_HEIGHT = 0.14;
 
 const SHELTER_COLOR = 0x4a5560;
@@ -95,6 +97,13 @@ const SIGN_COLOR = 0xf2d16b;
 /** Shelter stands at the south-west kerb, clear of the lamp corner (south-east). */
 const SHELTER_OFFSET_X = 0.16;
 const SHELTER_OFFSET_Z = 0.84;
+
+/** Whether a bridge with this road mask is straight (or a dead end): only those get railings. */
+function hasRailings(mask: number): boolean {
+  const alongZ = (mask & (DIR_N | DIR_S)) !== 0 && (mask & (DIR_E | DIR_W)) === 0;
+  const alongX = (mask & (DIR_E | DIR_W)) !== 0 && (mask & (DIR_N | DIR_S)) === 0;
+  return alongX || alongZ;
+}
 
 /**
  * Instanced road tiles. Each road tile is composed of a center pad plus an
@@ -428,7 +437,8 @@ export class RoadsMesh implements DiffLayer {
   /**
    * One streetlamp on every other road tile, at a fixed corner beside
    * the roadway, its arm reaching over the road toward the tile centre.
-   * The bus shelter keeps to the opposite (south-west) kerb.
+   * Level crossings and straight avenue bridges go without. The bus
+   * shelter keeps clear of the lamp's (south-east) corner.
    */
   private rebuildLamps(): void {
     const head = lampModel().head;
@@ -443,7 +453,13 @@ export class RoadsMesh implements DiffLayer {
       // Level crossings carry their own barriers and signals at the corners.
       if (this.track[index] !== 0) continue;
       // Avenues are wide enough to reach the usual corner: step back to the kerb.
-      const corner = 0.5 + kerbsideCorner(this.roadClasses[index]);
+      const offset = kerbsideCorner(this.roadClasses[index]);
+      // A straight bridge has railings along its sides: an avenue's lamp
+      // corner lies in them, and there is no room between the roadway and
+      // the railing to step in, so such bridges go without a lamp.
+      const railed = this.isBridge(index) && hasRailings(this.roadMasks[index]);
+      if (railed && offset + LAMP_FOOT_SIZE / 2 > DECK_SIZE / 2 - RAIL_THICKNESS) continue;
+      const corner = 0.5 + offset;
       const px = x + corner;
       const pz = y + corner;
       // Poles stand upright on the ground under their own corner.
@@ -509,9 +525,8 @@ export class RoadsMesh implements DiffLayer {
       this.matrix.setPosition(x, DECK_HEIGHT / 2 + lift, z);
       this.decks.setMatrixAt(deckCount++, this.matrix);
 
+      if (!hasRailings(mask)) continue;
       const alongZ = (mask & (DIR_N | DIR_S)) !== 0 && (mask & (DIR_E | DIR_W)) === 0;
-      const alongX = (mask & (DIR_E | DIR_W)) !== 0 && (mask & (DIR_N | DIR_S)) === 0;
-      if (!alongZ && !alongX) continue;
       const offset = DECK_SIZE / 2 - RAIL_THICKNESS / 2;
       for (const side of [-1, 1]) {
         if (alongZ) {

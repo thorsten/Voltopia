@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
-import { ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
+import { DECK_SIZE, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
+import { LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
 
 const SIZE = 5;
 const at = (x: number, y: number) => y * SIZE + x;
@@ -137,4 +137,25 @@ describe('RoadsMesh streetlamps', () => {
     expect(foot.x - 2.5).toBeGreaterThan(roadHalfWidth(RoadClass.Avenue));
     expect(foot.x - 2.5).toBeLessThan(0.5);
   });
+
+  for (const roadClass of [RoadClass.Street, RoadClass.Avenue]) {
+    const label = roadClass === RoadClass.Avenue ? 'an avenue' : 'a street';
+    it(`keeps the lamp of ${label} on a straight bridge inside the railing`, () => {
+      for (const alongX of [true, false]) {
+        const list = tiles();
+        road(list, 2, 2, alongX ? DIR_E | DIR_W : DIR_N | DIR_S);
+        Object.assign(list[at(2, 2)], { roadClass, terrain: Terrain.River });
+        const layer = layerWith(list);
+        const inner = DECK_SIZE / 2 - RAIL_THICKNESS;
+        // A street's corner fits between the roadway and the railing; an
+        // avenue leaves no room, so its straight bridges go without.
+        expect(layer.lampPoles.mesh.count).toBe(roadClass === RoadClass.Avenue ? 0 : 1);
+        for (let slot = 0; slot < layer.lampPoles.mesh.count; slot++) {
+          const foot = position(layer.lampPoles.mesh, slot);
+          const across = alongX ? foot.z - 2.5 : foot.x - 2.5;
+          expect(Math.abs(across) + LAMP_FOOT_SIZE / 2).toBeLessThanOrEqual(inner);
+        }
+      }
+    });
+  }
 });
