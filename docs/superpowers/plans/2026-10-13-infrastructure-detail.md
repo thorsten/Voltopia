@@ -94,8 +94,8 @@ export function zebraPieces(mask: number, padSize: number): FlatPiece[]; // [] u
 
 - Build the ballasted half segment from `modelKit` boxes (ballast `BALLAST_COLOR`, rails `RAIL_COLOR`, `SLEEPERS_PER_HALF = 3` sleepers `SLEEPER_COLOR = 0x5a4632`, `SLEEPER_LENGTH = 0.26`, `SLEEPER_WIDTH = 0.05`, `SLEEPER_HEIGHT = 0.015`, spaced evenly over the half, on the ballast under the rails), material with `vertexColors: true` and white colour. Same footprint and rail height as today (rails raised by `SLEEPER_HEIGHT` only if needed so rails rest on sleepers — keep train height unchanged: lift the ballast-to-rail stack within today's total height).
 - Road-crossing segments unchanged.
-- [ ] Tests: the ballasted segment has a color attribute and its vertex colours include `SLEEPER_COLOR`; total height of the segment geometry unchanged vs. today (pin the value); existing rail tests green.
-- [ ] Implement; checks; commit `feat(render): sleepers under the rails`.
+- [x] Tests: the ballasted segment has a color attribute and its vertex colours include `SLEEPER_COLOR`; total height of the segment geometry unchanged vs. today (pin the value); existing rail tests green.
+- [x] Implement; checks; commit `feat(render): sleepers under the rails`.
 
 ### Task 6: Occupancy signals
 

@@ -10,7 +10,7 @@ import {
   type VehicleState,
 } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { RailMesh } from './railMesh.ts';
+import { RailMesh, SLEEPER_COLOR } from './railMesh.ts';
 import { roadHalfWidth } from './roadsMesh.ts';
 
 const SIZE = 8;
@@ -185,6 +185,38 @@ describe('RailMesh', () => {
   });
 });
 
+describe('RailMesh sleepers', () => {
+  it('keeps the ballasted segment footprint and rail-top height', () => {
+    const { segments } = sceneWith(baseTiles());
+    const geometry = segments.geometry;
+    geometry.computeBoundingBox();
+    const { min, max } = geometry.boundingBox!;
+    expect(min.x).toBeCloseTo(0, 6);
+    expect(max.x).toBeCloseTo(0.5, 6);
+    expect(min.y).toBeCloseTo(0, 6);
+    // Rail tops: ballast bed and sleepers 0.04, rails 0.03 on top.
+    expect(max.y).toBeCloseTo(0.07, 6);
+    expect(min.z).toBeCloseTo(-0.15, 6);
+    expect(max.z).toBeCloseTo(0.15, 6);
+  });
+
+  it('bakes sleepers into the ballasted segment as vertex colours', () => {
+    const { segments } = sceneWith(baseTiles());
+    const colors = segments.geometry.getAttribute('color');
+    expect(colors).toBeDefined();
+    const sleeper = new THREE.Color(SLEEPER_COLOR);
+    let found = false;
+    for (let i = 0; i < colors.count && !found; i++) {
+      found =
+        Math.abs(colors.getX(i) - sleeper.r) < 1e-6 &&
+        Math.abs(colors.getY(i) - sleeper.g) < 1e-6 &&
+        Math.abs(colors.getZ(i) - sleeper.b) < 1e-6;
+    }
+    expect(found).toBe(true);
+    expect((segments.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
+  });
+});
+
 describe('RailMesh crossing ballast', () => {
   /** Horizontal distance from the tile centre (cx, cz) to both ends of a half-segment instance. */
   function extent(mesh: THREE.InstancedMesh, slot: number, cx: number, cz: number) {
@@ -218,7 +250,7 @@ describe('RailMesh crossing ballast', () => {
         expect(flush.from).toBeLessThan(0.01);
         expect(Math.abs(flush.to - half)).toBeLessThan(0.01);
         // The ballasted rails meet the flush ones at the road edge without
-        // a step beyond the crossing lift (rails sit BALLAST_HEIGHT = 0.04
+        // a step beyond the crossing lift (rails sit TRACKBED_HEIGHT = 0.04
         // above a ballasted piece, CROSSING_LIFT = 0.012 above the ground on
         // the road), and the piece reaches the ground at the tile edge, where
         // the neighbour's track starts.

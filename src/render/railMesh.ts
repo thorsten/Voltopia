@@ -12,6 +12,7 @@ import {
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer } from './renderer.ts';
 import { surfaceMaterial } from './materials.ts';
+import { box } from './modelKit.ts';
 import { roadHalfWidth } from './roadsMesh.ts';
 
 const BALLAST_COLOR = 0x8a8075;
@@ -25,7 +26,15 @@ const GAUGE = 0.09;
 const RAIL_WIDTH = 0.03;
 const RAIL_HEIGHT = 0.03;
 const BALLAST_WIDTH = 0.3;
-const BALLAST_HEIGHT = 0.04;
+/** Sleepers across the track under the rails, baked into the ballasted half segment. */
+export const SLEEPER_COLOR = 0x5a4632;
+export const SLEEPERS_PER_HALF = 3;
+const SLEEPER_LENGTH = 0.26;
+const SLEEPER_WIDTH = 0.05;
+const SLEEPER_HEIGHT = 0.015;
+/** Rails rest this high on a ballasted piece: the ballast bed plus the sleepers on it. */
+const TRACKBED_HEIGHT = 0.04;
+const BALLAST_HEIGHT = TRACKBED_HEIGHT - SLEEPER_HEIGHT;
 /** Rails on a road tile are flush with the asphalt: no ballast, a hair above the road. */
 const CROSSING_LIFT = 0.012;
 const DECK_HEIGHT = 0.08;
@@ -80,24 +89,48 @@ function frac(value: number): number {
   return value - Math.floor(value);
 }
 
-/** Half a tile of track from the centre to one edge, pointing +x. */
-function segmentGeometry(withBallast: boolean): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  if (withBallast) {
-    const ballast = new THREE.BoxGeometry(0.5, BALLAST_HEIGHT, BALLAST_WIDTH);
-    ballast.translate(0.25, BALLAST_HEIGHT / 2, 0);
-    parts.push(ballast);
+/**
+ * Half a tile of track from the centre to one edge, pointing +x, on a
+ * ballast bed with sleepers under the rails. Vertex-coloured.
+ */
+function ballastedSegmentGeometry(): THREE.BufferGeometry {
+  const parts = [
+    box(0.5, BALLAST_HEIGHT, BALLAST_WIDTH, 0.25, BALLAST_HEIGHT / 2, 0, BALLAST_COLOR),
+  ];
+  const spacing = 0.5 / SLEEPERS_PER_HALF;
+  for (let k = 0; k < SLEEPERS_PER_HALF; k++) {
+    parts.push(
+      box(
+        SLEEPER_WIDTH,
+        SLEEPER_HEIGHT,
+        SLEEPER_LENGTH,
+        spacing * (k + 0.5),
+        BALLAST_HEIGHT + SLEEPER_HEIGHT / 2,
+        0,
+        SLEEPER_COLOR,
+      ),
+    );
   }
-  const lift = withBallast ? BALLAST_HEIGHT : 0;
+  for (const side of [-GAUGE, GAUGE]) {
+    parts.push(
+      box(0.5, RAIL_HEIGHT, RAIL_WIDTH, 0.25, TRACKBED_HEIGHT + RAIL_HEIGHT / 2, side, RAIL_COLOR),
+    );
+  }
+  return mergeGeometries(parts);
+}
+
+/** Half a tile of bare rails from the centre to one edge, pointing +x (level crossings). */
+function crossingSegmentGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
   for (const side of [-GAUGE, GAUGE]) {
     const rail = new THREE.BoxGeometry(0.5, RAIL_HEIGHT, RAIL_WIDTH);
-    rail.translate(0.25, lift + RAIL_HEIGHT / 2, side);
+    rail.translate(0.25, RAIL_HEIGHT / 2, side);
     parts.push(rail);
   }
   return mergeGeometries(parts);
 }
 
-/** The junction block under a tile's centre, so curves and crossings close. */
+/** The ballast block under a tile's centre, so curves and crossings close; level with the bed, so the sleepers show. */
 function centreGeometry(): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(BALLAST_WIDTH, BALLAST_HEIGHT, BALLAST_WIDTH);
   g.translate(0, BALLAST_HEIGHT / 2, 0);
@@ -167,8 +200,13 @@ export class RailMesh implements DiffLayer {
     this.terrains = new Uint8Array(tiles);
     this.roadClasses = new Uint8Array(tiles);
     this.roadMasks = new Uint8Array(tiles);
-    const make = (geometry: THREE.BufferGeometry, color: number, count: number) => {
-      const mesh = new THREE.InstancedMesh(geometry, surfaceMaterial({ color }), count);
+    const make = (
+      geometry: THREE.BufferGeometry,
+      color: number,
+      count: number,
+      material: THREE.Material = surfaceMaterial({ color }),
+    ) => {
+      const mesh = new THREE.InstancedMesh(geometry, material, count);
       mesh.frustumCulled = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -176,8 +214,14 @@ export class RailMesh implements DiffLayer {
       scene.add(mesh);
       return mesh;
     };
-    this.segments = make(segmentGeometry(true), BALLAST_COLOR, tiles * 4);
-    this.crossings = make(segmentGeometry(false), RAIL_COLOR, tiles * 4);
+    // White base colour: ballast, sleepers and rails come from the vertex colours.
+    this.segments = make(
+      ballastedSegmentGeometry(),
+      0xffffff,
+      tiles * 4,
+      surfaceMaterial({ vertexColors: true }),
+    );
+    this.crossings = make(crossingSegmentGeometry(), RAIL_COLOR, tiles * 4);
     this.centres = make(centreGeometry(), BALLAST_COLOR, tiles);
     this.decks = make(new THREE.BoxGeometry(1, DECK_HEIGHT, DECK_WIDTH), DECK_COLOR, tiles);
     this.parapets = make(standingBoxGeometry(), PARAPET_COLOR, tiles * 2);
@@ -394,13 +438,13 @@ export class RailMesh implements DiffLayer {
           edgeY,
         );
         if (roadEdge < 0.5) {
-          // The ballasted piece starts sunk by the ballast height less the
+          // The ballasted piece starts sunk by the trackbed height less the
           // crossing lift, so its rails continue the flush rails' top at the
           // road edge, and ramps up to its usual height at the tile edge,
           // where the neighbour's track starts. The 0.028 ramp (about 8° on a
           // street, 16° on an avenue's shorter stretch) reads better than a
           // step at the road edge of more than twice the crossing lift.
-          const startY = edgeY - BALLAST_HEIGHT;
+          const startY = edgeY - TRACKBED_HEIGHT;
           const tileEdgeY = this.groundAlong(index, x, z, angle, 0.5);
           this.placePiece(this.segments, segments++, x, z, angle, roadEdge, startY, 0.5, tileEdgeY);
         }
