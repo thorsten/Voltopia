@@ -7,6 +7,7 @@ import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
 import { applyRipples, type RippleUniforms } from './nature/waterShader.ts';
+import { uploadDrawn } from './plants/growingMesh.ts';
 
 /**
  * Just above the ground plane, below roads (0.05) and the build grid. The
@@ -41,6 +42,24 @@ const SEA_MEAN_HEIGHT = WATER_HEIGHT + TIDE_AMPLITUDE;
  */
 const SEA_FLOOR = -0.01;
 
+/** Width of a foam strip, measured from the shore line into the water. */
+const FOAM_WIDTH = 0.06;
+/** Foam floats this far above the water surface so it never z-fights it. */
+const FOAM_LIFT = 0.002;
+const FOAM_OPACITY = 0.55;
+/** Opacity amplitude of the slow foam pulse. */
+const FOAM_PULSE = 0.15;
+const FOAM_PULSE_SPEED = 0.8;
+const FOAM_COLOR = 0xffffff;
+/** 4-neighbour offsets (N, E, S, W) a shore edge can face. */
+const FOAM_NEIGHBOURS = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+] as const;
+const FOAM_UP = new THREE.Vector3(0, 1, 0);
+
 /**
  * One thin instanced slab per river or lake tile. Water never changes
  * after map generation, so the mesh only rebuilds when terrain diffs
@@ -53,6 +72,14 @@ export class WaterMesh implements DiffLayer {
   private readonly riverMesh: THREE.InstancedMesh;
   /** Sea tiles: flat boxes on the tide-driven sea level. */
   private readonly seaMesh: THREE.InstancedMesh;
+  /** Foam along lake and river shores; recreated when it outgrows its capacity. */
+  private inlandFoam: THREE.InstancedMesh;
+  /** Foam along the coast; its mesh y follows the sea surface. */
+  private seaFoam: THREE.InstancedMesh;
+  private readonly foamGeometry: THREE.PlaneGeometry;
+  private readonly foamMaterial: THREE.MeshBasicMaterial;
+  private readonly scene: THREE.Scene;
+  private seaSurfaceY = SEA_MEAN_HEIGHT;
   private readonly material: THREE.MeshStandardMaterial;
   private readonly ripples: RippleUniforms;
   private readonly terrain: Uint8Array;
@@ -68,6 +95,7 @@ export class WaterMesh implements DiffLayer {
     private readonly elevation: ElevationField,
   ) {
     this.gridSize = gridSize;
+    this.scene = scene;
     this.terrain = new Uint8Array(gridSize * gridSize);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     this.material = surfaceMaterial({ color: 0xffffff });
@@ -98,8 +126,25 @@ export class WaterMesh implements DiffLayer {
     this.seaMesh.frustumCulled = false;
     this.seaMesh.receiveShadow = true;
     this.seaMesh.count = 0;
-    this.setSeaSurface(SEA_MEAN_HEIGHT);
     scene.add(this.seaMesh);
+
+    // A flat strip, long side along x; E/W edges turn it about y.
+    this.foamGeometry = new THREE.PlaneGeometry(1, FOAM_WIDTH);
+    this.foamGeometry.rotateX(-Math.PI / 2);
+    this.foamMaterial = new THREE.MeshBasicMaterial({
+      color: FOAM_COLOR,
+      transparent: true,
+      opacity: FOAM_OPACITY,
+      depthWrite: false,
+    });
+    this.inlandFoam = this.createFoam('inlandFoam', 1);
+    this.seaFoam = this.createFoam('seaFoam', 1);
+    this.setSeaSurface(SEA_MEAN_HEIGHT);
+  }
+
+  /** Shore edges drawn with foam, inland (lake, river) and on the coast. */
+  get foamCount(): { inland: number; sea: number } {
+    return { inland: this.inlandFoam.count, sea: this.seaFoam.count };
   }
 
   applyDiffs(diffs: TileDiff[]): void {
@@ -132,6 +177,8 @@ export class WaterMesh implements DiffLayer {
     const wobble = this.reducedMotion ? 0 : WOBBLE_AMPLITUDE * Math.sin(nowSeconds * WOBBLE_SPEED);
     const brightness = (1 + wobble) * (1 - NIGHT_DIM * this.nightFactor);
     this.material.color.setScalar(brightness);
+    const pulse = this.reducedMotion ? 0 : FOAM_PULSE * Math.sin(nowSeconds * FOAM_PULSE_SPEED);
+    this.foamMaterial.opacity = (FOAM_OPACITY + pulse) * (1 - NIGHT_DIM * this.nightFactor);
     // The sea rises and falls with the tide; the range is deliberately
     // small so the shore reads as a shore, not as a flood.
     const tideOffset = this.reducedMotion ? 0 : this.tideLevel * TIDE_AMPLITUDE;
@@ -147,6 +194,72 @@ export class WaterMesh implements DiffLayer {
   private setSeaSurface(surfaceY: number): void {
     this.seaMesh.scale.y = surfaceY - SEA_FLOOR;
     this.seaMesh.position.y = (surfaceY + SEA_FLOOR) / 2;
+    this.seaSurfaceY = surfaceY;
+    this.seaFoam.position.y = surfaceY + FOAM_LIFT;
+  }
+
+  private createFoam(name: string, capacity: number): THREE.InstancedMesh {
+    const mesh = new THREE.InstancedMesh(this.foamGeometry, this.foamMaterial, capacity);
+    mesh.name = name;
+    // Instance transforms live across the whole grid; the base geometry's
+    // bounds would wrongly cull the mesh, so culling is disabled.
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    this.scene.add(mesh);
+    return mesh;
+  }
+
+  /** The foam mesh itself when it holds `count` strips, else a larger replacement. */
+  private fitFoam(mesh: THREE.InstancedMesh, count: number): THREE.InstancedMesh {
+    if (count <= mesh.instanceMatrix.count) return mesh;
+    this.scene.remove(mesh);
+    mesh.dispose();
+    return this.createFoam(mesh.name, count);
+  }
+
+  /**
+   * Lay one foam strip along every edge where a water tile meets land,
+   * `FOAM_WIDTH / 2` into the water. Water–water edges and the map
+   * border stay bare. Sea strips sit at y = 0: the mesh carries the tide.
+   */
+  private rebuildFoam(): void {
+    const size = this.gridSize;
+    const inland: THREE.Matrix4[] = [];
+    const sea: THREE.Matrix4[] = [];
+    const turn = new THREE.Quaternion();
+    const unit = new THREE.Vector3(1, 1, 1);
+    const at = new THREE.Vector3();
+    for (let index = 0; index < this.terrain.length; index++) {
+      const terrain = this.terrain[index];
+      if (terrain === Terrain.Land) continue;
+      const x = index % size;
+      const z = Math.floor(index / size);
+      for (const [dx, dz] of FOAM_NEIGHBOURS) {
+        const nx = x + dx;
+        const nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= size || nz >= size) continue;
+        if (this.terrain[nz * size + nx] !== Terrain.Land) continue;
+        // Centre of the edge, pulled half a strip back into the water.
+        const fx = x + 0.5 + dx * (0.5 - FOAM_WIDTH / 2);
+        const fz = z + 0.5 + dz * (0.5 - FOAM_WIDTH / 2);
+        let fy = 0;
+        if (terrain === Terrain.Lake) {
+          fy = this.elevation.centerY(index) + WATER_HEIGHT + WATER_THICKNESS + FOAM_LIFT;
+        } else if (terrain === Terrain.River) {
+          fy = this.elevation.surfaceY(fx, fz) + WATER_HEIGHT + WATER_THICKNESS + FOAM_LIFT;
+        }
+        turn.setFromAxisAngle(FOAM_UP, dx === 0 ? 0 : Math.PI / 2);
+        const matrix = new THREE.Matrix4().compose(at.set(fx, fy, fz), turn, unit);
+        (terrain === Terrain.Sea ? sea : inland).push(matrix);
+      }
+    }
+    this.inlandFoam = this.fitFoam(this.inlandFoam, inland.length);
+    this.seaFoam = this.fitFoam(this.seaFoam, sea.length);
+    this.seaFoam.position.y = this.seaSurfaceY + FOAM_LIFT;
+    inland.forEach((matrix, i) => this.inlandFoam.setMatrixAt(i, matrix));
+    sea.forEach((matrix, i) => this.seaFoam.setMatrixAt(i, matrix));
+    uploadDrawn(this.inlandFoam, inland.length);
+    uploadDrawn(this.seaFoam, sea.length);
   }
 
   private rebuild(): void {
@@ -210,5 +323,6 @@ export class WaterMesh implements DiffLayer {
     this.seaMesh.count = seaCount;
     this.seaMesh.instanceMatrix.needsUpdate = true;
     if (this.seaMesh.instanceColor) this.seaMesh.instanceColor.needsUpdate = true;
+    this.rebuildFoam();
   }
 }

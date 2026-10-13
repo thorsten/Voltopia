@@ -90,8 +90,8 @@ export function applyRipples(material: THREE.MeshStandardMaterial): RippleUnifor
   - Sea: instance y = 0; `seaFoam.position.y` = current sea surface + `FOAM_LIFT`, set in `setSeaSurface`.
 - `update`: opacity = `(FOAM_OPACITY + (reducedMotion ? 0 : FOAM_PULSE * sin(now * FOAM_PULSE_SPEED))) * (1 - NIGHT_DIM * nightFactor)`.
 - Expose `get foamCount(): { inland: number; sea: number }` for tests.
-- [ ] Tests: a 6×6 land map with a 2×2 lake in the middle → 8 inland edges; a straight river column across an 8×8 map → 2 edges per river tile, none between river tiles; a sea row at z = 0 on an 8×8 map → 8 sea edges, none at the map border, none between sea tiles; a lake tile next to a river tile → no foam on that shared edge; every inland foam instance y is above that tile's water surface; `seaFoam` world y rises with the tide (tide −1 vs 1) and stays put with reduced motion; foam opacity at night is lower than by day.
-- [ ] Implement; checks; commit `feat(render): foam along the shores`.
+- [x] Tests: a 6×6 land map with a 2×2 lake in the middle → 8 inland edges; a straight river column across an 8×8 map → 2 edges per river tile, none between river tiles; a sea row at z = 0 on an 8×8 map → 8 sea edges, none at the map border, none between sea tiles; a lake tile next to a river tile → no foam on that shared edge; every inland foam instance y is above that tile's water surface; `seaFoam` world y rises with the tide (tide −1 vs 1) and stays put with reduced motion; foam opacity at night is lower than by day.
+- [x] Implement; checks; commit `feat(render): foam along the shores`.
 
 ---
 
