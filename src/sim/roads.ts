@@ -4,6 +4,7 @@ import { RoadClass, Terrain } from '../shared/types.ts';
 import { clearPowerLines } from './powerLines.ts';
 import { clearRail } from './rail.ts';
 import { clearBusStops } from './transit.ts';
+import { clearInvalidOverpasses } from './overpass.ts';
 import { clearForest, fellingCost } from './forest.ts';
 import {
   BuildIntent,
@@ -90,6 +91,7 @@ export function buildRoads(state: SimState, tiles: number[], avenue = false): Bu
     markDirty(state, index);
   }
   for (const index of affected) recomputeRoadMask(state, index);
+  clearInvalidOverpasses(state, affected);
 
   state.undoStack.push(undo);
   return {};
@@ -178,11 +180,13 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.buildingAge[index] = 0;
     layers.busStop[index] = 0;
     layers.rail[index] = 0;
+    layers.overpass[index] = 0;
     layers.damage[index] = 0;
     layers.supplied[index] = SupplyStatus.NotConnected;
     markDirty(state, index);
   }
   for (const index of affected) recomputeRoadMask(state, index);
+  clearInvalidOverpasses(state, affected);
   // A cleared tile may have been a plant: connectivity must be recomputed.
   if (clearable.length > 0) bumpGridVersion(state);
 

@@ -108,3 +108,48 @@ describe('buildOverpasses', () => {
     expect(poor.layers.overpass[CROSSING]).toBe(0);
   });
 });
+
+describe('overpass removal', () => {
+  it('goes when its track is removed', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    bulldozeTiles(state, [CROSSING]); // clears the track (and the road)
+    expect(state.layers.overpass[CROSSING]).toBe(0);
+  });
+
+  it('goes when a ramp road is bulldozed', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    bulldozeTiles(state, [at(5, 7)]);
+    expect(state.layers.overpass[CROSSING]).toBe(0);
+  });
+
+  it('goes when the track becomes a junction', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    buildRail(state, [at(5, 7)]);
+    expect(state.layers.overpass[CROSSING]).toBe(0);
+  });
+
+  it('goes when the road grows an arm along the track', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    buildRoads(state, [at(6, 8)]);
+    expect(state.layers.overpass[CROSSING]).toBe(0);
+  });
+
+  it('survives an avenue upgrade of its ramps and of itself', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    buildRoads(state, [at(5, 7), CROSSING, at(5, 9)], true);
+    expect(state.layers.overpass[CROSSING]).toBe(1);
+  });
+
+  it('removal is covered by the undo of the removing action', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    bulldozeTiles(state, [at(5, 9)]);
+    undoLastAction(state);
+    expect(state.layers.overpass[CROSSING]).toBe(1);
+  });
+});

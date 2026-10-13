@@ -1,4 +1,5 @@
 import { BALANCE } from '../shared/constants.ts';
+import { clearInvalidOverpasses } from './overpass.ts';
 import {
   chebyshevDistance,
   DIRECTIONS,
@@ -108,6 +109,7 @@ export function buildRail(state: SimState, tiles: number[]): BuildResult {
     markDirty(state, index);
   }
   for (const index of affected) recomputeRailMask(state, index);
+  clearInvalidOverpasses(state, affected);
   bumpRailVersion(state);
   state.undoStack.push(undo);
   return {};
@@ -120,7 +122,9 @@ export function clearRail(state: SimState, tiles: number[]): void {
     layers.rail[index] = 0;
     markDirty(state, index);
   }
-  for (const index of withNeighbors(state, tiles)) recomputeRailMask(state, index);
+  const affected = withNeighbors(state, tiles);
+  for (const index of affected) recomputeRailMask(state, index);
+  clearInvalidOverpasses(state, affected);
   bumpRailVersion(state);
 }
 
