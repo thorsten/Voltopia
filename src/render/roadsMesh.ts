@@ -56,6 +56,16 @@ function setupFlat(mesh: THREE.InstancedMesh): void {
 const LAMP_CORNER = 0.38;
 /** Room kept between the roadway's edge and the lamp's foot on wide roads. */
 const LAMP_KERB_CLEARANCE = KERB_WIDTH + 0.015;
+
+/**
+ * Offset from the tile centre (along both axes) of a kerbside corner
+ * post: the usual corner, or on wide roads just beyond the roadway's
+ * kerb, with room for a foot of `footRadius`. Streetlamps take the
+ * south-east corner, power poles the north-west one (powerLinesMesh).
+ */
+export function kerbsideCorner(roadClass: number, footRadius = 0): number {
+  return Math.max(LAMP_CORNER, roadHalfWidth(roadClass) + LAMP_KERB_CLEARANCE + footRadius);
+}
 const LAMP_GLOW_RADIUS = 0.03;
 /** The lamp's arm (local +x) points from its corner back to the tile centre. */
 const LAMP_YAW = (3 * Math.PI) / 4;
@@ -432,8 +442,7 @@ export class RoadsMesh implements DiffLayer {
       // Level crossings carry their own barriers and signals at the corners.
       if (this.track[index] !== 0) continue;
       // Avenues are wide enough to reach the usual corner: step back to the kerb.
-      const corner =
-        0.5 + Math.max(LAMP_CORNER, roadHalfWidth(this.roadClasses[index]) + LAMP_KERB_CLEARANCE);
+      const corner = 0.5 + kerbsideCorner(this.roadClasses[index]);
       const px = x + corner;
       const pz = y + corner;
       // Poles stand upright on the ground under their own corner.

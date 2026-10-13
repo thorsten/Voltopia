@@ -4,7 +4,9 @@ import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import { PlantType, RoadClass, Terrain, TileType, Zone, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { POLE_FOOT_RADIUS } from './infrastructure/pylonModels.ts';
+import { KERB_WIDTH } from './infrastructure/roadFurniture.ts';
 import { RailMesh } from './railMesh.ts';
+import { roadHalfWidth } from './roadsMesh.ts';
 import {
   CABLE_SAG,
   CABLE_SEGMENTS,
@@ -326,5 +328,39 @@ describe('PowerLinesMesh', () => {
     layer.applyDiffs([station]);
     const after = footOf(layer.poles.mesh, 0);
     expect(Math.sign(before.z - 2.5)).toBe(-Math.sign(after.z - 2.5));
+  });
+
+  for (const roadClass of [RoadClass.Street, RoadClass.Avenue]) {
+    const label = roadClass === RoadClass.Avenue ? 'an avenue' : 'a street';
+    it(`stands the pole on ${label} beyond the roadway and its kerb, inside the tile`, () => {
+      const tiles = baseTiles();
+      Object.assign(tiles[at(2, 2)], {
+        tileType: TileType.Road,
+        roadMask: DIR_E | DIR_W,
+        roadClass,
+        powerLine: LINE_PRESENT,
+      });
+      const { layer } = layerWith(tiles);
+      const foot = footOf(layer.poles.mesh, 0);
+      const kerbside = roadHalfWidth(roadClass) + KERB_WIDTH;
+      for (const offset of [foot.x - 2.5, foot.z - 2.5]) {
+        expect(Math.abs(offset) - POLE_FOOT_RADIUS).toBeGreaterThanOrEqual(kerbside);
+        expect(Math.abs(offset) + POLE_FOOT_RADIUS).toBeLessThanOrEqual(0.5);
+      }
+    });
+  }
+
+  it('moves the pole back to the kerb when the street becomes an avenue', () => {
+    const tiles = baseTiles();
+    Object.assign(tiles[at(2, 2)], {
+      tileType: TileType.Road,
+      roadMask: DIR_E | DIR_W,
+      powerLine: LINE_PRESENT,
+    });
+    const { layer } = layerWith(tiles);
+    const street = footOf(layer.poles.mesh, 0);
+    layer.applyDiffs([{ ...tiles[at(2, 2)], roadClass: RoadClass.Avenue }]);
+    const avenue = footOf(layer.poles.mesh, 0);
+    expect(avenue.z).toBeLessThan(street.z);
   });
 });
