@@ -7,7 +7,10 @@ import { createSimState, type SimState } from '../sim/state.ts';
 import { generateTerrain } from '../sim/terrain.ts';
 import { generateWater } from '../sim/water.ts';
 import type { RenderEnvironment } from './renderer.ts';
-import { WATER_HEIGHT, WaterMesh } from './waterMesh.ts';
+import { WATER_HEIGHT, WATER_THICKNESS, WaterMesh } from './waterMesh.ts';
+
+/** Water top above its bed beyond WATER_HEIGHT: the slab's thickness. */
+const WATER_SURFACE_GAP = WATER_THICKNESS;
 
 const SIZE = 8;
 
@@ -244,6 +247,36 @@ describe('foam edges', () => {
           : field.surfaceY(position.x, position.z);
       expect(position.y).toBeGreaterThan(bed + WATER_HEIGHT);
     }
+  });
+
+  it('lays river foam along a sloping bank, both ends on the water', () => {
+    // A river running down the x = 3 column drops one level halfway.
+    const size = 8;
+    const { scene, field } = foamMap(
+      size,
+      (x) => (x === 3 ? Terrain.River : Terrain.Land),
+      (_x, z) => (z < size / 2 ? 1 : 0),
+    );
+    const inland = foamMesh(scene, 'inlandFoam');
+    expect(inland.count).toBeGreaterThan(0);
+    scene.updateMatrixWorld(true);
+    const instance = new THREE.Matrix4();
+    const world = new THREE.Matrix4();
+    const end = new THREE.Vector3();
+    let steepest = 0;
+    for (let i = 0; i < inland.count; i++) {
+      inland.getMatrixAt(i, instance);
+      world.multiplyMatrices(inland.matrixWorld, instance);
+      const ends = [-0.5, 0.5].map((x) => end.set(x, 0, 0).applyMatrix4(world).clone());
+      steepest = Math.max(steepest, Math.abs(ends[1].y - ends[0].y));
+      for (const point of ends) {
+        const surface = field.surfaceY(point.x, point.z) + WATER_HEIGHT + WATER_SURFACE_GAP;
+        expect(point.y - surface).toBeGreaterThanOrEqual(0);
+        expect(point.y - surface).toBeLessThanOrEqual(0.02);
+      }
+    }
+    // The bank across the drop really is tilted.
+    expect(steepest).toBeGreaterThan(LEVEL_HEIGHT / 2);
   });
 
   function seaFoamY(tideLevel: number, reducedMotion: boolean): number {

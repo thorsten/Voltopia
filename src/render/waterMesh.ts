@@ -16,7 +16,7 @@ import { uploadDrawn } from './plants/growingMesh.ts';
  */
 export const WATER_HEIGHT = 0.015;
 /** Thickness of the water slab (it is a box so it can be sheared onto slopes). */
-const WATER_THICKNESS = 0.01;
+export const WATER_THICKNESS = 0.01;
 const WOBBLE_AMPLITUDE = 0.06;
 const WOBBLE_SPEED = 1.3;
 const NIGHT_DIM = 0.55;
@@ -59,6 +59,8 @@ const FOAM_NEIGHBOURS = [
   [-1, 0],
 ] as const;
 const FOAM_UP = new THREE.Vector3(0, 1, 0);
+/** The strip's width axis in its own frame; river strips tilt about it. */
+const FOAM_WIDTH_AXIS = new THREE.Vector3(0, 0, 1);
 
 /**
  * One thin instanced slab per river or lake tile. Water never changes
@@ -228,6 +230,9 @@ export class WaterMesh implements DiffLayer {
     const sea: THREE.Matrix4[] = [];
     const turn = new THREE.Quaternion();
     const unit = new THREE.Vector3(1, 1, 1);
+    const stretch = new THREE.Vector3();
+    const tilt = new THREE.Quaternion();
+    const along = new THREE.Vector3();
     const at = new THREE.Vector3();
     for (let index = 0; index < this.terrain.length; index++) {
       const terrain = this.terrain[index];
@@ -242,14 +247,25 @@ export class WaterMesh implements DiffLayer {
         // Centre of the edge, pulled half a strip back into the water.
         const fx = x + 0.5 + dx * (0.5 - FOAM_WIDTH / 2);
         const fz = z + 0.5 + dz * (0.5 - FOAM_WIDTH / 2);
+        turn.setFromAxisAngle(FOAM_UP, dx === 0 ? 0 : Math.PI / 2);
+        stretch.copy(unit);
         let fy = 0;
         if (terrain === Terrain.Lake) {
           fy = this.elevation.centerY(index) + WATER_HEIGHT + WATER_THICKNESS + FOAM_LIFT;
         } else if (terrain === Terrain.River) {
-          fy = this.elevation.surfaceY(fx, fz) + WATER_HEIGHT + WATER_THICKNESS + FOAM_LIFT;
+          // A river edge may drop a level along its length: lay the strip
+          // on the water at both ends, tilted about its width axis.
+          along.set(1, 0, 0).applyQuaternion(turn).multiplyScalar(0.5);
+          const lift = WATER_HEIGHT + WATER_THICKNESS + FOAM_LIFT;
+          const yPlus = this.elevation.surfaceY(fx + along.x, fz + along.z) + lift;
+          const yMinus = this.elevation.surfaceY(fx - along.x, fz - along.z) + lift;
+          const dy = yPlus - yMinus;
+          fy = (yPlus + yMinus) / 2;
+          tilt.setFromAxisAngle(FOAM_WIDTH_AXIS, Math.atan2(dy, 1));
+          turn.multiply(tilt);
+          stretch.x = Math.hypot(1, dy);
         }
-        turn.setFromAxisAngle(FOAM_UP, dx === 0 ? 0 : Math.PI / 2);
-        const matrix = new THREE.Matrix4().compose(at.set(fx, fy, fz), turn, unit);
+        const matrix = new THREE.Matrix4().compose(at.set(fx, fy, fz), turn, stretch);
         (terrain === Terrain.Sea ? sea : inland).push(matrix);
       }
     }
