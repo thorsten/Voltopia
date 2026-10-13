@@ -443,6 +443,10 @@ export class GameRenderer {
   }
 
   /** Whether a track is laid on this tile, for the tool's cost preview. */
+  overpassAt(index: number): boolean {
+    return this.roadsMesh.hasOverpass(index);
+  }
+
   railAt(index: number): boolean {
     return this.railMesh.hasRail(index);
   }

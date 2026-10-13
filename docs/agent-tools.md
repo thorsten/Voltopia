@@ -140,6 +140,7 @@ rail_yard_without_grid` to spot a dark yard. `get_game_overview`'s
   `tileOccupied`, `needsRiverTile`, `needsLakeShore`, `needsSeaTile`,
   `needsCoast`, `needsHotspot`, `cannotBuildOnWater`, `needsLineSite`,
   `alreadyInsulated`, `nothingToUndo`, `needsRoadTile`, `needsRailAccess`,
+  `needsLevelCrossing`, `needsStraightCrossing`, `needsRampRoom`,
   `damaged`) plus `invalidInput` and `unknownTool`.
 - Bad input never throws; it comes back as `invalidInput`.
 - A tile with `damage > 0` (storm, fire or flood strike) is out of

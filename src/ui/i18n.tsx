@@ -51,6 +51,7 @@ const en = {
   'tool.power-line': 'Power line',
   'tool.bus-stop': 'Bus stop',
   'tool.rail': 'Track',
+  'tool.overpass': 'Overpass',
   'tool.zone-residential': 'Residential',
   'tool.zone-commercial': 'Commercial',
   'tool.zone-retail': 'Retail',
@@ -102,6 +103,8 @@ const en = {
     'Mark a stop on a road. Commuters near a served stop at home and at work leave the car at home.',
   'tool.rail.desc':
     'Lay railway track. Crosses roads and the river, not lakes or the sea. Stations, terminals and a rail yard go beside it.',
+  'tool.overpass.desc':
+    'Carry a road over the track. Click a straight level crossing with a plain road tile on either side; the barriers go and traffic never waits.',
   'tool.zone-residential.desc': 'Homes. Residents move in once the lot has a road and power.',
   'tool.zone-commercial.desc': 'Offices. Provide jobs for your residents.',
   'tool.zone-retail.desc': 'Shops. Keep residents happy and add jobs.',
@@ -281,6 +284,9 @@ const en = {
   'rejection.needsRoad': 'Needs a road next to it',
   'rejection.needsRoadTile': 'Bus stops go on road tiles',
   'rejection.needsRailSite': 'Track cannot go through buildings or plants',
+  'rejection.needsLevelCrossing': 'Overpasses go on a straight level crossing',
+  'rejection.needsStraightCrossing': 'The road must run straight across the track',
+  'rejection.needsRampRoom': 'Both road tiles beside the crossing must be plain road for the ramps',
   'rejection.needsRailAccess': 'Needs a track next to it',
   'rejection.alreadyInsulated': 'Building insulation is already installed',
   'rejection.tooSteep': 'Too steep to build on',
@@ -719,6 +725,7 @@ const de: Record<TranslationKey, string> = {
   'tool.power-line': 'Stromleitung',
   'tool.bus-stop': 'Haltestelle',
   'tool.rail': 'Gleis',
+  'tool.overpass': 'Überführung',
   'tool.zone-residential': 'Wohngebiet',
   'tool.zone-commercial': 'Gewerbe',
   'tool.zone-retail': 'Einzelhandel',
@@ -770,6 +777,8 @@ const de: Record<TranslationKey, string> = {
     'Haltestelle auf einer Straße. Pendler mit bedienter Haltestelle nahe Wohnung und Arbeit lassen das Auto stehen.',
   'tool.rail.desc':
     'Eisenbahngleis verlegen. Kreuzt Straßen und den Fluss, nicht Seen oder das Meer. Bahnhöfe, Güterbahnhöfe und ein Betriebswerk kommen daneben.',
+  'tool.overpass.desc':
+    'Führt eine Straße über das Gleis. Auf einen geraden Bahnübergang klicken, der beidseitig eine freie Straßenkachel hat; die Schranken verschwinden, der Verkehr wartet nie.',
   'tool.zone-residential.desc': 'Wohnhäuser. Bewohner ziehen ein, sobald Straße und Strom da sind.',
   'tool.zone-commercial.desc': 'Büros. Schaffen Arbeitsplätze für deine Bewohner.',
   'tool.zone-retail.desc': 'Läden. Halten Bewohner zufrieden und schaffen Arbeitsplätze.',
@@ -951,6 +960,10 @@ const de: Record<TranslationKey, string> = {
   'rejection.needsRoad': 'Braucht eine Straße daneben',
   'rejection.needsRoadTile': 'Haltestellen gehören auf Straßenkacheln',
   'rejection.needsRailSite': 'Gleise führen nicht durch Gebäude oder Anlagen',
+  'rejection.needsLevelCrossing': 'Überführungen gehören auf einen geraden Bahnübergang',
+  'rejection.needsStraightCrossing': 'Die Straße muss gerade über das Gleis führen',
+  'rejection.needsRampRoom':
+    'Beide Straßenkacheln neben dem Übergang müssen freie Straße sein (Rampen)',
   'rejection.needsRailAccess': 'Braucht ein Gleis daneben',
   'rejection.alreadyInsulated': 'Die Gebäudedämmung ist bereits installiert',
   'rejection.tooSteep': 'Zu steil zum Bebauen',

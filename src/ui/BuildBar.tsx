@@ -47,6 +47,7 @@ const CATEGORIES: Category[] = [
       { id: 'power-line', icon: '⚡', cost: BALANCE.costs.powerLinePerTile, perTile: true },
       { id: 'bus-stop', icon: '🚏', cost: BALANCE.costs.busStop, perTile: true },
       { id: 'rail', icon: '🛤', cost: BALANCE.costs.railPerTile, perTile: true },
+      { id: 'overpass', icon: '🌉', cost: BALANCE.costs.overpass, perTile: true },
       { id: 'bulldoze', icon: '🚜' },
       { id: 'undo', icon: '↩' },
     ],

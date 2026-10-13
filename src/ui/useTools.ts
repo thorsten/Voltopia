@@ -4,6 +4,7 @@ import { lShapedPath, rectTiles } from '../shared/grid.ts';
 import { BALANCE } from '../shared/constants.ts';
 import { PlantType, Terrain, Zone } from '../shared/types.ts';
 import { sound } from './sound.ts';
+import type { SimCommand } from '../shared/messages.ts';
 import type { SimBridge } from './useSimBridge.ts';
 
 export type ToolId =
@@ -12,6 +13,7 @@ export type ToolId =
   | 'avenue'
   | 'power-line'
   | 'bus-stop'
+  | 'overpass'
   | 'rail'
   | 'zone-residential'
   | 'zone-commercial'
@@ -87,6 +89,26 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
 export interface DragCostPreview {
   tiles: number;
   cost: number;
+}
+
+/** The build command a drag or click tool sends for its path; null for the other tools. */
+export function lineToolCommand(tool: ToolId, path: number[]): SimCommand | null {
+  switch (tool) {
+    case 'road':
+      return { type: 'buildRoad', tiles: path, avenue: false };
+    case 'avenue':
+      return { type: 'buildRoad', tiles: path, avenue: true };
+    case 'power-line':
+      return { type: 'buildPowerLine', tiles: path };
+    case 'bus-stop':
+      return { type: 'buildBusStop', tiles: path };
+    case 'rail':
+      return { type: 'buildRail', tiles: path };
+    case 'overpass':
+      return { type: 'buildOverpass', tiles: path };
+    default:
+      return null;
+  }
 }
 
 export const PLANT_BY_TOOL: Partial<Record<ToolId, PlantType>> = {
@@ -178,9 +200,17 @@ export function useTools(
       avenue: boolean,
       stop: boolean,
       rail: boolean,
+      overpass: boolean,
     ): void => {
       const renderer = rendererRef.current;
       const cost = tiles.reduce((sum, index) => {
+        if (overpass) {
+          // Mirrors src/sim/overpass.ts: one price per level crossing without an overpass.
+          const crossing =
+            (renderer?.roadClassAt(index) ?? -1) >= 0 && (renderer?.railAt(index) ?? false);
+          const built = renderer?.overpassAt(index) ?? false;
+          return sum + (crossing && !built ? BALANCE.costs.overpass : 0);
+        }
         if (stop) {
           // Mirrors src/sim/transit.ts: one flat price per road tile without a stop.
           const road = (renderer?.roadClassAt(index) ?? -1) >= 0;
@@ -262,39 +292,34 @@ export function useTools(
       tool === 'avenue' ||
       tool === 'power-line' ||
       tool === 'bus-stop' ||
+      tool === 'overpass' ||
       tool === 'rail'
     ) {
       const line = tool === 'power-line';
       const avenue = tool === 'avenue';
       const stop = tool === 'bus-stop';
       const rail = tool === 'rail';
+      const overpass = tool === 'overpass';
       if (stop) renderer?.setHoverRadius(BALANCE.transit.stopRadius);
       callbacks.onBuildStart = (tile) => {
         anchor = tile;
         path = [tile.index];
         rendererRef.current?.setPreviewTiles(path);
-        showPathCost(path, line, avenue, stop, rail);
+        showPathCost(path, line, avenue, stop, rail, overpass);
       };
       callbacks.onBuildDrag = (tile) => {
         if (!anchor) return;
         path = lShapedPath(anchor.x, anchor.y, tile.x, tile.y, gridSize);
         rendererRef.current?.setPreviewTiles(path);
-        showPathCost(path, line, avenue, stop, rail);
+        showPathCost(path, line, avenue, stop, rail, overpass);
       };
       callbacks.onBuildEnd = (tile) => {
         if (anchor && tile) {
           path = lShapedPath(anchor.x, anchor.y, tile.x, tile.y, gridSize);
         }
-        if (path.length > 0) {
-          send(
-            rail
-              ? { type: 'buildRail', tiles: path }
-              : stop
-                ? { type: 'buildBusStop', tiles: path }
-                : line
-                  ? { type: 'buildPowerLine', tiles: path }
-                  : { type: 'buildRoad', tiles: path, avenue },
-          );
+        const command = path.length > 0 ? lineToolCommand(tool, path) : null;
+        if (command) {
+          send(command);
           sound.play('build');
         }
         clearPreview();

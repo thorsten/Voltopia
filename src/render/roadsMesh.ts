@@ -545,6 +545,11 @@ export class RoadsMesh implements DiffLayer {
     this.signs.instanceMatrix.needsUpdate = true;
   }
 
+  /** Whether the tile carries a road overpass (for the tool's cost preview). */
+  hasOverpass(index: number): boolean {
+    return this.overpass[index] !== 0;
+  }
+
   /** Whether a bus stop is marked on the tile (for the tool's cost preview). */
   hasBusStop(index: number): boolean {
     return this.busStops[index] !== 0;

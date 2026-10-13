@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PlantType } from '../shared/types.ts';
-import { PLANT_BY_TOOL, TOOL_HOTKEYS, type ToolId } from './useTools.ts';
+import { lineToolCommand, PLANT_BY_TOOL, TOOL_HOTKEYS, type ToolId } from './useTools.ts';
 
 describe('tool hotkeys', () => {
   it('gives every buildable plant a hotkey', () => {
@@ -52,5 +52,23 @@ describe('tool hotkeys', () => {
     expect(PLANT_BY_TOOL['plant-station']).toBe(PlantType.TrainStation);
     expect(PLANT_BY_TOOL['plant-terminal']).toBe(PlantType.FreightTerminal);
     expect(PLANT_BY_TOOL['plant-railyard']).toBe(PlantType.RailYard);
+  });
+});
+
+describe('line tool commands', () => {
+  it('the overpass tool sends buildOverpass for the clicked tile', () => {
+    expect(lineToolCommand('overpass', [42])).toEqual({ type: 'buildOverpass', tiles: [42] });
+  });
+
+  it('maps the other drag tools to their commands', () => {
+    expect(lineToolCommand('avenue', [1, 2])).toEqual({
+      type: 'buildRoad',
+      tiles: [1, 2],
+      avenue: true,
+    });
+    expect(lineToolCommand('rail', [3])).toEqual({ type: 'buildRail', tiles: [3] });
+    expect(lineToolCommand('bus-stop', [4])).toEqual({ type: 'buildBusStop', tiles: [4] });
+    expect(lineToolCommand('power-line', [5])).toEqual({ type: 'buildPowerLine', tiles: [5] });
+    expect(lineToolCommand('select', [6])).toBeNull();
   });
 });
