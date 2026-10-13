@@ -76,8 +76,8 @@ export function zebraPieces(mask: number, padSize: number): FlatPiece[]; // [] u
 
 - Kerbs: pad sides without an arm (length `padSize`), both long sides of every arm (length `armLength = (1 − padSize)/2`), each `KERB_WIDTH = 0.03` wide, centred on the edge line inset by `KERB_WIDTH/2`. Zebra: per connected arm, `ZEBRA_STRIPES = 4` stripes `ZEBRA_STRIPE_WIDTH = 0.04` across the arm width with equal gaps, length `ZEBRA_LENGTH = 0.12` along the traffic, centred in the arm.
 - `RoadsMesh`: two new `GrowingMesh` meshes (kerbs `KERB_COLOR = 0xc9c6bd` surface material, height `ROAD_HEIGHT + KERB_RISE` from the ground; stripes `LINE_COLOR` at `LINE_HEIGHT` on the road like the centre line); `composeBoxOnGround` for land tiles; nothing on bridge tiles. No shadows.
-- [ ] Tests: straight E–W street: kerbs only along north/south sides (pieces on both long sides of both arms + pad N/S sides), none crossing x-edges; dead end (E only): the pad's W, N, S sides; T-junction: 3 × 4 zebra stripes, straight: none; every piece inside the tile (|cx| + sizeX/2 ≤ 0.5); avenue pad size widens the pieces; `RoadsMesh` counts kerbs/stripes for a small map and draws none on a bridge tile.
-- [ ] Implement; checks; commit `feat(render): kerbs and zebra crossings`.
+- [x] Tests: straight E–W street: kerbs only along north/south sides (pieces on both long sides of both arms + pad N/S sides), none crossing x-edges; dead end (E only): the pad's W, N, S sides; T-junction: 3 × 4 zebra stripes, straight: none; every piece inside the tile (|cx| + sizeX/2 ≤ 0.5); avenue pad size widens the pieces; `RoadsMesh` counts kerbs/stripes for a small map and draws none on a bridge tile.
+- [x] Implement; checks; commit `feat(render): kerbs and zebra crossings`.
 
 ### Task 4: New streetlamps
 

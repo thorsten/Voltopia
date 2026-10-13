@@ -8,6 +8,8 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composeBoxOnGround, composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
+import { GrowingMesh } from './plants/growingMesh.ts';
+import { kerbPieces, zebraPieces, type FlatPiece } from './infrastructure/roadFurniture.ts';
 
 const ROAD_HEIGHT = 0.05;
 /** Width of a street's centre pad and arms (the roadway). */
@@ -29,6 +31,17 @@ const LINE_DASHES_PER_ARM = 2;
 const LINE_DASH_LENGTH = 0.15;
 const LINE_COLOR = 0xe8e2c8;
 const LINE_HEIGHT = 0.012;
+
+const KERB_COLOR = 0xc9c6bd;
+/** Kerbs stand this far above the asphalt. */
+const KERB_RISE = 0.015;
+
+/** Kerbs and zebra stripes lie flat: transforms span the grid, so no culling; no shadows. */
+function setupFlat(mesh: THREE.InstancedMesh): void {
+  mesh.frustumCulled = false;
+  mesh.castShadow = false;
+  mesh.receiveShadow = true;
+}
 
 const DECK_COLOR = 0x8a9099;
 const RAIL_COLOR = 0xd8d8d0;
@@ -53,6 +66,10 @@ export class RoadsMesh implements DiffLayer {
   /** Centre pads on land: two prisms per tile, each flush with one ground triangle. */
   private readonly pads: THREE.InstancedMesh;
   private readonly centreLines: THREE.InstancedMesh;
+  /** Kerbs along the open edges of land road tiles. */
+  readonly kerbs: GrowingMesh;
+  /** Zebra crossings on the arms of land junctions without track. */
+  readonly stripes: GrowingMesh;
   private readonly lampPoles: THREE.InstancedMesh;
   private readonly lampHeads: THREE.InstancedMesh;
   private readonly lampHeadMaterial: THREE.MeshBasicMaterial;
@@ -66,6 +83,8 @@ export class RoadsMesh implements DiffLayer {
   private readonly roadClasses: Uint8Array;
   private readonly terrain: Uint8Array;
   private readonly busStops: Uint8Array;
+  /** Track mask per tile: a road tile with track is a level crossing. */
+  private readonly track: Uint8Array;
   private readonly matrix = new THREE.Matrix4();
 
   constructor(
@@ -78,6 +97,7 @@ export class RoadsMesh implements DiffLayer {
     this.roadClasses = new Uint8Array(gridSize * gridSize);
     this.terrain = new Uint8Array(gridSize * gridSize);
     this.busStops = new Uint8Array(gridSize * gridSize);
+    this.track = new Uint8Array(gridSize * gridSize);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = surfaceMaterial({ color: PALETTE.road });
     this.mesh = new THREE.InstancedMesh(
@@ -111,6 +131,20 @@ export class RoadsMesh implements DiffLayer {
     this.centreLines.frustumCulled = false;
     this.centreLines.count = 0;
     scene.add(this.centreLines);
+
+    this.kerbs = new GrowingMesh(
+      scene,
+      geometry,
+      surfaceMaterial({ color: KERB_COLOR }),
+      setupFlat,
+    );
+    // Lit like the centre line, so the paint darkens at night too.
+    this.stripes = new GrowingMesh(
+      scene,
+      geometry,
+      surfaceMaterial({ color: LINE_COLOR }),
+      setupFlat,
+    );
 
     const poleGeometry = new THREE.BoxGeometry(0.035, 0.3, 0.035);
     poleGeometry.translate(0, 0.15, 0);
@@ -227,6 +261,10 @@ export class RoadsMesh implements DiffLayer {
         this.busStops[diff.index] = busStop;
         changed = true;
       }
+      if (this.track[diff.index] !== diff.rail) {
+        this.track[diff.index] = diff.rail;
+        if (mask >= 0) changed = true;
+      }
     }
     if (changed) this.rebuild();
   }
@@ -300,9 +338,57 @@ export class RoadsMesh implements DiffLayer {
     this.pads.instanceMatrix.needsUpdate = true;
     this.centreLines.count = lineCount;
     this.centreLines.instanceMatrix.needsUpdate = true;
+    this.rebuildFurniture();
     this.rebuildLamps();
     this.rebuildShelters();
     this.rebuildBridges();
+  }
+
+  /**
+   * Kerbs on every land road tile; zebra crossings on land junctions
+   * except level crossings, where the rails run across the arms. Bridges
+   * have railings instead.
+   */
+  private rebuildFurniture(): void {
+    let kerbCount = 0;
+    let stripeCount = 0;
+    for (let index = 0; index < this.roadMasks.length; index++) {
+      const mask = this.roadMasks[index];
+      if (mask < 0 || this.isBridge(index)) continue;
+      const size = roadHalfWidth(this.roadClasses[index]) * 2;
+      const kerbs = kerbPieces(mask, size);
+      this.kerbs.ensure(kerbCount + kerbs.length);
+      for (const piece of kerbs) {
+        this.layFlat(index, piece, ROAD_HEIGHT + KERB_RISE, 0);
+        this.kerbs.mesh.setMatrixAt(kerbCount++, this.matrix);
+      }
+      if (this.track[index] !== 0) continue;
+      const stripes = zebraPieces(mask, size);
+      this.stripes.ensure(stripeCount + stripes.length);
+      for (const piece of stripes) {
+        this.layFlat(index, piece, LINE_HEIGHT, ROAD_HEIGHT);
+        this.stripes.mesh.setMatrixAt(stripeCount++, this.matrix);
+      }
+    }
+    this.kerbs.commit(kerbCount);
+    this.stripes.commit(stripeCount);
+  }
+
+  /** A tile-local flat piece as a box on the ground triangle under it. */
+  private layFlat(index: number, piece: FlatPiece, sizeY: number, lift: number): void {
+    const x = (index % this.gridSize) + 0.5 + piece.cx;
+    const z = Math.floor(index / this.gridSize) + 0.5 + piece.cz;
+    composeBoxOnGround(
+      this.matrix,
+      this.elevation,
+      index,
+      x,
+      z,
+      piece.sizeX,
+      sizeY,
+      piece.sizeZ,
+      lift,
+    );
   }
 
   /** One streetlamp on every other road tile, at a fixed corner. */
