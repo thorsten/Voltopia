@@ -44,8 +44,8 @@ export interface PylonModel {
 export function pylonModel(kind: PylonKind): PylonModel; // cached
 ```
 
-- [ ] Tests: parts ≤ budget; bounding box |x|,|z| ≤ 0.2 (lattice) / 0.12 (pole), height ≈ 0.55 / 0.42 (±0.03); exactly 3 attachments, all y > 0.3, spread along x (distinct x), |z| < 0.02; cached instance.
-- [ ] Implement; checks; commit `feat(render): lattice pylon and concrete pole models`.
+- [x] Tests: parts ≤ budget; bounding box |x|,|z| ≤ 0.2 (lattice) / 0.12 (pole), height ≈ 0.55 / 0.42 (±0.03); exactly 3 attachments, all y > 0.3, spread along x (distinct x), |z| < 0.02; cached instance.
+- [x] Implement; checks; commit `feat(render): lattice pylon and concrete pole models`.
 
 ### Task 2: Power lines with three sagging conductors
 
