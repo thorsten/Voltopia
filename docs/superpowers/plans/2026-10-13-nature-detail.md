@@ -72,8 +72,8 @@ export function applyRipples(material: THREE.MeshStandardMaterial): RippleUnifor
   - fragment: declare `uniform float rippleTime; varying vec3 vRippleWorld;`; after `#include <normal_fragment_begin>` compute the slope of 2–3 summed sines over `vRippleWorld.xz` (`RIPPLE_SCALE`, `RIPPLE_SPEED`, `RIPPLE_STRENGTH`, wave directions as named `vec2` constants), build `vec3 rippleN = normalize(vec3(-dx, 1.0, -dz))`, transform to view space with `viewMatrix`, and apply it only to upward faces: `float up = step(0.5, dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz)));` `normal = normalize(mix(normal, rippleView, up));`.
 - `material.customProgramCacheKey = () => 'voltopia-water-ripples'`.
 - `WaterMesh`: call `applyRipples(this.material)` in the constructor, keep the uniforms; `update(dt)` adds `dt` to `time` unless reduced motion; expose `get rippleTime(): number` for tests.
-- [ ] Tests (`waterShader.test.ts`): `applyRipples` sets `onBeforeCompile`, the cache key and the roughness; running the hook on a stub `{ uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <normal_fragment_begin>' }` keeps both includes, adds `vRippleWorld` to both shaders, `rippleTime` to the fragment shader and the uniform object (same reference as the returned `time`). (`waterMesh.test.ts`): `rippleTime` grows with `update(0.5, …)`; stays put with reduced motion; existing tests green.
-- [ ] Implement; checks; commit `feat(render): rippling water highlights`.
+- [x] Tests (`waterShader.test.ts`): `applyRipples` sets `onBeforeCompile`, the cache key and the roughness; running the hook on a stub `{ uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <normal_fragment_begin>' }` keeps both includes, adds `vRippleWorld` to both shaders, `rippleTime` to the fragment shader and the uniform object (same reference as the returned `time`). (`waterMesh.test.ts`): `rippleTime` grows with `update(0.5, …)`; stays put with reduced motion; existing tests green.
+- [x] Implement; checks; commit `feat(render): rippling water highlights`.
 
 ---
 

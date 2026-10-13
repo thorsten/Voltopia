@@ -138,3 +138,25 @@ describe('ground under water on generated maps', () => {
     }
   });
 });
+
+describe('water ripples', () => {
+  function water(reducedMotion: boolean): WaterMesh {
+    const mesh = new WaterMesh(new THREE.Scene(), SIZE, new ElevationField(SIZE));
+    mesh.setReducedMotion(reducedMotion);
+    return mesh;
+  }
+
+  it('advance with frame time', () => {
+    const mesh = water(false);
+    const before = mesh.rippleTime;
+    mesh.update(0.5, 0);
+    expect(mesh.rippleTime).toBeCloseTo(before + 0.5, 6);
+  });
+
+  it('freeze when motion is reduced', () => {
+    const mesh = water(true);
+    const before = mesh.rippleTime;
+    mesh.update(0.5, 0);
+    expect(mesh.rippleTime).toBe(before);
+  });
+});

@@ -6,6 +6,7 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
 import { composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
+import { applyRipples, type RippleUniforms } from './nature/waterShader.ts';
 
 /**
  * Just above the ground plane, below roads (0.05) and the build grid. The
@@ -43,7 +44,7 @@ const SEA_FLOOR = -0.01;
 /**
  * One thin instanced slab per river or lake tile. Water never changes
  * after map generation, so the mesh only rebuilds when terrain diffs
- * arrive (new game / load). A slow brightness wobble keeps it alive.
+ * arrive (new game / load). A slow brightness wobble and shader ripples keep it alive.
  */
 export class WaterMesh implements DiffLayer {
   /** Lake tiles: flat unit boxes on the shared lake level. */
@@ -53,6 +54,7 @@ export class WaterMesh implements DiffLayer {
   /** Sea tiles: flat boxes on the tide-driven sea level. */
   private readonly seaMesh: THREE.InstancedMesh;
   private readonly material: THREE.MeshStandardMaterial;
+  private readonly ripples: RippleUniforms;
   private readonly terrain: Uint8Array;
   private readonly gridSize: number;
   private readonly matrix = new THREE.Matrix4();
@@ -69,6 +71,7 @@ export class WaterMesh implements DiffLayer {
     this.terrain = new Uint8Array(gridSize * gridSize);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     this.material = surfaceMaterial({ color: 0xffffff });
+    this.ripples = applyRipples(this.material);
     this.mesh = new THREE.InstancedMesh(geometry, this.material, gridSize * gridSize);
     // Instance transforms live across the whole grid; the base geometry's
     // bounds would wrongly cull the mesh, so culling is disabled.
@@ -119,7 +122,13 @@ export class WaterMesh implements DiffLayer {
     this.reducedMotion = reduced;
   }
 
-  update(_deltaSeconds: number, nowSeconds: number): void {
+  /** Seconds of ripple animation so far (frozen while motion is reduced). */
+  get rippleTime(): number {
+    return this.ripples.time.value;
+  }
+
+  update(deltaSeconds: number, nowSeconds: number): void {
+    if (!this.reducedMotion) this.ripples.time.value += deltaSeconds;
     const wobble = this.reducedMotion ? 0 : WOBBLE_AMPLITUDE * Math.sin(nowSeconds * WOBBLE_SPEED);
     const brightness = (1 + wobble) * (1 - NIGHT_DIM * this.nightFactor);
     this.material.color.setScalar(brightness);
