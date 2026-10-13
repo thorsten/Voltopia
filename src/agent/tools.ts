@@ -1115,6 +1115,25 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       },
     },
     {
+      name: 'build_overpass',
+      description:
+        'Upgrade the level crossing at x, y to a road overpass: the road crosses the track on a ' +
+        'bridge, the barriers go and traffic never waits there. Needs a straight track, a straight ' +
+        'road across it and a plain road tile (no track, no overpass, not river) on either side ' +
+        'along the road for the ramps. Rejected with needsLevelCrossing, needsStraightCrossing ' +
+        'or needsRampRoom; removed automatically when the crossing or a ramp road goes.',
+      inputSchema: POINT_SCHEMA,
+      async execute(input) {
+        const { x, y } = readPoint({ p: input }, 'p', tiles);
+        const before = requireStats(ctx).money;
+        const outcome = await ctx.sendCommand({
+          type: 'buildOverpass',
+          tiles: [tileIndex(x, y, size)],
+        });
+        return outcomeResult(outcome, { x, y, ...spent(ctx, before) });
+      },
+    },
+    {
       name: 'build_rail',
       description:
         'Lay railway track along an L-shaped path (or explicit tiles). Track shares tiles with roads ' +

@@ -137,6 +137,7 @@ describe('agent tools: reading', () => {
       'build_road',
       'build_power_line',
       'build_bus_stop',
+      'build_overpass',
       'build_rail',
       'paint_zone',
       'place_plant',
@@ -589,6 +590,22 @@ describe('agent tools: building', () => {
     const info = await call('inspect_tile', { x, y: y + 1 });
     expect(info).toMatchObject({ ok: true, plant: 'logistics_depot' });
     expect(info.depot).toMatchObject({ vansTotal: BALANCE.deliveries.vansPerDepot });
+  });
+
+  it('build_overpass upgrades a level crossing and reports the rejection otherwise', async () => {
+    const { call, engine } = createHarness();
+    engine.state.layers.elevation.fill(0);
+    engine.state.money = 1e6;
+    const { x, y } = findLand(engine);
+    await call('build_road', { from: { x, y }, to: { x, y: y + 4 } });
+    await call('build_rail', { from: { x: x - 2, y: y + 2 }, to: { x: x + 2, y: y + 2 } });
+    const plain = await call('build_overpass', { x, y });
+    expect(plain).toMatchObject({ ok: false, error: 'needsLevelCrossing' });
+    const built = await call('build_overpass', { x, y: y + 2 });
+    expect(built).toMatchObject({ ok: true });
+    expect(engine.state.layers.overpass[tileIndex(x, y + 2, SIZE)]).toBe(1);
+    const info = await call('inspect_tile', { x, y: y + 2 });
+    expect(info.rail).toMatchObject({ overpass: true });
   });
 
   it('marks bus stops, places a bus depot and reports transit', async () => {
