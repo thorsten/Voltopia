@@ -17,7 +17,8 @@ import {
   type FlatPiece,
 } from './infrastructure/roadFurniture.ts';
 
-const ROAD_HEIGHT = 0.05;
+/** Thickness of the asphalt: the road surface stands this high above the ground. */
+export const ROAD_HEIGHT = 0.05;
 /** Width of a street's centre pad and arms (the roadway). */
 export const CENTER_SIZE = 0.62;
 /** Instances per road tile: 1 center + up to 4 arms. */

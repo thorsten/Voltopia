@@ -12,7 +12,7 @@ import {
 } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { RailMesh, SLEEPER_COLOR } from './railMesh.ts';
-import { roadHalfWidth } from './roadsMesh.ts';
+import { ROAD_HEIGHT, roadHalfWidth } from './roadsMesh.ts';
 import { SIGNAL_GREEN, SIGNAL_RED } from './infrastructure/railSignals.ts';
 
 const SIZE = 8;
@@ -251,15 +251,17 @@ describe('RailMesh crossing ballast', () => {
         const flush = extent(crossings, slot, 3.5, 3.5);
         expect(flush.from).toBeLessThan(0.01);
         expect(Math.abs(flush.to - half)).toBeLessThan(0.01);
-        // The ballasted rails meet the flush ones at the road edge without
-        // a step beyond the crossing lift (rails sit TRACKBED_HEIGHT = 0.04
-        // above a ballasted piece, CROSSING_LIFT = 0.012 above the ground on
-        // the road), and the piece reaches the ground at the tile edge, where
-        // the neighbour's track starts.
+        // The ballasted rails meet the flush ones at the road edge (rails
+        // sit TRACKBED_HEIGHT = 0.04 above a ballasted piece and right on
+        // the asphalt on the road), and the piece reaches the ground at the
+        // tile edge, where the neighbour's track starts.
         const ballastRailTop = ballast.startY + 0.04;
         const flushRailTop = flush.endY;
-        expect(Math.abs(ballastRailTop - flushRailTop)).toBeLessThanOrEqual(0.012);
+        expect(Math.abs(ballastRailTop - flushRailTop)).toBeLessThanOrEqual(0.003);
         expect(ballast.endY).toBeCloseTo(0, 6);
+        // The flush rails rest on the road surface, not in it.
+        expect(flush.startY).toBeGreaterThanOrEqual(ROAD_HEIGHT);
+        expect(flush.endY).toBeGreaterThanOrEqual(ROAD_HEIGHT);
       }
     });
   }

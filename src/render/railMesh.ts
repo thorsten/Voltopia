@@ -14,7 +14,7 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import { RailSignals } from './infrastructure/railSignals.ts';
 import { surfaceMaterial } from './materials.ts';
 import { box } from './modelKit.ts';
-import { roadHalfWidth } from './roadsMesh.ts';
+import { ROAD_HEIGHT, roadHalfWidth } from './roadsMesh.ts';
 
 const BALLAST_COLOR = 0x8a8075;
 const RAIL_COLOR = 0x4a4d52;
@@ -36,8 +36,9 @@ const SLEEPER_HEIGHT = 0.015;
 /** Rails rest this high on a ballasted piece: the ballast bed plus the sleepers on it. */
 const TRACKBED_HEIGHT = 0.04;
 const BALLAST_HEIGHT = TRACKBED_HEIGHT - SLEEPER_HEIGHT;
-/** Rails on a road tile are flush with the asphalt: no ballast, a hair above the road. */
-const CROSSING_LIFT = 0.012;
+/** Rails on a road tile sit on the asphalt: no ballast, a hair above the road surface. */
+const CROSSING_HAIR = 0.002;
+const CROSSING_LIFT = ROAD_HEIGHT + CROSSING_HAIR;
 const DECK_HEIGHT = 0.08;
 const DECK_WIDTH = 0.5;
 /** Railings along a rail bridge, like the road bridges' (roadsMesh). */
@@ -480,12 +481,12 @@ export class RailMesh implements DiffLayer {
           edgeY,
         );
         if (roadEdge < 0.5) {
-          // The ballasted piece starts sunk by the trackbed height less the
-          // crossing lift, so its rails continue the flush rails' top at the
-          // road edge, and ramps up to its usual height at the tile edge,
-          // where the neighbour's track starts. The 0.028 ramp (about 8° on a
-          // street, 16° on an avenue's shorter stretch) reads better than a
-          // step at the road edge of more than twice the crossing lift.
+          // The ballasted piece starts the crossing lift less the trackbed
+          // height above the ground, so its rails continue the flush rails'
+          // top at the road edge, and ramps down to its usual height at the
+          // tile edge, where the neighbour's track starts. The 0.012 ramp
+          // (about 4° on a street, 7° on an avenue's shorter stretch) reads
+          // better than a step at the road edge.
           const startY = edgeY - TRACKBED_HEIGHT;
           const tileEdgeY = this.groundAlong(index, x, z, angle, 0.5);
           this.placePiece(this.segments, segments++, x, z, angle, roadEdge, startY, 0.5, tileEdgeY);
