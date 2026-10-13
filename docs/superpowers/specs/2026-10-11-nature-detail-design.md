@@ -46,16 +46,19 @@ Made with the user during brainstorming:
   highlights move across lake, river and sea. Returns `{ time: { value } }`;
   `customProgramCacheKey` set so the program is not shared with plain
   `surfaceMaterial` users.
+- The water material gets its own `WATER_ROUGHNESS = 0.35`: at the
+  shared `SURFACE_ROUGHNESS` (0.9) the moving highlights would not show.
 - `WaterMesh.update` advances `time` unless reduced motion is on (then
   frozen). The brightness wobble stays; the tide stays.
 
 ### Foam edges (`src/render/waterMesh.ts`)
 
-- A `foam` `InstancedMesh` (thin quad, `MeshBasicMaterial`, white,
+- Two foam `InstancedMesh`es, inland (lake, river) and sea (thin quad, `MeshBasicMaterial`, white,
   transparent, `depthWrite: false`, `frustumCulled = false`, no shadows):
   one instance per water tile edge that borders a land tile (N/E/S/W),
   laid on the water surface along that edge, `FOAM_WIDTH = 0.06` into
-  the water. Sea foam rides the tide (its y follows the sea surface).
+  the water. Sea foam rides the tide (its mesh y follows the sea
+  surface, like the sea column).
   Opacity pulses gently (`FOAM_PULSE`) unless reduced motion; dimmed at
   night like the water. Rebuilt only when terrain diffs arrive.
 
@@ -64,9 +67,10 @@ Made with the user during brainstorming:
 - `GroundMesh.applyDiffs(diffs)` records terrain per tile. Ground vertex
   colours (which multiply the seasonal ground colour) get
   `SAND_TINT` (a warm multiplier) on every corner that touches a water
-  tile and a land tile, and `BED_TINT` (darker, cooler) on corners
-  surrounded only by water — riverbeds and lake beds read as beds, not
-  lawn. Snow still whitens through the seasonal colour.
+  tile and a land tile. Snow still whitens through the seasonal colour.
+- No bed tint: the water is opaque and covers every corner surrounded
+  only by water, so a darker bed would never be seen (dropped while
+  planning, 2026-10-13).
 
 ### Forest (`src/render/forestMesh.ts`)
 
@@ -87,8 +91,10 @@ Made with the user during brainstorming:
 ### Scatter (`src/render/nature/scatterMesh.ts` new, registered in `renderer.ts`)
 
 - A `DiffLayer` that keeps per tile: tile type, zone, power line,
-  forest stage, terrain. A tile is **free** when it is `TileType.Empty`,
-  `Terrain.Land`, `zone === None`, no power line, forest 0.
+  forest stage, terrain, track, geothermal hotspot. A tile is **free**
+  when it is `TileType.Empty`, `Terrain.Land`, `zone === None`, no power
+  line, no track, no geothermal hotspot (its vents are drawn there),
+  forest 0.
 - Deterministic per free tile: `SCATTER_SHARE = 0.33` of free tiles get
   1–3 props; each prop is a **bush** (merged dome cluster, vertex
   colour) or a **rock** (low faceted `sphere`/`cone` cluster, grey);
@@ -113,13 +119,13 @@ true })`, cast and receive shadows, `frustumCulled = false`, bounded
   two water tiles; foam sits on the water surface; sea foam follows the
   tide; existing tests stay green.
 - `terrain.test.ts` (new): corners next to water and land carry the
-  sand tint, corners inside water the bed tint, inland corners neither.
+  sand tint; corners inside water and inland corners do not.
 - `forestMesh.test.ts` (new): tree count per stage; both species occur;
   on high ground conifers are the majority; conifer crowns keep their
   colour through autumn and winter (snow aside); positions stable across
   rebuilds; every tree stands on its ground point.
 - `scatterMesh.test.ts`: props only on free tiles; none on roads,
-  plants, zones, power lines, woods or water; props vanish when the tile
+  plants, zones, power lines, tracks, hotspots, woods or water; props vanish when the tile
   is built on; deterministic; every prop on its ground point; share of
   tiles with props within ±0.05 of `SCATTER_SHARE` on a large free map.
 - Render-only: nothing under `src/sim`, `src/shared`, `src/storage`,
@@ -128,7 +134,7 @@ true })`, cast and receive shadows, `frustumCulled = false`, bounded
 Acceptance on the Mac (the user): woods read as mixed conifer and
 broadleaf, darker on the hills; free land has bushes and rocks that
 vanish when building; water shows moving highlights, foam at the shores
-and sandy edges; rivers and lakes have beds; frame time unchanged.
+and sandy edges; frame time unchanged.
 
 ## Out of scope
 
