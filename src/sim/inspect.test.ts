@@ -12,6 +12,7 @@ import { heatPumpCop, recomputeHeated } from './heat.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { islandKey, islandOf } from './powerGrid.ts';
+import { buildOverpasses } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
 import { SERVICE_FIRE, SERVICE_POLICE } from './services.ts';
@@ -608,6 +609,24 @@ describe('district grid inspection', () => {
 });
 
 describe('railway inspector fields', () => {
+  it('reports an overpass on its track tile', () => {
+    const state = createSimState(1, SIZE);
+    state.layers.elevation.fill(0);
+    state.money = 1e6;
+    buildRoads(
+      state,
+      Array.from({ length: 12 }, (_, i) => at(5, i + 2)),
+    );
+    buildRail(
+      state,
+      Array.from({ length: 12 }, (_, i) => at(i + 2, 8)),
+    );
+    const crossing = at(5, 8);
+    expect(inspectTile(state, crossing)!.rail?.overpass).toBe(false);
+    buildOverpasses(state, [crossing]);
+    expect(inspectTile(state, crossing)!.rail?.overpass).toBe(true);
+  });
+
   it('reports a track tile, a station, a terminal and a yard', () => {
     const state = createSimState(1, SIZE);
     state.layers.elevation.fill(0);
@@ -624,7 +643,7 @@ describe('railway inspector fields', () => {
     placePlant(state, at(6, 11), PlantType.FreightTerminal);
     placePlant(state, at(9, 11), PlantType.RailYard);
     const track = inspectTile(state, at(5, 10))!;
-    expect(track.rail).toEqual({ networkTiles: 10, trainsInNetwork: 0 });
+    expect(track.rail).toEqual({ networkTiles: 10, trainsInNetwork: 0, overpass: false });
     expect(track.station).toBeNull();
     const station = inspectTile(state, at(3, 9))!;
     expect(station.station).toMatchObject({

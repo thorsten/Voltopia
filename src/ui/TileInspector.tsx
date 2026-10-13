@@ -615,6 +615,9 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               trains: info.rail.trainsInNetwork,
             })}
           />
+          {info.rail.overpass && (
+            <Row label={t('inspect.overpass')} value={t('inspect.overpass.value')} />
+          )}
         </section>
       )}
 

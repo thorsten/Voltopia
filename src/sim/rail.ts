@@ -472,7 +472,11 @@ export function railTileInfo(state: SimState, tile: number): RailTileInfo {
   let trainsInNetwork = 0;
   for (const t of state.trains)
     if (railNetworkOf(state, t.yardTrack) === network) trainsInNetwork++;
-  return { networkTiles: railNetworkTiles(state, network), trainsInNetwork };
+  return {
+    networkTiles: railNetworkTiles(state, network),
+    trainsInNetwork,
+    overpass: state.layers.overpass[tile] !== 0,
+  };
 }
 
 /** Station for the inspector. */

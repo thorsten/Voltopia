@@ -450,6 +450,8 @@ export interface RailStats {
 export interface RailTileInfo {
   networkTiles: number;
   trainsInNetwork: number;
+  /** A road overpass carries the road over this track tile. */
+  overpass: boolean;
 }
 /** Inspector: a passenger station. */
 export interface StationInfo {
