@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../shared/grid.ts';
 import type { TileDiff } from '../shared/types.ts';
 import { RoadClass, Terrain, TileType } from '../shared/types.ts';
@@ -14,6 +13,8 @@ import {
   kerbPieces,
   LAMP_FOOT_SIZE,
   lampModel,
+  shelterGeometry,
+  shelterPlacement,
   zebraPieces,
   type FlatPiece,
 } from './infrastructure/roadFurniture.ts';
@@ -94,9 +95,6 @@ const RAIL_HEIGHT = 0.14;
 
 const SHELTER_COLOR = 0x4a5560;
 const SIGN_COLOR = 0xf2d16b;
-/** Shelter stands at the south-west kerb, clear of the lamp corner (south-east). */
-const SHELTER_OFFSET_X = 0.16;
-const SHELTER_OFFSET_Z = 0.84;
 
 /** Whether a bridge with this road mask is straight (or a dead end): only those get railings. */
 function hasRailings(mask: number): boolean {
@@ -126,7 +124,7 @@ export class RoadsMesh implements DiffLayer {
   private readonly lampHeadMaterial: THREE.MeshBasicMaterial;
   private readonly decks: THREE.InstancedMesh;
   private readonly rails: THREE.InstancedMesh;
-  private readonly shelters: THREE.InstancedMesh;
+  readonly shelters: THREE.InstancedMesh;
   private readonly signs: THREE.InstancedMesh;
   private readonly signMaterial: THREE.MeshBasicMaterial;
   private readonly gridSize: number;
@@ -215,15 +213,8 @@ export class RoadsMesh implements DiffLayer {
       setupGlow,
     );
 
-    const post1 = new THREE.BoxGeometry(0.03, 0.22, 0.03);
-    post1.translate(-0.09, 0.11, 0);
-    const post2 = new THREE.BoxGeometry(0.03, 0.22, 0.03);
-    post2.translate(0.09, 0.11, 0);
-    const roof = new THREE.BoxGeometry(0.26, 0.03, 0.14);
-    roof.translate(0, 0.23, 0);
-    const shelterGeometry = mergeGeometries([post1, post2, roof]);
     this.shelters = new THREE.InstancedMesh(
-      shelterGeometry,
+      shelterGeometry(),
       surfaceMaterial({ color: SHELTER_COLOR }),
       gridSize * gridSize,
     );
@@ -478,17 +469,24 @@ export class RoadsMesh implements DiffLayer {
     this.lampHeads.commit(count);
   }
 
-  /** One shelter with a lit sign at the kerb of every stop tile. */
+  /** One shelter with a lit sign beyond the kerb of every stop tile (see shelterPlacement). */
   private rebuildShelters(): void {
     let count = 0;
     for (let index = 0; index < this.busStops.length; index++) {
-      if (this.busStops[index] === 0 || this.roadMasks[index] < 0) continue;
-      const px = (index % this.gridSize) + SHELTER_OFFSET_X;
-      const pz = Math.floor(index / this.gridSize) + SHELTER_OFFSET_Z;
+      const mask = this.roadMasks[index];
+      if (this.busStops[index] === 0 || mask < 0) continue;
+      const railed = this.isBridge(index) && hasRailings(mask);
+      const { dx, dz, yaw } = shelterPlacement(
+        mask,
+        this.track[index],
+        railed ? DECK_SIZE / 2 - RAIL_THICKNESS : undefined,
+      );
+      const px = (index % this.gridSize) + 0.5 + dx;
+      const pz = Math.floor(index / this.gridSize) + 0.5 + dz;
       const lift = this.isBridge(index)
         ? this.elevation.maxCornerY(index)
         : this.elevation.surfaceY(px, pz);
-      this.matrix.identity();
+      this.matrix.makeRotationY(yaw);
       this.matrix.setPosition(px, lift, pz);
       this.shelters.setMatrixAt(count, this.matrix);
       this.signs.setMatrixAt(count, this.matrix);

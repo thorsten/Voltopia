@@ -4,7 +4,7 @@ import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { DECK_SIZE, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
-import { LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
+import { KERB_WIDTH, LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
 
 const SIZE = 5;
 const at = (x: number, y: number) => y * SIZE + x;
@@ -157,5 +157,59 @@ describe('RoadsMesh streetlamps', () => {
         }
       }
     });
+  }
+});
+
+describe('RoadsMesh bus shelters', () => {
+  const position = (mesh: THREE.InstancedMesh, slot: number) => {
+    const matrix = new THREE.Matrix4();
+    mesh.getMatrixAt(slot, matrix);
+    return new THREE.Vector3().setFromMatrixPosition(matrix);
+  };
+
+  /** World positions of a shelter instance's vertices. */
+  function shelterVertices(layer: RoadsMesh, slot: number): THREE.Vector3[] {
+    const matrix = new THREE.Matrix4();
+    layer.shelters.getMatrixAt(slot, matrix);
+    const attribute = layer.shelters.geometry.getAttribute('position');
+    return Array.from({ length: attribute.count }, (_, i) =>
+      new THREE.Vector3().fromBufferAttribute(attribute, i).applyMatrix4(matrix),
+    );
+  }
+
+  for (const roadClass of [RoadClass.Street, RoadClass.Avenue]) {
+    for (const alongX of [true, false]) {
+      const label = `${roadClass === RoadClass.Avenue ? 'an avenue' : 'a street'} along ${alongX ? 'x' : 'z'}`;
+      it(`stands the shelter on ${label} beyond the kerb, inside the tile, clear of the lamp`, () => {
+        const list = tiles();
+        road(list, 2, 2, alongX ? DIR_E | DIR_W : DIR_N | DIR_S);
+        Object.assign(list[at(2, 2)], { roadClass, busStop: 1 });
+        const layer = layerWith(list);
+        expect(layer.shelters.count).toBe(1);
+        const vertices = shelterVertices(layer, 0);
+        const kerbside = roadHalfWidth(roadClass) + KERB_WIDTH;
+        for (const v of vertices) {
+          expect(v.x).toBeGreaterThanOrEqual(2);
+          expect(v.x).toBeLessThanOrEqual(3);
+          expect(v.z).toBeGreaterThanOrEqual(2);
+          expect(v.z).toBeLessThanOrEqual(3);
+          // The posts (all vertices near the ground) stand beyond the kerb.
+          const across = Math.abs(alongX ? v.z - 2.5 : v.x - 2.5);
+          if (v.y < 0.1) expect(across).toBeGreaterThan(kerbside);
+        }
+        // Clear of the streetlamp's foot.
+        expect(layer.lampPoles.mesh.count).toBe(1);
+        const lamp = position(layer.lampPoles.mesh, 0);
+        const half = LAMP_FOOT_SIZE / 2;
+        const xs = vertices.map((v) => v.x);
+        const zs = vertices.map((v) => v.z);
+        const clear =
+          lamp.x + half < Math.min(...xs) ||
+          lamp.x - half > Math.max(...xs) ||
+          lamp.z + half < Math.min(...zs) ||
+          lamp.z - half > Math.max(...zs);
+        expect(clear).toBe(true);
+      });
+    }
   }
 });

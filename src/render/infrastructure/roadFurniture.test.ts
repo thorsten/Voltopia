@@ -9,6 +9,7 @@ import {
   MAX_PARTS_PER_LAMP,
   kerbPieces,
   lampModel,
+  shelterPlacement,
   zebraPieces,
   type FlatPiece,
 } from './roadFurniture.ts';
@@ -106,5 +107,25 @@ describe('lampModel', () => {
     expect(lamp.geometry.boundingBox!.max.x).toBeLessThanOrEqual(LAMP_REACH + 0.02);
     expect(lamp.parts).toBeLessThanOrEqual(MAX_PARTS_PER_LAMP);
     expect(lampModel()).toBe(lamp);
+  });
+});
+
+describe('shelterPlacement', () => {
+  const corner = ({ dx, dz }: { dx: number; dz: number }) => Math.sign(dx) * Math.sign(dz);
+
+  it('backs onto an open side, turned to face the road', () => {
+    const south = shelterPlacement(DIR_E | DIR_W, 0);
+    expect(south.dz).toBeGreaterThan(0.3);
+    expect(south.yaw).toBeCloseTo(0, 9);
+    const west = shelterPlacement(DIR_N | DIR_S, 0);
+    expect(west.dx).toBeLessThan(-0.3);
+    expect(west.yaw).toBeCloseTo(-Math.PI / 2, 9);
+  });
+
+  it('keeps off the barrier corners of a level crossing', () => {
+    // Track along z: barriers at (−,+) and (+,−).
+    expect(corner(shelterPlacement(DIR_E | DIR_W, DIR_N | DIR_S))).toBe(1);
+    // Track along x: barriers at (−,−) and (+,+).
+    expect(corner(shelterPlacement(DIR_N | DIR_S, DIR_E | DIR_W))).toBe(-1);
   });
 });

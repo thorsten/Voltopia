@@ -9,7 +9,7 @@
  * same width toward every connected neighbour (see roadsMesh.ts).
  */
 import * as THREE from 'three';
-import { DIRECTIONS } from '../../shared/grid.ts';
+import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../../shared/grid.ts';
 import { box, cylinder, merge } from '../modelKit.ts';
 
 export interface FlatPiece {
@@ -163,4 +163,74 @@ export function lampModel(): LampModel {
     head: { x: housingX, y: housingY - housing.height / 2, z: 0 },
   };
   return lampCache;
+}
+
+/**
+ * Bus shelter: two posts at the back of a flat roof. Local frame: the
+ * roof runs along x, the back (posts) faces +z, the road lies toward -z.
+ */
+export const SHELTER = {
+  length: 0.26,
+  depth: 0.14,
+  roofHeight: 0.03,
+  roofY: 0.23,
+  post: 0.03,
+  postHeight: 0.22,
+  postX: 0.09,
+} as const;
+/** The shelter's back stays this far inside the tile edge. */
+const SHELTER_EDGE_MARGIN = 0.01;
+/** Its centre sits this far along the kerb from the tile's middle, clear of the lamp and pole corners. */
+const SHELTER_ALONG = 0.34;
+
+/** Two posts at the back edge of the roof, standing on y = 0. */
+export function shelterGeometry(): THREE.BufferGeometry {
+  const { length, depth, roofHeight, roofY, post, postHeight, postX } = SHELTER;
+  const postZ = depth / 2 - post / 2;
+  return merge([
+    box(post, postHeight, post, -postX, postHeight / 2, postZ, 0xffffff),
+    box(post, postHeight, post, postX, postHeight / 2, postZ, 0xffffff),
+    box(length, roofHeight, depth, 0, roofY, 0, 0xffffff),
+  ]).geometry;
+}
+
+/**
+ * Where a road tile's bus shelter stands: tile-local centre and yaw
+ * (about +y; local +z, the shelter's back, turns onto the outward side).
+ *
+ * It backs onto the first open pad side (no arm) of south, west, north,
+ * east — south on a full crossing, where no side is open — with its back
+ * SHELTER_EDGE_MARGIN inside the tile edge, or inside a straight bridge's
+ * railing at `backLimit`. Its posts then stand beyond the kerb; on an
+ * avenue the roof reaches over the kerb, as real shelters do. Along the
+ * side it keeps to the half away from the pole (north-west) and lamp
+ * (south-east) corners, and on a level crossing to the half the
+ * barriers leave free (barriers stand at (−,−)/(+,+) when the track runs
+ * along x, at (−,+)/(+,−) along z; railMesh).
+ */
+export function shelterPlacement(
+  roadMask: number,
+  track: number,
+  backLimit = 0.5 - SHELTER_EDGE_MARGIN,
+): { dx: number; dz: number; yaw: number } {
+  // Outward normal (back) and the along-kerb direction of each side.
+  const sides = [
+    { bit: DIR_S, nx: 0, nz: 1, tx: -1, tz: 0 },
+    { bit: DIR_W, nx: -1, nz: 0, tx: 0, tz: 1 },
+    { bit: DIR_N, nx: 0, nz: -1, tx: 1, tz: 0 },
+    { bit: DIR_E, nx: 1, nz: 0, tx: 0, tz: -1 },
+  ];
+  const side = sides.find(({ bit }) => (roadMask & bit) === 0) ?? sides[0];
+  const out = backLimit - SHELTER.depth / 2;
+  let dx = side.nx * out + side.tx * SHELTER_ALONG;
+  let dz = side.nz * out + side.tz * SHELTER_ALONG;
+  const bits = track & (DIR_N | DIR_E | DIR_S | DIR_W);
+  const trackAlongX = (bits & (DIR_E | DIR_W)) !== 0 && (bits & (DIR_N | DIR_S)) === 0;
+  const trackAlongZ = (bits & (DIR_N | DIR_S)) !== 0 && (bits & (DIR_E | DIR_W)) === 0;
+  const barrierCorner = trackAlongX ? 1 : trackAlongZ ? -1 : 0;
+  if (barrierCorner !== 0 && Math.sign(dx) * Math.sign(dz) === barrierCorner) {
+    dx -= 2 * side.tx * SHELTER_ALONG;
+    dz -= 2 * side.tz * SHELTER_ALONG;
+  }
+  return { dx, dz, yaw: Math.atan2(side.nx, side.nz) };
 }
