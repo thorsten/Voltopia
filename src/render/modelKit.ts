@@ -82,14 +82,31 @@ export function tube(
   return finish(g, x, y, z, color);
 }
 
-export const sphere = (r: number, x: number, y: number, z: number, color: number) =>
-  finish(new THREE.SphereGeometry(r, ROUND_SEGMENTS, ROUND_SEGMENTS / 2), x, y, z, color);
+/** Height segments for a round primitive with `segments` around it. */
+const heightSegments = (segments: number) => Math.max(2, Math.floor(segments / 2));
 
-export function dome(r: number, squash: number, x: number, y: number, z: number, color: number) {
+export const sphere = (
+  r: number,
+  x: number,
+  y: number,
+  z: number,
+  color: number,
+  segments = ROUND_SEGMENTS,
+) => finish(new THREE.SphereGeometry(r, segments, heightSegments(segments)), x, y, z, color);
+
+export function dome(
+  r: number,
+  squash: number,
+  x: number,
+  y: number,
+  z: number,
+  color: number,
+  segments = ROUND_SEGMENTS,
+) {
   const g = new THREE.SphereGeometry(
     r,
-    ROUND_SEGMENTS,
-    ROUND_SEGMENTS / 2,
+    segments,
+    heightSegments(segments),
     0,
     Math.PI * 2,
     0,

@@ -46,8 +46,8 @@ Spec: `docs/superpowers/specs/2026-10-11-nature-detail-design.md`.
 
 - `sphere(r, x, y, z, color, segments = ROUND_SEGMENTS)` (height segments `max(2, segments / 2)`), `dome(r, squash, x, y, z, color, segments = ROUND_SEGMENTS)` — same for `dome`. Existing callers unchanged.
 - `export function tileHash(index: number, salt: number): number` in `nature/hash.ts`: the exact function body of today's `hash` in `forestMesh.ts` (so existing tree spots do not move needlessly); `forestMesh.ts` imports it.
-- [ ] Tests: a sphere with `segments = 8` has fewer vertices than the default; a dome with `segments = 8` likewise; `tileHash` is in [0, 1), deterministic, differs across salts.
-- [ ] Implement; checks; commit `refactor(render): facet counts for kit spheres and domes, shared tile hash`.
+- [x] Tests: a sphere with `segments = 8` has fewer vertices than the default; a dome with `segments = 8` likewise; `tileHash` is in [0, 1), deterministic, differs across salts.
+- [x] Implement; checks; commit `refactor(render): facet counts for kit spheres and domes, shared tile hash`.
 
 ---
 

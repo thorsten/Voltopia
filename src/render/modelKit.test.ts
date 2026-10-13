@@ -102,4 +102,13 @@ describe('model kit', () => {
   it('merge: rejects an empty part list', () => {
     expect(() => merge([])).toThrow();
   });
+  it('sphere and dome: fewer facets on request', () => {
+    const count = (g: THREE.BufferGeometry) => g.getAttribute('position').count;
+    expect(count(sphere(0.1, 0, 0.1, 0, 0xff0000, 8))).toBeLessThan(
+      count(sphere(0.1, 0, 0.1, 0, 0xff0000)),
+    );
+    expect(count(dome(0.2, 0.5, 0, 0.05, 0, 0xff0000, 8))).toBeLessThan(
+      count(dome(0.2, 0.5, 0, 0.05, 0, 0xff0000)),
+    );
+  });
 });

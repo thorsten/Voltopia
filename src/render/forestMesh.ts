@@ -4,6 +4,7 @@ import type { TileDiff } from '../shared/types.ts';
 import type { ElevationField } from './elevationField.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import { surfaceMaterial } from './materials.ts';
+import { tileHash } from './nature/hash.ts';
 
 /** Trees drawn per tile at growth stage 1..maxStage. */
 const TREES_BY_STAGE = [0, 1, 2, 3];
@@ -36,17 +37,6 @@ export function foliageColor(target: THREE.Color, phase: number, snowCover: numb
     .copy(FOLIAGE_KEYS[i])
     .lerp(FOLIAGE_KEYS[next], x - Math.floor(x))
     .lerp(FOLIAGE_SNOW, THREE.MathUtils.clamp(snowCover, 0, 1) * 0.7);
-}
-
-/**
- * Deterministic pseudo-random value 0..1 from a tile index and a salt, so
- * every tree keeps its spot across rebuilds (and matches on reload).
- */
-function hash(index: number, salt: number): number {
-  let h = (index * 2654435761 + salt * 40503) >>> 0;
-  h ^= h >>> 13;
-  h = (h * 0x5bd1e995) >>> 0;
-  return (h >>> 8) / 16777216;
 }
 
 /**
@@ -127,9 +117,9 @@ export class ForestMesh implements DiffLayer {
       const tz = Math.floor(index / this.elevation.gridSize);
       for (let tree = 0; tree < trees; tree++) {
         // Scattered inside the tile, clear of its edges.
-        const x = tx + 0.2 + 0.6 * hash(index, tree * 2 + 1);
-        const z = tz + 0.2 + 0.6 * hash(index, tree * 2 + 2);
-        const wobble = 0.85 + 0.3 * hash(index, tree + 97);
+        const x = tx + 0.2 + 0.6 * tileHash(index, tree * 2 + 1);
+        const z = tz + 0.2 + 0.6 * tileHash(index, tree * 2 + 2);
+        const wobble = 0.85 + 0.3 * tileHash(index, tree + 97);
         this.position.set(x, this.elevation.surfaceY(x, z), z);
         this.scale.setScalar(size * wobble);
         this.matrix.compose(this.position, this.noRotation, this.scale);
