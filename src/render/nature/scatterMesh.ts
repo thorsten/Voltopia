@@ -7,7 +7,7 @@ import { foliageColor } from '../forestMesh.ts';
 import { surfaceMaterial } from '../materials.ts';
 import { dome, merge, type Model } from '../modelKit.ts';
 import type { DiffLayer, RenderEnvironment } from '../renderer.ts';
-import { uploadDrawn } from '../plants/growingMesh.ts';
+import { GrowingMesh } from '../plants/growingMesh.ts';
 import { tileHash } from './hash.ts';
 
 /** Share of free tiles that carry props. */
@@ -116,8 +116,8 @@ function isFree(diff: TileDiff): boolean {
  * clears its props.
  */
 export class ScatterMesh implements DiffLayer {
-  private readonly bushes: THREE.InstancedMesh;
-  private readonly rocks: THREE.InstancedMesh;
+  private readonly bushes: GrowingMesh;
+  private readonly rocks: GrowingMesh;
   /** 1 for every free tile (see `isFree`). */
   private readonly free: Uint8Array;
   private bushCount = 0;
@@ -136,10 +136,9 @@ export class ScatterMesh implements DiffLayer {
     gridSize: number,
     private readonly elevation: ElevationField,
   ) {
-    const capacity = gridSize * gridSize * MAX_PROPS_PER_TILE;
     this.free = new Uint8Array(gridSize * gridSize);
-    this.bushes = this.instanced(scene, bushModel(), capacity, 'scatter-bushes');
-    this.rocks = this.instanced(scene, rockModel(), capacity, 'scatter-rocks');
+    this.bushes = this.instanced(scene, bushModel(), 'scatter-bushes');
+    this.rocks = this.instanced(scene, rockModel(), 'scatter-rocks');
   }
 
   /** Props currently drawn per kind. */
@@ -176,34 +175,30 @@ export class ScatterMesh implements DiffLayer {
     this.rebuild();
   }
 
-  private instanced(
-    scene: THREE.Scene,
-    model: Model,
-    capacity: number,
-    name: string,
-  ): THREE.InstancedMesh {
-    const mesh = new THREE.InstancedMesh(
+  /** A mesh that grows with the props (a full-map capacity would waste memory). */
+  private instanced(scene: THREE.Scene, model: Model, name: string): GrowingMesh {
+    return new GrowingMesh(
+      scene,
       model.geometry,
       surfaceMaterial({ vertexColors: true }),
-      capacity,
+      (mesh) => {
+        mesh.name = name;
+        // Instance transforms live across the whole grid; the base geometry's
+        // bounds would wrongly cull the mesh, so culling is disabled.
+        mesh.frustumCulled = false;
+        // Props are small and many: their shadows would cost more than they show.
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+      },
     );
-    mesh.name = name;
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    mesh.frustumCulled = false;
-    // Props are small and many: their shadows would cost more than they show.
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
-    mesh.count = 0;
-    scene.add(mesh);
-    return mesh;
   }
 
   /** Write the bush colour to every drawn bush and upload just those. */
   private paint(): void {
     const count = this.bushCount;
-    for (let i = 0; i < count; i++) this.bushes.setColorAt(i, this.bushTint);
-    const colors = this.bushes.instanceColor;
+    const bushes = this.bushes.mesh;
+    for (let i = 0; i < count; i++) bushes.setColorAt(i, this.bushTint);
+    const colors = bushes.instanceColor;
     if (!colors) return;
     colors.clearUpdateRanges();
     // Never an empty range: three.js reads that as "upload everything".
@@ -242,14 +237,16 @@ export class ScatterMesh implements DiffLayer {
         this.scale.setScalar(scale);
         this.matrix.compose(this.position, this.rotation, this.scale);
         if (tileHash(index, SALT_KIND + prop) < rockShare) {
-          this.rocks.setMatrixAt(this.rockCount++, this.matrix);
+          this.rocks.ensure(this.rockCount + 1);
+          this.rocks.mesh.setMatrixAt(this.rockCount++, this.matrix);
         } else {
-          this.bushes.setMatrixAt(this.bushCount++, this.matrix);
+          this.bushes.ensure(this.bushCount + 1);
+          this.bushes.mesh.setMatrixAt(this.bushCount++, this.matrix);
         }
       }
     }
-    uploadDrawn(this.bushes, this.bushCount);
-    uploadDrawn(this.rocks, this.rockCount);
+    this.rocks.commit(this.rockCount);
     this.paint();
+    this.bushes.commit(this.bushCount);
   }
 }

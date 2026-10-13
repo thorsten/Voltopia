@@ -6,11 +6,10 @@ import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import { surfaceMaterial } from './materials.ts';
 import { cone, cylinder, merge, sphere, type Model } from './modelKit.ts';
 import { tileHash } from './nature/hash.ts';
-import { uploadDrawn } from './plants/growingMesh.ts';
+import { GrowingMesh, uploadDrawn } from './plants/growingMesh.ts';
 
 /** Trees drawn per tile at growth stage 1..maxStage. */
 const TREES_BY_STAGE = [0, 2, 3, 5];
-const MAX_TREES_PER_TILE = TREES_BY_STAGE[TREES_BY_STAGE.length - 1];
 /** Facets of trunks and crowns: trees are many, so rounder than a box but cheap. */
 const TREE_SEGMENTS = 8;
 /** Broadleaf crown spheres are coarser still: two per tree, the costliest part. */
@@ -141,8 +140,8 @@ function broadleafModels(): { trunk: Model; crown: Model } {
 
 /** Trunk and crown meshes of one species, plus the crowns' current colour. */
 interface Species {
-  trunks: THREE.InstancedMesh;
-  crowns: THREE.InstancedMesh;
+  trunks: GrowingMesh;
+  crowns: GrowingMesh;
   color: THREE.Color;
   count: number;
 }
@@ -167,21 +166,20 @@ export class ForestMesh implements DiffLayer {
 
   constructor(
     scene: THREE.Scene,
-    gridSize: number,
+    _gridSize: number,
     private readonly elevation: ElevationField,
   ) {
-    const capacity = gridSize * gridSize * MAX_TREES_PER_TILE;
     const conifer = coniferModels();
     const broadleaf = broadleafModels();
     this.conifer = {
-      trunks: this.instanced(scene, conifer.trunk, capacity, 'forest-conifer-trunks', false),
-      crowns: this.instanced(scene, conifer.crown, capacity, 'forest-conifer-crowns', true),
+      trunks: this.instanced(scene, conifer.trunk, 'forest-conifer-trunks', false),
+      crowns: this.instanced(scene, conifer.crown, 'forest-conifer-crowns', true),
       color: coniferColor(new THREE.Color(), 0),
       count: 0,
     };
     this.broadleaf = {
-      trunks: this.instanced(scene, broadleaf.trunk, capacity, 'forest-broadleaf-trunks', false),
-      crowns: this.instanced(scene, broadleaf.crown, capacity, 'forest-broadleaf-crowns', true),
+      trunks: this.instanced(scene, broadleaf.trunk, 'forest-broadleaf-trunks', false),
+      crowns: this.instanced(scene, broadleaf.crown, 'forest-broadleaf-crowns', true),
       color: FOLIAGE_KEYS[1].clone(),
       count: 0,
     };
@@ -215,28 +213,27 @@ export class ForestMesh implements DiffLayer {
     if (changed) this.rebuild();
   }
 
+  /** A mesh that grows with the woods (a full-map capacity would waste memory). */
   private instanced(
     scene: THREE.Scene,
     model: Model,
-    capacity: number,
     name: string,
     castShadow: boolean,
-  ): THREE.InstancedMesh {
-    const mesh = new THREE.InstancedMesh(
+  ): GrowingMesh {
+    return new GrowingMesh(
+      scene,
       model.geometry,
       surfaceMaterial({ vertexColors: true }),
-      capacity,
+      (mesh) => {
+        mesh.name = name;
+        // Instance transforms live across the whole grid; the base geometry's
+        // bounds would wrongly cull the mesh, so culling is disabled.
+        mesh.frustumCulled = false;
+        // Thin trunks hide under their crown's shadow; only crowns cast one.
+        mesh.castShadow = castShadow;
+        mesh.receiveShadow = true;
+      },
     );
-    mesh.name = name;
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    mesh.frustumCulled = false;
-    // Thin trunks hide under their crown's shadow; only crowns cast one.
-    mesh.castShadow = castShadow;
-    mesh.receiveShadow = true;
-    mesh.count = 0;
-    scene.add(mesh);
-    return mesh;
   }
 
   /** Paint a species' crowns when its foliage colour changed. */
@@ -248,7 +245,8 @@ export class ForestMesh implements DiffLayer {
 
   /** Write the species colour to every drawn crown and upload just those. */
   private paint(species: Species): void {
-    const { crowns, color, count } = species;
+    const { color, count } = species;
+    const crowns = species.crowns.mesh;
     for (let i = 0; i < count; i++) crowns.setColorAt(i, color);
     const colors = crowns.instanceColor;
     if (!colors) return;
@@ -285,14 +283,16 @@ export class ForestMesh implements DiffLayer {
         this.scale.setScalar(size * jitter);
         this.matrix.compose(this.position, this.rotation, this.scale);
         const species = tileHash(index, tree + 307) < coniferShare ? conifer : broadleaf;
-        species.trunks.setMatrixAt(species.count, this.matrix);
-        species.crowns.setMatrixAt(species.count, this.matrix);
+        species.trunks.ensure(species.count + 1);
+        species.crowns.ensure(species.count + 1);
+        species.trunks.mesh.setMatrixAt(species.count, this.matrix);
+        species.crowns.mesh.setMatrixAt(species.count, this.matrix);
         species.count++;
       }
     }
     for (const species of [conifer, broadleaf]) {
-      uploadDrawn(species.trunks, species.count);
-      uploadDrawn(species.crowns, species.count);
+      species.trunks.commit(species.count);
+      uploadDrawn(species.crowns.mesh, species.count);
       this.paint(species);
     }
   }

@@ -159,4 +159,14 @@ describe('ForestMesh', () => {
       expect(mesh(scene, `forest-${species}-crowns`).castShadow).toBe(true);
     }
   });
+
+  it('sizes its meshes to the woods, not to the map', () => {
+    const { scene } = woods((index) => (index === 0 ? 3 : 0));
+    for (const species of ['conifer', 'broadleaf']) {
+      for (const part of ['trunks', 'crowns']) {
+        const capacity = mesh(scene, `forest-${species}-${part}`).instanceMatrix.count;
+        expect(capacity).toBeLessThan((SIZE * SIZE * 5) / 10);
+      }
+    }
+  });
 });

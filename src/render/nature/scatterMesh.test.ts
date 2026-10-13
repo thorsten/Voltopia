@@ -141,4 +141,17 @@ describe('ScatterMesh', () => {
     const { scene } = freeMap();
     for (const name of MESHES) expect(mesh(scene, name).castShadow).toBe(false);
   });
+
+  it('sizes its meshes to the props, not to the map', () => {
+    const { field, diffs, layer: probe } = freeMap();
+    const [kept] = probe.propTiles();
+    // A map built over with roads but for one tile that carries props.
+    const scene = new THREE.Scene();
+    const layer = new ScatterMesh(scene, SIZE, field);
+    layer.applyDiffs(diffs.map((d) => (d.index === kept ? d : { ...d, tileType: TileType.Road })));
+    expect(layer.propTiles()).toEqual(new Set([kept]));
+    for (const name of MESHES) {
+      expect(mesh(scene, name).instanceMatrix.count).toBeLessThan((SIZE * SIZE * 3) / 10);
+    }
+  });
 });
