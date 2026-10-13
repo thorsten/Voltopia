@@ -42,9 +42,12 @@ const LATTICE = {
   outerX: 0.165,
 } as const;
 
+/** Radius of the concrete pole's shaft at its foot. */
+export const POLE_FOOT_RADIUS = 0.026;
+
 /** Concrete pole: tapered round shaft, one short arm, three standing insulators. */
 const POLE = {
-  rBottom: 0.026,
+  rBottom: POLE_FOOT_RADIUS,
   rTop: 0.016,
   shaft: 0.37,
   segments: 8,

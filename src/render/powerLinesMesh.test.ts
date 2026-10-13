@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
-import { Terrain, TileType, Zone, type TileDiff } from '../shared/types.ts';
+import { RoadClass, Terrain, TileType, Zone, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
+import { POLE_FOOT_RADIUS } from './infrastructure/pylonModels.ts';
+import { RailMesh } from './railMesh.ts';
 import {
   CABLE_SAG,
   CABLE_SEGMENTS,
@@ -84,6 +86,38 @@ function lineAlongX(tiles: TileDiff[], x0: number, x1: number): void {
     tiles[at(x, 1)].powerLine = LINE_PRESENT | (x > x0 ? DIR_W : 0) | (x < x1 ? DIR_E : 0);
   }
 }
+
+/** Foot position of one pylon instance. */
+function footOf(mesh: THREE.InstancedMesh, slot: number): THREE.Vector3 {
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(slot, matrix);
+  return new THREE.Vector3().setFromMatrixPosition(matrix);
+}
+
+/** A flat axis-aligned footprint (x/z) in world coordinates. */
+interface Footprint {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+function poleFootprint(foot: THREE.Vector3): Footprint {
+  const r = POLE_FOOT_RADIUS;
+  return { minX: foot.x - r, maxX: foot.x + r, minZ: foot.z - r, maxZ: foot.z + r };
+}
+
+/** World x/z footprint of one instance of an instanced mesh. */
+function instanceFootprint(mesh: THREE.InstancedMesh, slot: number): Footprint {
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(slot, matrix);
+  mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox!.clone().applyMatrix4(matrix);
+  return { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z };
+}
+
+const overlaps = (a: Footprint, b: Footprint) =>
+  a.minX < b.maxX && b.minX < a.maxX && a.minZ < b.maxZ && b.minZ < a.maxZ;
 
 function crosses2d(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) {
   const side = (p: THREE.Vector3, q: THREE.Vector3, r: THREE.Vector3) =>
@@ -192,4 +226,35 @@ describe('PowerLinesMesh', () => {
     expect(layer.poles.mesh.castShadow).toBe(true);
     expect(layer.conductors.mesh.frustumCulled).toBe(false);
   });
+
+  for (const roadClass of [RoadClass.Street, RoadClass.Avenue]) {
+    for (const trackAlongX of [true, false]) {
+      const label = `${roadClass === RoadClass.Avenue ? 'an avenue' : 'a street'} crossing a track along ${trackAlongX ? 'x' : 'z'}`;
+      it(`keeps the pole on ${label} clear of the barriers`, () => {
+        const tiles = baseTiles();
+        const crossing = tiles[at(2, 2)];
+        crossing.tileType = TileType.Road;
+        crossing.roadClass = roadClass;
+        crossing.roadMask = trackAlongX ? DIR_N | DIR_S : DIR_E | DIR_W;
+        crossing.rail = LINE_PRESENT | (trackAlongX ? DIR_E | DIR_W : DIR_N | DIR_S);
+        crossing.powerLine = LINE_PRESENT;
+        const { layer, field } = layerWith(tiles);
+        const scene = new THREE.Scene();
+        const rail = new RailMesh(scene, SIZE, field);
+        rail.applyDiffs(tiles);
+        const instanced = scene.children.filter(
+          (child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh,
+        );
+        const [posts, bars] = [instanced[5], instanced[6]];
+        expect(posts.count).toBe(2);
+        expect(layer.poles.mesh.count).toBe(1);
+        const pole = poleFootprint(footOf(layer.poles.mesh, 0));
+        for (const slot of [0, 1]) {
+          expect(overlaps(pole, instanceFootprint(posts, slot))).toBe(false);
+          // The bar stands raised on its post until a train comes.
+          expect(overlaps(pole, instanceFootprint(bars, slot))).toBe(false);
+        }
+      });
+    }
+  }
 });

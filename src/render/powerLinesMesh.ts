@@ -17,6 +17,20 @@ export const CABLE_SAG = 0.06;
 /** On a road tile the pylon stands at the north-west kerb so cars pass. */
 const KERB_OFFSET = 0.12;
 const DIRECTION_BITS = DIR_N | DIR_E | DIR_S | DIR_W;
+
+/**
+ * Corner (signs of the x and z offset from the tile centre) of the pole
+ * on a road tile. Level-crossing barriers (railMesh) take two opposite
+ * corners: (−,−) and (+,+) when the track runs along x, (−,+) and (+,−)
+ * along z. The pole keeps to the north-west kerb (the streetlamp has the
+ * south-east one), except on a crossing with the track along x, where
+ * it takes the free north-east corner (the bus shelter keeps south-west).
+ */
+export function roadPoleCorner(rail: number): { sx: number; sz: number } {
+  const bits = rail & DIRECTION_BITS;
+  const trackAlongX = (bits & (DIR_E | DIR_W)) !== 0 && (bits & (DIR_N | DIR_S)) === 0;
+  return trackAlongX ? { sx: 1, sz: -1 } : { sx: -1, sz: -1 };
+}
 /** Yaw that puts the line (local z) along world x. */
 const ALONG_X = Math.PI / 2;
 
@@ -91,6 +105,8 @@ export class PowerLinesMesh implements DiffLayer {
   private readonly tileTypes: Uint8Array;
   private readonly zones: Uint8Array;
   private readonly levels: Uint8Array;
+  /** Track mask per tile: a level crossing moves the road pole off its barriers. */
+  private readonly rails: Uint8Array;
   private readonly dummy = new THREE.Object3D();
 
   constructor(
@@ -104,6 +120,7 @@ export class PowerLinesMesh implements DiffLayer {
     this.tileTypes = new Uint8Array(n);
     this.zones = new Uint8Array(n);
     this.levels = new Uint8Array(n);
+    this.rails = new Uint8Array(n);
 
     const pylonMaterial = surfaceMaterial({ vertexColors: true });
     this.lattice = new GrowingMesh(
@@ -139,6 +156,10 @@ export class PowerLinesMesh implements DiffLayer {
         this.zones[i] = diff.zone;
         if (hasLine) changed = true;
       }
+      if (this.rails[i] !== diff.rail) {
+        this.rails[i] = diff.rail;
+        if (hasLine) changed = true;
+      }
       if (this.levels[i] !== diff.elevation) {
         this.levels[i] = diff.elevation;
         lifted = true;
@@ -156,9 +177,13 @@ export class PowerLinesMesh implements DiffLayer {
     const type = this.tileTypes[index];
     const town =
       type === TileType.Road || type === TileType.Plant || this.zones[index] !== Zone.None;
-    const offset = type === TileType.Road ? KERB_OFFSET : 0.5;
-    const x = tx + offset;
-    const z = tz + offset;
+    let x = tx + 0.5;
+    let z = tz + 0.5;
+    if (type === TileType.Road) {
+      const { sx, sz } = roadPoleCorner(this.rails[index]);
+      x += sx * (0.5 - KERB_OFFSET);
+      z += sz * (0.5 - KERB_OFFSET);
+    }
     // The foot stands on the ground under it: on a slope the kerb corner
     // sits well above or below the tile's nominal level.
     return {
