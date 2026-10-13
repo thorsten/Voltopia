@@ -135,8 +135,8 @@ export function applyRipples(material: THREE.MeshStandardMaterial): RippleUnifor
 - Two `InstancedMesh` (bush, rock), capacity `gridSize² × MAX_PROPS_PER_TILE`, `surfaceMaterial({ vertexColors: true })`, cast + receive shadows, `frustumCulled = false`, bounded uploads. Bush instance colour = `foliageColor(phase, snow)` lerped to `BUSH_GREEN` by `BUSH_SEASON_MIX`, rewritten in `setEnvironment` only when it changed.
 - Expose `get counts(): { bushes: number; rocks: number }` and `propTiles(): Set<number>` (tiles that carry props) for tests.
 - Register in `renderer.ts` with `this.addDiffLayer(new ScatterMesh(scene, gridSize, this.elevation))` right after the `ForestMesh`.
-- [ ] Tests: on a 64×64 free flat map the share of prop tiles is within ±0.05 of `SCATTER_SHARE`; a road, plant, zoned, power-line, track, hotspot, wooded and water tile never carries props (build each on a prop tile found from the free map); building a road on a prop tile removes its props; two layers fed the same diffs give identical matrices; every prop y equals `surfaceY` at its x/z; on a map at level 7 rocks outnumber bushes, on flat level 0 bushes outnumber rocks.
-- [ ] Implement; checks; commit `feat(render): bushes and rocks on free land`.
+- [x] Tests: on a 64×64 free flat map the share of prop tiles is within ±0.05 of `SCATTER_SHARE`; a road, plant, zoned, power-line, track, hotspot, wooded and water tile never carries props (build each on a prop tile found from the free map); building a road on a prop tile removes its props; two layers fed the same diffs give identical matrices; every prop y equals `surfaceY` at its x/z; on a map at level 7 rocks outnumber bushes, on flat level 0 bushes outnumber rocks.
+- [x] Implement; checks; commit `feat(render): bushes and rocks on free land`.
 
 ---
 

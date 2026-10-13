@@ -33,6 +33,7 @@ import { WeatherFx } from './weatherFx.ts';
 import { IconsMesh } from './iconsMesh.ts';
 import type { OverlayMode } from '../shared/types.ts';
 import { ForestMesh } from './forestMesh.ts';
+import { ScatterMesh } from './nature/scatterMesh.ts';
 import { GeothermalMesh } from './geothermalMesh.ts';
 import { ZoneTilesMesh } from './zoneTilesMesh.ts';
 import { WaterMesh } from './waterMesh.ts';
@@ -221,6 +222,7 @@ export class GameRenderer {
     this.addDiffLayer(new WaterMesh(scene, gridSize, this.elevation));
     this.roadsMesh = new RoadsMesh(scene, gridSize, this.elevation);
     this.addDiffLayer(new ForestMesh(scene, gridSize, this.elevation));
+    this.addDiffLayer(new ScatterMesh(scene, gridSize, this.elevation));
     this.addDiffLayer(new GeothermalMesh(scene, gridSize, this.elevation));
     this.addDiffLayer(this.roadsMesh);
     this.addDiffLayer(new PowerLinesMesh(scene, gridSize, this.elevation));
