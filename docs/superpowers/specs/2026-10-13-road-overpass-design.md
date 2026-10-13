@@ -17,8 +17,11 @@ either side. Cars never stop there and the barriers are gone.
   automatic for avenues; a separate bridge-building tool). A click
   tool, like the bus stop, paid once per crossing.
 - **Ramps on the neighbouring road tiles** (rejected: deck and ramps
-  within the crossing tile). The two road tiles before and after the
+  within the crossing tile). The road tiles before and after the
   crossing along the road become ramps; they must exist.
+- **Ramps two tiles long** (2026-10-13, after seeing one-tile ramps in
+  the game: a 20° ramp reads as a kink in the isometric view). The
+  length is `OVERPASS_RAMP_TILES` in `src/shared/constants.ts`.
 
 ## Scope
 
@@ -27,8 +30,8 @@ removal, the crossing logic, rendering of deck and ramps, vehicles
 following the ramps, the UI tool, the agent tool, save compatibility.
 
 Out: railway bridges over roads, overpasses at track bends or
-junctions, at road junctions, or at crossings on river tiles; ramps
-longer than one tile; a cost difference between street and avenue.
+junctions, at road junctions, or at crossings on river tiles; a cost
+difference between street and avenue.
 
 ## Simulation
 
@@ -55,8 +58,11 @@ rejected with the first failing reason:
    `E|W` — else `needsLevelCrossing`.
 3. The road is straight and perpendicular to the track: its `roadMask`
    bits are exactly the other axis — else `needsStraightCrossing`.
-4. Both road neighbours along the road axis are road tiles with no
-   track, no overpass and not river — else `needsRampRoom`.
+4. The `OVERPASS_RAMP_TILES` (2) road tiles on each side along the
+   road axis are plain road: no track, no overpass, not river, straight
+   along the axis (the far one may dead-end toward the deck); and no
+   other overpass of the same axis within twice that distance, so ramps
+   never overlap — else `needsRampRoom`.
 5. `damage === 0` (as every build) — else `damaged`.
 
 Cost: `BALANCE.costs.overpass` (150) per tile, regardless of road
@@ -94,18 +100,21 @@ OVERPASS_LIFT`, on a deck slab like the river bridges (`DECK_COLOR`),
   with railings along both sides of the road. The deck is a box with
   the full road width; the space under it is open so the track shows.
   No kerbs, no zebra crossing, no lamp, no bus shelter on the deck.
-- **Ramp tiles:** the road pad and lines are pitched from the ground
-  at the far edge to `OVERPASS_LIFT` at the shared edge with the deck
-  (one box instance rotated about the axis across the road and
-  stretched to the slope length) on a wedge of `DECK_COLOR` below.
-  Low walls along both sides. No lamp, no bus shelter on a ramp; the
-  bus stop sign is left where it is.
+- **Ramp tiles:** over the `OVERPASS_RAMP_TILES` tiles the road pad
+  and lines climb `OVERPASS_LIFT / OVERPASS_RAMP_TILES` per tile, from
+  the ground at the far edge to `OVERPASS_LIFT` at the shared edge with
+  the deck (per tile one box instance rotated about the axis across the
+  road and stretched to the slope length). Under each tile a wedge of
+  `DECK_COLOR` one rise high, standing on a plinth of the rises already
+  climbed. Low walls along both sides. No lamp, no bus shelter on a
+  ramp; the bus stop sign is left where it is.
 - **Track under the deck:** `railMesh.ts` treats an overpass tile as
   plain track — ballasted halves, no flush rails, no barriers, no
   signal heads — and the rail stub logic is untouched.
 - **Vehicles:** `vehiclesMesh.roadY(x, y)` adds `roadsMesh.lift(x, y)`:
-  `OVERPASS_LIFT` on a deck tile, linear from 0 at the far edge to
-  `OVERPASS_LIFT` at the deck edge on a ramp tile, 0 elsewhere. The
+  `OVERPASS_LIFT` on a deck tile, linear from 0 at the far edge of the
+  ramp to `OVERPASS_LIFT` at the deck edge across the ramp tiles, 0
+  elsewhere. The
   existing pitch sampling then tilts cars on the ramps.
 - **Rebuilds:** a diff on an overpass tile re-draws its two ramp
   neighbours; a diff on a road tile re-draws it as a ramp when its

@@ -6,7 +6,7 @@ import { ElevationField } from './elevationField.ts';
 import { DECK_SIZE, OVERPASS_LIFT, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
 import { KERB_WIDTH, LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
 
-const SIZE = 5;
+const SIZE = 8;
 const at = (x: number, y: number) => y * SIZE + x;
 
 function tiles(): TileDiff[] {
@@ -215,15 +215,16 @@ describe('RoadsMesh bus shelters', () => {
   }
 });
 
-/** An east-west track under a north-south street with an overpass at (2, 2). */
+/**
+ * An east-west track under a north-south street with an overpass at
+ * (2, 3): ramps on (2, 1)–(2, 2) and (2, 4)–(2, 5), plain road beyond.
+ */
 function overpassRoad(): TileDiff[] {
   const list = tiles();
   road(list, 2, 0, DIR_S);
-  road(list, 2, 1, DIR_N | DIR_S);
-  road(list, 2, 2, DIR_N | DIR_S);
-  road(list, 2, 3, DIR_N | DIR_S);
-  road(list, 2, 4, DIR_N);
-  Object.assign(list[at(2, 2)], { rail: LINE_PRESENT | DIR_E | DIR_W, overpass: 1 });
+  for (let y = 1; y <= 5; y++) road(list, 2, y, DIR_N | DIR_S);
+  road(list, 2, 6, DIR_N);
+  Object.assign(list[at(2, 3)], { rail: LINE_PRESENT | DIR_E | DIR_W, overpass: 1 });
   return list;
 }
 
@@ -236,54 +237,67 @@ function positionOf(mesh: THREE.InstancedMesh, slot: number): THREE.Vector3 {
 describe('RoadsMesh overpass', () => {
   it('lifts the road surface on the deck and along the ramps', () => {
     const layer = layerWith(overpassRoad());
-    expect(layer.lift(2.5, 2.5)).toBeCloseTo(OVERPASS_LIFT, 6);
-    // North ramp (2,1): far edge at z = 1, deck edge at z = 2.
+    expect(layer.lift(2.5, 3.5)).toBeCloseTo(OVERPASS_LIFT, 6);
+    // North ramp over (2,1) and (2,2): far edge at z = 1, deck edge at z = 3.
     expect(layer.lift(2.5, 1.0)).toBeCloseTo(0, 6);
-    expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 2, 6);
-    expect(layer.lift(2.5, 1.999999)).toBeCloseTo(OVERPASS_LIFT, 4);
-    // South ramp (2,3): deck edge at z = 3, far edge at z = 4.
-    expect(layer.lift(2.5, 3.25)).toBeCloseTo(OVERPASS_LIFT * 0.75, 6);
+    expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 4, 6);
+    expect(layer.lift(2.5, 2.0)).toBeCloseTo(OVERPASS_LIFT / 2, 6);
+    expect(layer.lift(2.5, 2.5)).toBeCloseTo((OVERPASS_LIFT * 3) / 4, 6);
+    expect(layer.lift(2.5, 2.999999)).toBeCloseTo(OVERPASS_LIFT, 4);
+    // South ramp over (2,4) and (2,5): deck edge at z = 4, far edge at z = 6.
+    expect(layer.lift(2.5, 4.25)).toBeCloseTo(OVERPASS_LIFT * (7 / 8), 6);
+    expect(layer.lift(2.5, 5.5)).toBeCloseTo(OVERPASS_LIFT / 4, 6);
     // Plain road and off-road: nothing.
     expect(layer.lift(2.5, 0.5)).toBe(0);
+    expect(layer.lift(2.5, 6.5)).toBe(0);
     expect(layer.lift(5.5, 5.5)).toBe(0);
   });
 
   it('draws a deck with two railings on the overpass and walls on both ramps', () => {
     const layer = layerWith(overpassRoad());
-    // One deck slab for the overpass tile; the ramps get wedges of their own.
-    expect(layer.decks.count).toBe(1);
-    // Two railings on the deck, two walls per ramp.
-    expect(layer.rails.mesh.count).toBe(6);
-    const deck = positionOf(layer.decks, 0);
-    expect(Math.floor(deck.z)).toBe(2);
+    // One deck slab for the overpass tile plus a plinth under each inner
+    // ramp tile (the wedge of the far tile stands on the ground).
+    expect(layer.decks.count).toBe(3);
+    // Two railings on the deck, two walls per ramp tile.
+    expect(layer.rails.mesh.count).toBe(2 + 4 * 2);
+    // Instances follow tile order: north inner plinth (2,2), deck (2,3), south inner plinth (2,4).
+    const deck = positionOf(layer.decks, 1);
+    expect(Math.floor(deck.z)).toBe(3);
     expect(deck.y).toBeGreaterThan(OVERPASS_LIFT - 0.05);
+    const plinth = positionOf(layer.decks, 0);
+    expect(Math.floor(plinth.z)).toBe(2);
+    expect(plinth.y).toBeCloseTo(OVERPASS_LIFT / 4, 6);
   });
 
-  it('puts a solid wedge under each ramp, rising from the ground to the deck', () => {
+  it('puts a wedge under each ramp tile, each rising one step toward the deck', () => {
     const layer = layerWith(overpassRoad());
-    expect(layer.decks.count).toBe(1);
-    expect(layer.wedges.count).toBe(2);
+    expect(layer.wedges.count).toBe(4);
     const matrix = new THREE.Matrix4();
     const p = new THREE.Vector3();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
+    // Far north tile (2,1): the wedge stands on the ground, half the deck lift
+    // high, its rising edge (local +x) pointing south toward the deck.
     layer.wedges.getMatrixAt(0, matrix);
     matrix.decompose(p, q, s);
-    // North ramp (2,1): the wedge stands on the ground, as high as the deck lift,
-    // and its rising edge (local +x) points south toward the deck.
     expect(p.x).toBeCloseTo(2.5, 6);
     expect(p.y).toBeCloseTo(0, 6);
     expect(p.z).toBeCloseTo(1.5, 6);
-    expect(s.y).toBeCloseTo(OVERPASS_LIFT, 6);
-    const rising = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
-    expect(rising.z).toBeCloseTo(1, 6);
+    expect(s.y).toBeCloseTo(OVERPASS_LIFT / 2, 6);
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(q).z).toBeCloseTo(1, 6);
+    // Inner north tile (2,2): the same wedge on a plinth half the lift high.
+    layer.wedges.getMatrixAt(1, matrix);
+    matrix.decompose(p, q, s);
+    expect(p.z).toBeCloseTo(2.5, 6);
+    expect(p.y).toBeCloseTo(OVERPASS_LIFT / 2, 6);
+    expect(s.y).toBeCloseTo(OVERPASS_LIFT / 2, 6);
   });
 
   it('keeps lamps, kerbs, stripes and shelters off deck and ramps', () => {
     const list = overpassRoad();
     list[at(2, 1)].busStop = 1;
     const layer = layerWith(list);
-    // Lamps stand on every other tile: (2,0) and (2,4) only ((2,2) is the deck, (2,1)/(2,3) ramps).
+    // Lamps stand on every other tile: (2,0) and (2,6) only; (2,1)–(2,5) are ramps and deck.
     expect(layer.lampPoles.mesh.count).toBe(2);
     expect(layer.shelters.count).toBe(0);
     // Kerbs: the two plain dead ends only (5 pieces each).
@@ -292,18 +306,18 @@ describe('RoadsMesh overpass', () => {
 
   it('turns a road tile into a ramp when the overpass appears beside it, and back', () => {
     const list = overpassRoad();
-    list[at(2, 2)].overpass = 0;
+    list[at(2, 3)].overpass = 0;
     const layer = layerWith(list);
     expect(layer.lift(2.5, 1.5)).toBe(0);
-    layer.applyDiffs([{ ...list[at(2, 2)], overpass: 1 }]);
-    expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 2, 6);
-    layer.applyDiffs([{ ...list[at(2, 2)], overpass: 0 }]);
+    layer.applyDiffs([{ ...list[at(2, 3)], overpass: 1 }]);
+    expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 4, 6);
+    layer.applyDiffs([{ ...list[at(2, 3)], overpass: 0 }]);
     expect(layer.lift(2.5, 1.5)).toBe(0);
   });
 
   it('a ramp pad is pitched toward the deck', () => {
     const layer = layerWith(overpassRoad());
-    // The ramp pad is the single `mesh` instance whose centre lies in tile (2,1).
+    // The far ramp pad is the single `mesh` instance whose centre lies in tile (2,1).
     let pitched = 0;
     const matrix = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -314,7 +328,8 @@ describe('RoadsMesh overpass', () => {
       matrix.decompose(p, q, s);
       if (Math.floor(p.z) !== 1 || Math.floor(p.x) !== 2) continue;
       const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
-      expect(forward.y).toBeGreaterThan(0.2); // +z (toward the deck) climbs
+      // +z (toward the deck) climbs by half the lift over the tile.
+      expect(forward.y / forward.z).toBeCloseTo(OVERPASS_LIFT / 2, 6);
       pitched++;
     }
     expect(pitched).toBe(1);

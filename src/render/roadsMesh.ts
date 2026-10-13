@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OVERPASS_RAMP_TILES } from '../shared/constants.ts';
 import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../shared/grid.ts';
 import type { TileDiff } from '../shared/types.ts';
 import { RoadClass, Terrain, TileType } from '../shared/types.ts';
@@ -131,8 +132,17 @@ const DECK_HEIGHT = 0.04;
  * vehicles' ground offset) under the deck.
  */
 export const OVERPASS_LIFT = 0.36;
-const RAMP_PITCH = Math.atan2(OVERPASS_LIFT, 1);
-const RAMP_STRETCH = Math.hypot(1, OVERPASS_LIFT);
+/** A ramp climbs this much per tile over OVERPASS_RAMP_TILES tiles. */
+const RAMP_RISE = OVERPASS_LIFT / OVERPASS_RAMP_TILES;
+const RAMP_PITCH = Math.atan2(RAMP_RISE, 1);
+const RAMP_STRETCH = Math.hypot(1, RAMP_RISE);
+
+/** A ramp tile: the unit step toward its deck and how many tiles away the deck is (1 = next to it). */
+interface Ramp {
+  dx: number;
+  dz: number;
+  step: number;
+}
 /** Thickness of a bridge railing, standing on the deck's edge. */
 export const RAIL_THICKNESS = 0.06;
 const RAIL_HEIGHT = 0.14;
@@ -619,17 +629,23 @@ export class RoadsMesh implements DiffLayer {
       if (mask < 0) continue;
       const ramp = this.rampOf(index);
       if (ramp) {
-        // A solid wedge from the ground up to the deck under the pitched
-        // carriageway (its rising edge, local +x, turned toward the deck)
-        // and a low wall per side.
-        this.rampPosition.set(
-          (index % this.gridSize) + 0.5,
-          this.elevation.maxCornerY(index),
-          Math.floor(index / this.gridSize) + 0.5,
-        );
+        // A solid wedge one rise high under the pitched carriageway (its
+        // rising edge, local +x, turned toward the deck), on a plinth of
+        // the rises already climbed, and a low wall per side.
+        const cx = (index % this.gridSize) + 0.5;
+        const cz = Math.floor(index / this.gridSize) + 0.5;
+        const ground = this.elevation.maxCornerY(index);
+        const climbed = RAMP_RISE * (OVERPASS_RAMP_TILES - ramp.step);
+        if (climbed > 0) {
+          this.matrix.makeScale(1, climbed, DECK_SIZE);
+          if (ramp.dx === 0) this.matrix.makeScale(DECK_SIZE, climbed, 1);
+          this.matrix.setPosition(cx, ground + climbed / 2, cz);
+          this.decks.setMatrixAt(deckCount++, this.matrix);
+        }
+        this.rampPosition.set(cx, ground + climbed, cz);
         this.rampEuler.set(0, Math.atan2(-ramp.dz, ramp.dx), 0);
         this.rampQuaternion.setFromEuler(this.rampEuler);
-        this.rampScale.set(1, OVERPASS_LIFT, DECK_SIZE);
+        this.rampScale.set(1, RAMP_RISE, DECK_SIZE);
         this.matrix.compose(this.rampPosition, this.rampQuaternion, this.rampScale);
         this.wedges.setMatrixAt(wedgeCount++, this.matrix);
         for (const side of [-1, 1]) {
@@ -681,21 +697,28 @@ export class RoadsMesh implements DiffLayer {
     return this.elevation.maxCornerY(index) + (this.overpass[index] !== 0 ? OVERPASS_LIFT : 0);
   }
 
-  /** Step from a ramp tile toward its deck, or null when the tile is no ramp. */
-  private rampOf(index: number): { dx: number; dz: number } | null {
+  /**
+   * The ramp a road tile belongs to, or null: within OVERPASS_RAMP_TILES
+   * tiles of an overpass deck along the deck's road, with straight road
+   * (or the ramp's own end) all the way.
+   */
+  private rampOf(index: number): Ramp | null {
     if (this.roadMasks[index] < 0 || this.overpass[index] !== 0) return null;
     const x = index % this.gridSize;
     const z = Math.floor(index / this.gridSize);
     for (const { dx, dy, bit } of DIRECTIONS) {
-      const nx = x + dx;
-      const nz = z + dy;
-      if (nx < 0 || nz < 0 || nx >= this.gridSize || nz >= this.gridSize) continue;
-      const deck = nz * this.gridSize + nx;
-      if (this.overpass[deck] === 0 || this.roadMasks[deck] < 0) continue;
-      // The deck's road must point back at this tile.
+      if ((this.roadMasks[index] & bit) === 0) continue;
       const back = dx > 0 ? DIR_W : dx < 0 ? DIR_E : dy > 0 ? DIR_N : DIR_S;
-      if ((this.roadMasks[deck] & back) !== 0 && (this.roadMasks[index] & bit) !== 0)
-        return { dx, dz: dy };
+      for (let step = 1; step <= OVERPASS_RAMP_TILES; step++) {
+        const nx = x + dx * step;
+        const nz = z + dy * step;
+        if (nx < 0 || nz < 0 || nx >= this.gridSize || nz >= this.gridSize) break;
+        const tile = nz * this.gridSize + nx;
+        if (this.roadMasks[tile] < 0 || (this.roadMasks[tile] & back) === 0) break;
+        if (this.overpass[tile] !== 0) return { dx, dz: dy, step };
+        // An intermediate ramp tile must carry the road on toward the deck.
+        if ((this.roadMasks[tile] & bit) === 0) break;
+      }
     }
     return null;
   }
@@ -713,7 +736,7 @@ export class RoadsMesh implements DiffLayer {
     const fx = x - tx;
     const fz = y - tz;
     const t = ramp.dx > 0 ? fx : ramp.dx < 0 ? 1 - fx : ramp.dz > 0 ? fz : 1 - fz;
-    return OVERPASS_LIFT * t;
+    return RAMP_RISE * (OVERPASS_RAMP_TILES - ramp.step + t);
   }
 
   /**
@@ -723,7 +746,7 @@ export class RoadsMesh implements DiffLayer {
    */
   private rampMatrix(
     index: number,
-    ramp: { dx: number; dz: number },
+    ramp: Ramp,
     a: number,
     across: number,
     sizeAlong: number,
@@ -733,8 +756,8 @@ export class RoadsMesh implements DiffLayer {
   ): void {
     const cx = (index % this.gridSize) + 0.5;
     const cz = Math.floor(index / this.gridSize) + 0.5;
-    const ground = this.elevation.maxCornerY(index);
-    const y = ground + OVERPASS_LIFT * (a + 0.5) + baseLift + sizeY / 2;
+    const ground = this.elevation.maxCornerY(index) + RAMP_RISE * (OVERPASS_RAMP_TILES - ramp.step);
+    const y = ground + RAMP_RISE * (a + 0.5) + baseLift + sizeY / 2;
     const alongX = ramp.dx !== 0;
     const px = cx + (alongX ? ramp.dx * a : across);
     const pz = cz + (alongX ? across : ramp.dz * a);

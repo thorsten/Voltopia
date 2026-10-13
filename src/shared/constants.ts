@@ -3,6 +3,8 @@ import { PlantType, SEASON_ORDER, Zone } from './types.ts';
 /** Structural constants (not balancing). */
 export const GRID_SIZE = 64;
 export const TICK_RATE = 4; // simulation ticks per real-time second at 1x speed
+/** Road tiles a road overpass needs on each side of its deck for the ramp (sim rule and render). */
+export const OVERPASS_RAMP_TILES = 2;
 export const TICK_MS = 1000 / TICK_RATE;
 export const SAVE_VERSION = 1;
 

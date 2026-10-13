@@ -96,13 +96,25 @@ describe('buildOverpasses', () => {
     const river = crossingTown();
     river.layers.terrain[at(5, 7)] = Terrain.River; // under the north ramp
     expect(overpassRejection(river, CROSSING)).toBe('needsRampRoom');
+    const farRiver = crossingTown();
+    farRiver.layers.terrain[at(5, 10)] = Terrain.River; // under the far south ramp tile
+    expect(overpassRejection(farRiver, CROSSING)).toBe('needsRampRoom');
     const stacked = crossingTown();
     buildRail(
       stacked,
-      Array.from({ length: 12 }, (_, i) => at(i + 2, 10)),
+      Array.from({ length: 12 }, (_, i) => at(i + 2, 11)),
     );
-    buildOverpasses(stacked, [at(5, 10)]); // (5, 9) is now that overpass's ramp
+    expect(buildOverpasses(stacked, [at(5, 11)])).toEqual({}); // its ramps (5, 9), (5, 10) overlap ours
     expect(overpassRejection(stacked, CROSSING)).toBe('needsRampRoom');
+  });
+
+  it('needs two plain road tiles on each side: a side street two tiles out is too close', () => {
+    const state = crossingTown();
+    buildRoads(state, [at(6, 10)]); // side street off the far south ramp tile
+    expect(overpassRejection(state, CROSSING)).toBe('needsRampRoom');
+    const fine = crossingTown();
+    buildRoads(fine, [at(6, 11)]); // three tiles out: beyond the ramp
+    expect(overpassRejection(fine, CROSSING)).toBeNull();
   });
 
   it('rejects a damaged tile and short funds', () => {
@@ -184,13 +196,13 @@ describe('overpass build rules after review', () => {
     const state = crossingTown();
     buildRail(
       state,
-      Array.from({ length: 12 }, (_, i) => at(i + 2, 10)),
+      Array.from({ length: 12 }, (_, i) => at(i + 2, 11)),
     );
     const before = state.money;
-    // Crossings at (5, 8) and (5, 10) would share the ramp (5, 9).
-    expect(buildOverpasses(state, [at(5, 8), at(5, 9), at(5, 10)])).toEqual({});
+    // Crossings at (5, 8) and (5, 11) would share the ramp tiles (5, 9) and (5, 10).
+    expect(buildOverpasses(state, [at(5, 8), at(5, 9), at(5, 10), at(5, 11)])).toEqual({});
     expect(state.layers.overpass[at(5, 8)]).toBe(1);
-    expect(state.layers.overpass[at(5, 10)]).toBe(0);
+    expect(state.layers.overpass[at(5, 11)]).toBe(0);
     expect(state.money).toBe(before - BALANCE.costs.overpass);
   });
 
@@ -202,12 +214,19 @@ describe('overpass build rules after review', () => {
     buildOverpasses(later, [CROSSING]);
     buildRoads(later, [at(4, 9)]); // side street off the south ramp
     expect(later.layers.overpass[CROSSING]).toBe(0);
+    const farLater = crossingTown();
+    buildOverpasses(farLater, [CROSSING]);
+    buildRoads(farLater, [at(4, 10)]); // side street off the far south ramp tile
+    expect(farLater.layers.overpass[CROSSING]).toBe(0);
   });
 
   it('accepts a dead-end ramp that only leads to the deck', () => {
     const state = crossingTown();
-    bulldozeTiles(state, [at(5, 2), at(5, 3), at(5, 4), at(5, 5), at(5, 6)]);
-    // (5, 7) is now a dead end pointing south at the crossing.
+    bulldozeTiles(state, [at(5, 2), at(5, 3), at(5, 4), at(5, 5)]);
+    // (5, 6) is now a dead end pointing south, two tiles from the crossing.
     expect(overpassRejection(state, CROSSING)).toBeNull();
+    bulldozeTiles(state, [at(5, 6)]);
+    // Only one ramp tile left on the north side.
+    expect(overpassRejection(state, CROSSING)).toBe('needsRampRoom');
   });
 });

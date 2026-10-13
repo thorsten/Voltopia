@@ -1,4 +1,4 @@
-import { BALANCE } from '../shared/constants.ts';
+import { BALANCE, OVERPASS_RAMP_TILES } from '../shared/constants.ts';
 import {
   DIR_E,
   DIR_N,
@@ -33,15 +33,18 @@ function straightAxis(bits: number): Axis | null {
   return null;
 }
 
-/** The two tiles on either side of `index` along `axis` (-1 when off the grid). */
-function alongAxis(state: SimState, index: number, axis: Axis): [number, number] {
+/**
+ * The tiles `steps` away from `index` along `axis`, both ways: the one
+ * toward the grid's origin first (-1 when off the grid).
+ */
+function alongAxis(state: SimState, index: number, axis: Axis, steps: number): [number, number] {
   const x = tileX(index, state.size);
   const y = tileY(index, state.size);
   const inside = (nx: number, ny: number) =>
     nx >= 0 && ny >= 0 && nx < state.size && ny < state.size ? tileIndex(nx, ny, state.size) : -1;
   return axis === 'ns'
-    ? [inside(x, y - 1), inside(x, y + 1)]
-    : [inside(x - 1, y), inside(x + 1, y)];
+    ? [inside(x, y - steps), inside(x, y + steps)]
+    : [inside(x - steps, y), inside(x + steps, y)];
 }
 
 /**
@@ -68,25 +71,49 @@ function bitToward(state: SimState, ramp: number, deck: number): number {
 }
 
 /**
- * Whether `index` can serve as a ramp of an overpass at `deck`: a plain
- * road tile whose road runs straight along the axis or dead-ends at the
- * deck — a ramp with a side arm would be drawn without it and cars
- * turning off it would meet the slope mid-height.
+ * Whether `index` can serve as a ramp tile of an overpass at `deck`: a
+ * plain road tile whose road runs straight along the axis or — on the
+ * far tile only — dead-ends toward the deck. A ramp with a side arm
+ * would be drawn without it and cars turning off it would meet the
+ * slope mid-height.
  */
-function isRampRoom(state: SimState, index: number, deck: number, axis: Axis): boolean {
+function isRampTile(
+  state: SimState,
+  index: number,
+  deck: number,
+  axis: Axis,
+  far: boolean,
+): boolean {
   if (index < 0) return false;
   const { layers } = state;
   if (layers.tileType[index] !== TileType.Road) return false;
   if (layers.rail[index] !== 0) return false;
   const road = layers.roadMask[index] & SIDES;
-  if (road !== (axis === 'ns' ? AXIS_NS : AXIS_EW) && road !== bitToward(state, index, deck))
-    return false;
+  const straight = road === (axis === 'ns' ? AXIS_NS : AXIS_EW);
+  if (!straight && !(far && road === bitToward(state, index, deck))) return false;
   if (layers.terrain[index] === Terrain.River) return false;
-  if (layers.overpass[index] !== 0) return false;
-  // Not already the ramp of an overpass on its other side along the same axis.
-  const [a, b] = alongAxis(state, index, axis);
-  const other = a === deck ? b : a;
-  return !(other >= 0 && layers.overpass[other] !== 0 && crossingRoadAxis(state, other) === axis);
+  return layers.overpass[index] === 0;
+}
+
+/**
+ * Whether both ramps of a deck at `index` with road `axis` have room:
+ * OVERPASS_RAMP_TILES plain road tiles on each side, and no other
+ * overpass of the same axis close enough for its ramps to overlap them.
+ */
+function hasRampRoom(state: SimState, index: number, axis: Axis): boolean {
+  for (let step = 1; step <= OVERPASS_RAMP_TILES; step++) {
+    const far = step === OVERPASS_RAMP_TILES;
+    for (const tile of alongAxis(state, index, axis, step)) {
+      if (!isRampTile(state, tile, index, axis, far)) return false;
+    }
+  }
+  for (let step = OVERPASS_RAMP_TILES + 1; step <= 2 * OVERPASS_RAMP_TILES; step++) {
+    for (const tile of alongAxis(state, index, axis, step)) {
+      if (tile >= 0 && state.layers.overpass[tile] !== 0 && crossingRoadAxis(state, tile) === axis)
+        return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -103,9 +130,7 @@ export function overpassRejection(state: SimState, index: number): string | null
   if (track === null) return 'needsLevelCrossing';
   const road = straightAxis(layers.roadMask[index] & SIDES);
   if (road === null || road === track) return 'needsStraightCrossing';
-  const [a, b] = alongAxis(state, index, road);
-  if (!isRampRoom(state, a, index, road) || !isRampRoom(state, b, index, road))
-    return 'needsRampRoom';
+  if (!hasRampRoom(state, index, road)) return 'needsRampRoom';
   if (layers.damage[index] !== 0) return 'damaged';
   return null;
 }
@@ -114,8 +139,7 @@ export function overpassRejection(state: SimState, index: number): string | null
 export function overpassStillValid(state: SimState, index: number): boolean {
   const axis = crossingRoadAxis(state, index);
   if (axis === null || state.layers.terrain[index] === Terrain.River) return false;
-  const [a, b] = alongAxis(state, index, axis);
-  return isRampRoom(state, a, index, axis) && isRampRoom(state, b, index, axis);
+  return hasRampRoom(state, index, axis);
 }
 
 /**
@@ -157,13 +181,15 @@ export function buildOverpasses(state: SimState, tiles: number[]): BuildResult {
 
 /**
  * Drop every overpass whose crossing or ramp room is gone (no refund).
- * Callers pass the edited tiles plus their 4-neighbours; one more ring
- * is checked here, since a road arm two tiles from a deck changes its
- * ramp's mask.
+ * Callers pass the edited tiles plus their 4-neighbours; as many more
+ * rings as the ramp is long are checked here, since a road arm joining
+ * the far ramp tile changes that tile's mask.
  */
 export function clearInvalidOverpasses(state: SimState, tiles: Iterable<number>): void {
   const { layers } = state;
-  for (const index of withNeighbors(state, [...tiles])) {
+  let ring = new Set<number>(tiles);
+  for (let i = 0; i < OVERPASS_RAMP_TILES; i++) ring = withNeighbors(state, [...ring]);
+  for (const index of ring) {
     if (layers.overpass[index] === 0) continue;
     if (overpassStillValid(state, index)) continue;
     layers.overpass[index] = 0;
