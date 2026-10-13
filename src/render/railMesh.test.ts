@@ -191,6 +191,22 @@ describe('RailMesh', () => {
     expect(bendPos.geometry.boundingBox!.max.y).toBeCloseTo(0.07, 6);
   });
 
+  it('draws plain ballasted track and no barriers under a road overpass', () => {
+    const tiles = baseTiles();
+    tiles[at(2, 2)].rail = LINE_PRESENT | DIR_E;
+    tiles[at(3, 2)].rail = LINE_PRESENT | DIR_E | DIR_W;
+    tiles[at(3, 2)].tileType = TileType.Road;
+    tiles[at(3, 2)].roadMask = DIR_N | DIR_S;
+    tiles[at(3, 2)].overpass = 1;
+    tiles[at(4, 2)].rail = LINE_PRESENT | DIR_W;
+    const { segments, crossings, centres, barrierPosts, signalHeads } = sceneWith(tiles);
+    expect(crossings.count).toBe(0);
+    expect(segments.count).toBe(4);
+    expect(centres.count).toBe(3);
+    expect(barrierPosts.count).toBe(0);
+    expect(signalHeads.count).toBe(0);
+  });
+
   it('a bend on a road tile is flush to the tile edge, without ballast or barriers', () => {
     const tiles = baseTiles();
     tiles[at(3, 3)].rail = LINE_PRESENT | DIR_W | DIR_N;

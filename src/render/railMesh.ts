@@ -235,6 +235,8 @@ export class RailMesh implements DiffLayer {
   private readonly terrains: Uint8Array;
   private readonly roadClasses: Uint8Array;
   private readonly plantTypes: Uint8Array;
+  /** 1 where a road overpass carries the road over the track. */
+  private readonly overpasses: Uint8Array;
   /** Road connection bits per tile (0 off the road). */
   private readonly roadMasks: Uint8Array;
   private readonly dummy = new THREE.Object3D();
@@ -251,6 +253,7 @@ export class RailMesh implements DiffLayer {
     this.roadClasses = new Uint8Array(tiles);
     this.roadMasks = new Uint8Array(tiles);
     this.plantTypes = new Uint8Array(tiles);
+    this.overpasses = new Uint8Array(tiles);
     const make = (
       geometry: THREE.BufferGeometry,
       color: number,
@@ -317,6 +320,10 @@ export class RailMesh implements DiffLayer {
       }
       if (this.roadClasses[diff.index] !== diff.roadClass) {
         this.roadClasses[diff.index] = diff.roadClass;
+        if (diff.rail !== 0) changed = true;
+      }
+      if (this.overpasses[diff.index] !== diff.overpass) {
+        this.overpasses[diff.index] = diff.overpass;
         if (diff.rail !== 0) changed = true;
       }
       if (this.plantTypes[diff.index] !== diff.plantType) {
@@ -527,7 +534,8 @@ export class RailMesh implements DiffLayer {
       if (mask === 0) continue;
       const x = (index % this.gridSize) + 0.5;
       const z = Math.floor(index / this.gridSize) + 0.5;
-      const onRoad = this.tileTypes[index] === TileType.Road;
+      // Under a road overpass the road is in the air: the track is plain.
+      const onRoad = this.tileTypes[index] === TileType.Road && this.overpasses[index] === 0;
       const onRiver = this.terrains[index] === Terrain.River;
       const lift = onRoad ? CROSSING_LIFT : 0;
       const centreY = this.groundY(index, x, z) + lift;
