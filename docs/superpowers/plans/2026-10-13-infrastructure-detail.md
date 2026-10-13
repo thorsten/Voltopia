@@ -56,8 +56,8 @@ export function pylonModel(kind: PylonKind): PylonModel; // cached
 - Yaw (line direction → local z): E/W only → line along x; N/S only → along z; exactly one N/S + one E/W bit → bisector; else along x. Export `pylonYaw(mask): number` for tests.
 - Conductors: for E and S bits; world attachment points of both pylons (rotated by yaw). Pair by lateral offset across the span direction (sort each side's three points by their dot product with the span's horizontal normal). For each pair: `CABLE_SEGMENTS = 6` segments along `p(t) = lerp(a, b, t) − (0, 4·CABLE_SAG·t(1−t), 0)`, each a unit box (`CABLE_THICKNESS`) placed at the segment midpoint, yawed and pitched along the segment, scaled to its length. Export `conductorPoints(a, b): Vector3[]` (7 points) for tests.
 - Three meshes via `GrowingMesh`: lattice, pole, conductors (no shadow).
-- [ ] Tests (`powerLinesMesh.test.ts`): kinds per tile type/zone; yaw values; 3-tile straight line → 2 spans × 3 × 6 = 36 segments; each segment's end point equals the next one's start (decompose matrices, ±1e-5); conductor midpoint sag = `CABLE_SAG` below the chord (±1e-6); on a slope (levels 0→2) the conductor end heights differ by the ground rise; at a corner the three conductors' horizontal projections do not intersect; conductors `castShadow === false`; changing a line tile's zone switches lattice ↔ pole.
-- [ ] Implement; checks; commit `feat(render): pylons with three sagging conductors`.
+- [x] Tests (`powerLinesMesh.test.ts`): kinds per tile type/zone; yaw values; 3-tile straight line → 2 spans × 3 × 6 = 36 segments; each segment's end point equals the next one's start (decompose matrices, ±1e-5); conductor midpoint sag = `CABLE_SAG` below the chord (±1e-6); on a slope (levels 0→2) the conductor end heights differ by the ground rise; at a corner the three conductors' horizontal projections do not intersect; conductors `castShadow === false`; changing a line tile's zone switches lattice ↔ pole.
+- [x] Implement; checks; commit `feat(render): pylons with three sagging conductors`.
 
 ### Task 3: Kerbs and zebra crossings
 
