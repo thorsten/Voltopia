@@ -119,8 +119,8 @@ export function applyRipples(material: THREE.MeshStandardMaterial): RippleUnifor
 - Colours: broadleaf crowns `foliageColor(phase, snow)`; conifer crowns `CONIFER_COLOR` lerped to `FOLIAGE_SNOW` by `snowCover × 0.7`. `setEnvironment` writes the instance colours of both crown meshes only when the colour changed (compare hex), and the rebuild writes them too.
 - Uploads bounded by count.
 - Expose `get counts(): { conifer: number; broadleaf: number }` for tests.
-- [ ] Tests: stage 1/2/3 tiles give 2/3/5 trees; a 20×20 woods map at level 0 has both species; the same at level 7 has a conifer majority; at phase 0.6 (autumn) and snow 0 a conifer crown colour equals `CONIFER_COLOR`, a broadleaf crown does not; with snow 1 the conifer is lighter; positions identical after a second rebuild (diff off/on); every trunk instance y equals `elevation.surfaceY(x, z)` at its x/z; removing the forest from a tile drops its trees.
-- [ ] Implement; checks; commit `feat(render): conifers and broadleaves`.
+- [x] Tests: stage 1/2/3 tiles give 2/3/5 trees; a 20×20 woods map at level 0 has both species; the same at level 7 has a conifer majority; at phase 0.6 (autumn) and snow 0 a conifer crown colour equals `CONIFER_COLOR`, a broadleaf crown does not; with snow 1 the conifer is lighter; positions identical after a second rebuild (diff off/on); every trunk instance y equals `elevation.surfaceY(x, z)` at its x/z; removing the forest from a tile drops its trees.
+- [x] Implement; checks; commit `feat(render): conifers and broadleaves`.
 
 ---
 
