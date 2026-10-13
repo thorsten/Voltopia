@@ -173,6 +173,18 @@ describe('plant models', () => {
       expect(g.boundingBox!.max.z).toBeGreaterThan(0.25);
     },
   );
+  it('rail yard: a siding on the centre line runs from the shed to the track edge', () => {
+    const g = plantModel(PlantType.RailYard).geometry!;
+    const position = g.getAttribute('position');
+    // Rails either side of x = 0 (gauge 0.09) reaching z = 0.5, where the
+    // track tile's stub meets them.
+    let reachesEdge = false;
+    for (let i = 0; i < position.count; i++) {
+      if (Math.abs(Math.abs(position.getX(i)) - 0.09) < 0.02 && position.getZ(i) >= 0.5 - 1e-6)
+        reachesEdge = true;
+    }
+    expect(reachesEdge).toBe(true);
+  });
   it.each([
     ['tree', treeGeometry, TREE_HEIGHT],
     ['bench', benchGeometry, BENCH_HEIGHT],

@@ -241,6 +241,52 @@ describe('RailMesh', () => {
   });
 });
 
+describe('RailMesh rail yard stub', () => {
+  it('draws a stub from the track toward a rail yard that halts at it', () => {
+    const tiles = baseTiles();
+    tiles[at(3, 2)].rail = LINE_PRESENT | DIR_E;
+    tiles[at(4, 2)].rail = LINE_PRESENT | DIR_E | DIR_W;
+    tiles[at(5, 2)].rail = LINE_PRESENT | DIR_W;
+    tiles[at(4, 3)].tileType = TileType.Plant;
+    tiles[at(4, 3)].plantType = PlantType.RailYard;
+    const { segments } = sceneWith(tiles);
+    // Four halves of the line plus the stub south from (4, 2).
+    expect(segments.count).toBe(5);
+    // Instances per tile follow DIRECTION_ANGLE order: (4, 2) is E, W, S.
+    const stub = instanceOf(segments, 3);
+    expect(stub.position.x).toBeCloseTo(4.5, 6);
+    expect(stub.position.z).toBeCloseTo(2.5, 6);
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(stub.quaternion).z).toBeCloseTo(1, 6);
+  });
+
+  it('gives a yard one stub, from its lowest-index track neighbour only', () => {
+    const tiles = baseTiles();
+    // Track north and west of the yard at (4, 3): the north tile has the lower index.
+    tiles[at(4, 2)].rail = LINE_PRESENT | DIR_E;
+    tiles[at(5, 2)].rail = LINE_PRESENT | DIR_W;
+    tiles[at(3, 3)].rail = LINE_PRESENT | DIR_N;
+    tiles[at(3, 2)].rail = LINE_PRESENT | DIR_S;
+    tiles[at(4, 3)].tileType = TileType.Plant;
+    tiles[at(4, 3)].plantType = PlantType.RailYard;
+    const { segments } = sceneWith(tiles);
+    expect(segments.count).toBe(5);
+  });
+
+  it('a station beside the track gets no stub, and a demolished yard loses its stub', () => {
+    const tiles = baseTiles();
+    tiles[at(4, 2)].rail = LINE_PRESENT | DIR_E;
+    tiles[at(5, 2)].rail = LINE_PRESENT | DIR_W;
+    tiles[at(4, 3)].tileType = TileType.Plant;
+    tiles[at(4, 3)].plantType = PlantType.TrainStation;
+    const { mesh, segments } = sceneWith(tiles);
+    expect(segments.count).toBe(2);
+    mesh.applyDiffs([{ ...tiles[at(4, 3)], plantType: PlantType.RailYard }]);
+    expect(segments.count).toBe(3);
+    mesh.applyDiffs([{ ...tiles[at(4, 3)], tileType: TileType.Empty, plantType: 0 }]);
+    expect(segments.count).toBe(2);
+  });
+});
+
 describe('RailMesh sleepers', () => {
   it('keeps the ballasted segment footprint and rail-top height', () => {
     const { segments } = sceneWith(baseTiles());

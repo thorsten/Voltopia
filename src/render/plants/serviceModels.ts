@@ -1,4 +1,5 @@
 import { PlantType } from '../../shared/types.ts';
+import type * as THREE from 'three';
 import { box, cone, cylinder, gable, merge } from '../modelKit.ts';
 import { FULL_PLINTH, TONE, win, yardLamp } from './common.ts';
 import type { GroundProp, LampAnchor, PlantModel } from './models.ts';
@@ -39,6 +40,8 @@ const C = {
   yardHall: 0x6e5a9e,
   yardRoof: 0xe4e7ea,
   loco: 0xd84a3a,
+  ballast: 0x8a8075,
+  rail: 0x4a4d52,
 } as const;
 
 /** Doors are thin slabs proud of their wall. */
@@ -800,9 +803,18 @@ function freightTerminal(): PlantModel {
 
 /** Engine shed, long along z, its doors facing the track (+z). */
 const SHED = { w: 0.44, h: 0.26, d: 0.56, x: -0.12, z: 0, roofH: 0.14 };
-const SHED_DOOR = { w: 0.14, h: 0.2, x: [-0.23, -0.01] };
-/** Inspection pit in front of the west door, running out to the track edge. */
-const PIT = { w: 0.08, z1: 0.48 };
+/** The east door sits on the centre line, where the track tile's stub meets the siding. */
+const SHED_DOOR = { w: 0.14, h: 0.2, x: [-0.23, 0] };
+/**
+ * Sidings out of both doors: a ballast strip with the rails on it. Its
+ * rail tops match the track tile's (trackbed 0.04 + rail 0.03 over the
+ * ground; the plinth already lifts the model by 0.015). The east siding
+ * runs to the tile edge, the west one ends at a buffer stop.
+ */
+const SIDING = { w: 0.3, bed: 0.025, gauge: 0.09, railW: 0.03, railH: 0.03, westEnd: 0.44 };
+const BUFFER = { w: 0.2, h: 0.06, d: 0.02 };
+/** Inspection pit between the rails in front of the west door, up to the buffer stop. */
+const PIT = { w: 0.08, z1: 0.42 };
 /** Sand tower: column, funnel, hopper and a conical lid. */
 const SAND = {
   x: 0.3,
@@ -818,6 +830,27 @@ const YARD_OFFICE = { w: 0.18, h: 0.18, d: 0.18, x: 0.3, z: -0.25 };
 /** Shunting locomotive standing in front of the east door. */
 const LOCO = { w: 0.1, frame: 0.03, body: 0.09, cab: 0.05, z0: 0.3, z1: 0.48, cabD: 0.06 };
 
+/** A siding from the shed front to `end`, centred on `x`: ballast bed and two rails. */
+function siding(x: number, from: number, end: number): THREE.BufferGeometry[] {
+  const length = end - from;
+  const z = (from + end) / 2;
+  const parts = [box(SIDING.w, SIDING.bed, length, x, SIDING.bed / 2, z, C.ballast)];
+  for (const side of [-1, 1]) {
+    parts.push(
+      box(
+        SIDING.railW,
+        SIDING.railH,
+        length,
+        x + side * SIDING.gauge,
+        SIDING.bed + SIDING.railH / 2,
+        z,
+        C.rail,
+      ),
+    );
+  }
+  return parts;
+}
+
 function railYard(): PlantModel {
   const shedFront = SHED.z + SHED.d / 2;
   const shedBack = SHED.z - SHED.d / 2;
@@ -828,6 +861,8 @@ function railYard(): PlantModel {
   const locoX = SHED_DOOR.x[1];
   const locoD = LOCO.z1 - LOCO.z0;
   const locoZ = (LOCO.z0 + LOCO.z1) / 2;
+  /** The locomotive stands on the east siding's rails. */
+  const locoY = SIDING.bed + SIDING.railH;
   const officeFront = YARD_OFFICE.z + YARD_OFFICE.d / 2;
   const officeEast = YARD_OFFICE.x + YARD_OFFICE.w / 2;
   const lamp = yardLamp(0.42, 0.42);
@@ -844,12 +879,23 @@ function railYard(): PlantModel {
       'z',
     ),
     ...SHED_DOOR.x.map((x) => frontDoor(SHED_DOOR.w, SHED_DOOR.h, x, shedFront, C.FRAME)),
+    ...siding(SHED_DOOR.x[0], shedFront, SIDING.westEnd),
+    ...siding(SHED_DOOR.x[1], shedFront, 0.5),
+    box(
+      BUFFER.w,
+      BUFFER.h,
+      BUFFER.d,
+      SHED_DOOR.x[0],
+      SIDING.bed + BUFFER.h / 2,
+      SIDING.westEnd + BUFFER.d / 2,
+      C.FRAME,
+    ),
     box(
       PIT.w,
       MARK,
       PIT.z1 - shedFront - DOOR_DEPTH,
       SHED_DOOR.x[0],
-      MARK / 2,
+      SIDING.bed + MARK / 2,
       (PIT.z1 + shedFront + DOOR_DEPTH) / 2,
       C.GLASS,
     ),
@@ -874,14 +920,14 @@ function railYard(): PlantModel {
       YARD_OFFICE.z,
       C.ROOF_DARK,
     ),
-    box(LOCO.w, LOCO.frame, locoD, locoX, LOCO.frame / 2, locoZ, C.FRAME),
-    box(LOCO.w, LOCO.body, locoD, locoX, LOCO.frame + LOCO.body / 2, locoZ, C.loco),
+    box(LOCO.w, LOCO.frame, locoD, locoX, locoY + LOCO.frame / 2, locoZ, C.FRAME),
+    box(LOCO.w, LOCO.body, locoD, locoX, locoY + LOCO.frame + LOCO.body / 2, locoZ, C.loco),
     box(
       LOCO.w,
       LOCO.cab,
       LOCO.cabD,
       locoX,
-      LOCO.frame + LOCO.body + LOCO.cab / 2,
+      locoY + LOCO.frame + LOCO.body + LOCO.cab / 2,
       LOCO.z0 + LOCO.cabD / 2,
       C.loco,
     ),
@@ -892,7 +938,8 @@ function railYard(): PlantModel {
   return {
     geometry,
     parts: n,
-    plinth: { sx: FULL_PLINTH, sz: FULL_PLINTH, color: C.GRAVEL },
+    // The plinth runs to the track edge, under the siding's end.
+    plinth: { sx: FULL_PLINTH, sz: 1, color: C.GRAVEL },
     windows: [
       win(shedEast, sill, -0.15, 1),
       win(shedEast, sill, 0.05, 1),

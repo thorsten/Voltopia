@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../shared/grid.ts';
 import { crossingIsClosed, type CrossingTrain } from '../shared/levelCrossing.ts';
 import {
+  PlantType,
   Terrain,
   TileType,
   VehicleKind,
@@ -203,7 +204,9 @@ const DIRECTION_ANGLE: ReadonlyArray<{ bit: number; angle: number }> = [
  * bar and a signal head per approach; a bend's rails mitred at the
  * corner; a deck with parapets under tiles
  * that bridge the river; line-side occupancy signals at stations and
- * junctions (`RailSignals`). Rebuilt from the diffs like the lines.
+ * junctions (`RailSignals`); a stub from the track toward a rail yard
+ * that halts at it, meeting the yard's siding at the shared edge.
+ * Rebuilt from the diffs like the lines.
  */
 export class RailMesh implements DiffLayer {
   private readonly segments: THREE.InstancedMesh;
@@ -335,6 +338,36 @@ export class RailMesh implements DiffLayer {
       if (nx < 0 || ny < 0 || nx >= this.gridSize || ny >= this.gridSize) return false;
       return this.masks[ny * this.gridSize + nx] !== 0;
     });
+  }
+
+  /**
+   * Connection bits a track tile gets toward the rail yards beside it: a
+   * yard halts at its lowest-index track neighbour (`plantTrack` in the
+   * sim), and that tile draws a stub to the yard's siding.
+   */
+  private yardStubBits(index: number): number {
+    const size = this.gridSize;
+    const x = index % size;
+    const y = Math.floor(index / size);
+    let bits = 0;
+    for (const { dx, dy, bit } of DIRECTIONS) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+      const yard = ny * size + nx;
+      if (this.tileTypes[yard] !== TileType.Plant || this.plantTypes[yard] !== PlantType.RailYard)
+        continue;
+      let halt = -1;
+      for (const d of DIRECTIONS) {
+        const tx = nx + d.dx;
+        const ty = ny + d.dy;
+        if (tx < 0 || ty < 0 || tx >= size || ty >= size) continue;
+        const track = ty * size + tx;
+        if (this.masks[track] !== 0 && (halt < 0 || track < halt)) halt = track;
+      }
+      if (halt === index) bits |= bit;
+    }
+    return bits;
   }
 
   /** Ground under a point of a track tile: the deck top on a river tile, the terrain elsewhere. */
@@ -501,10 +534,11 @@ export class RailMesh implements DiffLayer {
       const bits = mask & (DIR_N | DIR_E | DIR_S | DIR_W);
       const alongX = (bits & (DIR_E | DIR_W)) !== 0 && (bits & (DIR_N | DIR_S)) === 0;
       const alongZ = (bits & (DIR_N | DIR_S)) !== 0 && (bits & (DIR_E | DIR_W)) === 0;
+      const arms = bits | this.yardStubBits(index);
       const directions =
-        bits === 0
+        arms === 0
           ? [DIRECTION_ANGLE[0], DIRECTION_ANGLE[2]]
-          : DIRECTION_ANGLE.filter((d) => (bits & d.bit) !== 0);
+          : DIRECTION_ANGLE.filter((d) => (arms & d.bit) !== 0);
       const bend = bits !== 0 && directions.length === 2 && !alongX && !alongZ;
       const roadHalf = onRoad ? roadHalfWidth(this.roadClasses[index]) : 0;
       for (const { bit, angle } of directions) {
