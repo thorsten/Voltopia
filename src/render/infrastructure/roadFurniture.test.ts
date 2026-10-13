@@ -5,7 +5,10 @@ import {
   KERB_WIDTH,
   ZEBRA_STRIPES,
   ZEBRA_STRIPE_WIDTH,
+  LAMP_REACH,
+  MAX_PARTS_PER_LAMP,
   kerbPieces,
+  lampModel,
   zebraPieces,
   type FlatPiece,
 } from './roadFurniture.ts';
@@ -81,5 +84,18 @@ describe('zebraPieces', () => {
         expect(Math.abs(across) + ZEBRA_STRIPE_WIDTH / 2).toBeLessThanOrEqual(pad / 2);
       }
     }
+  });
+});
+
+describe('lampModel', () => {
+  it('stands on y = 0 with its head under the housing at the arm tip', () => {
+    const lamp = lampModel();
+    lamp.geometry.computeBoundingBox();
+    expect(lamp.geometry.boundingBox!.min.y).toBeCloseTo(0, 6);
+    expect(lamp.head.y).toBeGreaterThan(0.25);
+    expect(lamp.head.x).toBeGreaterThanOrEqual(LAMP_REACH - 0.02);
+    expect(lamp.geometry.boundingBox!.max.x).toBeLessThanOrEqual(LAMP_REACH + 0.02);
+    expect(lamp.parts).toBeLessThanOrEqual(MAX_PARTS_PER_LAMP);
+    expect(lampModel()).toBe(lamp);
   });
 });

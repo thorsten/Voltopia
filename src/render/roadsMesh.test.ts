@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
-import { Terrain, TileType, type TileDiff } from '../shared/types.ts';
+import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { RoadsMesh } from './roadsMesh.ts';
+import { RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
 import { ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
 
 const SIZE = 5;
@@ -68,5 +68,47 @@ describe('RoadsMesh kerbs and zebra crossings', () => {
     const layer = layerWith(list);
     expect(layer.stripes.mesh.count).toBe(0);
     expect(layer.kerbs.mesh.count).toBe(3 * 5 + 7);
+  });
+});
+
+describe('RoadsMesh streetlamps', () => {
+  const position = (mesh: THREE.InstancedMesh, slot: number) => {
+    const matrix = new THREE.Matrix4();
+    mesh.getMatrixAt(slot, matrix);
+    return new THREE.Vector3().setFromMatrixPosition(matrix);
+  };
+
+  it('hangs the glow over the road, closer to the tile centre than the foot', () => {
+    const list = tiles();
+    road(list, 2, 2, DIR_E | DIR_W);
+    const layer = layerWith(list);
+    expect(layer.lampPoles.mesh.count).toBe(1);
+    expect(layer.lampHeads.mesh.count).toBe(1);
+    expect(layer.lampPoles.mesh.castShadow).toBe(true);
+    const centre = new THREE.Vector2(2.5, 2.5);
+    const foot = position(layer.lampPoles.mesh, 0);
+    const head = position(layer.lampHeads.mesh, 0);
+    const flat = (v: THREE.Vector3) => new THREE.Vector2(v.x, v.z).distanceTo(centre);
+    expect(flat(head)).toBeLessThan(flat(foot));
+    // The arm reaches toward the centre along the diagonal.
+    expect(head.x).toBeCloseTo(head.z, 6);
+    expect(head.y).toBeGreaterThan(foot.y + 0.25);
+  });
+
+  it('leaves a level crossing to its barriers', () => {
+    const list = tiles();
+    road(list, 2, 2, DIR_E | DIR_W);
+    list[at(2, 2)].rail = LINE_PRESENT | DIR_N | DIR_S;
+    expect(layerWith(list).lampPoles.mesh.count).toBe(0);
+  });
+
+  it('keeps the pole foot off an avenue roadway', () => {
+    const list = tiles();
+    road(list, 2, 2, DIR_E | DIR_W);
+    list[at(2, 2)].roadClass = RoadClass.Avenue;
+    const layer = layerWith(list);
+    const foot = position(layer.lampPoles.mesh, 0);
+    expect(foot.x - 2.5).toBeGreaterThan(roadHalfWidth(RoadClass.Avenue));
+    expect(foot.x - 2.5).toBeLessThan(0.5);
   });
 });

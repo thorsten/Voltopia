@@ -85,8 +85,8 @@ export function zebraPieces(mask: number, padSize: number): FlatPiece[]; // [] u
 
 - `lampModel(): { geometry; parts; head: {x, y, z} }` — pole (≈ 0.3 high), arm of two boxes reaching `LAMP_REACH = 0.18` along local +x, housing at the tip, `head` = glow position under the housing. Base y = 0.
 - `RoadsMesh.rebuildLamps`: same tiles/corner as today; yaw so local +x points from the lamp foot to the tile centre; poles mesh uses the model (vertex colours, casts shadow); the glow head instance at the rotated `head`. Night behaviour unchanged.
-- [ ] Tests: lamp model base y = 0, head above 0.25 and at x ≥ LAMP_REACH − 0.02; in `RoadsMesh` a lamp head lies closer to the tile centre than its pole foot.
-- [ ] Implement; checks; commit `feat(render): streetlamps with an arm over the road`.
+- [x] Tests: lamp model base y = 0, head above 0.25 and at x ≥ LAMP_REACH − 0.02; in `RoadsMesh` a lamp head lies closer to the tile centre than its pole foot.
+- [x] Implement; checks; commit `feat(render): streetlamps with an arm over the road`.
 
 ### Task 5: Sleepers
 

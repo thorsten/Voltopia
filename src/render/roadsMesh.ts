@@ -9,7 +9,13 @@ import type { ElevationField } from './elevationField.ts';
 import { composeBoxOnGround, composePrismOnGround, createHalfTilePrism } from './decal.ts';
 import { surfaceMaterial } from './materials.ts';
 import { GrowingMesh } from './plants/growingMesh.ts';
-import { kerbPieces, zebraPieces, type FlatPiece } from './infrastructure/roadFurniture.ts';
+import {
+  KERB_WIDTH,
+  kerbPieces,
+  lampModel,
+  zebraPieces,
+  type FlatPiece,
+} from './infrastructure/roadFurniture.ts';
 
 const ROAD_HEIGHT = 0.05;
 /** Width of a street's centre pad and arms (the roadway). */
@@ -43,6 +49,26 @@ function setupFlat(mesh: THREE.InstancedMesh): void {
   mesh.receiveShadow = true;
 }
 
+/** Streetlamps stand at this tile-local corner offset (south-east of the centre). */
+const LAMP_CORNER = 0.38;
+/** Room kept between the roadway's edge and the lamp's foot on wide roads. */
+const LAMP_KERB_CLEARANCE = KERB_WIDTH + 0.015;
+const LAMP_GLOW_RADIUS = 0.03;
+/** The lamp's arm (local +x) points from its corner back to the tile centre. */
+const LAMP_YAW = (3 * Math.PI) / 4;
+
+/** Lamps cast shadows; transforms span the grid, so no culling. */
+function setupLamp(mesh: THREE.InstancedMesh): void {
+  mesh.frustumCulled = false;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+}
+
+/** Unlit glows cast nothing; transforms span the grid, so no culling. */
+function setupGlow(mesh: THREE.InstancedMesh): void {
+  mesh.frustumCulled = false;
+}
+
 const DECK_COLOR = 0x8a9099;
 const RAIL_COLOR = 0xd8d8d0;
 const DECK_SIZE = 0.96;
@@ -52,7 +78,7 @@ const RAIL_HEIGHT = 0.14;
 
 const SHELTER_COLOR = 0x4a5560;
 const SIGN_COLOR = 0xf2d16b;
-/** Shelter stands at the south-west kerb, clear of the lamp corner (north-east). */
+/** Shelter stands at the south-west kerb, clear of the lamp corner (south-east). */
 const SHELTER_OFFSET_X = 0.16;
 const SHELTER_OFFSET_Z = 0.84;
 
@@ -70,8 +96,10 @@ export class RoadsMesh implements DiffLayer {
   readonly kerbs: GrowingMesh;
   /** Zebra crossings on the arms of land junctions without track. */
   readonly stripes: GrowingMesh;
-  private readonly lampPoles: THREE.InstancedMesh;
-  private readonly lampHeads: THREE.InstancedMesh;
+  /** Streetlamp models (pole, arm, housing). */
+  readonly lampPoles: GrowingMesh;
+  /** The lamps' glows, under each housing. */
+  readonly lampHeads: GrowingMesh;
   private readonly lampHeadMaterial: THREE.MeshBasicMaterial;
   private readonly decks: THREE.InstancedMesh;
   private readonly rails: THREE.InstancedMesh;
@@ -146,32 +174,23 @@ export class RoadsMesh implements DiffLayer {
       setupFlat,
     );
 
-    const poleGeometry = new THREE.BoxGeometry(0.035, 0.3, 0.035);
-    poleGeometry.translate(0, 0.15, 0);
-    const poleMaterial = surfaceMaterial({ color: 0x3a4048 });
-    this.lampPoles = new THREE.InstancedMesh(poleGeometry, poleMaterial, gridSize * gridSize);
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.lampPoles.frustumCulled = false;
-    this.lampPoles.count = 0;
-    scene.add(this.lampPoles);
-
-    const headGeometry = new THREE.SphereGeometry(0.045, 6, 4);
+    this.lampPoles = new GrowingMesh(
+      scene,
+      lampModel().geometry,
+      surfaceMaterial({ vertexColors: true }),
+      setupLamp,
+    );
     this.lampHeadMaterial = new THREE.MeshBasicMaterial({
       color: 0xffe3a1,
       transparent: true,
       opacity: 0.25,
     });
-    this.lampHeads = new THREE.InstancedMesh(
-      headGeometry,
+    this.lampHeads = new GrowingMesh(
+      scene,
+      new THREE.SphereGeometry(LAMP_GLOW_RADIUS, 6, 4),
       this.lampHeadMaterial,
-      gridSize * gridSize,
+      setupGlow,
     );
-    // Instance transforms live across the whole grid; the base geometry's
-    // bounds would wrongly cull the mesh, so culling is disabled.
-    this.lampHeads.frustumCulled = false;
-    this.lampHeads.count = 0;
-    scene.add(this.lampHeads);
 
     const post1 = new THREE.BoxGeometry(0.03, 0.22, 0.03);
     post1.translate(-0.09, 0.11, 0);
@@ -391,31 +410,42 @@ export class RoadsMesh implements DiffLayer {
     );
   }
 
-  /** One streetlamp on every other road tile, at a fixed corner. */
+  /**
+   * One streetlamp on every other road tile, at a fixed corner beside
+   * the roadway, its arm reaching over the road toward the tile centre.
+   * The bus shelter keeps to the opposite (south-west) kerb.
+   */
   private rebuildLamps(): void {
+    const head = lampModel().head;
+    const yaw = new THREE.Matrix4().makeRotationY(LAMP_YAW);
+    const reach = new THREE.Vector3(head.x, head.y, head.z).applyMatrix4(yaw);
     let count = 0;
     for (let index = 0; index < this.roadMasks.length; index++) {
       if (this.roadMasks[index] < 0) continue;
       const x = index % this.gridSize;
       const y = Math.floor(index / this.gridSize);
       if ((x + y) % 2 !== 0) continue;
-      const px = x + 0.88;
-      const pz = y + 0.88;
+      // Level crossings carry their own barriers and signals at the corners.
+      if (this.track[index] !== 0) continue;
+      // Avenues are wide enough to reach the usual corner: step back to the kerb.
+      const corner =
+        0.5 + Math.max(LAMP_CORNER, roadHalfWidth(this.roadClasses[index]) + LAMP_KERB_CLEARANCE);
+      const px = x + corner;
+      const pz = y + corner;
       // Poles stand upright on the ground under their own corner.
       const lift = this.isBridge(index)
         ? this.elevation.maxCornerY(index)
         : this.elevation.surfaceY(px, pz);
-      this.matrix.identity();
-      this.matrix.setPosition(px, 0 + lift, pz);
-      this.lampPoles.setMatrixAt(count, this.matrix);
-      this.matrix.setPosition(px, 0.33 + lift, pz);
-      this.lampHeads.setMatrixAt(count, this.matrix);
+      this.lampPoles.ensure(count + 1);
+      this.lampHeads.ensure(count + 1);
+      this.matrix.copy(yaw).setPosition(px, lift, pz);
+      this.lampPoles.mesh.setMatrixAt(count, this.matrix);
+      this.matrix.makeTranslation(px + reach.x, lift + reach.y, pz + reach.z);
+      this.lampHeads.mesh.setMatrixAt(count, this.matrix);
       count++;
     }
-    this.lampPoles.count = count;
-    this.lampHeads.count = count;
-    this.lampPoles.instanceMatrix.needsUpdate = true;
-    this.lampHeads.instanceMatrix.needsUpdate = true;
+    this.lampPoles.commit(count);
+    this.lampHeads.commit(count);
   }
 
   /** One shelter with a lit sign at the kerb of every stop tile. */
