@@ -45,13 +45,16 @@ const DECK_WIDTH = 0.5;
 const PARAPET_HEIGHT = 0.12;
 const PARAPET_THICKNESS = 0.03;
 /**
- * Level-crossing furniture: a white post with a raised red bar and a
- * signal head, per approach. The bar's length is set per crossing so the
- * lowered bar ends at the road's centre line.
+ * Level-crossing furniture, per approach: a white post with the signal
+ * head on its top and the red bar hung beside it, pivoting at the post's
+ * top. The bar's length is set per crossing so the lowered bar ends at
+ * the road's centre line.
  */
 const BARRIER_POST = { sx: 0.06, sy: 0.14, sz: 0.06 } as const;
 const BARRIER_BAR = { sx: 0.04, sz: 0.04 } as const;
 const SIGNAL_HEAD = { sx: 0.08, sy: 0.1, sz: 0.05 } as const;
+/** The bar hangs this far from the post's centre, toward the road's centre. */
+const BAR_OFF_POST = BARRIER_POST.sx / 2 + BARRIER_BAR.sx / 2;
 /** The post stands this far from the tile centre along the road … */
 const BARRIER_ALONG_ROAD = 0.42;
 /** … and this far off the roadway's edge, so the raised bar is clear of the lane. */
@@ -574,12 +577,13 @@ export class RailMesh implements DiffLayer {
       }
       if (onRoad && (alongX || alongZ)) {
         // A road crossing a straight track: a barrier on the right-hand
-        // side of each approach (traffic keeps right), its bar raised, a
-        // signal head on the post. Decoration — cars and trains ignore
-        // each other. The post stands just off the roadway; its bar
-        // reaches from there to the road's centre line.
+        // side of each approach (traffic keeps right), its bar raised, the
+        // signal head on the post's top. Decoration — cars and trains
+        // ignore each other. The post stands just off the roadway; the
+        // bar hangs beside it and reaches to the road's centre line.
         const beside =
           roadHalfWidth(this.roadClasses[index]) + BARRIER_POST.sx / 2 + BARRIER_CLEARANCE;
+        const hang = beside - BAR_OFF_POST;
         for (const s of [-1, 1]) {
           const px = alongX ? x + s * beside : x + s * BARRIER_ALONG_ROAD;
           const pz = alongX ? z + s * BARRIER_ALONG_ROAD : z - s * beside;
@@ -590,7 +594,7 @@ export class RailMesh implements DiffLayer {
             this.signalHeads,
             barriers,
             px,
-            ground + BARRIER_POST.sy + beside - SIGNAL_HEAD.sy,
+            ground + BARRIER_POST.sy,
             pz,
             SIGNAL_HEAD,
             yaw,
@@ -603,10 +607,10 @@ export class RailMesh implements DiffLayer {
             cz: z,
             alongX,
             side: s,
-            px,
-            pz,
+            px: alongX ? x + s * hang : px,
+            pz: alongX ? pz : z - s * hang,
             pivotY: ground + BARRIER_POST.sy,
-            length: beside,
+            length: hang,
             yaw,
             progress: 0,
             lit: false,

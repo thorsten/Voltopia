@@ -410,6 +410,30 @@ describe('RailMesh level-crossing barriers', () => {
     return { id: 1, x, y, angle: 0, kind: VehicleKind.Locomotive };
   }
 
+  it('mounts the signal head on the post and hangs the bar beside it', () => {
+    const { mesh, barrierPosts, barrierBars, signalHeads } = crossing();
+    for (const slot of [0, 1]) {
+      const post = instanceOf(barrierPosts, slot);
+      const head = instanceOf(signalHeads, slot);
+      // The head stands on the post's top, over its foot.
+      expect(head.position.x).toBeCloseTo(post.position.x, 6);
+      expect(head.position.z).toBeCloseTo(post.position.z, 6);
+      expect(head.position.y).toBeCloseTo(post.position.y + post.scale.y, 6);
+      // The bar pivots at the post's top, beside it toward the road's centre.
+      const bar = instanceOf(barrierBars, slot);
+      expect(bar.position.y).toBeCloseTo(post.position.y + post.scale.y, 6);
+      expect(Math.abs(bar.position.x - 3.5)).toBeLessThan(Math.abs(post.position.x - 3.5));
+      expect(Math.abs(bar.position.x - 3.5)).toBeGreaterThan(
+        Math.abs(post.position.x - 3.5) - post.scale.x,
+      );
+    }
+    // Lowering the bar leaves the head where it is.
+    const before = instanceOf(signalHeads, 0).position.clone();
+    mesh.setTrains([train(5, 2.5)]);
+    mesh.update(1, 1);
+    expect(instanceOf(signalHeads, 0).position).toEqual(before);
+  });
+
   it('keeps the bars raised while no train is near', () => {
     const { mesh, barrierBars } = crossing();
     mesh.setTrains([train(7.5, 2.5)]); // four tiles east: out of range
