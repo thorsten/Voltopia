@@ -363,3 +363,34 @@ describe('vehicle models and colours', () => {
     expect(material.opacity).toBeCloseTo(1, 6);
   });
 });
+
+describe('overpass ramps', () => {
+  /** A ramp climbing toward +z across tile (2,1) and one toward +x across tile (1,2). */
+  const lift = (x: number, y: number): number => {
+    if (Math.floor(x) === 2 && Math.floor(y) === 1) return 0.3 * (y - 1);
+    if (Math.floor(y) === 2 && Math.floor(x) === 1) return 0.3 * (x - 1);
+    return 0;
+  };
+
+  it('lifts the car by the ramp height under it and tilts it nose-up, on either axis', () => {
+    for (const vehicle of [car(2.5, 1.5, Math.PI / 2), car(1.5, 2.5, 0)]) {
+      const scene = new THREE.Scene();
+      const mesh = new VehiclesMesh(
+        scene,
+        field(() => 0),
+        () => Terrain.Land,
+        lift,
+      );
+      mesh.setVehicles([vehicle], 1);
+      mesh.update(10);
+      const cars = mesh.modelMeshes().get(carStyleOf(vehicle.id))!;
+      const m = new THREE.Matrix4();
+      cars.getMatrixAt(0, m);
+      m.decompose(position, quaternion, scale);
+      // Half-way up a 0.3 ramp; the lane offset keeps the car on the ramp tile.
+      expect(position.y).toBeCloseTo(0.03 + 0.15, 2);
+      const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
+      expect(forward.y).toBeGreaterThan(0.2);
+    }
+  });
+});

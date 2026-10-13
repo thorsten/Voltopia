@@ -169,6 +169,8 @@ export class VehiclesMesh {
     scene: THREE.Scene,
     private readonly elevation: ElevationField,
     private readonly terrainAt: (index: number) => Terrain,
+    /** Extra road height over the ground (overpass decks and ramps), from the road mesh. */
+    private readonly roadLift: (x: number, y: number) => number = () => 0,
   ) {
     let lightCapacity = 0;
     for (const key of Object.keys(MODELS) as ModelKey[]) {
@@ -336,8 +338,11 @@ export class VehiclesMesh {
     const tx = Math.min(size - 1, Math.max(0, Math.floor(x)));
     const tz = Math.min(size - 1, Math.max(0, Math.floor(y)));
     const index = tz * size + tx;
-    if (this.terrainAt(index) === Terrain.River) return this.elevation.maxCornerY(index);
-    return this.elevation.surfaceY(x, y);
+    const ground =
+      this.terrainAt(index) === Terrain.River
+        ? this.elevation.maxCornerY(index)
+        : this.elevation.surfaceY(x, y);
+    return ground + this.roadLift(x, y);
   }
 }
 

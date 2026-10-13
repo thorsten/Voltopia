@@ -235,7 +235,12 @@ export class GameRenderer {
     this.addDiffLayer(new PlantsMesh(scene, gridSize, this.elevation));
     this.disasters = new DisasterMesh(scene, gridSize, this.elevation);
     this.addDiffLayer(this.disasters);
-    this.vehiclesMesh = new VehiclesMesh(scene, this.elevation, (index) => this.terrainAt(index));
+    this.vehiclesMesh = new VehiclesMesh(
+      scene,
+      this.elevation,
+      (index) => this.terrainAt(index),
+      (x, y) => this.roadsMesh.lift(x, y),
+    );
     this.overlays = new OverlaysMesh(scene, gridSize, this.elevation);
     this.addDiffLayer(this.overlays);
     this.minimap = new MinimapLayer(gridSize);
