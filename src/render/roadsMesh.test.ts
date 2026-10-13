@@ -250,16 +250,33 @@ describe('RoadsMesh overpass', () => {
 
   it('draws a deck with two railings on the overpass and walls on both ramps', () => {
     const layer = layerWith(overpassRoad());
-    // One deck slab for the overpass tile plus one wedge per ramp.
-    expect(layer.decks.count).toBe(3);
+    // One deck slab for the overpass tile; the ramps get wedges of their own.
+    expect(layer.decks.count).toBe(1);
     // Two railings on the deck, two walls per ramp.
     expect(layer.rails.mesh.count).toBe(6);
-    // Instances follow tile order: north ramp wedge, deck, south ramp wedge.
-    const deck = positionOf(layer.decks, 1);
+    const deck = positionOf(layer.decks, 0);
     expect(Math.floor(deck.z)).toBe(2);
     expect(deck.y).toBeGreaterThan(OVERPASS_LIFT - 0.05);
-    // The wedges sit under the ramps, centred half-way up.
-    expect(positionOf(layer.decks, 0).y).toBeCloseTo(OVERPASS_LIFT / 2 - 0.02, 2);
+  });
+
+  it('puts a solid wedge under each ramp, rising from the ground to the deck', () => {
+    const layer = layerWith(overpassRoad());
+    expect(layer.decks.count).toBe(1);
+    expect(layer.wedges.count).toBe(2);
+    const matrix = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    layer.wedges.getMatrixAt(0, matrix);
+    matrix.decompose(p, q, s);
+    // North ramp (2,1): the wedge stands on the ground, as high as the deck lift,
+    // and its rising edge (local +x) points south toward the deck.
+    expect(p.x).toBeCloseTo(2.5, 6);
+    expect(p.y).toBeCloseTo(0, 6);
+    expect(p.z).toBeCloseTo(1.5, 6);
+    expect(s.y).toBeCloseTo(OVERPASS_LIFT, 6);
+    const rising = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+    expect(rising.z).toBeCloseTo(1, 6);
   });
 
   it('keeps lamps, kerbs, stripes and shelters off deck and ramps', () => {

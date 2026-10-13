@@ -49,6 +49,35 @@ const KERB_COLOR = 0xc9c6bd;
 const KERB_RISE = 0.015;
 
 /** Kerbs and zebra stripes lie flat: transforms span the grid, so no culling; no shadows. */
+/**
+ * A wedge one unit long (x), one high (y) and one wide (z), centred on
+ * x and z, standing on y = 0 with its slope rising from x = −0.5 to the
+ * full height at x = +0.5. Faces wound counter-clockwise seen from
+ * outside; flat normals per face.
+ */
+function createWedgeGeometry(): THREE.BufferGeometry {
+  // prettier-ignore
+  const positions = new Float32Array([
+    // bottom (y = 0), facing down
+    -0.5, 0, -0.5,   0.5, 0,  0.5,  -0.5, 0,  0.5,
+    -0.5, 0, -0.5,   0.5, 0, -0.5,   0.5, 0,  0.5,
+    // back (x = 0.5), facing +x
+     0.5, 0, -0.5,   0.5, 1, -0.5,   0.5, 1,  0.5,
+     0.5, 0, -0.5,   0.5, 1,  0.5,   0.5, 0,  0.5,
+    // slope, facing up and -x
+    -0.5, 0, -0.5,   0.5, 1,  0.5,   0.5, 1, -0.5,
+    -0.5, 0, -0.5,  -0.5, 0,  0.5,   0.5, 1,  0.5,
+    // side (z = -0.5), facing -z
+    -0.5, 0, -0.5,   0.5, 1, -0.5,   0.5, 0, -0.5,
+    // side (z = 0.5), facing +z
+    -0.5, 0,  0.5,   0.5, 0,  0.5,   0.5, 1,  0.5,
+  ]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 /** Railings and ramp walls stand up and cast shadows; transforms span the grid, so no culling. */
 function setupRailing(mesh: THREE.InstancedMesh): void {
   mesh.frustumCulled = false;
@@ -96,8 +125,12 @@ const DECK_COLOR = 0x8a9099;
 const RAIL_COLOR = 0xd8d8d0;
 export const DECK_SIZE = 0.96;
 const DECK_HEIGHT = 0.04;
-/** Road surface of an overpass deck above the tile's ground; ramps climb to it over one tile. */
-export const OVERPASS_LIFT = 0.3;
+/**
+ * Road surface of an overpass deck above the tile's ground; ramps climb
+ * to it over one tile. Clears a locomotive's pantograph (0.33 with the
+ * vehicles' ground offset) under the deck.
+ */
+export const OVERPASS_LIFT = 0.36;
 const RAMP_PITCH = Math.atan2(OVERPASS_LIFT, 1);
 const RAMP_STRETCH = Math.hypot(1, OVERPASS_LIFT);
 /** Thickness of a bridge railing, standing on the deck's edge. */
@@ -137,6 +170,8 @@ export class RoadsMesh implements DiffLayer {
   readonly decks: THREE.InstancedMesh;
   /** Railings of bridges and decks, walls of ramps. */
   readonly rails: GrowingMesh;
+  /** Solid wedges under the overpass ramps. */
+  readonly wedges: THREE.InstancedMesh;
   readonly shelters: THREE.InstancedMesh;
   private readonly signs: THREE.InstancedMesh;
   private readonly signMaterial: THREE.MeshBasicMaterial;
@@ -279,6 +314,18 @@ export class RoadsMesh implements DiffLayer {
       setupRailing,
       gridSize * 4,
     );
+    this.wedges = new THREE.InstancedMesh(
+      createWedgeGeometry(),
+      surfaceMaterial({ color: DECK_COLOR }),
+      gridSize * gridSize,
+    );
+    // Instance transforms live across the whole grid; the base geometry's
+    // bounds would wrongly cull the mesh, so culling is disabled.
+    this.wedges.frustumCulled = false;
+    this.wedges.castShadow = true;
+    this.wedges.receiveShadow = true;
+    this.wedges.count = 0;
+    scene.add(this.wedges);
   }
 
   /** Streetlamps and stop signs glow warmly at night. */
@@ -565,15 +612,26 @@ export class RoadsMesh implements DiffLayer {
   private rebuildBridges(): void {
     let deckCount = 0;
     let railCount = 0;
+    let wedgeCount = 0;
     const offset = DECK_SIZE / 2 - RAIL_THICKNESS / 2;
     for (let index = 0; index < this.roadMasks.length; index++) {
       const mask = this.roadMasks[index];
       if (mask < 0) continue;
       const ramp = this.rampOf(index);
       if (ramp) {
-        // A wedge under the pitched carriageway and a low wall per side.
-        this.rampMatrix(index, ramp, 0, 0, 1, DECK_HEIGHT, DECK_SIZE, -DECK_HEIGHT);
-        this.decks.setMatrixAt(deckCount++, this.matrix);
+        // A solid wedge from the ground up to the deck under the pitched
+        // carriageway (its rising edge, local +x, turned toward the deck)
+        // and a low wall per side.
+        this.rampPosition.set(
+          (index % this.gridSize) + 0.5,
+          this.elevation.maxCornerY(index),
+          Math.floor(index / this.gridSize) + 0.5,
+        );
+        this.rampEuler.set(0, Math.atan2(-ramp.dz, ramp.dx), 0);
+        this.rampQuaternion.setFromEuler(this.rampEuler);
+        this.rampScale.set(1, OVERPASS_LIFT, DECK_SIZE);
+        this.matrix.compose(this.rampPosition, this.rampQuaternion, this.rampScale);
+        this.wedges.setMatrixAt(wedgeCount++, this.matrix);
         for (const side of [-1, 1]) {
           this.rails.ensure(railCount + 1);
           this.rampMatrix(index, ramp, 0, side * offset, 1, RAIL_HEIGHT, RAIL_THICKNESS, 0);
@@ -605,6 +663,8 @@ export class RoadsMesh implements DiffLayer {
     }
     this.decks.count = deckCount;
     this.decks.instanceMatrix.needsUpdate = true;
+    this.wedges.count = wedgeCount;
+    this.wedges.instanceMatrix.needsUpdate = true;
     this.rails.commit(railCount);
   }
 

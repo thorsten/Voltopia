@@ -5,6 +5,7 @@ import { Terrain, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { ElevationField, LEVEL_HEIGHT } from './elevationField.ts';
 import { BALANCE, TICK_MS } from '../shared/constants.ts';
 import { LANE_OFFSET, LOCOMOTIVE_LENGTH, VehiclesMesh, WAGON_LENGTH } from './vehiclesMesh.ts';
+import { OVERPASS_LIFT } from './roadsMesh.ts';
 import { CAR_STYLES, carColorOf, carStyleOf } from './vehicles/variety.ts';
 
 const SIZE = 8;
@@ -392,5 +393,57 @@ describe('overpass ramps', () => {
       const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
       expect(forward.y).toBeGreaterThan(0.2);
     }
+  });
+});
+
+describe('overpass deck and trains', () => {
+  const deckLift = (x: number, y: number): number =>
+    Math.floor(x) === 2 && Math.floor(y) === 2 ? OVERPASS_LIFT : 0;
+
+  it('leaves a train under the deck on the ground', () => {
+    const scene = new THREE.Scene();
+    const mesh = new VehiclesMesh(
+      scene,
+      field(() => 0),
+      () => Terrain.Land,
+      deckLift,
+    );
+    mesh.setVehicles(
+      [{ id: 1, x: 2.5, y: 2.5, angle: 0, kind: VehicleKind.Locomotive, lead: true }],
+      1,
+    );
+    mesh.update(10);
+    const locos = mesh.modelMeshes().get('locomotive')!;
+    const m = new THREE.Matrix4();
+    locos.getMatrixAt(0, m);
+    m.decompose(position, quaternion, scale);
+    expect(position.y).toBeCloseTo(0.03, 6);
+    expect(Math.abs(new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion).y)).toBeLessThan(1e-6);
+  });
+
+  it('clears the locomotive, pantograph included, under the deck', () => {
+    const scene = new THREE.Scene();
+    const mesh = new VehiclesMesh(
+      scene,
+      field(() => 0),
+      () => Terrain.Land,
+    );
+    const geometry = mesh.modelMeshes().get('locomotive')!.geometry;
+    geometry.computeBoundingBox();
+    expect(geometry.boundingBox!.max.y + 0.03).toBeLessThan(OVERPASS_LIFT);
+  });
+
+  it('rests a car on a sloped deck tile on the deck, not the ground triangles', () => {
+    // Ground rises along +x; the deck is flat at the tile's highest corner.
+    const f = field((x) => x);
+    const scene = new THREE.Scene();
+    const mesh = new VehiclesMesh(scene, f, () => Terrain.Land, deckLift);
+    mesh.setVehicles([car(2.5, 2.5, 0)], 1);
+    mesh.update(10);
+    const cars = mesh.modelMeshes().get(carStyleOf(1))!;
+    const m = new THREE.Matrix4();
+    cars.getMatrixAt(0, m);
+    m.decompose(position, quaternion, scale);
+    expect(position.y).toBeCloseTo(0.03 + f.maxCornerY(2 * SIZE + 2) + OVERPASS_LIFT, 6);
   });
 });

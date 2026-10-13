@@ -282,12 +282,12 @@ export class VehiclesMesh {
       // the ground plane and y up, the right-hand side is (-dirY, dirX).
       const x = (jump ? target.x : source.x + (target.x - source.x) * blend) - dirY * laneOffset;
       const y = (jump ? target.y : source.y + (target.y - source.y) * blend) + dirX * laneOffset;
-      this.position.set(x, 0.03 + this.roadY(x, y), y);
+      this.position.set(x, 0.03 + this.roadY(x, y, isTrain), y);
       this.quaternion.setFromAxisAngle(this.up, -angle);
       // Pitch along the heading so the vehicle hugs a sloped carriageway
       // instead of floating at one end and clipping at the other.
-      const ahead = this.roadY(x + dirX * PITCH_SAMPLE, y + dirY * PITCH_SAMPLE);
-      const behind = this.roadY(x - dirX * PITCH_SAMPLE, y - dirY * PITCH_SAMPLE);
+      const ahead = this.roadY(x + dirX * PITCH_SAMPLE, y + dirY * PITCH_SAMPLE, isTrain);
+      const behind = this.roadY(x - dirX * PITCH_SAMPLE, y - dirY * PITCH_SAMPLE, isTrain);
       const pitch = Math.atan2(ahead - behind, 2 * PITCH_SAMPLE);
       this.pitchQuaternion.setFromAxisAngle(this.pitchAxis, pitch);
       this.quaternion.multiply(this.pitchQuaternion);
@@ -333,16 +333,21 @@ export class VehiclesMesh {
    * surface on land, but the flat bridge deck (the bank-level top corner)
    * over a river — vehicles must not dive into the carved channel.
    */
-  private roadY(x: number, y: number): number {
+  /**
+   * Height of the surface a vehicle rides on: the ground, the bank under
+   * a river bridge, or — for road vehicles — the overpass deck or ramp
+   * (flat slabs over the tile's highest corner). Trains stay on the
+   * ground under a deck.
+   */
+  private roadY(x: number, y: number, isTrain: boolean): number {
     const size = this.elevation.gridSize;
     const tx = Math.min(size - 1, Math.max(0, Math.floor(x)));
     const tz = Math.min(size - 1, Math.max(0, Math.floor(y)));
     const index = tz * size + tx;
-    const ground =
-      this.terrainAt(index) === Terrain.River
-        ? this.elevation.maxCornerY(index)
-        : this.elevation.surfaceY(x, y);
-    return ground + this.roadLift(x, y);
+    const lift = isTrain ? 0 : this.roadLift(x, y);
+    const flat = lift > 0 || this.terrainAt(index) === Terrain.River;
+    const ground = flat ? this.elevation.maxCornerY(index) : this.elevation.surfaceY(x, y);
+    return ground + lift;
   }
 }
 
