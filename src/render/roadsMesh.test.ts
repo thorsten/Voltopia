@@ -4,7 +4,14 @@ import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import { OVERPASS_LONG_RAMP_TILES, OVERPASS_SHORT_RAMP_TILES } from '../shared/constants.ts';
 import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
-import { DECK_SIZE, OVERPASS_LIFT, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
+import {
+  DECK_SIZE,
+  OVERPASS_LIFT,
+  RAIL_THICKNESS,
+  ROAD_HEIGHT,
+  RoadsMesh,
+  roadHalfWidth,
+} from './roadsMesh.ts';
 import { KERB_WIDTH, LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
 
 const SIZE = 8;
@@ -388,4 +395,141 @@ describe('RoadsMesh overpass', () => {
     }
     expect(pitched).toBe(1);
   });
+});
+
+/**
+ * A street along x or z at across = 2 from along = 0 to 6, the overpass
+ * deck at along = 3, on ground whose level follows `level(along)`.
+ */
+function slopedOverpass(
+  alongX: boolean,
+  rampTiles: number,
+  level: (along: number) => number,
+): { layer: RoadsMesh; field: ElevationField } {
+  const list = tiles();
+  const tile = (along: number) => (alongX ? at(along, 2) : at(2, along));
+  const [toward, back] = alongX ? [DIR_E, DIR_W] : [DIR_S, DIR_N];
+  for (let along = 0; along <= 6; along++) {
+    const mask = (along > 0 ? back : 0) | (along < 6 ? toward : 0);
+    Object.assign(list[tile(along)], { tileType: TileType.Road, roadMask: mask });
+  }
+  for (const diff of list) {
+    const x = diff.index % SIZE;
+    const z = Math.floor(diff.index / SIZE);
+    diff.elevation = level(alongX ? x : z);
+  }
+  Object.assign(list[tile(3)], {
+    rail: LINE_PRESENT | (alongX ? DIR_N | DIR_S : DIR_E | DIR_W),
+    overpass: rampTiles,
+  });
+  const field = new ElevationField(SIZE);
+  field.applyDiffs(list);
+  const layer = new RoadsMesh(new THREE.Scene(), SIZE, field);
+  layer.applyDiffs(list);
+  return { layer, field };
+}
+
+/** Height of an instance's top face (local y = +0.5) above the world point (x, z). */
+function topFaceY(mesh: THREE.InstancedMesh, slot: number, x: number, z: number): number {
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(slot, matrix);
+  const point = new THREE.Vector3(0, 0.5, 0).applyMatrix4(matrix);
+  const normal = new THREE.Vector3(0, 1, 0)
+    .applyMatrix3(new THREE.Matrix3().getNormalMatrix(matrix))
+    .normalize();
+  return point.y - (normal.x * (x - point.x) + normal.z * (z - point.z)) / normal.y;
+}
+
+/** Slots of a mesh's instances centred inside tile (tx, tz). */
+function slotsIn(mesh: THREE.InstancedMesh, tx: number, tz: number): number[] {
+  const slots: number[] = [];
+  for (let slot = 0; slot < mesh.count; slot++) {
+    const p = positionOf(mesh, slot);
+    if (Math.floor(p.x) === tx && Math.floor(p.z) === tz) slots.push(slot);
+  }
+  return slots;
+}
+
+describe('RoadsMesh overpass ramps on sloping ground', () => {
+  // Falling away from the deck on the low side, rising past it on the high side.
+  const slopes: { name: string; level: (along: number) => number }[] = [
+    { name: 'ground falling away to the low end', level: (a) => [0, 0, 1, 2, 2, 2, 2, 2][a] },
+    { name: 'a steady slope', level: (a) => [0, 0, 1, 1, 2, 2, 3, 3][a] },
+    { name: 'a dip under the deck', level: (a) => [2, 2, 1, 0, 0, 1, 2, 2][a] },
+  ];
+  for (const rampTiles of [OVERPASS_SHORT_RAMP_TILES, OVERPASS_LONG_RAMP_TILES]) {
+    for (const alongX of [false, true]) {
+      for (const { name, level } of slopes) {
+        const label = `${rampTiles}-tile ramps along ${alongX ? 'x' : 'z'} on ${name}`;
+        it(`${label} meet the neighbour road and the deck flush`, () => {
+          const { layer, field } = slopedOverpass(alongX, rampTiles, level);
+          const point = (along: number): [number, number] => (alongX ? [along, 2.5] : [2.5, along]);
+          const tileOf = (along: number): [number, number] => (alongX ? [along, 2] : [2, along]);
+          const deckTop =
+            field.maxCornerY(alongX ? at(3, 2) : at(2, 3)) + OVERPASS_LIFT + ROAD_HEIGHT;
+          for (const side of [-1, 1]) {
+            // Ramp tiles: along = 3 + side * step; the foot edge lies beyond the last one.
+            const deckEdge = side < 0 ? 3 : 4;
+            const footEdge = deckEdge + side * rampTiles;
+            for (let step = 1; step <= rampTiles; step++) {
+              const along = 3 + side * step;
+              const [pad] = slotsIn(layer.mesh, ...tileOf(along));
+              const near = side < 0 ? along + 1 : along;
+              const far = side < 0 ? along : along + 1;
+              const line = (edge: number) => {
+                const footY = field.surfaceY(...point(footEdge)) + ROAD_HEIGHT;
+                const s = (edge - footEdge) / (deckEdge - footEdge);
+                return footY + (deckTop - footY) * s;
+              };
+              expect(topFaceY(layer.mesh, pad, ...point(far))).toBeCloseTo(line(far), 3);
+              expect(topFaceY(layer.mesh, pad, ...point(near))).toBeCloseTo(line(near), 3);
+              if (step === rampTiles) {
+                // (1) flush with the neighbour road's top at the foot edge.
+                expect(topFaceY(layer.mesh, pad, ...point(footEdge))).toBeCloseTo(
+                  field.surfaceY(...point(footEdge)) + ROAD_HEIGHT,
+                  3,
+                );
+              }
+              if (step === 1) {
+                // (2) flush with the deck road's top at the deck edge.
+                expect(topFaceY(layer.mesh, pad, ...point(deckEdge))).toBeCloseTo(deckTop, 3);
+              }
+              // (3) vehicles ride the drawn carriageway (where it is above ground).
+              for (const f of [0.1, 0.5, 0.9]) {
+                const [x, z] = point(along + f);
+                const ground = field.surfaceY(x, z);
+                const top = topFaceY(layer.mesh, pad, x, z);
+                expect(ground + layer.lift(x, z) + ROAD_HEIGHT).toBeCloseTo(
+                  Math.max(top, ground + ROAD_HEIGHT),
+                  3,
+                );
+              }
+              // (4) the solid under the ramp reaches the ground at every corner.
+              const [tx, tz] = tileOf(along);
+              const bottoms = [
+                ...slotsIn(layer.wedges, tx, tz).map((slot) => positionOf(layer.wedges, slot).y),
+                ...slotsIn(layer.decks, tx, tz).map((slot) => {
+                  const m = new THREE.Matrix4();
+                  layer.decks.getMatrixAt(slot, m);
+                  const p = new THREE.Vector3();
+                  const s = new THREE.Vector3();
+                  m.decompose(p, new THREE.Quaternion(), s);
+                  return p.y - s.y / 2;
+                }),
+              ];
+              const bottom = Math.min(...bottoms);
+              for (const [cx, cz] of [
+                [tx, tz],
+                [tx + 1, tz],
+                [tx, tz + 1],
+                [tx + 1, tz + 1],
+              ]) {
+                expect(bottom).toBeLessThanOrEqual(field.cornerY(cx, cz) + 1e-6);
+              }
+            }
+          }
+        });
+      }
+    }
+  }
 });

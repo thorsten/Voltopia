@@ -133,25 +133,24 @@ const DECK_HEIGHT = 0.04;
  */
 export const OVERPASS_LIFT = 0.36;
 /**
- * A ramp tile: the unit step toward its deck, how many tiles away the
- * deck is (1 = next to it), and the ramp's length in tiles with the
- * rise per tile, pitch and slope stretch that follow from it.
+ * A ramp tile: the unit step toward its deck and how many tiles away the
+ * deck is (1 = next to it). The road base of the whole ramp is one
+ * straight line from the ground at its foot (the middle of the outer
+ * tile's far edge, where the next road arm ends) up to the deck's road
+ * base at the deck edge; `low` and `high` are that line's heights at this
+ * tile's far and deck-side edges, with the pitch and slope stretch that
+ * follow from them. On uneven ground the line may run below the ground
+ * in between; the ground hides it there (and `lift` clamps to zero).
  */
 interface Ramp {
   dx: number;
   dz: number;
   step: number;
-  length: number;
-  rise: number;
+  low: number;
+  high: number;
   pitch: number;
   stretch: number;
 }
-
-/** Rise, pitch and stretch per ramp length (index = tiles; 0 unused). */
-const RAMP_SHAPES = Array.from({ length: OVERPASS_LONG_RAMP_TILES + 1 }, (_, length) => {
-  const rise = length > 0 ? OVERPASS_LIFT / length : 0;
-  return { rise, pitch: Math.atan2(rise, 1), stretch: Math.hypot(1, rise) };
-});
 /** Thickness of a bridge railing, standing on the deck's edge. */
 export const RAIL_THICKNESS = 0.06;
 const RAIL_HEIGHT = 0.14;
@@ -638,23 +637,26 @@ export class RoadsMesh implements DiffLayer {
       if (mask < 0) continue;
       const ramp = this.rampOf(index);
       if (ramp) {
-        // A solid wedge one rise high under the pitched carriageway (its
-        // rising edge, local +x, turned toward the deck), on a plinth of
-        // the rises already climbed, and a low wall per side.
+        // A solid wedge under the pitched carriageway (its rising edge,
+        // local +x, turned toward the higher end), on a plinth from the
+        // tile's lowest ground corner up to the lower end, and a low wall
+        // per side.
         const cx = (index % this.gridSize) + 0.5;
         const cz = Math.floor(index / this.gridSize) + 0.5;
-        const ground = this.elevation.maxCornerY(index);
-        const climbed = ramp.rise * (ramp.length - ramp.step);
-        if (climbed > 0) {
-          this.matrix.makeScale(1, climbed, DECK_SIZE);
-          if (ramp.dx === 0) this.matrix.makeScale(DECK_SIZE, climbed, 1);
-          this.matrix.setPosition(cx, ground + climbed / 2, cz);
+        const bottom = this.elevation.minCornerY(index);
+        const lower = Math.min(ramp.low, ramp.high);
+        const plinth = lower - bottom;
+        if (plinth > 1e-6) {
+          this.matrix.makeScale(1, plinth, DECK_SIZE);
+          if (ramp.dx === 0) this.matrix.makeScale(DECK_SIZE, plinth, 1);
+          this.matrix.setPosition(cx, bottom + plinth / 2, cz);
           this.decks.setMatrixAt(deckCount++, this.matrix);
         }
-        this.rampPosition.set(cx, ground + climbed, cz);
-        this.rampEuler.set(0, Math.atan2(-ramp.dz, ramp.dx), 0);
+        const toward = ramp.high >= ramp.low ? 1 : -1;
+        this.rampPosition.set(cx, lower, cz);
+        this.rampEuler.set(0, Math.atan2(-ramp.dz * toward, ramp.dx * toward), 0);
         this.rampQuaternion.setFromEuler(this.rampEuler);
-        this.rampScale.set(1, ramp.rise, DECK_SIZE);
+        this.rampScale.set(1, Math.abs(ramp.high - ramp.low), DECK_SIZE);
         this.matrix.compose(this.rampPosition, this.rampQuaternion, this.rampScale);
         this.wedges.setMatrixAt(wedgeCount++, this.matrix);
         for (const side of [-1, 1]) {
@@ -727,7 +729,22 @@ export class RoadsMesh implements DiffLayer {
         const length = Math.min(this.overpass[tile], OVERPASS_LONG_RAMP_TILES);
         if (length !== 0) {
           if (step > length) break;
-          return { dx, dz: dy, step, length, ...RAMP_SHAPES[length] };
+          // The foot: the middle of the far edge of the ramp's outer tile.
+          const reach = length - step + 0.5;
+          const foot = this.elevation.surfaceY(x + 0.5 - dx * reach, z + 0.5 - dy * reach);
+          const deck = this.flatLift(tile);
+          const low = foot + ((deck - foot) * (length - step)) / length;
+          const high = foot + ((deck - foot) * (length - step + 1)) / length;
+          const rise = high - low;
+          return {
+            dx,
+            dz: dy,
+            step,
+            low,
+            high,
+            pitch: Math.atan2(rise, 1),
+            stretch: Math.hypot(1, rise),
+          };
         }
         // An intermediate ramp tile must carry the road on toward the deck.
         if ((this.roadMasks[tile] & bit) === 0) break;
@@ -736,26 +753,34 @@ export class RoadsMesh implements DiffLayer {
     return null;
   }
 
-  /** Extra height of the road surface over the ground at a world point (0 off deck and ramps). */
+  /**
+   * Height of the road base over the ground surface (`surfaceY`) at a
+   * world point, as drawn: the flat deck of an overpass, the straight
+   * ramp line on its ramps (never below the ground, see Ramp), 0 elsewhere.
+   */
   lift(x: number, y: number): number {
     const size = this.gridSize;
     const tx = Math.floor(x);
     const tz = Math.floor(y);
     if (tx < 0 || tz < 0 || tx >= size || tz >= size) return 0;
     const index = tz * size + tx;
-    if (this.overpass[index] !== 0 && this.roadMasks[index] >= 0) return OVERPASS_LIFT;
+    if (this.overpass[index] !== 0 && this.roadMasks[index] >= 0) {
+      return Math.max(0, this.flatLift(index) - this.elevation.surfaceY(x, y));
+    }
     const ramp = this.rampOf(index);
     if (!ramp) return 0;
     const fx = x - tx;
     const fz = y - tz;
     const t = ramp.dx > 0 ? fx : ramp.dx < 0 ? 1 - fx : ramp.dz > 0 ? fz : 1 - fz;
-    return ramp.rise * (ramp.length - ramp.step + t);
+    const base = ramp.low + (ramp.high - ramp.low) * t;
+    return Math.max(0, base - this.elevation.surfaceY(x, y));
   }
 
   /**
    * A box on a ramp: centred `a` along the ramp (−0.5 far edge … +0.5 deck
    * edge) and `across` beside its centre line, its base `baseLift` above
-   * the ramp surface, pitched with the ramp and stretched to its length.
+   * the ramp surface, pitched with the ramp and stretched to its length,
+   * and thinned so its vertical height is exactly `sizeY`.
    */
   private rampMatrix(
     index: number,
@@ -769,8 +794,7 @@ export class RoadsMesh implements DiffLayer {
   ): void {
     const cx = (index % this.gridSize) + 0.5;
     const cz = Math.floor(index / this.gridSize) + 0.5;
-    const ground = this.elevation.maxCornerY(index) + ramp.rise * (ramp.length - ramp.step);
-    const y = ground + ramp.rise * (a + 0.5) + baseLift + sizeY / 2;
+    const y = ramp.low + (ramp.high - ramp.low) * (a + 0.5) + baseLift + sizeY / 2;
     const alongX = ramp.dx !== 0;
     const px = cx + (alongX ? ramp.dx * a : across);
     const pz = cz + (alongX ? across : ramp.dz * a);
@@ -779,7 +803,7 @@ export class RoadsMesh implements DiffLayer {
     this.rampQuaternion.setFromEuler(this.rampEuler);
     this.rampScale.set(
       alongX ? sizeAlong * ramp.stretch : sizeAcross,
-      sizeY,
+      sizeY / ramp.stretch,
       alongX ? sizeAcross : sizeAlong * ramp.stretch,
     );
     this.rampPosition.set(px, y, pz);

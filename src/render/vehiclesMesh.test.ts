@@ -436,8 +436,11 @@ describe('overpass deck and trains', () => {
   it('rests a car on a sloped deck tile on the deck, not the ground triangles', () => {
     // Ground rises along +x; the deck is flat at the tile's highest corner.
     const f = field((x) => x);
+    // The lift is over the ground surface, so it shrinks up the slope.
+    const slopedDeckLift = (x: number, y: number): number =>
+      deckLift(x, y) > 0 ? f.maxCornerY(2 * SIZE + 2) + OVERPASS_LIFT - f.surfaceY(x, y) : 0;
     const scene = new THREE.Scene();
-    const mesh = new VehiclesMesh(scene, f, () => Terrain.Land, deckLift);
+    const mesh = new VehiclesMesh(scene, f, () => Terrain.Land, slopedDeckLift);
     mesh.setVehicles([car(2.5, 2.5, 0)], 1);
     mesh.update(10);
     const cars = mesh.modelMeshes().get(carStyleOf(1))!;

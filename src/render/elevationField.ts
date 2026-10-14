@@ -128,6 +128,19 @@ export class ElevationField implements DiffLayer {
     );
   }
 
+  /** Lowest ground corner of a tile — solids under raised roads reach down to it. */
+  minCornerY(index: number): number {
+    const size = this.size;
+    const x = index % size;
+    const z = Math.floor(index / size);
+    return Math.min(
+      this.cornerY(x, z),
+      this.cornerY(x + 1, z),
+      this.cornerY(x, z + 1),
+      this.cornerY(x + 1, z + 1),
+    );
+  }
+
   /**
    * Slopes (world units per tile along +x and +z) of one of the two
    * ground triangles of a tile. The ground mesh is a PlaneGeometry, which

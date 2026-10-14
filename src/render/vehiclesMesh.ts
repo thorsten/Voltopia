@@ -329,15 +329,11 @@ export class VehiclesMesh {
   }
 
   /**
-   * Height of the carriageway at a continuous tile position: the ground
-   * surface on land, but the flat bridge deck (the bank-level top corner)
-   * over a river — vehicles must not dive into the carved channel.
-   */
-  /**
-   * Height of the surface a vehicle rides on: the ground, the bank under
-   * a river bridge, or — for road vehicles — the overpass deck or ramp
-   * (flat slabs over the tile's highest corner). Trains stay on the
-   * ground under a deck.
+   * Height of the surface a vehicle rides on: the ground, the flat bridge
+   * deck (the bank-level top corner) over a river — vehicles must not dive
+   * into the carved channel — or, for road vehicles, the overpass deck or
+   * ramp, which `roadLift` gives over the ground surface. Trains stay on
+   * the ground under a deck.
    */
   private roadY(x: number, y: number, isTrain: boolean): number {
     const size = this.elevation.gridSize;
@@ -345,9 +341,10 @@ export class VehiclesMesh {
     const tz = Math.min(size - 1, Math.max(0, Math.floor(y)));
     const index = tz * size + tx;
     const lift = isTrain ? 0 : this.roadLift(x, y);
-    const flat = lift > 0 || this.terrainAt(index) === Terrain.River;
-    const ground = flat ? this.elevation.maxCornerY(index) : this.elevation.surfaceY(x, y);
-    return ground + lift;
+    if (lift > 0) return this.elevation.surfaceY(x, y) + lift;
+    return this.terrainAt(index) === Terrain.River
+      ? this.elevation.maxCornerY(index)
+      : this.elevation.surfaceY(x, y);
   }
 }
 
