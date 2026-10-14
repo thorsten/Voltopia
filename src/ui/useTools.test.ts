@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PlantType } from '../shared/types.ts';
-import { lineToolCommand, PLANT_BY_TOOL, TOOL_HOTKEYS, type ToolId } from './useTools.ts';
+import { PlantType, Terrain } from '../shared/types.ts';
+import {
+  bridgeTileCount,
+  lineToolCommand,
+  PLANT_BY_TOOL,
+  TOOL_HOTKEYS,
+  type ToolId,
+} from './useTools.ts';
 
 describe('tool hotkeys', () => {
   it('gives every buildable plant a hotkey', () => {
@@ -70,5 +76,32 @@ describe('line tool commands', () => {
     expect(lineToolCommand('bus-stop', [4])).toEqual({ type: 'buildBusStop', tiles: [4] });
     expect(lineToolCommand('power-line', [5])).toEqual({ type: 'buildPowerLine', tiles: [5] });
     expect(lineToolCommand('select', [6])).toBeNull();
+  });
+});
+
+describe('bridge tile count', () => {
+  // Tiles 2 and 3 are river, 4 is lake, the rest land.
+  const terrainAt = (index: number): Terrain | undefined =>
+    index === 2 || index === 3 ? Terrain.River : index === 4 ? Terrain.Lake : Terrain.Land;
+
+  it('counts the river tiles of a road, avenue or track drag', () => {
+    for (const tool of ['road', 'avenue', 'rail'] as const) {
+      expect(bridgeTileCount(tool, [1, 2, 3, 5], terrainAt)).toBe(2);
+    }
+  });
+
+  it('ignores lake tiles and land-only paths', () => {
+    expect(bridgeTileCount('road', [4, 5], terrainAt)).toBe(0);
+    expect(bridgeTileCount('rail', [0, 1], terrainAt)).toBe(0);
+  });
+
+  it('is zero for tools that build no bridges', () => {
+    for (const tool of ['power-line', 'bus-stop', 'overpass', 'zone-residential'] as const) {
+      expect(bridgeTileCount(tool, [2, 3], terrainAt)).toBe(0);
+    }
+  });
+
+  it('is zero while the terrain is unknown', () => {
+    expect(bridgeTileCount('road', [2, 3], () => undefined)).toBe(0);
   });
 });

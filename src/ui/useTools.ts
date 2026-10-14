@@ -89,6 +89,18 @@ export const TOOL_HOTKEYS: Record<string, ToolId> = {
 export interface DragCostPreview {
   tiles: number;
   cost: number;
+  /** River tiles the drag turns into bridges (road, avenue, track); absent otherwise. */
+  bridges?: number;
+}
+
+/** River tiles of a road, avenue or track drag — the sim builds those as bridges. */
+export function bridgeTileCount(
+  tool: ToolId,
+  tiles: number[],
+  terrainAt: (index: number) => Terrain | undefined,
+): number {
+  if (tool !== 'road' && tool !== 'avenue' && tool !== 'rail') return 0;
+  return tiles.filter((index) => terrainAt(index) === Terrain.River).length;
 }
 
 /** The build command a drag or click tool sends for its path; null for the other tools. */
@@ -259,7 +271,8 @@ export function useTools(
         }
         return sum + Math.round(base * factor) + (base > 0 ? fellingCostAt(index) : 0);
       }, 0);
-      setCostPreview({ tiles: tiles.length, cost });
+      const bridges = bridgeTileCount(tool, tiles, (index) => renderer?.terrainAt(index));
+      setCostPreview({ tiles: tiles.length, cost, ...(bridges > 0 ? { bridges } : {}) });
     };
 
     // Mirrors the sim's per-tile pricing for zones (src/sim/zones.ts): each

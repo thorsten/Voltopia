@@ -94,15 +94,16 @@ const en = {
   'build.category.energy': 'Energy',
   'build.category.services': 'Services',
   'tool.select.desc': 'Click a tile to inspect it, drag to pan the camera.',
-  'tool.road.desc': 'Roads connect the city. Drag to build a line.',
+  'tool.road.desc':
+    'Roads connect the city. Drag to build a line. Across the river it becomes a bridge (pricier per tile), not across a lake or the sea.',
   'tool.avenue.desc':
-    'Twice the lane capacity and faster driving. Drag over a street to upgrade it.',
+    'Twice the lane capacity and faster driving. Drag over a street to upgrade it. Across the river it becomes a bridge (pricier per tile), not across a lake or the sea.',
   'tool.power-line.desc':
     'Carries power from plants along roads. Buildings within three tiles of a connected line get supplied.',
   'tool.bus-stop.desc':
     'Mark a stop on a road. Commuters near a served stop at home and at work leave the car at home.',
   'tool.rail.desc':
-    'Lay railway track. Crosses roads and the river, not lakes or the sea. Stations, terminals and a rail yard go beside it.',
+    'Lay railway track. Crosses roads and, as a bridge (pricier per tile), the river, not lakes or the sea. Stations, terminals and a rail yard go beside it.',
   'tool.overpass.desc':
     'Carry a road over the track. Click a straight level crossing with two plain road tiles on either side for the ramps; the barriers go and traffic never waits.',
   'tool.zone-residential.desc': 'Homes. Residents move in once the lot has a road and power.',
@@ -525,6 +526,8 @@ const en = {
   'budget.note': 'Upkeep is a money cost only — it does not consume energy.',
 
   'inspect.bridge': 'Bridge',
+  'costPreview.bridge': '🌉 {count} bridge tile',
+  'costPreview.bridges': '🌉 {count} bridge tiles',
   'inspect.plant': 'Plant',
   'inspect.density': 'density',
   'inspect.vacantLot': 'vacant lot',
@@ -769,15 +772,16 @@ const de: Record<TranslationKey, string> = {
   'build.category.energy': 'Energie',
   'build.category.services': 'Service',
   'tool.select.desc': 'Feld anklicken zum Inspizieren, ziehen bewegt die Kamera.',
-  'tool.road.desc': 'Straßen verbinden die Stadt. Ziehen baut eine Linie.',
+  'tool.road.desc':
+    'Straßen verbinden die Stadt. Ziehen baut eine Linie. Über den Fluss wird sie zur Brücke (teurer pro Feld), über See oder Meer nicht.',
   'tool.avenue.desc':
-    'Doppelte Spurkapazität und schnellere Fahrt. Über eine Straße ziehen, um sie auszubauen.',
+    'Doppelte Spurkapazität und schnellere Fahrt. Über eine Straße ziehen, um sie auszubauen. Über den Fluss wird sie zur Brücke (teurer pro Feld), über See oder Meer nicht.',
   'tool.power-line.desc':
     'Führt Strom von Anlagen entlang der Straßen. Gebäude im Umkreis von drei Feldern einer angeschlossenen Leitung werden versorgt.',
   'tool.bus-stop.desc':
     'Haltestelle auf einer Straße. Pendler mit bedienter Haltestelle nahe Wohnung und Arbeit lassen das Auto stehen.',
   'tool.rail.desc':
-    'Eisenbahngleis verlegen. Kreuzt Straßen und den Fluss, nicht Seen oder das Meer. Bahnhöfe, Güterbahnhöfe und ein Betriebswerk kommen daneben.',
+    'Eisenbahngleis verlegen. Kreuzt Straßen und, als Brücke (teurer pro Feld), den Fluss, nicht Seen oder das Meer. Bahnhöfe, Güterbahnhöfe und ein Betriebswerk kommen daneben.',
   'tool.overpass.desc':
     'Führt eine Straße über das Gleis. Auf einen geraden Bahnübergang klicken, der beidseitig zwei freie Straßenkacheln für die Rampen hat; die Schranken verschwinden, der Verkehr wartet nie.',
   'tool.zone-residential.desc': 'Wohnhäuser. Bewohner ziehen ein, sobald Straße und Strom da sind.',
@@ -1205,6 +1209,8 @@ const de: Record<TranslationKey, string> = {
   'budget.note': 'Unterhalt kostet nur Geld – er verbraucht keine Energie.',
 
   'inspect.bridge': 'Brücke',
+  'costPreview.bridge': '🌉 {count} Brückenfeld',
+  'costPreview.bridges': '🌉 {count} Brückenfelder',
   'inspect.plant': 'Anlage',
   'inspect.density': 'Dichte',
   'inspect.vacantLot': 'unbebaut',

@@ -391,6 +391,10 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
       {costPreview && (
         <div className="cost-preview" data-testid="cost-preview">
           {costPreview.tiles} ▦ · {costPreview.cost.toLocaleString('en-US')} ⌁
+          {costPreview.bridges !== undefined &&
+            ` · ${t(costPreview.bridges === 1 ? 'costPreview.bridge' : 'costPreview.bridges', {
+              count: costPreview.bridges,
+            })}`}
         </div>
       )}
       {showSmallScreenNotice && (
