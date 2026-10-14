@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, TICKS_PER_DAY, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
+import {
+  BALANCE,
+  OVERPASS_LONG_RAMP_TILES,
+  TICKS_PER_DAY,
+  TICKS_PER_HISTORY_SAMPLE,
+} from '../shared/constants.ts';
 import { tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import {
@@ -603,7 +608,7 @@ describe('agent tools: building', () => {
     expect(plain).toMatchObject({ ok: false, error: 'needsLevelCrossing' });
     const built = await call('build_overpass', { x, y: y + 2 });
     expect(built).toMatchObject({ ok: true });
-    expect(engine.state.layers.overpass[tileIndex(x, y + 2, SIZE)]).toBe(1);
+    expect(engine.state.layers.overpass[tileIndex(x, y + 2, SIZE)]).toBe(OVERPASS_LONG_RAMP_TILES);
     const info = await call('inspect_tile', { x, y: y + 2 });
     expect(info.rail).toMatchObject({ overpass: true });
   });

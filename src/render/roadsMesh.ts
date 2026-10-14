@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OVERPASS_RAMP_TILES } from '../shared/constants.ts';
+import { OVERPASS_LONG_RAMP_TILES } from '../shared/constants.ts';
 import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../shared/grid.ts';
 import type { TileDiff } from '../shared/types.ts';
 import { RoadClass, Terrain, TileType } from '../shared/types.ts';
@@ -128,21 +128,30 @@ export const DECK_SIZE = 0.96;
 const DECK_HEIGHT = 0.04;
 /**
  * Road surface of an overpass deck above the tile's ground; ramps climb
- * to it over one tile. Clears a locomotive's pantograph (0.33 with the
+ * to it over the ramp length the sim stored on the deck. Clears a locomotive's pantograph (0.33 with the
  * vehicles' ground offset) under the deck.
  */
 export const OVERPASS_LIFT = 0.36;
-/** A ramp climbs this much per tile over OVERPASS_RAMP_TILES tiles. */
-const RAMP_RISE = OVERPASS_LIFT / OVERPASS_RAMP_TILES;
-const RAMP_PITCH = Math.atan2(RAMP_RISE, 1);
-const RAMP_STRETCH = Math.hypot(1, RAMP_RISE);
-
-/** A ramp tile: the unit step toward its deck and how many tiles away the deck is (1 = next to it). */
+/**
+ * A ramp tile: the unit step toward its deck, how many tiles away the
+ * deck is (1 = next to it), and the ramp's length in tiles with the
+ * rise per tile, pitch and slope stretch that follow from it.
+ */
 interface Ramp {
   dx: number;
   dz: number;
   step: number;
+  length: number;
+  rise: number;
+  pitch: number;
+  stretch: number;
 }
+
+/** Rise, pitch and stretch per ramp length (index = tiles; 0 unused). */
+const RAMP_SHAPES = Array.from({ length: OVERPASS_LONG_RAMP_TILES + 1 }, (_, length) => {
+  const rise = length > 0 ? OVERPASS_LIFT / length : 0;
+  return { rise, pitch: Math.atan2(rise, 1), stretch: Math.hypot(1, rise) };
+});
 /** Thickness of a bridge railing, standing on the deck's edge. */
 export const RAIL_THICKNESS = 0.06;
 const RAIL_HEIGHT = 0.14;
@@ -635,7 +644,7 @@ export class RoadsMesh implements DiffLayer {
         const cx = (index % this.gridSize) + 0.5;
         const cz = Math.floor(index / this.gridSize) + 0.5;
         const ground = this.elevation.maxCornerY(index);
-        const climbed = RAMP_RISE * (OVERPASS_RAMP_TILES - ramp.step);
+        const climbed = ramp.rise * (ramp.length - ramp.step);
         if (climbed > 0) {
           this.matrix.makeScale(1, climbed, DECK_SIZE);
           if (ramp.dx === 0) this.matrix.makeScale(DECK_SIZE, climbed, 1);
@@ -645,7 +654,7 @@ export class RoadsMesh implements DiffLayer {
         this.rampPosition.set(cx, ground + climbed, cz);
         this.rampEuler.set(0, Math.atan2(-ramp.dz, ramp.dx), 0);
         this.rampQuaternion.setFromEuler(this.rampEuler);
-        this.rampScale.set(1, RAMP_RISE, DECK_SIZE);
+        this.rampScale.set(1, ramp.rise, DECK_SIZE);
         this.matrix.compose(this.rampPosition, this.rampQuaternion, this.rampScale);
         this.wedges.setMatrixAt(wedgeCount++, this.matrix);
         for (const side of [-1, 1]) {
@@ -698,8 +707,8 @@ export class RoadsMesh implements DiffLayer {
   }
 
   /**
-   * The ramp a road tile belongs to, or null: within OVERPASS_RAMP_TILES
-   * tiles of an overpass deck along the deck's road, with straight road
+   * The ramp a road tile belongs to, or null: within the ramp length
+   * stored on an overpass deck along the deck's road, with straight road
    * (or the ramp's own end) all the way.
    */
   private rampOf(index: number): Ramp | null {
@@ -709,13 +718,17 @@ export class RoadsMesh implements DiffLayer {
     for (const { dx, dy, bit } of DIRECTIONS) {
       if ((this.roadMasks[index] & bit) === 0) continue;
       const back = dx > 0 ? DIR_W : dx < 0 ? DIR_E : dy > 0 ? DIR_N : DIR_S;
-      for (let step = 1; step <= OVERPASS_RAMP_TILES; step++) {
+      for (let step = 1; step <= OVERPASS_LONG_RAMP_TILES; step++) {
         const nx = x + dx * step;
         const nz = z + dy * step;
         if (nx < 0 || nz < 0 || nx >= this.gridSize || nz >= this.gridSize) break;
         const tile = nz * this.gridSize + nx;
         if (this.roadMasks[tile] < 0 || (this.roadMasks[tile] & back) === 0) break;
-        if (this.overpass[tile] !== 0) return { dx, dz: dy, step };
+        const length = Math.min(this.overpass[tile], OVERPASS_LONG_RAMP_TILES);
+        if (length !== 0) {
+          if (step > length) break;
+          return { dx, dz: dy, step, length, ...RAMP_SHAPES[length] };
+        }
         // An intermediate ramp tile must carry the road on toward the deck.
         if ((this.roadMasks[tile] & bit) === 0) break;
       }
@@ -736,7 +749,7 @@ export class RoadsMesh implements DiffLayer {
     const fx = x - tx;
     const fz = y - tz;
     const t = ramp.dx > 0 ? fx : ramp.dx < 0 ? 1 - fx : ramp.dz > 0 ? fz : 1 - fz;
-    return RAMP_RISE * (OVERPASS_RAMP_TILES - ramp.step + t);
+    return ramp.rise * (ramp.length - ramp.step + t);
   }
 
   /**
@@ -756,18 +769,18 @@ export class RoadsMesh implements DiffLayer {
   ): void {
     const cx = (index % this.gridSize) + 0.5;
     const cz = Math.floor(index / this.gridSize) + 0.5;
-    const ground = this.elevation.maxCornerY(index) + RAMP_RISE * (OVERPASS_RAMP_TILES - ramp.step);
-    const y = ground + RAMP_RISE * (a + 0.5) + baseLift + sizeY / 2;
+    const ground = this.elevation.maxCornerY(index) + ramp.rise * (ramp.length - ramp.step);
+    const y = ground + ramp.rise * (a + 0.5) + baseLift + sizeY / 2;
     const alongX = ramp.dx !== 0;
     const px = cx + (alongX ? ramp.dx * a : across);
     const pz = cz + (alongX ? across : ramp.dz * a);
     // Rz(+θ) lifts the +x end; Rx(−θ) lifts the +z end.
-    this.rampEuler.set(alongX ? 0 : -ramp.dz * RAMP_PITCH, 0, alongX ? ramp.dx * RAMP_PITCH : 0);
+    this.rampEuler.set(alongX ? 0 : -ramp.dz * ramp.pitch, 0, alongX ? ramp.dx * ramp.pitch : 0);
     this.rampQuaternion.setFromEuler(this.rampEuler);
     this.rampScale.set(
-      alongX ? sizeAlong * RAMP_STRETCH : sizeAcross,
+      alongX ? sizeAlong * ramp.stretch : sizeAcross,
       sizeY,
-      alongX ? sizeAcross : sizeAlong * RAMP_STRETCH,
+      alongX ? sizeAcross : sizeAlong * ramp.stretch,
     );
     this.rampPosition.set(px, y, pz);
     this.matrix.compose(this.rampPosition, this.rampQuaternion, this.rampScale);

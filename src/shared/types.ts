@@ -875,7 +875,7 @@ export interface TileDiff {
   transitCover: number;
   /** Track mask: 0 = none, else LINE_PRESENT | connection bits (N=1, E=2, S=4, W=8). */
   rail: number;
-  /** 1 when a road overpass carries the road over the track on this tile. */
+  /** Overpass ramp length in tiles per side (1 or 2) on a road overpass over the track, 0 elsewhere. */
   overpass: number;
   /** 1 when this road tile is within stationRadius of a served station. */
   railCover: number;

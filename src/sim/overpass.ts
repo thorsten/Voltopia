@@ -1,4 +1,8 @@
-import { BALANCE, OVERPASS_RAMP_TILES } from '../shared/constants.ts';
+import {
+  BALANCE,
+  OVERPASS_LONG_RAMP_TILES,
+  OVERPASS_SHORT_RAMP_TILES,
+} from '../shared/constants.ts';
 import {
   DIR_E,
   DIR_N,
@@ -95,25 +99,36 @@ function isRampTile(
   return layers.overpass[index] === 0;
 }
 
+/** Ramp lengths to try, best first. */
+const RAMP_LENGTHS = [OVERPASS_LONG_RAMP_TILES, OVERPASS_SHORT_RAMP_TILES];
+
 /**
- * Whether both ramps of a deck at `index` with road `axis` have room:
- * OVERPASS_RAMP_TILES plain road tiles on each side, and no other
- * overpass of the same axis close enough for its ramps to overlap them.
+ * Whether both ramps of a deck at `index` with road `axis` have room for
+ * `length` tiles each: that many plain road tiles on each side, and no
+ * other overpass of the same axis so close that its ramps (at their
+ * stored length) would meet ours.
  */
-function hasRampRoom(state: SimState, index: number, axis: Axis): boolean {
-  for (let step = 1; step <= OVERPASS_RAMP_TILES; step++) {
-    const far = step === OVERPASS_RAMP_TILES;
+function hasRampRoom(state: SimState, index: number, axis: Axis, length: number): boolean {
+  for (let step = 1; step <= length; step++) {
+    const far = step === length;
     for (const tile of alongAxis(state, index, axis, step)) {
       if (!isRampTile(state, tile, index, axis, far)) return false;
     }
   }
-  for (let step = OVERPASS_RAMP_TILES + 1; step <= 2 * OVERPASS_RAMP_TILES; step++) {
+  const { overpass } = state.layers;
+  for (let step = length + 1; step <= length + OVERPASS_LONG_RAMP_TILES; step++) {
     for (const tile of alongAxis(state, index, axis, step)) {
-      if (tile >= 0 && state.layers.overpass[tile] !== 0 && crossingRoadAxis(state, tile) === axis)
-        return false;
+      if (tile < 0 || overpass[tile] === 0 || step > length + overpass[tile]) continue;
+      if (crossingRoadAxis(state, tile) === axis) return false;
     }
   }
   return true;
+}
+
+/** The longest ramp that fits a deck at `index` with road `axis`, or 0 when none does. */
+function bestRampLength(state: SimState, index: number, axis: Axis): number {
+  for (const length of RAMP_LENGTHS) if (hasRampRoom(state, index, axis, length)) return length;
+  return 0;
 }
 
 /**
@@ -130,16 +145,20 @@ export function overpassRejection(state: SimState, index: number): string | null
   if (track === null) return 'needsLevelCrossing';
   const road = straightAxis(layers.roadMask[index] & SIDES);
   if (road === null || road === track) return 'needsStraightCrossing';
-  if (!hasRampRoom(state, index, road)) return 'needsRampRoom';
+  if (bestRampLength(state, index, road) === 0) return 'needsRampRoom';
   if (layers.damage[index] !== 0) return 'damaged';
   return null;
 }
 
-/** Whether an existing overpass at `index` still meets its build rules. */
-export function overpassStillValid(state: SimState, index: number): boolean {
+/**
+ * The ramp length an overpass at `index` gets under its build rules
+ * today: long where both sides have room, else short, 0 when it no
+ * longer fits at all.
+ */
+export function overpassRampLength(state: SimState, index: number): number {
   const axis = crossingRoadAxis(state, index);
-  if (axis === null || state.layers.terrain[index] === Terrain.River) return false;
-  return hasRampRoom(state, index, axis);
+  if (axis === null || state.layers.terrain[index] === Terrain.River) return 0;
+  return bestRampLength(state, index, axis);
 }
 
 /**
@@ -164,7 +183,7 @@ export function buildOverpasses(state: SimState, tiles: number[]): BuildResult {
       continue;
     }
     snapshots.push(snapshotTile(state, index));
-    layers.overpass[index] = 1;
+    layers.overpass[index] = overpassRampLength(state, index);
     built.push(index);
   }
   if (built.length === 0) return { rejected: firstRejection ?? 'needsLevelCrossing' };
@@ -180,19 +199,38 @@ export function buildOverpasses(state: SimState, tiles: number[]): BuildResult {
 }
 
 /**
- * Drop every overpass whose crossing or ramp room is gone (no refund).
- * Callers pass the edited tiles plus their 4-neighbours; as many more
- * rings as the ramp is long are checked here, since a road arm joining
- * the far ramp tile changes that tile's mask.
+ * Refit every overpass near an edit to the ramp it has room for now:
+ * long ramps shrink to short ones (or grow back), and an overpass whose
+ * crossing or ramp room is gone drops (no refund). Callers pass the
+ * edited tiles plus their 4-neighbours; as many more rings as the long
+ * ramp is long are checked here, since a road arm joining the far ramp
+ * tile changes that tile's mask.
  */
 export function clearInvalidOverpasses(state: SimState, tiles: Iterable<number>): void {
-  const { layers } = state;
   let ring = new Set<number>(tiles);
-  for (let i = 0; i < OVERPASS_RAMP_TILES; i++) ring = withNeighbors(state, [...ring]);
-  for (const index of ring) {
-    if (layers.overpass[index] === 0) continue;
-    if (overpassStillValid(state, index)) continue;
-    layers.overpass[index] = 0;
-    markDirty(state, index);
+  for (let i = 0; i < OVERPASS_LONG_RAMP_TILES; i++) ring = withNeighbors(state, [...ring]);
+  refitOverpasses(state, ring, true);
+}
+
+/**
+ * Refit the ramps of a loaded save to the room they have: saves from
+ * before the ramp fallback store 1 for every overpass.
+ */
+export function refitAllOverpasses(state: SimState): void {
+  const tiles: number[] = [];
+  state.layers.overpass.forEach((value, index) => {
+    if (value !== 0) tiles.push(index);
+  });
+  refitOverpasses(state, tiles, false);
+}
+
+function refitOverpasses(state: SimState, tiles: Iterable<number>, dirty: boolean): void {
+  const { overpass } = state.layers;
+  for (const index of tiles) {
+    if (overpass[index] === 0) continue;
+    const length = overpassRampLength(state, index);
+    if (length === overpass[index]) continue;
+    overpass[index] = length;
+    if (dirty) markDirty(state, index);
   }
 }

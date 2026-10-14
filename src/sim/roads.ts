@@ -217,6 +217,14 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.damage[tile.index] = tile.damage;
     markDirty(state, tile.index);
   }
+  // An overpass the undone action shrank to short ramps grows back.
+  clearInvalidOverpasses(
+    state,
+    withNeighbors(
+      state,
+      entry.tiles.map((tile) => tile.index),
+    ),
+  );
   bumpGridVersion(state);
   state.railVersion++;
   return {};

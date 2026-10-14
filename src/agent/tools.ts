@@ -1119,9 +1119,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'Upgrade the level crossing at x, y to a road overpass: the road crosses the track on a ' +
         'bridge, the barriers go and traffic never waits there. Needs a straight track, a straight ' +
-        'road across it and two plain road tiles (no track, no overpass, not river) on either ' +
-        'side along the road for the ramps. Rejected with needsLevelCrossing, needsStraightCrossing ' +
-        'or needsRampRoom; removed automatically when the crossing or a ramp road goes.',
+        'road across it and plain straight road tiles (no track, no overpass, not river) on either ' +
+        'side along the road for the ramps: two per side where both sides have room, else one. ' +
+        'Rejected with needsLevelCrossing, needsStraightCrossing or needsRampRoom (not even one ' +
+        'tile per side); ramps shrink to one tile or the overpass goes when a ramp road changes.',
       inputSchema: POINT_SCHEMA,
       async execute(input) {
         const { x, y } = readPoint({ p: input }, 'p', tiles);

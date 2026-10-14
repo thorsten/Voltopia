@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
+import { OVERPASS_LONG_RAMP_TILES, OVERPASS_SHORT_RAMP_TILES } from '../shared/constants.ts';
 import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import { DECK_SIZE, OVERPASS_LIFT, RAIL_THICKNESS, RoadsMesh, roadHalfWidth } from './roadsMesh.ts';
@@ -224,7 +225,20 @@ function overpassRoad(): TileDiff[] {
   road(list, 2, 0, DIR_S);
   for (let y = 1; y <= 5; y++) road(list, 2, y, DIR_N | DIR_S);
   road(list, 2, 6, DIR_N);
-  Object.assign(list[at(2, 3)], { rail: LINE_PRESENT | DIR_E | DIR_W, overpass: 1 });
+  Object.assign(list[at(2, 3)], {
+    rail: LINE_PRESENT | DIR_E | DIR_W,
+    overpass: OVERPASS_LONG_RAMP_TILES,
+  });
+  return list;
+}
+
+/**
+ * The same street, with short ramps: (2,2) and (2,4) are the ramps;
+ * (2,1) and (2,5) are plain road (in the game a junction would sit there).
+ */
+function shortOverpassRoad(): TileDiff[] {
+  const list = overpassRoad();
+  list[at(2, 3)].overpass = OVERPASS_SHORT_RAMP_TILES;
   return list;
 }
 
@@ -309,10 +323,50 @@ describe('RoadsMesh overpass', () => {
     list[at(2, 3)].overpass = 0;
     const layer = layerWith(list);
     expect(layer.lift(2.5, 1.5)).toBe(0);
-    layer.applyDiffs([{ ...list[at(2, 3)], overpass: 1 }]);
+    layer.applyDiffs([{ ...list[at(2, 3)], overpass: OVERPASS_LONG_RAMP_TILES }]);
     expect(layer.lift(2.5, 1.5)).toBeCloseTo(OVERPASS_LIFT / 4, 6);
     layer.applyDiffs([{ ...list[at(2, 3)], overpass: 0 }]);
     expect(layer.lift(2.5, 1.5)).toBe(0);
+  });
+
+  it('a short-ramp overpass climbs over the adjacent tile only', () => {
+    const layer = layerWith(shortOverpassRoad());
+    expect(layer.lift(2.5, 3.5)).toBeCloseTo(OVERPASS_LIFT, 6);
+    // North ramp over (2,2) only: far edge at z = 2, deck edge at z = 3.
+    expect(layer.lift(2.5, 1.5)).toBe(0);
+    expect(layer.lift(2.5, 2.0)).toBeCloseTo(0, 6);
+    expect(layer.lift(2.5, 2.5)).toBeCloseTo(OVERPASS_LIFT / 2, 6);
+    // South ramp over (2,4): deck edge at z = 4, far edge at z = 5.
+    expect(layer.lift(2.5, 4.25)).toBeCloseTo(OVERPASS_LIFT * (3 / 4), 6);
+    expect(layer.lift(2.5, 5.5)).toBe(0);
+  });
+
+  it('a short ramp gets one full-height wedge on the ground and no plinth', () => {
+    const layer = layerWith(shortOverpassRoad());
+    // The deck slab only; no plinths.
+    expect(layer.decks.count).toBe(1);
+    // Two railings on the deck, two walls per ramp tile.
+    expect(layer.rails.mesh.count).toBe(2 + 2 * 2);
+    expect(layer.wedges.count).toBe(2);
+    const matrix = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    layer.wedges.getMatrixAt(0, matrix);
+    matrix.decompose(p, q, s);
+    expect(p.z).toBeCloseTo(2.5, 6);
+    expect(p.y).toBeCloseTo(0, 6);
+    expect(s.y).toBeCloseTo(OVERPASS_LIFT, 6);
+    const pitched: number[] = [];
+    for (let slot = 0; slot < layer.mesh.count; slot++) {
+      layer.mesh.getMatrixAt(slot, matrix);
+      matrix.decompose(p, q, s);
+      if (Math.floor(p.x) !== 2) continue;
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      if (Math.abs(forward.y) > 1e-6) pitched.push(Math.floor(p.z));
+    }
+    // Only the two ramp pads are pitched, each by the full lift over its tile.
+    expect(pitched.sort()).toEqual([2, 4]);
   });
 
   it('a ramp pad is pitched toward the deck', () => {

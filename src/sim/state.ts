@@ -42,6 +42,7 @@ import {
   type GeothermalField,
 } from './geothermal.ts';
 import { poolForIsland, syncIslandPools, type IslandPool } from './islandPools.ts';
+import { refitAllOverpasses } from './overpass.ts';
 import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
@@ -309,7 +310,7 @@ export interface TileLayers {
   transitCover: Uint8Array;
   /** Track mask per tile (0 = none, else LINE_PRESENT | connection bits). Persisted. */
   rail: Uint8Array;
-  /** 1 on a level crossing upgraded to a road overpass (persisted). */
+  /** Ramp length (tiles per side) on a level crossing upgraded to a road overpass, 0 elsewhere (persisted). */
   overpass: Uint8Array;
   /** Track network number 1.. of this track tile; 0 = no track. Derived, not persisted. */
   railNetwork: Uint16Array;
@@ -1450,6 +1451,8 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
   if (save.layers.rail) state.layers.rail.set(new Uint8Array(save.layers.rail));
   if (save.layers.overpass) state.layers.overpass.set(new Uint8Array(save.layers.overpass));
+  // Saves from before the ramp fallback store 1 for every overpass.
+  refitAllOverpasses(state);
   if (save.layers.damage) state.layers.damage.set(new Uint8Array(save.layers.damage));
   // A save from before disasters keeps its calm: the city only faces them
   // when it was founded with an intensity (see NewGameOptions).

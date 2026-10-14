@@ -21,7 +21,26 @@ either side. Cars never stop there and the barriers are gone.
   crossing along the road become ramps; they must exist.
 - **Ramps two tiles long** (2026-10-13, after seeing one-tile ramps in
   the game: a 20° ramp reads as a kink in the isometric view). The
-  length is `OVERPASS_RAMP_TILES` in `src/shared/constants.ts`.
+  length is `OVERPASS_LONG_RAMP_TILES` in `src/shared/constants.ts`.
+- **Ramp fallback** (2026-10-14, after a player could no longer upgrade
+  crossings with a junction or bend two tiles away): see below.
+
+## Ramp fallback (2026-10-14)
+
+An overpass gets long ramps (`OVERPASS_LONG_RAMP_TILES`, 2) when both
+sides have room for them, else short ramps
+(`OVERPASS_SHORT_RAMP_TILES`, 1) when both sides have one plain
+straight road tile; both sides always share one length. Only a
+crossing without even that is rejected with `needsRampRoom`.
+`layers.overpass` stores the ramp length (0 = no overpass), and so does
+`TileDiff.overpass`; the renderer reads it per deck. Two overpasses of
+the same axis need more tiles between their decks than their two ramp
+lengths together. The automatic check after every road or track edit
+refits each nearby overpass to the longest ramp that fits now (long
+ramps shrink to short ones and grow back; an overpass drops only when
+neither fits), and undo re-runs it around the restored tiles. Saves
+from before the fallback store 1 for every overpass; loading refits
+them the same way, without a `SAVE_VERSION` bump.
 
 ## Scope
 
