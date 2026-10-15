@@ -6,9 +6,11 @@ import { placePlant } from './energy.ts';
 import { goalsStep } from './goals.ts';
 import { energySystemActive } from './growth.ts';
 import { happinessStep } from './happiness.ts';
+import { buildLanes } from './lanes.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads } from './roads.ts';
+import { RoadLane } from '../shared/types.ts';
 import { createSimState, PlantType, SupplyStatus, Zone } from './state.ts';
 import { buildBusStops } from './transit.ts';
 
@@ -246,5 +248,21 @@ describe('happinessStep', () => {
     const before = state.happiness;
     happinessStep(state, 0);
     expect(Math.abs(state.happiness - before)).toBeLessThan(0.05);
+  });
+
+  it('charges lane upkeep on top of the road tile', () => {
+    const state = createSimState(1, 16);
+    state.layers.elevation.fill(0);
+    state.money = 1e6;
+    state.lastServices = { fire: 1, police: 1 };
+    buildRoads(state, [at(4, 4), at(5, 4)]);
+    const plain = economyStep(state, 0, 0).gridUpkeep;
+    buildLanes(state, [at(4, 4)], RoadLane.Bike);
+    buildLanes(state, [at(5, 4)], RoadLane.Pedestrian);
+    const laned = economyStep(state, 0, 0).gridUpkeep;
+    expect(laned - plain).toBeCloseTo(
+      BALANCE.upkeepPerTick.bikeLanePerTile + BALANCE.upkeepPerTick.pedestrianPerTile,
+      9,
+    );
   });
 });

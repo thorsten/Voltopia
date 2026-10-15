@@ -14,6 +14,7 @@ import { buildRail } from './rail.ts';
 import { leadingPoint, locomotiveAngle, runningTrains, trailingPoint, wagonsOf } from './trains.ts';
 import { setSmartMeterRollout } from './smartMeters.ts';
 import { buildBusStops, drivingBuses } from './transit.ts';
+import { buildLanes } from './lanes.ts';
 import { buildOverpasses } from './overpass.ts';
 import { drivingVehicles } from './vehicles.ts';
 import { paintZones } from './zones.ts';
@@ -104,8 +105,7 @@ export class SimEngine {
       case 'buildOverpass':
         return this.toEvents(buildOverpasses(state, command.tiles));
       case 'buildLanes':
-        // Handled once lane building lands (later cycling task).
-        return [];
+        return this.toEvents(buildLanes(state, command.tiles, command.kind));
       case 'buildRail':
         return this.toEvents(buildRail(state, command.tiles));
       case 'bulldoze':

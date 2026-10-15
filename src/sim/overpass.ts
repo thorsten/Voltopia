@@ -198,6 +198,22 @@ export function buildOverpasses(state: SimState, tiles: number[]): BuildResult {
   return {};
 }
 
+/** Whether `index` is a ramp tile of some overpass (deck tiles are not ramps). */
+export function isOverpassRamp(state: SimState, index: number): boolean {
+  const { overpass } = state.layers;
+  if (overpass[index] !== 0) return false;
+  for (const axis of ['ns', 'ew'] as const) {
+    for (let step = 1; step <= OVERPASS_LONG_RAMP_TILES; step++) {
+      for (const deck of alongAxis(state, index, axis, step)) {
+        if (deck >= 0 && overpass[deck] >= step && crossingRoadAxis(state, deck) === axis) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Refit every overpass near an edit to the ramp it has room for now:
  * long ramps shrink to short ones (or grow back), and an overpass whose

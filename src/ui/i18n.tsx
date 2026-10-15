@@ -284,6 +284,9 @@ const en = {
   'rejection.needsLineSite': 'Power lines need free land, a road or water',
   'rejection.needsRoad': 'Needs a road next to it',
   'rejection.needsRoadTile': 'Bus stops go on road tiles',
+  'rejection.needsExistingRoad': 'Bike lanes and pedestrian streets go on existing roads',
+  'rejection.pedestrianBlocked':
+    'A pedestrian street cannot take a bus stop, a bridge, a level crossing or an overpass ramp',
   'rejection.needsRailSite': 'Track cannot go through buildings or plants',
   'rejection.needsLevelCrossing': 'Overpasses go on a straight level crossing',
   'rejection.needsStraightCrossing': 'The road must run straight across the track',
@@ -964,6 +967,9 @@ const de: Record<TranslationKey, string> = {
   'rejection.needsLineSite': 'Leitungen brauchen freies Land, eine Straße oder Wasser',
   'rejection.needsRoad': 'Braucht eine Straße daneben',
   'rejection.needsRoadTile': 'Haltestellen gehören auf Straßenkacheln',
+  'rejection.needsExistingRoad': 'Radwege und Fußgängerzonen gehören auf bestehende Straßen',
+  'rejection.pedestrianBlocked':
+    'Eine Fußgängerzone verträgt keine Haltestelle, Brücke, keinen Bahnübergang und keine Überführungsrampe',
   'rejection.needsRailSite': 'Gleise führen nicht durch Gebäude oder Anlagen',
   'rejection.needsLevelCrossing': 'Überführungen gehören auf einen geraden Bahnübergang',
   'rejection.needsStraightCrossing': 'Die Straße muss gerade über das Gleis führen',

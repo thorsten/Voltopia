@@ -5,7 +5,7 @@ import {
   OVERPASS_SHORT_RAMP_TILES as SHORT,
 } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { buildOverpasses, overpassRejection } from './overpass.ts';
+import { buildOverpasses, isOverpassRamp, overpassRejection } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import {
@@ -342,5 +342,14 @@ describe('overpass ramp fallback', () => {
     expect(restored.layers.overpass[at(5, 12)]).toBe(SHORT); // spaced against the long one
     expect(restored.layers.overpass[at(10, 8)]).toBe(SHORT);
     expect(restored.layers.overpass[at(5, 4)]).toBe(0);
+  });
+
+  it('tells ramp tiles from deck and bystanders', () => {
+    const state = crossingTown();
+    buildOverpasses(state, [CROSSING]);
+    for (const y of [6, 7, 9, 10]) expect(isOverpassRamp(state, at(5, y))).toBe(true);
+    for (const tile of [CROSSING, at(5, 5), at(5, 11)]) {
+      expect(isOverpassRamp(state, tile)).toBe(false);
+    }
   });
 });

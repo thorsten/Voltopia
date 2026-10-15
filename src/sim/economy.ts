@@ -1,5 +1,5 @@
 import { BALANCE } from '../shared/constants.ts';
-import { PlantType, RoadClass, TileType } from '../shared/types.ts';
+import { PlantType, RoadClass, RoadLane, TileType } from '../shared/types.ts';
 import { countPowerLineTiles } from './powerLines.ts';
 import { countRailTiles } from './rail.ts';
 import type { BuildResult } from './roads.ts';
@@ -64,7 +64,7 @@ export function economyStep(
   jobs: number,
   industrialJobs = 0,
 ): EconomyBreakdown {
-  const { tileType, plantType, roadClass } = state.layers;
+  const { tileType, plantType, roadClass, roadLane } = state.layers;
   const { incomePerResident, incomePerJob, incomePerIndustrialJob } = BALANCE.tax;
 
   // Industrial jobs (a share of `jobs`) pay the trade rate.
@@ -77,6 +77,8 @@ export function economyStep(
 
   let roadTiles = 0;
   let avenueTiles = 0;
+  let bikeLaneTiles = 0;
+  let pedestrianTiles = 0;
   let plantUpkeep = 0;
   const plantUpkeepByType = emptyPlantMap();
   const plantCountByType = emptyPlantMap();
@@ -84,6 +86,8 @@ export function economyStep(
     if (tileType[i] === TileType.Road) {
       roadTiles++;
       if (roadClass[i] === RoadClass.Avenue) avenueTiles++;
+      if (roadLane[i] === RoadLane.Bike) bikeLaneTiles++;
+      else if (roadLane[i] === RoadLane.Pedestrian) pedestrianTiles++;
     } else if (tileType[i] === TileType.Plant) {
       const plant = plantType[i] as PlantType;
       const upkeep = BALANCE.upkeepPerTick.plant[plant] ?? 0;
@@ -101,7 +105,9 @@ export function economyStep(
     avenueUpkeep +
     countPowerLineTiles(state) * BALANCE.upkeepPerTick.powerLinePerTile +
     countRailTiles(state) * BALANCE.upkeepPerTick.railPerTile +
-    busStopUpkeep;
+    busStopUpkeep +
+    bikeLaneTiles * BALANCE.upkeepPerTick.bikeLanePerTile +
+    pedestrianTiles * BALANCE.upkeepPerTick.pedestrianPerTile;
   const biogasFuelCost =
     state.lastEnergy.biogas * BALANCE.upkeepPerTick.biogasFuelCostPerEnergyUnit;
   // All link traffic of a tick trades at that tick's spot price.
