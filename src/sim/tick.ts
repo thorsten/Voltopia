@@ -1,5 +1,5 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import { PlantType, RoadClass } from '../shared/types.ts';
+import { PlantType, RoadClass, RoadLane } from '../shared/types.ts';
 import type { EnergyHistoryPoint, GlobalStats } from '../shared/types.ts';
 import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
@@ -148,6 +148,9 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
 function countTiles(state: SimState): {
   roadTiles: number;
   avenueTiles: number;
+  /** Road tiles open to motor traffic (no pedestrian streets), the avenueShare base. */
+  motorRoadTiles: number;
+  motorAvenueTiles: number;
   zonedTiles: number;
   plantTiles: number;
   buildingTiles: number;
@@ -156,10 +159,12 @@ function countTiles(state: SimState): {
   /** Logistics depots only; bus depots are tracked separately in transitStats. */
   depots: number;
 } {
-  const { tileType, zone, density, roadClass, plantType } = state.layers;
+  const { tileType, zone, density, roadClass, roadLane, plantType } = state.layers;
   const counts = {
     roadTiles: 0,
     avenueTiles: 0,
+    motorRoadTiles: 0,
+    motorAvenueTiles: 0,
     zonedTiles: 0,
     plantTiles: 0,
     buildingTiles: 0,
@@ -172,6 +177,10 @@ function countTiles(state: SimState): {
     if (tileType[i] === TileType.Road) {
       counts.roadTiles++;
       if (roadClass[i] === RoadClass.Avenue) counts.avenueTiles++;
+      if (roadLane[i] !== RoadLane.Pedestrian) {
+        counts.motorRoadTiles++;
+        if (roadClass[i] === RoadClass.Avenue) counts.motorAvenueTiles++;
+      }
     } else if (tileType[i] === TileType.Plant) {
       counts.plantTiles++;
       if (plantType[i] === PlantType.LogisticsDepot) counts.depots++;
@@ -279,7 +288,7 @@ export function buildStats(state: SimState): GlobalStats {
     traffic: {
       congestion: state.commuteCongestion,
       driving: drivingVehicleCount(state),
-      avenueShare: counts.roadTiles > 0 ? counts.avenueTiles / counts.roadTiles : 0,
+      avenueShare: counts.motorRoadTiles > 0 ? counts.motorAvenueTiles / counts.motorRoadTiles : 0,
     },
     deliveries: { ...state.lastDeliveries },
     transit: { ...state.lastTransit },

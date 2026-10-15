@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { DeliveryState, PlantType, Zone } from '../shared/types.ts';
+import { DeliveryState, PlantType, RoadLane, Zone } from '../shared/types.ts';
+import { buildLanes } from './lanes.ts';
 import {
   ageShops,
   claimedStops,
@@ -647,5 +648,30 @@ describe('rail-supplied depots', () => {
     state.layers.railGoodsAge[depot] = supplyWindowTicks() + 1;
     expect(isDepotRailSupplied(state, depot)).toBe(false);
     expect(deliveryStats(state).depotsRailSupplied).toBe(0);
+  });
+});
+
+describe('pedestrian streets', () => {
+  it('a van never stops on a pedestrian tile; a shop with another road beside it is still served', () => {
+    const state = shopTown(1, 1); // one shop at (6, 11), road above it at (6, 10)
+    state.money = 1e6;
+    // A side road south of the shop gives the van a second kerb to stop at.
+    buildRoads(state, [at(6, 12), at(5, 12), at(4, 12), at(3, 12), at(2, 12), at(2, 11)]);
+    syncFleet(state);
+    state.layers.deliveryAge[at(6, 11)] = dueTicks();
+    expect(planTour(state, state.vans[0], new Set())).toEqual([at(6, 10), at(6, 12), at(2, 10)]);
+    buildLanes(state, [at(6, 10)], RoadLane.Pedestrian);
+    const tour = planTour(state, state.vans[0], new Set());
+    expect(tour).not.toContain(at(6, 10));
+    expect(tour[0]).toBe(at(6, 12));
+  });
+
+  it('a shop reachable only through a pedestrian street is not on any tour', () => {
+    const state = shopTown(1, 1);
+    state.money = 1e6;
+    syncFleet(state);
+    state.layers.deliveryAge[at(6, 11)] = dueTicks();
+    buildLanes(state, [at(4, 10)], RoadLane.Pedestrian);
+    expect(planTour(state, state.vans[0], new Set())).toEqual([]);
   });
 });

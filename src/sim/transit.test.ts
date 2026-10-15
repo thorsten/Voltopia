@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, StopState, Zone } from '../shared/types.ts';
+import { PlantType, RoadLane, StopState, Zone } from '../shared/types.ts';
+import { buildLanes } from './lanes.ts';
 import {
   ageStops,
   buildBusStops,
@@ -525,5 +526,24 @@ describe('transitStep', () => {
       busesCharging: 0,
       stopsInReach: 0,
     });
+  });
+});
+
+describe('pedestrian streets', () => {
+  it('refuses a bus stop on a pedestrian street', () => {
+    const state = street();
+    state.money = 1e6;
+    buildLanes(state, [at(5, 10)], RoadLane.Pedestrian);
+    expect(buildBusStops(state, [at(5, 10)])).toEqual({ rejected: 'needsRoadTile' });
+    expect(isBusStop(state, at(5, 10))).toBe(false);
+  });
+
+  it('a depot no longer reaches stops behind a pedestrian street', () => {
+    const state = busTown(1, 2); // stops at x=6 and x=9
+    state.money = 1e6;
+    syncBusFleet(state);
+    expect(busDepotInfo(state, at(2, 9)).stopsInReach).toBe(2);
+    buildLanes(state, [at(8, 10)], RoadLane.Pedestrian);
+    expect(busDepotInfo(state, at(2, 9)).stopsInReach).toBe(1);
   });
 });

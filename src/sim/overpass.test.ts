@@ -5,6 +5,8 @@ import {
   OVERPASS_SHORT_RAMP_TILES as SHORT,
 } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
+import { RoadLane } from '../shared/types.ts';
+import { buildLanes } from './lanes.ts';
 import { buildOverpasses, isOverpassRamp, overpassRejection } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
@@ -352,4 +354,16 @@ describe('overpass ramp fallback', () => {
       expect(isOverpassRamp(state, tile)).toBe(false);
     }
   });
+});
+
+it('refuses an overpass whose deck or ramp tile is a pedestrian street', () => {
+  const state = crossingTown();
+  // buildLanes refuses a level crossing, so set the layer directly: this is the guard.
+  state.layers.roadLane[CROSSING] = RoadLane.Pedestrian;
+  expect(overpassRejection(state, CROSSING)).toBe('needsLevelCrossing');
+  state.layers.roadLane[CROSSING] = RoadLane.None;
+  buildLanes(state, [at(5, 7)], RoadLane.Pedestrian);
+  expect(overpassRejection(state, CROSSING)).toBe('needsRampRoom');
+  buildLanes(state, [at(5, 7)], RoadLane.None);
+  expect(overpassRejection(state, CROSSING)).toBeNull();
 });

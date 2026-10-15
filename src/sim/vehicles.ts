@@ -1,6 +1,6 @@
 import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex, tileX, tileY } from '../shared/grid.ts';
-import { PlantType, RoadClass, Zone } from '../shared/types.ts';
+import { PlantType, RoadClass, RoadLane, Zone } from '../shared/types.ts';
 import { closedCrossings } from './crossings.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { plantNetwork } from './rail.ts';
@@ -19,14 +19,18 @@ import { laneCapacity, laneKey } from './traffic.ts';
 
 /** Road tiles adjacent to buildings of the given zones. */
 function roadTilesNextToZones(state: SimState, zones: readonly Zone[]): number[] {
-  const { tileType, zone, density } = state.layers;
+  const { tileType, zone, density, roadLane } = state.layers;
   const result: number[] = [];
   const seen = new Set<number>();
   for (let i = 0; i < tileType.length; i++) {
     if (tileType[i] !== TileType.Empty || density[i] === 0) continue;
     if (!zones.includes(zone[i] as Zone)) continue;
     for (const neighbor of neighbors4(i, state.size)) {
-      if (tileType[neighbor] === TileType.Road && !seen.has(neighbor)) {
+      if (
+        tileType[neighbor] === TileType.Road &&
+        roadLane[neighbor] !== RoadLane.Pedestrian &&
+        !seen.has(neighbor)
+      ) {
         seen.add(neighbor);
         result.push(neighbor);
       }

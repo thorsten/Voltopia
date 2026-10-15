@@ -1,7 +1,7 @@
 import { BALANCE } from '../shared/constants.ts';
 import { neighbors4 } from '../shared/grid.ts';
 import { MinHeap } from '../shared/heap.ts';
-import { RoadClass } from '../shared/types.ts';
+import { RoadClass, RoadLane } from '../shared/types.ts';
 import { TileType, type SimState } from './state.ts';
 
 type TilePredicate = (tile: number) => boolean;
@@ -97,12 +97,18 @@ export function distances(
 }
 
 const isRoad = (state: SimState) => (tile: number) => state.layers.tileType[tile] === TileType.Road;
+/** A road tile open to cars, vans and buses: everything but a pedestrian street. */
+export const isMotorRoad = (state: SimState) => (tile: number) =>
+  state.layers.tileType[tile] === TileType.Road &&
+  state.layers.roadLane[tile] !== RoadLane.Pedestrian;
+/** Any road tile, pedestrian streets included — the walker's network. */
+export const isAnyRoad = isRoad;
 const isTrack = (state: SimState) => (tile: number) => state.layers.rail[tile] !== 0;
 const flat = () => 1;
 
 /** Road route (see findPath): road class and traffic load price the tiles. */
 export function findRoadPath(state: SimState, from: number, to: number): number[] | null {
-  return findPath(state, from, to, isRoad(state), (tile) => tileCost(state, tile));
+  return findPath(state, from, to, isMotorRoad(state), (tile) => tileCost(state, tile));
 }
 
 export function roadDistances(
@@ -110,7 +116,7 @@ export function roadDistances(
   from: number,
   maxCost: number = Infinity,
 ): Map<number, number> {
-  return distances(state, from, isRoad(state), (tile) => tileCost(state, tile), maxCost);
+  return distances(state, from, isMotorRoad(state), (tile) => tileCost(state, tile), maxCost);
 }
 
 /** Track route: every track tile costs 1, traffic and road class are irrelevant. */

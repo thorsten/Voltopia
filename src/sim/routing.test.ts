@@ -8,6 +8,8 @@ import {
   nearestNeighbourOrder,
 } from './routing.ts';
 import { buildRoads } from './roads.ts';
+import { buildLanes } from './lanes.ts';
+import { RoadLane } from '../shared/types.ts';
 import { buildRail } from './rail.ts';
 import { createSimState } from './state.ts';
 
@@ -125,5 +127,22 @@ describe('nearestNeighbourOrder', () => {
     const remaining = new Set([a, b]);
     expect(nearestNeighbourOrder(remaining, () => new Map(), new Map())).toEqual([]);
     expect(remaining.size).toBe(2);
+  });
+});
+
+describe('pedestrian streets', () => {
+  it('cars route around a pedestrian street and find no path when it cuts the only road', () => {
+    const state = createSimState(1, 12);
+    state.layers.elevation.fill(0);
+    state.money = 1e6;
+    const row = (y: number) => Array.from({ length: 8 }, (_, x) => tileIndex(x + 2, y, 12));
+    buildRoads(state, [...row(5), ...row(7), tileIndex(2, 6, 12), tileIndex(9, 6, 12)]);
+    buildLanes(state, [tileIndex(5, 5, 12)], RoadLane.Pedestrian);
+    const path = findRoadPath(state, tileIndex(2, 5, 12), tileIndex(9, 5, 12))!;
+    expect(path).not.toContain(tileIndex(5, 5, 12));
+    expect(path.some((t) => t === tileIndex(5, 7, 12))).toBe(true);
+    buildLanes(state, [tileIndex(5, 7, 12)], RoadLane.Pedestrian);
+    expect(findRoadPath(state, tileIndex(2, 5, 12), tileIndex(9, 5, 12))).toBeNull();
+    expect(roadDistances(state, tileIndex(2, 5, 12)).has(tileIndex(9, 5, 12))).toBe(false);
   });
 });

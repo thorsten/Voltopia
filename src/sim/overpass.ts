@@ -1,3 +1,4 @@
+import { RoadLane } from '../shared/types.ts';
 import {
   BALANCE,
   OVERPASS_LONG_RAMP_TILES,
@@ -92,6 +93,7 @@ function isRampTile(
   const { layers } = state;
   if (layers.tileType[index] !== TileType.Road) return false;
   if (layers.rail[index] !== 0) return false;
+  if (layers.roadLane[index] === RoadLane.Pedestrian) return false;
   const road = layers.roadMask[index] & SIDES;
   const straight = road === (axis === 'ns' ? AXIS_NS : AXIS_EW);
   if (!straight && !(far && road === bitToward(state, index, deck))) return false;
@@ -141,6 +143,7 @@ export function overpassRejection(state: SimState, index: number): string | null
   if (layers.tileType[index] !== TileType.Road || (layers.rail[index] & LINE_PRESENT) === 0)
     return 'needsLevelCrossing';
   if (layers.terrain[index] === Terrain.River) return 'needsLevelCrossing';
+  if (layers.roadLane[index] === RoadLane.Pedestrian) return 'needsLevelCrossing';
   const track = straightAxis(layers.rail[index] & SIDES);
   if (track === null) return 'needsLevelCrossing';
   const road = straightAxis(layers.roadMask[index] & SIDES);

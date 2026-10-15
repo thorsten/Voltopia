@@ -1,6 +1,6 @@
 import { BALANCE, TICK_RATE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex, tileX, tileY } from '../shared/grid.ts';
-import { MAX_STOP_AGE, PlantType, StopState } from '../shared/types.ts';
+import { MAX_STOP_AGE, PlantType, RoadLane, StopState } from '../shared/types.ts';
 import type { BusDepotInfo, TransitStats } from '../shared/types.ts';
 import { depotRoadTile } from './deliveries.ts';
 import { isTileConnected } from './energy.ts';
@@ -49,7 +49,10 @@ export function stopState(state: SimState, index: number): StopState {
 export function buildBusStops(state: SimState, tiles: number[]): BuildResult {
   const { layers } = state;
   const buildable = tiles.filter(
-    (index) => layers.tileType[index] === TileType.Road && layers.busStop[index] === 0,
+    (index) =>
+      layers.tileType[index] === TileType.Road &&
+      layers.roadLane[index] !== RoadLane.Pedestrian &&
+      layers.busStop[index] === 0,
   );
   if (buildable.length === 0) {
     const blocked = tiles.find((index) => layers.busStop[index] === 0);

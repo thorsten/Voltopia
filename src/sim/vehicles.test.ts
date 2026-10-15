@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex, tileX, tileY } from '../shared/grid.ts';
-import { PlantType, RoadClass, Zone } from '../shared/types.ts';
+import { PlantType, RoadClass, RoadLane, Zone } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
 import { islandOf } from './powerGrid.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
+import { buildLanes } from './lanes.ts';
 import { findRoadPath } from './routing.ts';
 import { refreshBuildingCount } from './smartMeters.ts';
 import {
@@ -1110,5 +1111,34 @@ describe('level crossings', () => {
     const state = crossingTown();
     commuter(state);
     expect(furthestEast(state, 12)).toBeGreaterThan(CROSSING_X);
+  });
+});
+
+describe('pedestrian streets', () => {
+  it('new commuters never get a pedestrian home or work road', () => {
+    const state = commuterTown(5, 200);
+    buildLanes(state, [at(3, 10), at(15, 10)], RoadLane.Pedestrian);
+    setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    for (const v of state.vehicles) {
+      expect(state.layers.roadLane[v.homeRoad]).toBe(RoadLane.None);
+      if (v.workRoad >= 0) expect(state.layers.roadLane[v.workRoad]).toBe(RoadLane.None);
+    }
+  });
+
+  it('a commuter cut off by a pedestrian street stays parked and the sim keeps running', () => {
+    const state = commuterTown(5, 200);
+    setHour(state, BALANCE.vehicles.commute.morningStartHour - 1);
+    stepVehicles(state); // spawn
+    // The one street: closing a middle tile strands everyone west of it.
+    buildLanes(state, [at(12, 10)], RoadLane.Pedestrian);
+    runHours(state, 6);
+    for (const v of drivingVehicles(state)) {
+      expect(v.path).not.toContain(at(12, 10));
+    }
+    const stranded = state.vehicles.filter(
+      (v) => tileX(v.homeRoad, SIZE) < 12 && v.phase === VehiclePhase.ParkedHome,
+    );
+    expect(stranded.length).toBeGreaterThan(0);
   });
 });
