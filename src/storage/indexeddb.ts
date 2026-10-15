@@ -107,6 +107,18 @@ export class IndexedDbStores implements CatalogStores {
     }
   }
 
+  async writeSummary(summary: StoredSummary): Promise<void> {
+    const db = await openDatabase();
+    try {
+      const transaction = db.transaction(SUMMARIES_STORE, 'readwrite');
+      const done = transactionDone(transaction, 'write');
+      transaction.objectStore(SUMMARIES_STORE).put(summary, summary.id);
+      await done;
+    } finally {
+      db.close();
+    }
+  }
+
   async remove(id: string): Promise<void> {
     const db = await openDatabase();
     try {

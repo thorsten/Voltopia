@@ -29,8 +29,12 @@ export interface SaveSummary {
  */
 export interface SaveStorage {
   load(slot?: string): Promise<SaveGame | null>;
-  /** Without a name, an existing named save keeps its name (overwrite). */
-  save(game: SaveGame, slot?: string, name?: string): Promise<void>;
+  /**
+   * Without a name, an existing named save keeps its name (overwrite).
+   * `population` is the live value for the summary; without it the last
+   * daily sample is used, up to a day behind.
+   */
+  save(game: SaveGame, slot?: string, name?: string, population?: number): Promise<void>;
   clear(slot?: string): Promise<void>;
   /** Named saves, newest first; never the autosave. */
   list(): Promise<SaveSummary[]>;

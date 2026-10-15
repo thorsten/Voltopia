@@ -24,6 +24,8 @@ export interface CatalogStores {
   write(id: string, save: SaveGame, summary: StoredSummary | null): Promise<void>;
   /** Removes the save and its summary in one transaction. */
   remove(id: string): Promise<void>;
+  /** Replaces the summary row only (rename), leaving the save untouched. */
+  writeSummary(summary: StoredSummary): Promise<void>;
 }
 
 /** The summary row to store for `save` under `id`. */
@@ -32,8 +34,9 @@ export function storedSummary(
   save: SaveGame,
   name: string,
   savedAt: number,
+  population?: number,
 ): StoredSummary {
-  return { ...summarizeSave(save, name, savedAt), id, version: save.version };
+  return { ...summarizeSave(save, name, savedAt, population), id, version: save.version };
 }
 
 /**
@@ -83,14 +86,19 @@ export class SaveCatalog implements SaveStorage {
     }
   }
 
-  async save(game: SaveGame, slot: string = AUTOSAVE_SLOT, name?: string): Promise<void> {
+  async save(
+    game: SaveGame,
+    slot: string = AUTOSAVE_SLOT,
+    name?: string,
+    population?: number,
+  ): Promise<void> {
     if (slot === AUTOSAVE_SLOT) {
       await this.stores.write(slot, game, null);
       return;
     }
     const existing = await this.stores.getSummary(slot);
     const label = name ?? existing?.name ?? slot;
-    await this.stores.write(slot, game, storedSummary(slot, game, label, this.now()));
+    await this.stores.write(slot, game, storedSummary(slot, game, label, this.now(), population));
   }
 
   async clear(slot: string = AUTOSAVE_SLOT): Promise<void> {
@@ -108,11 +116,8 @@ export class SaveCatalog implements SaveStorage {
   async rename(slot: string, name: string): Promise<void> {
     const trimmed = name.trim();
     if (trimmed === '') throw new Error('A save needs a name');
-    const [summary, save] = await Promise.all([
-      this.stores.getSummary(slot),
-      this.stores.getSave(slot),
-    ]);
-    if (!summary || !save || slot === AUTOSAVE_SLOT) throw new Error(`Unknown save: ${slot}`);
-    await this.stores.write(slot, save, { ...summary, name: trimmed });
+    const summary = await this.stores.getSummary(slot);
+    if (!summary || slot === AUTOSAVE_SLOT) throw new Error(`Unknown save: ${slot}`);
+    await this.stores.writeSummary({ ...summary, name: trimmed });
   }
 }

@@ -29,6 +29,10 @@ export class MemoryCatalogStores implements CatalogStores {
     if (summary) this.summaries.set(id, structuredClone(summary));
   }
 
+  async writeSummary(summary: StoredSummary): Promise<void> {
+    this.summaries.set(summary.id, structuredClone(summary));
+  }
+
   async remove(id: string): Promise<void> {
     this.saves.delete(id);
     this.summaries.delete(id);

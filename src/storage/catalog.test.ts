@@ -82,6 +82,12 @@ describe('SaveCatalog', () => {
     expect(await catalog.load('a')).not.toBeNull();
   });
 
+  it('uses the live population for the summary when given', async () => {
+    const { catalog } = makeCatalog();
+    await catalog.save(makeSave(), 'a', 'Live', 4321);
+    expect((await catalog.list())[0].population).toBe(4321);
+  });
+
   it('rejects renaming unknown saves, the autosave and empty names', async () => {
     const { catalog } = makeCatalog();
     await catalog.save(makeSave());
