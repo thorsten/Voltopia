@@ -311,8 +311,9 @@ feature set real play goals.
   town", "storm season with a fragile wind fleet". Each scenario fixes
   seed, size, disaster intensity and starting funds and ends with a win
   screen that scores the chosen metrics.
-- **Save slots**: today there is one autosave. Named slots with load,
-  delete and export/import in the web build as well as the native app.
+- **Save slots** (done): named slots with load, delete and
+  export/import in the web build as well as the native app (settings
+  page).
 - **Grid-frequency minigame**: inertia and reserve power as a
   mechanic — a sudden plant outage or storm cut-out drops the
   frequency, batteries and demand response hold it, too little reserve
@@ -327,8 +328,15 @@ feature set real play goals.
 - **Neighbouring cities**: the market is abstract. Concrete neighbours
   with their own generation mix, supply contracts and interconnectors
   whose capacity the player buys.
-- **Cycling and walking**: bike lanes and pedestrian streets that
-  replace short car trips and lower the charging peak.
+- **Cycling and walking** (done): bike lanes and pedestrian streets
+  (a road lane kind) replace short car trips. A commuter walks when
+  home and work are at most 4 tiles apart and cycles up to 20 tiles
+  when a connected bike lane or pedestrian street covers both ends;
+  riders leave the car parked, so they draw no charging load. Probe
+  (48x48 grid, seed 3, bike lanes on every road, 12 days with the
+  last 6 measured): active share 0.32 with lanes versus 0.004
+  without, evening (18:00-22:00) charging load 107 versus 167 per
+  tick (-36%). The `BALANCE.cycling` values stayed unchanged.
 - **Annual report / statistics replay**: multi-year time series,
   comparison of two saves, CSV export.
 - **Difficulty and sandbox modes**: unlimited money, disasters off,
