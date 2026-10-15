@@ -53,6 +53,8 @@ const storage = new IndexedDbStorage();
  * old city back between the copy and the reload.
  */
 const cityReloader = createCityReloader(storage, () => window.location.reload());
+/** The save tools' host; module-level so useAgentTools' effect stays put. */
+const agentSaveHost = { storage, replaceCity: cityReloader.replaceCityAndReload };
 
 /** Remembers whether the HUD detail drawer is open, across sessions. */
 const DETAILS_STORAGE_KEY = 'voltopia.hudDetails';
@@ -228,7 +230,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     });
     void cityReloader.replaceCityAndReload(null);
   }, []);
-  useAgentTools(bridge, gridSize, startNewCityFromTool);
+  useAgentTools(bridge, gridSize, startNewCityFromTool, agentSaveHost);
 
   useEffect(() => {
     if (stats) rendererRef.current?.setStats(stats);

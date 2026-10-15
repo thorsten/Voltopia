@@ -23,8 +23,11 @@ import {
   type GlobalStats,
   type LifetimeSample,
   type Speed,
+  type SaveGame,
   type TileInfo,
 } from '../shared/types.ts';
+import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
+import { dayOfTick, defaultSaveName } from '../storage/summary.ts';
 import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
 // Pure data (no localStorage call at import time, no React) — same kind of
 // cross-layer import as ../ui/i18n.tsx above. Reusing it keeps an agent's
@@ -61,6 +64,58 @@ export interface AgentContext {
   requestLifetime(): Promise<LifetimeSample[]>;
   /** Start a brand-new city (the app reloads the page). */
   startNewCity(options: NewCityOptions): void;
+  /** The named saves (the saves page's catalogue). */
+  saves: AgentSaves;
+}
+
+/** Named saves as seen by the tools; see `createAgentSaves`. */
+export interface AgentSaves {
+  list(): Promise<SaveSummary[]>;
+  /**
+   * Snapshot the running city into a slot; new slot when id is omitted.
+   * A null name keeps an existing save's name (overwrite).
+   */
+  saveCurrent(name: string | null, id?: string): Promise<SaveSummary>;
+  /** Copy into the autosave and reload (does not return in the app). */
+  load(id: string): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+
+/** Longest save name, matching the saves page's input. */
+export const MAX_SAVE_NAME_LENGTH = 80;
+
+/**
+ * `AgentSaves` over a `SaveStorage`, shared by the app and the tests.
+ * `snapshot` asks the simulation for a `SaveGame`; `replaceCity` makes a
+ * save the running city (in the app: autosave copy + page reload).
+ */
+export function createAgentSaves(deps: {
+  storage: SaveStorage;
+  snapshot(): Promise<SaveGame>;
+  /** Live population for the summary (null before the first tick). */
+  population(): number | null;
+  replaceCity(save: SaveGame): Promise<void>;
+  newId?: () => string;
+}): AgentSaves {
+  const { storage } = deps;
+  const newId = deps.newId ?? (() => newSlotId());
+  return {
+    list: () => storage.list(),
+    async saveCurrent(name, id) {
+      const slot = id ?? newId();
+      const snapshot = await deps.snapshot();
+      await storage.save(snapshot, slot, name ?? undefined, deps.population() ?? undefined);
+      const summary = (await storage.list()).find((entry) => entry.id === slot);
+      if (!summary) throw new Error(`Saving to ${slot} failed`);
+      return summary;
+    },
+    async load(id) {
+      const save = await storage.load(id);
+      if (!save) throw new Error(`Save ${id} cannot be loaded`);
+      await deps.replaceCity(save);
+    },
+    delete: (id) => storage.clear(id),
+  };
 }
 
 /** JSON-schema-ish input description; kept loose on purpose. */
@@ -1445,6 +1500,87 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       },
     },
     {
+      name: 'list_saves',
+      description:
+        'List the named saves (the saves page), newest first: id, name, savedAt (ms since ' +
+        'epoch), in-game day, population, money, map size and compatible (false = from another ' +
+        'game version; can only be deleted). The autosave is not listed.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        return { saves: await ctx.saves.list() };
+      },
+    },
+    {
+      name: 'save_to_slot',
+      description:
+        'Save the running city as a named save. Without "id" a new save is created (name ' +
+        'defaults to "Voltopia – day N"); with the "id" of an existing save it is overwritten ' +
+        '(keeping its name unless "name" is given). Returns the save summary.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', maxLength: MAX_SAVE_NAME_LENGTH },
+          id: { type: 'string', description: 'Existing save to overwrite (see list_saves).' },
+        },
+      },
+      async execute(input) {
+        const name = readSaveName(input);
+        const id = input.id;
+        if (id !== undefined) {
+          await requireSave(ctx, id);
+          return { ok: true, save: await ctx.saves.saveCurrent(name, id as string) };
+        }
+        const label = name ?? defaultSaveName(dayOfTick(requireStats(ctx).tick));
+        return { ok: true, save: await ctx.saves.saveCurrent(label) };
+      },
+    },
+    {
+      name: 'load_save',
+      description:
+        'Replace the running city with a named save (see list_saves); the current city is NOT ' +
+        'saved first — use save_to_slot if it should be kept. The page reloads. Saves from ' +
+        'another game version (compatible: false) are rejected.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const summary = await requireSave(ctx, input.id);
+        if (!summary.compatible) {
+          return {
+            ok: false,
+            error: 'incompatibleSave',
+            message: `"${summary.name}" is from another game version and can only be deleted`,
+          };
+        }
+        await ctx.saves.load(summary.id);
+        return {
+          ok: true,
+          id: summary.id,
+          name: summary.name,
+          note: 'The page is reloading with the loaded city.',
+        };
+      },
+    },
+    {
+      name: 'delete_save',
+      description: 'Delete a named save for good (see list_saves for ids).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const summary = await requireSave(ctx, input.id);
+        await ctx.saves.delete(summary.id);
+        return { ok: true, id: summary.id, name: summary.name };
+      },
+    },
+    {
       name: 'start_new_city',
       description:
         'Abandon the current city and start a new one (the page reloads; the old autosave is ' +
@@ -1494,6 +1630,26 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
     },
   ];
   return tools;
+}
+
+/** Optional save name: trimmed, non-empty, at most MAX_SAVE_NAME_LENGTH. Null when absent. */
+function readSaveName(input: Record<string, unknown>): string | null {
+  if (input.name === undefined) return null;
+  if (typeof input.name !== 'string') throw new ToolInputError('"name" must be a string');
+  const name = input.name.trim();
+  if (name === '') throw new ToolInputError('"name" must not be empty');
+  if (name.length > MAX_SAVE_NAME_LENGTH) {
+    throw new ToolInputError(`"name" must be at most ${MAX_SAVE_NAME_LENGTH} characters`);
+  }
+  return name;
+}
+
+/** The listed save with this id, or a ToolInputError. */
+async function requireSave(ctx: AgentContext, id: unknown): Promise<SaveSummary> {
+  if (typeof id !== 'string' || id === '') throw new ToolInputError('"id" must be a save id');
+  const summary = (await ctx.saves.list()).find((entry) => entry.id === id);
+  if (!summary) throw new ToolInputError(`No save with id "${id}" — see list_saves`);
+  return summary;
 }
 
 function spent(ctx: AgentContext, before: number): { spent: number; money: number } {

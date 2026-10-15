@@ -15,6 +15,7 @@ import {
   TileType,
   Zone,
   type GlobalStats,
+  type SaveGame,
 } from '../shared/types.ts';
 import { addDamage } from '../sim/disasters.ts';
 import { placePlant } from '../sim/energy.ts';
@@ -23,9 +24,11 @@ import { discoverGeothermalFields } from '../sim/geothermal.ts';
 import { buildPowerLines } from '../sim/powerLines.ts';
 import { isCoastalSea } from '../sim/sea.ts';
 import { markDirty, slopeAt, slopeCostMultiplier } from '../sim/state.ts';
+import { createMemoryStorage } from '../storage/memory.ts';
 import { TileMirror } from './tileMirror.ts';
 import {
   callTool,
+  createAgentSaves,
   createAgentTools,
   MAX_ADVANCE_DAYS,
   type AgentContext,
@@ -41,6 +44,9 @@ function createHarness(seed = 11): {
   tools: AgentTool[];
   engine: SimEngine;
   newCities: NewCityOptions[];
+  storage: ReturnType<typeof createMemoryStorage>;
+  /** Saves `load_save` made the running city, in order. */
+  loaded: SaveGame[];
   call: (name: string, input?: unknown) => Promise<Record<string, unknown>>;
 } {
   const engine = new SimEngine(seed, SIZE);
@@ -54,6 +60,10 @@ function createHarness(seed = 11): {
   };
   absorb(engine.tick());
   const newCities: NewCityOptions[] = [];
+  let clock = 1_000;
+  const storage = createMemoryStorage(() => clock++);
+  const loaded: SaveGame[] = [];
+  let nextId = 1;
   const ctx: AgentContext = {
     tiles,
     getStats: () => stats,
@@ -77,6 +87,19 @@ function createHarness(seed = 11): {
     startNewCity(options) {
       newCities.push(options);
     },
+    saves: createAgentSaves({
+      storage,
+      async snapshot() {
+        const [event] = engine.applyCommand({ type: 'requestSave' });
+        if (!event || event.type !== 'saveData') throw new Error('no save data');
+        return event.save;
+      },
+      population: () => stats?.population ?? null,
+      async replaceCity(save) {
+        loaded.push(save);
+      },
+      newId: () => `save-${nextId++}`,
+    }),
   };
   const tools = createAgentTools(ctx);
   return {
@@ -84,6 +107,8 @@ function createHarness(seed = 11): {
     tools,
     engine,
     newCities,
+    storage,
+    loaded,
     call: (name, input = {}) => callTool(tools, name, input) as Promise<Record<string, unknown>>,
   };
 }
@@ -159,6 +184,10 @@ describe('agent tools: reading', () => {
       'buy_insulation',
       'advance_time',
       'save_game',
+      'list_saves',
+      'save_to_slot',
+      'load_save',
+      'delete_save',
       'start_new_city',
     ]);
     for (const tool of tools) {
@@ -166,7 +195,7 @@ describe('agent tools: reading', () => {
       expect(tool.inputSchema.type).toBe('object');
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toHaveLength(8);
+    expect(readOnly).toHaveLength(9);
   });
 
   it('get_game_overview reports funds, clock, goals and counts', async () => {
@@ -551,6 +580,100 @@ describe('agent tools: building', () => {
     const day = await call('advance_time', { days: 0.5 });
     expect(day.ticksAdvanced).toBe(TICKS_PER_DAY / 2);
     expect(await call('save_game')).toMatchObject({ ok: true });
+  });
+
+  it('save_to_slot creates named saves that list_saves reports', async () => {
+    const { call, engine, storage } = createHarness();
+    expect(await call('list_saves')).toEqual({ saves: [] });
+    const first = await call('save_to_slot', { name: '  Testville  ' });
+    expect(first).toMatchObject({
+      ok: true,
+      save: {
+        id: 'save-1',
+        name: 'Testville',
+        day: 1,
+        money: BALANCE.startingMoney,
+        size: SIZE,
+        compatible: true,
+      },
+    });
+    // Without a name the save gets the UI's default name.
+    const second = await call('save_to_slot');
+    expect(second).toMatchObject({ ok: true, save: { id: 'save-2', name: 'Voltopia – day 1' } });
+    const { saves } = (await call('list_saves')) as { saves: { id: string }[] };
+    expect(saves.map((save) => save.id)).toEqual(['save-2', 'save-1']);
+    expect((await storage.load('save-1'))?.tick).toBe(engine.state.tick);
+    // The autosave is never a slot.
+    expect((await storage.list()).some((save) => save.id === 'autosave')).toBe(false);
+  });
+
+  it('save_to_slot with an id overwrites and keeps the name unless given', async () => {
+    const { call, engine, storage } = createHarness();
+    await call('save_to_slot', { name: 'Testville' });
+    await call('set_speed', { speed: 0 });
+    await call('advance_time', { ticks: 5 });
+    const overwritten = await call('save_to_slot', { id: 'save-1' });
+    expect(overwritten).toMatchObject({ ok: true, save: { id: 'save-1', name: 'Testville' } });
+    expect((await storage.load('save-1'))?.tick).toBe(engine.state.tick);
+    const renamed = await call('save_to_slot', { id: 'save-1', name: 'Testville 2' });
+    expect(renamed).toMatchObject({ ok: true, save: { id: 'save-1', name: 'Testville 2' } });
+    expect(await storage.list()).toHaveLength(1);
+  });
+
+  it('save_to_slot rejects unknown ids and bad names', async () => {
+    const { call, storage } = createHarness();
+    for (const input of [
+      { id: 'nope' },
+      { id: 'autosave' },
+      { id: 7 },
+      { name: '   ' },
+      { name: 3 },
+      { name: 'x'.repeat(81) },
+    ]) {
+      expect(await call('save_to_slot', input)).toMatchObject({
+        ok: false,
+        error: 'invalidInput',
+      });
+    }
+    expect(await storage.list()).toEqual([]);
+  });
+
+  it('load_save replaces the city with a listed, compatible save', async () => {
+    const { call, engine, loaded, storage } = createHarness();
+    await call('save_to_slot', { name: 'Testville' });
+    const result = await call('load_save', { id: 'save-1' });
+    expect(result).toMatchObject({ ok: true, id: 'save-1', name: 'Testville' });
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].tick).toBe(engine.state.tick);
+
+    expect(await call('load_save', { id: 'nope' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+    expect(await call('load_save')).toMatchObject({ ok: false, error: 'invalidInput' });
+
+    const old = await storage.load('save-1');
+    await storage.save({ ...old!, version: old!.version - 1 }, 'old', 'Old city');
+    expect(await call('load_save', { id: 'old' })).toMatchObject({
+      ok: false,
+      error: 'incompatibleSave',
+    });
+    expect(loaded).toHaveLength(1);
+  });
+
+  it('delete_save removes a listed save and rejects unknown ids', async () => {
+    const { call, storage } = createHarness();
+    await call('save_to_slot', { name: 'Testville' });
+    expect(await call('delete_save', { id: 'save-1' })).toEqual({
+      ok: true,
+      id: 'save-1',
+      name: 'Testville',
+    });
+    expect(await storage.list()).toEqual([]);
+    expect(await call('delete_save', { id: 'save-1' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
   });
 
   it('start_new_city hands validated options to the host', async () => {

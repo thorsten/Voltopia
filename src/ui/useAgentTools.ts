@@ -1,9 +1,23 @@
 import { useEffect } from 'react';
-import { createAgentTools, type AgentContext, type NewCityOptions } from '../agent/tools.ts';
+import {
+  createAgentSaves,
+  createAgentTools,
+  type AgentContext,
+  type NewCityOptions,
+} from '../agent/tools.ts';
 import { TileMirror } from '../agent/tileMirror.ts';
 import { registerAgentTools } from '../agent/webmcp.ts';
 import type { SimCommand } from '../shared/messages.ts';
+import type { SaveGame } from '../shared/types.ts';
+import type { SaveStorage } from '../storage/storage.ts';
 import type { SimBridge } from './useSimBridge.ts';
+
+/** Where the save tools persist; must be a stable (module-level) object. */
+export interface AgentSaveHost {
+  storage: SaveStorage;
+  /** Makes `save` the running city (autosave copy + reload). */
+  replaceCity(save: SaveGame): Promise<void>;
+}
 
 /**
  * Publishes the agent tools (WebMCP + `window.voltopia`) for the lifetime
@@ -14,9 +28,10 @@ export function useAgentTools(
   bridge: SimBridge,
   gridSize: number,
   onNewCity: (options: NewCityOptions) => void,
+  saveHost: AgentSaveHost,
 ): void {
   // Stable callbacks only — the bridge object changes identity every tick.
-  const { send, onDiffs, onTick, onCommandResult, onLifetime, getStats } = bridge;
+  const { send, onDiffs, onTick, onCommandResult, onLifetime, onSaveData, getStats } = bridge;
 
   useEffect(() => {
     const tiles = new TileMirror(gridSize);
@@ -66,6 +81,19 @@ export function useAgentTools(
           send({ type: 'requestLifetime' });
         }),
       startNewCity: onNewCity,
+      saves: createAgentSaves({
+        storage: saveHost.storage,
+        snapshot: () =>
+          new Promise((resolve) => {
+            const unsubscribe = onSaveData((save) => {
+              unsubscribe();
+              resolve(save);
+            });
+            send({ type: 'requestSave' });
+          }),
+        population: () => getStats()?.population ?? null,
+        replaceCity: saveHost.replaceCity,
+      }),
     };
 
     const unregister = registerAgentTools(createAgentTools(ctx));
@@ -75,5 +103,16 @@ export function useAgentTools(
       unsubscribeResults();
       pending.clear();
     };
-  }, [send, onDiffs, onTick, onCommandResult, onLifetime, getStats, gridSize, onNewCity]);
+  }, [
+    send,
+    onDiffs,
+    onTick,
+    onCommandResult,
+    onLifetime,
+    onSaveData,
+    getStats,
+    gridSize,
+    onNewCity,
+    saveHost,
+  ]);
 }
