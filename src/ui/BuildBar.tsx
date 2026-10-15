@@ -62,6 +62,7 @@ export const CATEGORIES: Category[] = [
         perTile: true,
         descVars: { walk: BALANCE.cycling.walkTiles, bike: BALANCE.cycling.bikeTiles },
       },
+      { id: 'remove-lane', icon: '🚫' },
       { id: 'bulldoze', icon: '🚜' },
       { id: 'undo', icon: '↩' },
     ],

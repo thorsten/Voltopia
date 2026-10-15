@@ -53,6 +53,9 @@ const en = {
   'tool.rail': 'Track',
   'tool.bike-lane': 'Bike lane',
   'tool.pedestrian': 'Pedestrian street',
+  'tool.remove-lane': 'Remove lane',
+  'tool.remove-lane.desc':
+    'Clear bike lanes and reopen pedestrian streets to traffic on the dragged roads. Free.',
   'tool.bike-lane.desc':
     'Paint a bike lane on existing roads. A commuter with a lane route of at most {bike} tiles between home and work cycles and leaves the car at home.',
   'tool.pedestrian.desc':
@@ -749,6 +752,9 @@ const de: Record<TranslationKey, string> = {
   'tool.rail': 'Gleis',
   'tool.bike-lane': 'Radweg',
   'tool.pedestrian': 'Fußgängerzone',
+  'tool.remove-lane': 'Spur entfernen',
+  'tool.remove-lane.desc':
+    'Entfernt Radwege und öffnet Fußgängerzonen auf den gezogenen Straßen wieder für den Verkehr. Kostenlos.',
   'tool.bike-lane.desc':
     'Markiere einen Radweg auf bestehenden Straßen. Pendler mit einer Radwegroute von höchstens {bike} Kacheln zwischen Wohnung und Arbeit fahren Rad und lassen das Auto stehen.',
   'tool.pedestrian.desc':

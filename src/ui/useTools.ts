@@ -16,6 +16,7 @@ export type ToolId =
   | 'overpass'
   | 'bike-lane'
   | 'pedestrian'
+  | 'remove-lane'
   | 'rail'
   | 'zone-residential'
   | 'zone-commercial'
@@ -124,9 +125,37 @@ export function lineToolCommand(tool: ToolId, path: number[]): SimCommand | null
       return { type: 'buildLanes', tiles: path, kind: RoadLane.Bike };
     case 'pedestrian':
       return { type: 'buildLanes', tiles: path, kind: RoadLane.Pedestrian };
+    case 'remove-lane':
+      return { type: 'buildLanes', tiles: path, kind: RoadLane.None };
     default:
       return null;
   }
+}
+
+/** Facts about one tile that decide what a lane costs there (see src/sim/lanes.ts). */
+export interface LanePreviewTile {
+  /** RoadLane of the tile, -1 when it has no road. */
+  lane: number;
+  busStop: boolean;
+  river: boolean;
+  rail: boolean;
+  overpass: boolean;
+  ramp: boolean;
+}
+
+/**
+ * Price of putting `kind` on one tile, mirroring the sim: nothing on a
+ * non-road tile or one already carrying the kind, and no pedestrian
+ * street where the sim refuses it (bus stop, bridge, level crossing,
+ * overpass deck or ramp).
+ */
+export function lanePreviewPrice(kind: RoadLane, tile: LanePreviewTile): number {
+  if (kind === RoadLane.None || tile.lane < 0 || tile.lane === kind) return 0;
+  if (kind === RoadLane.Pedestrian) {
+    if (tile.busStop || tile.river || tile.rail || tile.overpass || tile.ramp) return 0;
+    return BALANCE.costs.pedestrianPerTile;
+  }
+  return BALANCE.costs.bikeLanePerTile;
 }
 
 export const PLANT_BY_TOOL: Partial<Record<ToolId, PlantType>> = {
@@ -223,15 +252,21 @@ export function useTools(
     ): void => {
       const renderer = rendererRef.current;
       const cost = tiles.reduce((sum, index) => {
+        if (tool === 'remove-lane') {
+          // Free: counts the road tiles that currently carry a lane.
+          return sum;
+        }
         if (lane !== RoadLane.None) {
-          // Mirrors src/sim/lanes.ts: one price per road tile that does not carry the kind yet.
-          const existing = renderer?.roadLaneAt(index) ?? -1; // -1 no road
-          if (existing < 0 || existing === lane) return sum;
           return (
             sum +
-            (lane === RoadLane.Bike
-              ? BALANCE.costs.bikeLanePerTile
-              : BALANCE.costs.pedestrianPerTile)
+            lanePreviewPrice(lane, {
+              lane: renderer?.roadLaneAt(index) ?? -1,
+              busStop: renderer?.busStopAt(index) ?? false,
+              river: renderer?.terrainAt(index) === Terrain.River,
+              rail: renderer?.railAt(index) ?? false,
+              overpass: renderer?.overpassAt(index) ?? false,
+              ramp: renderer?.overpassRampAt(index) ?? false,
+            })
           );
         }
         if (overpass) {
@@ -290,7 +325,11 @@ export function useTools(
         return sum + Math.round(base * factor) + (base > 0 ? fellingCostAt(index) : 0);
       }, 0);
       const bridges = bridgeTileCount(tool, tiles, (index) => renderer?.terrainAt(index));
-      setCostPreview({ tiles: tiles.length, cost, ...(bridges > 0 ? { bridges } : {}) });
+      const shown =
+        tool === 'remove-lane'
+          ? tiles.filter((index) => (renderer?.roadLaneAt(index) ?? -1) > 0).length
+          : tiles.length;
+      setCostPreview({ tiles: shown, cost, ...(bridges > 0 ? { bridges } : {}) });
     };
 
     // Mirrors the sim's per-tile pricing for zones (src/sim/zones.ts): each
@@ -326,6 +365,7 @@ export function useTools(
       tool === 'overpass' ||
       tool === 'bike-lane' ||
       tool === 'pedestrian' ||
+      tool === 'remove-lane' ||
       tool === 'rail'
     ) {
       const line = tool === 'power-line';

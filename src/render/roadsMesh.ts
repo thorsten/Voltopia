@@ -705,6 +705,11 @@ export class RoadsMesh implements DiffLayer {
     return this.overpass[index] !== 0;
   }
 
+  /** Whether the tile lies on an overpass ramp (for the tool's cost preview). */
+  isOverpassRamp(index: number): boolean {
+    return this.rampOf(index) !== null;
+  }
+
   /** Whether a bus stop is marked on the tile (for the tool's cost preview). */
   hasBusStop(index: number): boolean {
     return this.busStops[index] !== 0;

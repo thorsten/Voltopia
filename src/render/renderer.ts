@@ -442,6 +442,11 @@ export class GameRenderer {
     return this.roadsMesh.roadLaneAt(index);
   }
 
+  /** Whether the tile lies on an overpass ramp, for the tool's cost preview. */
+  overpassRampAt(index: number): boolean {
+    return this.roadsMesh.isOverpassRamp(index);
+  }
+
   /** Whether a bus stop is marked on the tile, for the tool's cost preview. */
   busStopAt(index: number): boolean {
     return this.roadsMesh.hasBusStop(index);
