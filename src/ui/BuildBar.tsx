@@ -37,7 +37,7 @@ interface Category {
 /** Always on screen next to the categories — panning must never be a tab away. */
 const SELECT_BUTTON: BuildButton = { id: 'select', icon: '🖐' };
 
-const CATEGORIES: Category[] = [
+export const CATEGORIES: Category[] = [
   {
     id: 'basics',
     label: 'build.category.basics',
@@ -48,7 +48,13 @@ const CATEGORIES: Category[] = [
       { id: 'bus-stop', icon: '🚏', cost: BALANCE.costs.busStop, perTile: true },
       { id: 'rail', icon: '🛤', cost: BALANCE.costs.railPerTile, perTile: true },
       { id: 'overpass', icon: '🌉', cost: BALANCE.costs.overpass, perTile: true },
-      { id: 'bike-lane', icon: '🚲', cost: BALANCE.costs.bikeLanePerTile, perTile: true },
+      {
+        id: 'bike-lane',
+        icon: '🚲',
+        cost: BALANCE.costs.bikeLanePerTile,
+        perTile: true,
+        descVars: { bike: BALANCE.cycling.bikeTiles },
+      },
       {
         id: 'pedestrian',
         icon: '🚶',
