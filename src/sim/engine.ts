@@ -103,6 +103,9 @@ export class SimEngine {
         return this.toEvents(buildBusStops(state, command.tiles));
       case 'buildOverpass':
         return this.toEvents(buildOverpasses(state, command.tiles));
+      case 'buildLanes':
+        // Handled once lane building lands (later cycling task).
+        return [];
       case 'buildRail':
         return this.toEvents(buildRail(state, command.tiles));
       case 'bulldoze':

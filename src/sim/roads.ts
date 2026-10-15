@@ -1,6 +1,6 @@
 import { BALANCE } from '../shared/constants.ts';
 import { DIRECTIONS, inBounds, tileIndex, tileX, tileY } from '../shared/grid.ts';
-import { RoadClass, Terrain } from '../shared/types.ts';
+import { RoadClass, RoadLane, Terrain } from '../shared/types.ts';
 import { clearPowerLines } from './powerLines.ts';
 import { clearRail } from './rail.ts';
 import { clearBusStops } from './transit.ts';
@@ -181,6 +181,7 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.busStop[index] = 0;
     layers.rail[index] = 0;
     layers.overpass[index] = 0;
+    layers.roadLane[index] = RoadLane.None;
     layers.damage[index] = 0;
     layers.supplied[index] = SupplyStatus.NotConnected;
     markDirty(state, index);
@@ -209,6 +210,7 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.powerLine[tile.index] = tile.powerLine;
     layers.rail[tile.index] = tile.rail;
     layers.overpass[tile.index] = tile.overpass;
+    layers.roadLane[tile.index] = tile.roadLane;
     layers.zone[tile.index] = tile.zone;
     layers.density[tile.index] = tile.density;
     layers.variant[tile.index] = tile.variant;

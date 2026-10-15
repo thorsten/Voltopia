@@ -270,6 +270,7 @@ export function saveFromJson(text: string): SaveGame {
     'damage',
     'rail',
     'overpass',
+    'roadLane',
   ] as const;
   for (const name of optionalLayers) {
     const encoded = parsed.layers[name];

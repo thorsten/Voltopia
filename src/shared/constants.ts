@@ -56,6 +56,10 @@ export const BALANCE = {
     railBridgePerTile: 60,
     /** Upgrade of a level crossing to a road overpass (deck plus two ramps). */
     overpass: 150,
+    /** Bike lane painted on an existing road tile (street or avenue). */
+    bikeLanePerTile: 15,
+    /** Pedestrian street: an existing road tile closed to cars, vans and buses. */
+    pedestrianPerTile: 40,
     zonePerTile: 5,
     insulation: 4_000,
     plant: {
@@ -200,6 +204,9 @@ export const BALANCE = {
     busStop: 0.004,
     /** Track maintenance per tile: three times a power line's. */
     railPerTile: 0.0015,
+    /** Lane maintenance on top of the road tile's own upkeep. */
+    bikeLanePerTile: 0.002,
+    pedestrianPerTile: 0.003,
     plant: {
       [PlantType.SolarFarm]: 0.05,
       /**
@@ -1122,6 +1129,13 @@ export const BALANCE = {
     growthMinimum: 0.35,
   },
 
+  cycling: {
+    /** A commuter walks when home and work lie this many road tiles apart or fewer. */
+    walkTiles: 4,
+    /** A commuter cycles when a route over bike lanes / pedestrian streets of at most this many tiles joins home and work. */
+    bikeTiles: 20,
+  },
+
   vehicles: {
     /** One visible vehicle per this many (population + jobs). */
     citizensPerVehicle: 18,
@@ -1736,6 +1750,12 @@ export const BALANCE = {
       minPopulation: 300,
       /** Share of commuters riding the train for the railCity goal. */
       riderShare: 0.15,
+    },
+    activeCity: {
+      /** Population the activeCity goal requires. */
+      minPopulation: 150,
+      /** Share of commuters walking or cycling for the activeCity goal. */
+      share: 0.25,
     },
   },
 } as const;

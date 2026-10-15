@@ -221,6 +221,7 @@ export interface UndoEntry {
     tileType: number;
     roadMask: number;
     roadClass: number;
+    roadLane: number;
     powerLine: number;
     zone: number;
     density: number;
@@ -239,6 +240,8 @@ export interface TileLayers {
   roadMask: Uint8Array;
   /** RoadClass per road tile (persisted). */
   roadClass: Uint8Array;
+  /** RoadLane per road tile (persisted). */
+  roadLane: Uint8Array;
   zone: Uint8Array;
   density: Uint8Array;
   variant: Uint8Array;
@@ -613,6 +616,7 @@ export function createTileLayers(size: number): TileLayers {
     tileType: new Uint8Array(tiles),
     roadMask: new Uint8Array(tiles),
     roadClass: new Uint8Array(tiles),
+    roadLane: new Uint8Array(tiles),
     zone: new Uint8Array(tiles),
     density: new Uint8Array(tiles),
     variant: new Uint8Array(tiles),
@@ -849,6 +853,7 @@ export function snapshotTile(state: SimState, index: number): UndoEntry['tiles']
     tileType: layers.tileType[index],
     roadMask: layers.roadMask[index],
     roadClass: layers.roadClass[index],
+    roadLane: layers.roadLane[index],
     powerLine: layers.powerLine[index],
     zone: layers.zone[index],
     density: layers.density[index],
@@ -888,6 +893,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       tileType: layers.tileType[index] as TileDiff['tileType'],
       roadMask: layers.roadMask[index],
       roadClass: layers.roadClass[index],
+      roadLane: layers.roadLane[index],
       trafficLoad: layers.trafficLoad[index],
       powerLine: layers.powerLine[index],
       zone: layers.zone[index] as TileDiff['zone'],
@@ -1333,6 +1339,7 @@ export function serializeState(state: SimState): SaveGame {
       elevation: copyBuffer(layers.elevation),
       forest: copyBuffer(layers.forest),
       roadClass: copyBuffer(layers.roadClass),
+      roadLane: copyBuffer(layers.roadLane),
       busStop: copyBuffer(layers.busStop),
       geothermal: copyBuffer(layers.geothermal),
       reservoirHeat: copyBuffer(layers.reservoirHeat),
@@ -1448,6 +1455,7 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.elevation) state.layers.elevation.set(new Uint8Array(save.layers.elevation));
   if (save.layers.forest) state.layers.forest.set(new Uint8Array(save.layers.forest));
   if (save.layers.roadClass) state.layers.roadClass.set(new Uint8Array(save.layers.roadClass));
+  if (save.layers.roadLane) state.layers.roadLane.set(new Uint8Array(save.layers.roadLane));
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
   if (save.layers.rail) state.layers.rail.set(new Uint8Array(save.layers.rail));
   if (save.layers.overpass) state.layers.overpass.set(new Uint8Array(save.layers.overpass));

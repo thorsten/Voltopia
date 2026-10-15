@@ -2,6 +2,7 @@ import type {
   GlobalStats,
   LifetimeSample,
   PlantType,
+  RoadLane,
   SaveGame,
   Speed,
   TileDiff,
@@ -32,6 +33,7 @@ type SimCommandBody =
   | { type: 'buildPowerLine'; tiles: number[] }
   | { type: 'buildBusStop'; tiles: number[] }
   | { type: 'buildOverpass'; tiles: number[] }
+  | { type: 'buildLanes'; tiles: number[]; kind: RoadLane }
   | { type: 'buildRail'; tiles: number[] }
   | { type: 'paintZone'; tiles: number[]; zone: Zone }
   | { type: 'placePlant'; tile: number; plant: PlantType }

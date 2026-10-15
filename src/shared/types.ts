@@ -11,6 +11,10 @@ export type TileType = (typeof TileType)[keyof typeof TileType];
 export const RoadClass = { Street: 0, Avenue: 1 } as const;
 export type RoadClass = (typeof RoadClass)[keyof typeof RoadClass];
 
+/** Lane kind of a TileType.Road tile: a bike lane, or a pedestrian street closed to motor traffic. */
+export const RoadLane = { None: 0, Bike: 1, Pedestrian: 2 } as const;
+export type RoadLane = (typeof RoadLane)[keyof typeof RoadLane];
+
 /** Number of overlay/diff buckets the 0..255 load is quantised into. */
 export const TRAFFIC_LEVELS = 8;
 
@@ -833,6 +837,8 @@ export interface TileDiff {
   roadMask: number;
   /** RoadClass of a road tile (0 elsewhere). */
   roadClass: number;
+  /** RoadLane of a road tile (0 elsewhere). */
+  roadLane: number;
   /** Smoothed traffic load 0..255 of a road tile (0 elsewhere). */
   trafficLoad: number;
   /** Power line mask: 0 = none, else LINE_PRESENT | connection bits (N=1, E=2, S=4, W=8). */
@@ -993,6 +999,8 @@ export interface SaveGame {
     /** Track layer; absent in saves from before railways. */
     rail?: ArrayBuffer;
     overpass?: ArrayBuffer;
+    /** Lane layer (bike lanes, pedestrian streets); absent in saves from before cycling. */
+    roadLane?: ArrayBuffer;
     /** Forest layer; absent in saves from before woods (treeless map). */
     forest?: ArrayBuffer;
     /** Geothermal hotspot layer; absent in saves from before geothermal power. */

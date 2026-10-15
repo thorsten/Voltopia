@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { DIR_E, LINE_PRESENT, tileIndex } from '../shared/grid.ts';
-import { DeliveryState, MAX_RAIL_AGE, RoadClass, StopState, Terrain } from '../shared/types.ts';
+import {
+  DeliveryState,
+  MAX_RAIL_AGE,
+  RoadClass,
+  RoadLane,
+  StopState,
+  Terrain,
+} from '../shared/types.ts';
 import { addDamage } from './disasters.ts';
 import { callBudgetTicks } from './demandResponse.ts';
 import { placePlant } from './energy.ts';
@@ -244,6 +251,18 @@ describe('save round trip', () => {
     expect(restored.layers.terrain).toEqual(state.layers.terrain);
     expect(restored.weather.riverFlow).toBe(0.8);
     expect(restored.layers.stored[at(8, 7)]).toBeCloseTo(1234, 3);
+  });
+
+  it('persists the roadLane layer and defaults it to None on old saves', () => {
+    const state = makeState();
+    const tile = at(8, 7);
+    state.money = 1e9;
+    buildRoads(state, [tile]);
+    state.layers.roadLane[tile] = RoadLane.Pedestrian;
+    const save = serializeState(state);
+    expect(deserializeState(save).layers.roadLane[tile]).toBe(RoadLane.Pedestrian);
+    delete save.layers.roadLane;
+    expect(deserializeState(save).layers.roadLane[tile]).toBe(RoadLane.None);
   });
 
   it('loads older saves without the new fields as dry land', () => {
