@@ -1189,11 +1189,22 @@ describe('walking and cycling', () => {
     expect(chargingDemand(state)).toBe(0);
   });
 
-  it('walking wins over the bus, cycling over the train', () => {
+  it('walkers and cyclists are not counted as bus riders', () => {
+    const cover = (state: ReturnType<typeof commuterTown>) => {
+      for (let i = 0; i < state.layers.tileType.length; i++) {
+        state.layers.transitCover[i] = state.layers.tileType[i] === TileType.Road ? 1 : 0;
+      }
+    };
+    // Control: same coverage and no lanes, so some commuters do ride the bus.
+    const control = commuterTown(7, 200);
+    cover(control);
+    setHour(control, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(control);
+    runHours(control, 4);
+    expect(control.vehicles.some((v) => v.riderMode === 'bus')).toBe(true);
+
     const state = commuterTown(7, 200);
-    for (let i = 0; i < state.layers.tileType.length; i++) {
-      state.layers.transitCover[i] = state.layers.tileType[i] === TileType.Road ? 1 : 0;
-    }
+    cover(state);
     buildLanes(
       state,
       Array.from({ length: 16 }, (_, x) => at(x + 3, 10)),

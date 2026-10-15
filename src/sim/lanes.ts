@@ -46,7 +46,7 @@ export function buildLanes(state: SimState, tiles: number[], kind: RoadLane): Bu
   const { layers } = state;
   const built: number[] = [];
   let firstRejection: string | null = null;
-  for (const index of tiles) {
+  for (const index of new Set(tiles)) {
     if (layers.tileType[index] === TileType.Road && layers.roadLane[index] === kind) continue;
     const rejection = laneRejection(state, index, kind);
     if (rejection !== null) {

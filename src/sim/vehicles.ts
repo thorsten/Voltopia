@@ -361,6 +361,9 @@ export function vehiclesStep(state: SimState): Map<number, number> {
   const surplus = surplusAvailable(state);
 
   const motor = isMotorRoad(state);
+  // Computed once, when the first vehicle reaches the morning decision: without any lane
+  // on the map nobody cycles, so the route search is skipped.
+  let lanesExist: boolean | undefined;
   for (const vehicle of state.vehicles) {
     // Reassign endpoints that were bulldozed or lost their buildings.
     if (!motor(vehicle.homeRoad)) {
@@ -387,7 +390,8 @@ export function vehiclesStep(state: SimState): Map<number, number> {
           // Decided to ride today: the car stays parked all day.
           if (vehicle.riderDay === day) break;
           const walk = canWalk(state, vehicle.homeRoad, vehicle.workRoad);
-          const bike = !walk && canCycle(state, vehicle.homeRoad, vehicle.workRoad);
+          lanesExist ??= state.layers.roadLane.some((v) => v !== 0);
+          const bike = !walk && lanesExist && canCycle(state, vehicle.homeRoad, vehicle.workRoad);
           const busRide =
             !walk &&
             !bike &&

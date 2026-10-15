@@ -35,6 +35,14 @@ describe('buildLanes', () => {
     expect(before - state.money).toBe(2 * BALANCE.costs.bikeLanePerTile);
   });
 
+  it('charges a repeated tile index once', () => {
+    const state = town();
+    const before = state.money;
+    buildLanes(state, [at(2, 8), at(2, 8)], RoadLane.Bike);
+    expect(before - state.money).toBe(BALANCE.costs.bikeLanePerTile);
+    expect(state.undoStack[state.undoStack.length - 1].tiles).toHaveLength(1);
+  });
+
   it('does not charge tiles that already carry the kind, rejects a batch with nothing to build', () => {
     const state = town();
     buildLanes(state, [at(2, 8)], RoadLane.Bike);
