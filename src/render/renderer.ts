@@ -116,7 +116,7 @@ const SUN_DAY_COLOR = new THREE.Color(0xfff2dd);
 const SUN_DUSK_COLOR = new THREE.Color(0xff9e5e);
 const SUN_WINTER_COLOR = new THREE.Color(0xe8eefc);
 const AMBIENT_DAY_COLOR = new THREE.Color(0xdfeef5);
-const AMBIENT_NIGHT_COLOR = new THREE.Color(0x46557a);
+const AMBIENT_NIGHT_COLOR = new THREE.Color(0x6a7aa6);
 const WINTER_SOLAR_STRENGTH = BALANCE.seasons.winterSolarStrength;
 
 /** How high whatever stands on a tile rises above the ground. */

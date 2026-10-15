@@ -8,7 +8,7 @@ export interface SceneLights {
 
 export const PALETTE = {
   skyDay: 0xbfe0e8,
-  skyNight: 0x101a2a,
+  skyNight: 0x16233a,
   ground: 0x9fc37e,
   /** Seasonal ground tints, keyed at mid spring/summer/autumn/winter. */
   groundSpring: 0x9dd27c,
@@ -34,8 +34,8 @@ export const PALETTE = {
 export const SUN_INTENSITY_BASE = 0.15;
 export const SUN_INTENSITY_GAIN = 1.6;
 /** Hemisphere intensity = AMBIENT_BASE + AMBIENT_GAIN * sunFactor. */
-export const AMBIENT_INTENSITY_BASE = 0.35;
-export const AMBIENT_INTENSITY_GAIN = 0.65;
+export const AMBIENT_INTENSITY_BASE = 0.5;
+export const AMBIENT_INTENSITY_GAIN = 0.5;
 
 export function createScene(): { scene: THREE.Scene; lights: SceneLights } {
   const scene = new THREE.Scene();
