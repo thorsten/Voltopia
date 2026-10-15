@@ -499,3 +499,51 @@ test('agent tools drive the game through window.voltopia', async ({ page }) => {
   const after = await call('get_game_overview');
   expect(after.speed).toBe(0);
 });
+
+test('saves page keeps named saves', async ({ page }) => {
+  // Pause so the save holds a known tick.
+  await page.getByTestId('speed-0').click();
+  await expect(page.getByTestId('speed-0')).toHaveClass(/active/);
+  await page.waitForTimeout(400);
+  const savedTick = await readTick(page);
+
+  await page.getByTestId('open-saves').click();
+  await expect(page.getByTestId('saves-page')).toBeVisible();
+  await expect(page.getByTestId('saves-empty')).toBeVisible();
+  await page.getByTestId('save-name-input').fill('Testville');
+  await page.getByTestId('save-new').click();
+  const row = page.locator('[data-testid^="save-row-"]');
+  await expect(row).toHaveCount(1);
+  const id = (await row.getAttribute('data-testid'))!.replace('save-row-', '');
+  await expect(page.getByTestId(`save-name-${id}`)).toHaveText('Testville');
+
+  // Rename in place; Enter commits.
+  await page.getByTestId(`save-rename-${id}`).click();
+  await page.getByTestId(`save-rename-input-${id}`).fill('Testville 2');
+  await page.getByTestId(`save-rename-input-${id}`).press('Enter');
+  await expect(page.getByTestId(`save-name-${id}`)).toHaveText('Testville 2');
+
+  // The entry survives a reload.
+  await page.reload();
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('speed-3').click();
+  await expect
+    .poll(async () => readTick(page), { timeout: 15_000 })
+    .toBeGreaterThan(savedTick + 60);
+  await page.getByTestId('open-saves').click();
+  await expect(page.getByTestId(`save-name-${id}`)).toHaveText('Testville 2');
+
+  // Loading reloads the page with the saved city, not the later one.
+  await page.getByTestId(`save-load-${id}`).click();
+  await expect(page.getByTestId('saves-page')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  expect(await readTick(page)).toBeLessThan(savedTick + 60);
+
+  // Delete needs a second click to confirm.
+  await page.getByTestId('open-saves').click();
+  await page.getByTestId(`save-delete-${id}`).click();
+  await expect(page.getByTestId(`save-row-${id}`)).toHaveCount(1);
+  await page.getByTestId(`save-delete-${id}`).click();
+  await expect(page.getByTestId(`save-row-${id}`)).toHaveCount(0);
+  await expect(page.getByTestId('saves-empty')).toBeVisible();
+});
