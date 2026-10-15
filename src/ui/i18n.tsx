@@ -508,6 +508,9 @@ const en = {
   'goal.railCity.title': 'Rail city',
   'goal.railCity.body':
     'A whole day with at least 15% of commuters riding the train and a depot supplied by rail, in a city of 300+.',
+  'goal.activeCity.title': 'Active city',
+  'goal.activeCity.body':
+    'A whole day with at least 25% of commuters walking or cycling to work, in a town of 150+.',
 
   // Budget panel and tile inspector.
   'budget.title': 'Budget',
@@ -1194,6 +1197,9 @@ const de: Record<TranslationKey, string> = {
   'goal.railCity.title': 'Bahnstadt',
   'goal.railCity.body':
     'Ein ganzer Tag, an dem mindestens 15 % der Pendler mit dem Zug fahren und ein Depot per Bahn versorgt wird, in einer Stadt ab 300 Einwohnern.',
+  'goal.activeCity.title': 'Aktive Stadt',
+  'goal.activeCity.body':
+    'Ein ganzer Tag, an dem mindestens 25 % der Pendler zu Fuß oder mit dem Rad zur Arbeit kommen, in einer Stadt ab 150 Einwohnern.',
 
   // Budget-Panel und Kachel-Inspektor.
   'budget.title': 'Budget',

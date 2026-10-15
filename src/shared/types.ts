@@ -955,6 +955,8 @@ export interface SaveGame {
   transitTicks?: number;
   /** Consecutive railCity ticks so far (absent in older saves → 0). */
   railTicks?: number;
+  /** Consecutive activeCity ticks so far (absent in older saves → 0). */
+  activeTicks?: number;
   /** Trains (absent in saves from before railways; the yard re-spawns its fleet). */
   trains?: SavedTrain[];
   /** Legacy district-heating store pool; read on load, never written (see `stored`). */

@@ -326,6 +326,7 @@ describe('save game JSON export/import', () => {
   it('round-trips railTicks, the rail layer and a train', () => {
     const save = makeSave();
     save.railTicks = 42;
+    save.activeTicks = 7;
     save.layers.rail = new Uint8Array(save.size * save.size).fill(17).buffer as ArrayBuffer;
     const train: SavedTrain = {
       id: 7,
@@ -345,6 +346,7 @@ describe('save game JSON export/import', () => {
     save.trains = [train];
     const restored = saveFromJson(saveToJson(save));
     expect(restored.railTicks).toBe(42);
+    expect(restored.activeTicks).toBe(7);
     expect(new Uint8Array(restored.layers.rail!)).toEqual(new Uint8Array(save.layers.rail));
     expect(restored.trains).toEqual([train]);
   });
@@ -352,8 +354,17 @@ describe('save game JSON export/import', () => {
   it('parses a save without railTicks, trains or the rail layer without those keys', () => {
     const restored = saveFromJson(saveToJson(makeSave()));
     expect('railTicks' in restored).toBe(false);
+    expect('activeTicks' in restored).toBe(false);
     expect('trains' in restored).toBe(false);
     expect(restored.layers.rail).toBeUndefined();
+  });
+
+  it('drops a non-finite activeTicks from a hand-edited export', () => {
+    const save = makeSave();
+    save.activeTicks = 7;
+    const raw = JSON.parse(saveToJson(save)) as Record<string, unknown>;
+    raw.activeTicks = 'x';
+    expect('activeTicks' in saveFromJson(JSON.stringify(raw))).toBe(false);
   });
 
   it('drops only the malformed train record from a hand-edited export', () => {

@@ -35,6 +35,7 @@ interface SaveGameJson {
   wellStockedTicks?: number;
   transitTicks?: number;
   railTicks?: number;
+  activeTicks?: number;
   /** Trains in flight (absent in saves from before railways). */
   trains?: SavedTrain[];
   heatStored?: number;
@@ -109,6 +110,7 @@ export function saveToJson(save: SaveGame): string {
     ...(save.wellStockedTicks !== undefined ? { wellStockedTicks: save.wellStockedTicks } : {}),
     ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
     ...(save.railTicks !== undefined ? { railTicks: save.railTicks } : {}),
+    ...(save.activeTicks !== undefined ? { activeTicks: save.activeTicks } : {}),
     ...(save.trains !== undefined ? { trains: save.trains } : {}),
     ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
     ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
@@ -331,6 +333,9 @@ export function saveFromJson(text: string): SaveGame {
     // poisoned by a hand-edited export's NaN (same reasoning as flexTicks).
     ...(typeof parsed.railTicks === 'number' && Number.isFinite(parsed.railTicks)
       ? { railTicks: parsed.railTicks }
+      : {}),
+    ...(typeof parsed.activeTicks === 'number' && Number.isFinite(parsed.activeTicks)
+      ? { activeTicks: parsed.activeTicks }
       : {}),
     // Dropped one train at a time, not the whole fleet: a bad record from
     // a hand-edited export should not cost every other train.

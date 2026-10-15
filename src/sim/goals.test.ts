@@ -458,6 +458,43 @@ describe('goals', () => {
     });
   });
 
+  describe('activeCity', () => {
+    function activeReady(state: SimState): void {
+      state.lastTransit = {
+        riderShare: 0.5,
+        riders: 100,
+        busRiders: 0,
+        railRiders: 0,
+        walkRiders: 30,
+        bikeRiders: 30,
+        commuters: 200,
+        driving: 0,
+        stops: 0,
+        stopsServed: 0,
+        depots: 0,
+      };
+    }
+
+    it('needs a real city with a quarter of commuters on foot or bike for a whole day', () => {
+      const state = bigCity();
+      activeReady(state);
+      for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
+      expect(state.goalsAchieved.has('activeCity')).toBe(false);
+      goalsStep(state);
+      expect(state.goalsAchieved.has('activeCity')).toBe(true);
+    });
+
+    it('resets the streak when the share lapses', () => {
+      const state = bigCity();
+      activeReady(state);
+      for (let t = 0; t < 10; t++) goalsStep(state);
+      expect(state.goalProgress.activeTicks).toBe(10);
+      state.lastTransit = { ...state.lastTransit, walkRiders: 1, bikeRiders: 1 };
+      goalsStep(state);
+      expect(state.goalProgress.activeTicks).toBe(0);
+    });
+  });
+
   describe('the stormProof goal', () => {
     it('is omitted from goalStates when disasters are off', () => {
       const state = createSimState(1, SIZE);

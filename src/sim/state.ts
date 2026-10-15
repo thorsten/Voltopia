@@ -513,6 +513,8 @@ export interface SimState {
     transitTicks: number;
     /** Consecutive railCity ticks; persisted like transitTicks. */
     railTicks: number;
+    /** Consecutive activeCity ticks; persisted like railTicks. */
+    activeTicks: number;
     geothermalTicks: number;
     stormTicks: number;
     warmWinterTicks: number;
@@ -767,6 +769,7 @@ export function createSimState(
       wellStockedTicks: 0,
       transitTicks: 0,
       railTicks: 0,
+      activeTicks: 0,
       geothermalTicks: 0,
       stormTicks: 0,
       warmWinterTicks: 0,
@@ -1314,6 +1317,7 @@ export function serializeState(state: SimState): SaveGame {
     wellStockedTicks: state.goalProgress.wellStockedTicks,
     transitTicks: state.goalProgress.transitTicks,
     railTicks: state.goalProgress.railTicks,
+    activeTicks: state.goalProgress.activeTicks,
     warmWinterTicks: state.goalProgress.warmWinterTicks,
     flexTicks: state.goalProgress.flexTicks,
     demandResponse: { active: state.demandResponse.active },
@@ -1432,6 +1436,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.goalProgress.wellStockedTicks = save.wellStockedTicks ?? 0;
   state.goalProgress.transitTicks = save.transitTicks ?? 0;
   state.goalProgress.railTicks = save.railTicks ?? 0;
+  state.goalProgress.activeTicks = save.activeTicks ?? 0;
   state.goalProgress.warmWinterTicks = save.warmWinterTicks ?? 0;
   state.goalProgress.flexTicks = save.flexTicks ?? 0;
   state.goalProgress.shedTotal =

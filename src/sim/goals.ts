@@ -29,6 +29,7 @@ export const GOAL_IDS = [
   'localGoods',
   'districtGrid',
   'railCity',
+  'activeCity',
 ] as const;
 export type GoalId = (typeof GOAL_IDS)[number];
 
@@ -122,6 +123,15 @@ export function goalsStep(state: SimState): void {
     progress.railTicks++;
   } else {
     progress.railTicks = 0;
+  }
+
+  // A whole day with a real share of commuters walking or cycling, in a real town.
+  const active = BALANCE.goals.activeCity;
+  const activeShare = t.commuters > 0 ? (t.walkRiders + t.bikeRiders) / t.commuters : 0;
+  if (population >= active.minPopulation && activeShare >= active.share) {
+    progress.activeTicks++;
+  } else {
+    progress.activeTicks = 0;
   }
 
   // A whole day with a real share of generation from geothermal.
@@ -254,6 +264,9 @@ export function goalsStep(state: SimState): void {
   }
   if (!achieved.has('railCity') && progress.railTicks >= TICKS_PER_DAY) {
     achieved.add('railCity');
+  }
+  if (!achieved.has('activeCity') && progress.activeTicks >= TICKS_PER_DAY) {
+    achieved.add('activeCity');
   }
 
   // Yesterday every tour was supplied locally (a factory pickup or a depot
