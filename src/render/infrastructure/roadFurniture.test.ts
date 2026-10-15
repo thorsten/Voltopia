@@ -4,6 +4,10 @@ import {
   KERB_OVERHANG,
   KERB_WIDTH,
   ZEBRA_STRIPES,
+  BOLLARDS_PER_ARM,
+  bollardSpots,
+  laneStripPieces,
+  pavingPieces,
   ZEBRA_STRIPE_WIDTH,
   LAMP_REACH,
   MAX_PARTS_PER_LAMP,
@@ -127,5 +131,23 @@ describe('shelterPlacement', () => {
     expect(corner(shelterPlacement(DIR_E | DIR_W, DIR_N | DIR_S))).toBe(1);
     // Track along x: barriers at (−,−) and (+,+).
     expect(corner(shelterPlacement(DIR_N | DIR_S, DIR_E | DIR_W))).toBe(-1);
+  });
+});
+
+describe('lane strips, paving and bollards', () => {
+  it('lays one strip per kerb side of every arm, inside the kerb', () => {
+    const pieces = laneStripPieces(DIR_E | DIR_W, 0.62);
+    expect(pieces).toHaveLength(4);
+    for (const p of pieces) expect(Math.abs(p.cz)).toBeLessThan(0.31 - KERB_WIDTH);
+  });
+  it('paves the pad and every arm', () => {
+    expect(pavingPieces(DIR_N | DIR_S | DIR_E, 0.62)).toHaveLength(4);
+    expect(pavingPieces(DIR_N, 0.62)).toHaveLength(2);
+  });
+  it('puts a row of bollards across an arm that meets a motor road', () => {
+    // openEnds: direction bits of arms whose neighbour is NOT pedestrian.
+    const spots = bollardSpots(DIR_E | DIR_W, DIR_E, 0.62);
+    expect(spots.length).toBe(BOLLARDS_PER_ARM);
+    for (const s of spots) expect(s.cx).toBeGreaterThan(0.31);
   });
 });

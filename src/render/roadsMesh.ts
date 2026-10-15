@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OVERPASS_LONG_RAMP_TILES } from '../shared/constants.ts';
 import { DIR_E, DIR_N, DIR_S, DIR_W, DIRECTIONS } from '../shared/grid.ts';
 import type { TileDiff } from '../shared/types.ts';
-import { RoadClass, Terrain, TileType } from '../shared/types.ts';
+import { RoadClass, RoadLane, Terrain, TileType } from '../shared/types.ts';
 import { PALETTE } from './scene.ts';
 import type { DiffLayer, RenderEnvironment } from './renderer.ts';
 import type { ElevationField } from './elevationField.ts';
@@ -10,8 +10,12 @@ import { composeBoxOnGround, composePrismOnGround, createHalfTilePrism } from '.
 import { surfaceMaterial } from './materials.ts';
 import { GrowingMesh } from './plants/growingMesh.ts';
 import {
+  BOLLARD_HEIGHT,
+  bollardSpots,
   KERB_WIDTH,
   kerbPieces,
+  laneStripPieces,
+  pavingPieces,
   LAMP_FOOT_SIZE,
   lampModel,
   shelterGeometry,
@@ -46,6 +50,9 @@ const LINE_HEIGHT = 0.012;
 const TRACK_SIDES = DIR_N | DIR_E | DIR_S | DIR_W;
 
 const KERB_COLOR = 0xc9c6bd;
+const LANE_STRIP_COLOR = 0x9a4a3c;
+const PAVING_COLOR = 0xd9d2c3;
+const BOLLARD_COLOR = 0x3a3f45;
 /** Kerbs stand this far above the asphalt. */
 const KERB_RISE = 0.015;
 
@@ -177,6 +184,12 @@ export class RoadsMesh implements DiffLayer {
   private readonly centreLines: THREE.InstancedMesh;
   /** Kerbs along the open edges of land road tiles. */
   readonly kerbs: GrowingMesh;
+  /** Bike lane strips along both kerbs of bike-laned road tiles. */
+  readonly laneStrips: GrowingMesh;
+  /** Paving over pedestrian streets. */
+  readonly paving: GrowingMesh;
+  /** Bollards where a pedestrian street meets a motor road. */
+  readonly bollards: GrowingMesh;
   /** Zebra crossings on the arms of land junctions without track. */
   readonly stripes: GrowingMesh;
   /** Streetlamp models (pole, arm, housing). */
@@ -196,6 +209,8 @@ export class RoadsMesh implements DiffLayer {
   private readonly gridSize: number;
   private readonly roadMasks: Int16Array; // -1 = no road, else mask 0..15
   private readonly roadClasses: Uint8Array;
+  /** RoadLane per tile (0 on non-road tiles). */
+  private readonly roadLane: Uint8Array;
   private readonly terrain: Uint8Array;
   private readonly busStops: Uint8Array;
   /** Track mask per tile: a road tile with track is a level crossing. */
@@ -216,6 +231,7 @@ export class RoadsMesh implements DiffLayer {
     this.gridSize = gridSize;
     this.roadMasks = new Int16Array(gridSize * gridSize).fill(-1);
     this.roadClasses = new Uint8Array(gridSize * gridSize);
+    this.roadLane = new Uint8Array(gridSize * gridSize);
     this.terrain = new Uint8Array(gridSize * gridSize);
     this.busStops = new Uint8Array(gridSize * gridSize);
     this.track = new Uint8Array(gridSize * gridSize);
@@ -266,6 +282,25 @@ export class RoadsMesh implements DiffLayer {
       geometry,
       surfaceMaterial({ color: LINE_COLOR }),
       setupFlat,
+    );
+
+    this.laneStrips = new GrowingMesh(
+      scene,
+      geometry,
+      surfaceMaterial({ color: LANE_STRIP_COLOR }),
+      setupFlat,
+    );
+    this.paving = new GrowingMesh(
+      scene,
+      geometry,
+      surfaceMaterial({ color: PAVING_COLOR }),
+      setupFlat,
+    );
+    this.bollards = new GrowingMesh(
+      scene,
+      geometry,
+      surfaceMaterial({ color: BOLLARD_COLOR }),
+      setupRailing,
     );
 
     this.lampPoles = new GrowingMesh(
@@ -358,6 +393,7 @@ export class RoadsMesh implements DiffLayer {
     for (const diff of diffs) {
       const mask = diff.tileType === TileType.Road ? diff.roadMask : -1;
       const roadClass = diff.tileType === TileType.Road ? diff.roadClass : 0;
+      const roadLane = diff.tileType === TileType.Road ? diff.roadLane : 0;
       const busStop = diff.tileType === TileType.Road ? diff.busStop : 0;
       if (this.terrain[diff.index] !== diff.terrain) {
         this.terrain[diff.index] = diff.terrain;
@@ -369,6 +405,10 @@ export class RoadsMesh implements DiffLayer {
       }
       if (this.roadClasses[diff.index] !== roadClass) {
         this.roadClasses[diff.index] = roadClass;
+        changed = true;
+      }
+      if (this.roadLane[diff.index] !== roadLane) {
+        this.roadLane[diff.index] = roadLane;
         changed = true;
       }
       if (this.busStops[diff.index] !== busStop) {
@@ -497,6 +537,9 @@ export class RoadsMesh implements DiffLayer {
   private rebuildFurniture(): void {
     let kerbCount = 0;
     let stripeCount = 0;
+    let laneCount = 0;
+    let pavingCount = 0;
+    let bollardCount = 0;
     for (let index = 0; index < this.roadMasks.length; index++) {
       const mask = this.roadMasks[index];
       if (mask < 0 || this.isBridge(index) || this.rampOf(index)) continue;
@@ -508,6 +551,30 @@ export class RoadsMesh implements DiffLayer {
         this.layFlat(index, piece, ROAD_HEIGHT + KERB_RISE, 0);
         this.kerbs.mesh.setMatrixAt(kerbCount++, this.matrix);
       }
+      if (this.roadLane[index] === RoadLane.Bike) {
+        const strips = laneStripPieces(mask, size);
+        this.laneStrips.ensure(laneCount + strips.length);
+        for (const piece of strips) {
+          this.layFlat(index, piece, LINE_HEIGHT, ROAD_HEIGHT);
+          this.laneStrips.mesh.setMatrixAt(laneCount++, this.matrix);
+        }
+      }
+      if (this.roadLane[index] === RoadLane.Pedestrian) {
+        const slabs = pavingPieces(mask, size);
+        this.paving.ensure(pavingCount + slabs.length);
+        for (const piece of slabs) {
+          this.layFlat(index, piece, LINE_HEIGHT, ROAD_HEIGHT);
+          this.paving.mesh.setMatrixAt(pavingCount++, this.matrix);
+        }
+        const posts = bollardSpots(mask, this.openEnds(index, mask), size);
+        this.bollards.ensure(bollardCount + posts.length);
+        for (const piece of posts) {
+          this.layFlat(index, piece, BOLLARD_HEIGHT, ROAD_HEIGHT);
+          this.bollards.mesh.setMatrixAt(bollardCount++, this.matrix);
+        }
+        // No zebra crossing on a pedestrian street.
+        continue;
+      }
       if (this.track[index] !== 0) continue;
       const stripes = zebraPieces(mask, size);
       this.stripes.ensure(stripeCount + stripes.length);
@@ -518,6 +585,27 @@ export class RoadsMesh implements DiffLayer {
     }
     this.kerbs.commit(kerbCount);
     this.stripes.commit(stripeCount);
+    this.laneStrips.commit(laneCount);
+    this.paving.commit(pavingCount);
+    this.bollards.commit(bollardCount);
+  }
+
+  /** Arms of a tile whose neighbour is a road that is not a pedestrian street. */
+  private openEnds(index: number, mask: number): number {
+    const x = index % this.gridSize;
+    const y = Math.floor(index / this.gridSize);
+    let open = 0;
+    for (const { dx, dy, bit } of DIRECTIONS) {
+      if ((mask & bit) === 0) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= this.gridSize || ny >= this.gridSize) continue;
+      const neighbour = ny * this.gridSize + nx;
+      if (this.roadMasks[neighbour] >= 0 && this.roadLane[neighbour] !== RoadLane.Pedestrian) {
+        open |= bit;
+      }
+    }
+    return open;
   }
 
   /** A tile-local flat piece as a box on the ground triangle under it. */
@@ -857,5 +945,10 @@ export class RoadsMesh implements DiffLayer {
   /** RoadClass of the road tile at this index; -1 if there is no road. */
   roadClassAt(index: number): number {
     return this.roadMasks[index] < 0 ? -1 : this.roadClasses[index];
+  }
+
+  /** RoadLane of the road tile at this index; -1 if there is no road. */
+  roadLaneAt(index: number): number {
+    return this.roadMasks[index] < 0 ? -1 : this.roadLane[index];
   }
 }

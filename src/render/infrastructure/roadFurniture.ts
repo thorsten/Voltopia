@@ -101,6 +101,73 @@ export function zebraPieces(mask: number, padSize: number): FlatPiece[] {
   return pieces;
 }
 
+export const LANE_STRIP_WIDTH = 0.035;
+/** Gap between kerb and bike strip. */
+const LANE_STRIP_INSET = KERB_WIDTH + 0.01;
+export const BOLLARDS_PER_ARM = 3;
+export const BOLLARD_SIZE = 0.025;
+export const BOLLARD_HEIGHT = 0.07;
+
+/** One bike strip along each side of every arm, just inside the kerb. */
+export function laneStripPieces(mask: number, padSize: number): FlatPiece[] {
+  const half = padSize / 2;
+  const armLength = (1 - padSize) / 2;
+  const edge = half - LANE_STRIP_INSET - LANE_STRIP_WIDTH / 2;
+  const armCentre = half + armLength / 2;
+  const pieces: FlatPiece[] = [];
+  for (const { dx, dy, bit } of DIRECTIONS) {
+    if ((mask & bit) === 0) continue;
+    for (const side of [-1, 1]) {
+      pieces.push(
+        dx !== 0
+          ? { cx: dx * armCentre, cz: side * edge, sizeX: armLength, sizeZ: LANE_STRIP_WIDTH }
+          : { cx: side * edge, cz: dy * armCentre, sizeX: LANE_STRIP_WIDTH, sizeZ: armLength },
+      );
+    }
+  }
+  return pieces;
+}
+
+/** Paving over the pad and every arm of a pedestrian street. */
+export function pavingPieces(mask: number, padSize: number): FlatPiece[] {
+  const half = padSize / 2;
+  const armLength = (1 - padSize) / 2;
+  const armCentre = half + armLength / 2;
+  const pieces: FlatPiece[] = [{ cx: 0, cz: 0, sizeX: padSize, sizeZ: padSize }];
+  for (const { dx, dy, bit } of DIRECTIONS) {
+    if ((mask & bit) === 0) continue;
+    pieces.push(
+      dx !== 0
+        ? { cx: dx * armCentre, cz: 0, sizeX: armLength, sizeZ: padSize }
+        : { cx: 0, cz: dy * armCentre, sizeX: padSize, sizeZ: armLength },
+    );
+  }
+  return pieces;
+}
+
+/**
+ * Bollard footprints in a row across each arm in `openEnds` (the arms
+ * whose neighbour is a motor road), near the tile edge.
+ */
+export function bollardSpots(mask: number, openEnds: number, padSize: number): FlatPiece[] {
+  const half = padSize / 2;
+  const along = 0.5 - BOLLARD_SIZE;
+  const gap = padSize / (BOLLARDS_PER_ARM + 1);
+  const spots: FlatPiece[] = [];
+  for (const { dx, dy, bit } of DIRECTIONS) {
+    if ((mask & bit) === 0 || (openEnds & bit) === 0) continue;
+    for (let k = 1; k <= BOLLARDS_PER_ARM; k++) {
+      const across = -half + gap * k;
+      spots.push(
+        dx !== 0
+          ? { cx: dx * along, cz: across, sizeX: BOLLARD_SIZE, sizeZ: BOLLARD_SIZE }
+          : { cx: across, cz: dy * along, sizeX: BOLLARD_SIZE, sizeZ: BOLLARD_SIZE },
+      );
+    }
+  }
+  return spots;
+}
+
 /** How far the lamp's arm reaches out from the pole (local +x). */
 export const LAMP_REACH = 0.18;
 export const MAX_PARTS_PER_LAMP = 6;

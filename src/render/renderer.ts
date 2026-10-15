@@ -437,6 +437,11 @@ export class GameRenderer {
     return this.roadsMesh.roadClassAt(index);
   }
 
+  /** RoadLane of the tile (-1 no road), for build tool cost previews. */
+  roadLaneAt(index: number): number {
+    return this.roadsMesh.roadLaneAt(index);
+  }
+
   /** Whether a bus stop is marked on the tile, for the tool's cost preview. */
   busStopAt(index: number): boolean {
     return this.roadsMesh.hasBusStop(index);

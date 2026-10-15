@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIR_E, DIR_N, DIR_S, DIR_W, LINE_PRESENT } from '../shared/grid.ts';
 import { OVERPASS_LONG_RAMP_TILES, OVERPASS_SHORT_RAMP_TILES } from '../shared/constants.ts';
-import { RoadClass, Terrain, TileType, type TileDiff } from '../shared/types.ts';
+import { RoadClass, RoadLane, Terrain, TileType, type TileDiff } from '../shared/types.ts';
 import { ElevationField } from './elevationField.ts';
 import {
   DECK_SIZE,
@@ -12,7 +12,12 @@ import {
   RoadsMesh,
   roadHalfWidth,
 } from './roadsMesh.ts';
-import { KERB_WIDTH, LAMP_FOOT_SIZE, ZEBRA_STRIPES } from './infrastructure/roadFurniture.ts';
+import {
+  BOLLARDS_PER_ARM,
+  KERB_WIDTH,
+  LAMP_FOOT_SIZE,
+  ZEBRA_STRIPES,
+} from './infrastructure/roadFurniture.ts';
 
 const SIZE = 8;
 const at = (x: number, y: number) => y * SIZE + x;
@@ -23,6 +28,7 @@ function tiles(): TileDiff[] {
     tileType: TileType.Empty,
     roadMask: 0,
     roadClass: 0,
+    roadLane: 0,
     busStop: 0,
     terrain: Terrain.Land,
     elevation: 0,
@@ -532,4 +538,42 @@ describe('RoadsMesh overpass ramps on sloping ground', () => {
       }
     }
   }
+});
+
+describe('RoadsMesh lanes', () => {
+  it('draws strips on bike-laned tiles and nothing on plain ones', () => {
+    const list = tJunction();
+    list[at(1, 2)].roadLane = RoadLane.Bike;
+    const layer = layerWith(list);
+    expect(layer.laneStrips.mesh.count).toBe(2); // dead end: one arm, two sides
+    expect(layer.paving.mesh.count).toBe(0);
+    expect(layer.bollards.mesh.count).toBe(0);
+  });
+
+  it('paves a pedestrian tile, drops its zebra, and bollards the ends that meet motor roads', () => {
+    const list = tJunction();
+    list[at(2, 2)].roadLane = RoadLane.Pedestrian;
+    const layer = layerWith(list);
+    expect(layer.paving.mesh.count).toBe(4); // pad + 3 arms
+    expect(layer.stripes.mesh.count).toBe(0);
+    expect(layer.bollards.mesh.count).toBe(3 * BOLLARDS_PER_ARM);
+    expect(layer.bollards.mesh.frustumCulled).toBe(false);
+  });
+
+  it('two adjacent pedestrian tiles share no bollards on their common edge', () => {
+    const list = tJunction();
+    list[at(1, 2)].roadLane = RoadLane.Pedestrian;
+    list[at(2, 2)].roadLane = RoadLane.Pedestrian;
+    const layer = layerWith(list);
+    expect(layer.bollards.mesh.count).toBe(2 * BOLLARDS_PER_ARM); // junction's N and E arms only
+  });
+
+  it('reports the lane kind for the cost preview', () => {
+    const list = tJunction();
+    list[at(1, 2)].roadLane = RoadLane.Bike;
+    const layer = layerWith(list);
+    expect(layer.roadLaneAt(at(1, 2))).toBe(RoadLane.Bike);
+    expect(layer.roadLaneAt(at(2, 2))).toBe(RoadLane.None);
+    expect(layer.roadLaneAt(at(0, 0))).toBe(-1);
+  });
 });
