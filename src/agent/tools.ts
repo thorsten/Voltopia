@@ -725,6 +725,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             riders: s.transit.riders,
             busRiders: s.transit.busRiders,
             railRiders: s.transit.railRiders,
+            walkRiders: s.transit.walkRiders,
+            bikeRiders: s.transit.bikeRiders,
             busesDriving: s.transit.driving,
             stops: s.transit.stops,
             stopsServed: s.transit.stopsServed,

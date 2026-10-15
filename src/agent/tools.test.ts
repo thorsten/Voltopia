@@ -653,6 +653,8 @@ describe('agent tools: building', () => {
     await call('advance_time', { ticks: 1 });
     const overview = await call('get_game_overview');
     expect(overview.transit).toMatchObject({ stops: 4, stopsServed: 4, depots: 1 });
+    expect(overview.transit).toHaveProperty('walkRiders');
+    expect(overview.transit).toHaveProperty('bikeRiders');
     const map = await call('get_map', { layer: 'transit', origin: { x, y }, width: 6, height: 2 });
     expect((map.rows as string[])[0]).toBe('+oooo+');
     expect((map.rows as string[])[1]).toBe('T.....');
