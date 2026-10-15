@@ -11,6 +11,7 @@ import {
   deliveryStats,
   depotInfo,
   depotReach,
+  depotRoadTile,
   depotTiles,
   drivingVans,
   dueTicks,
@@ -664,6 +665,18 @@ describe('pedestrian streets', () => {
     const tour = planTour(state, state.vans[0], new Set());
     expect(tour).not.toContain(at(6, 10));
     expect(tour[0]).toBe(at(6, 12));
+  });
+
+  it('a depot whose only road turns pedestrian gets no fleet and loses its vans', () => {
+    const state = shopTown(1, 1);
+    state.money = 1e6;
+    syncFleet(state);
+    expect(state.vans.length).toBeGreaterThan(0);
+    expect(depotRoadTile(state, at(2, 9))).toBe(at(2, 10));
+    buildLanes(state, [at(2, 10)], RoadLane.Pedestrian);
+    expect(depotRoadTile(state, at(2, 9))).toBe(-1);
+    syncFleet(state);
+    expect(state.vans).toHaveLength(0);
   });
 
   it('a shop reachable only through a pedestrian street is not on any tour', () => {

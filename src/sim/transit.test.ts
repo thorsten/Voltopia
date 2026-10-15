@@ -538,6 +538,16 @@ describe('pedestrian streets', () => {
     expect(isBusStop(state, at(5, 10))).toBe(false);
   });
 
+  it('a bus depot whose road turns pedestrian drops its buses', () => {
+    const state = busTown(1, 2);
+    state.money = 1e6;
+    syncBusFleet(state);
+    expect(state.buses.length).toBeGreaterThan(0);
+    buildLanes(state, [at(2, 10)], RoadLane.Pedestrian);
+    syncBusFleet(state);
+    expect(state.buses).toHaveLength(0);
+  });
+
   it('a depot no longer reaches stops behind a pedestrian street', () => {
     const state = busTown(1, 2); // stops at x=6 and x=9
     state.money = 1e6;

@@ -145,12 +145,9 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   sums.ticks = 0;
 }
 
-function countTiles(state: SimState): {
+interface TileCounts {
   roadTiles: number;
   avenueTiles: number;
-  /** Road tiles open to motor traffic (no pedestrian streets), the avenueShare base. */
-  motorRoadTiles: number;
-  motorAvenueTiles: number;
   zonedTiles: number;
   plantTiles: number;
   buildingTiles: number;
@@ -158,13 +155,16 @@ function countTiles(state: SimState): {
   railTiles: number;
   /** Logistics depots only; bus depots are tracked separately in transitStats. */
   depots: number;
-} {
+}
+
+function countTiles(state: SimState): { counts: TileCounts; avenueShare: number } {
   const { tileType, zone, density, roadClass, roadLane, plantType } = state.layers;
-  const counts = {
+  // Pedestrian streets are closed to cars, so they stay out of the avenue share.
+  let motorRoadTiles = 0;
+  let motorAvenueTiles = 0;
+  const counts: TileCounts = {
     roadTiles: 0,
     avenueTiles: 0,
-    motorRoadTiles: 0,
-    motorAvenueTiles: 0,
     zonedTiles: 0,
     plantTiles: 0,
     buildingTiles: 0,
@@ -178,8 +178,8 @@ function countTiles(state: SimState): {
       counts.roadTiles++;
       if (roadClass[i] === RoadClass.Avenue) counts.avenueTiles++;
       if (roadLane[i] !== RoadLane.Pedestrian) {
-        counts.motorRoadTiles++;
-        if (roadClass[i] === RoadClass.Avenue) counts.motorAvenueTiles++;
+        motorRoadTiles++;
+        if (roadClass[i] === RoadClass.Avenue) motorAvenueTiles++;
       }
     } else if (tileType[i] === TileType.Plant) {
       counts.plantTiles++;
@@ -189,13 +189,13 @@ function countTiles(state: SimState): {
       if (density[i] > 0) counts.buildingTiles++;
     }
   }
-  return counts;
+  return { counts, avenueShare: motorRoadTiles > 0 ? motorAvenueTiles / motorRoadTiles : 0 };
 }
 
 export function buildStats(state: SimState): GlobalStats {
   const { population, jobs } = countPopulationAndJobs(state);
   const e = state.lastEnergy;
-  const counts = countTiles(state);
+  const { counts, avenueShare } = countTiles(state);
   return {
     seed: state.seed,
     tick: state.tick,
@@ -288,7 +288,7 @@ export function buildStats(state: SimState): GlobalStats {
     traffic: {
       congestion: state.commuteCongestion,
       driving: drivingVehicleCount(state),
-      avenueShare: counts.motorRoadTiles > 0 ? counts.motorAvenueTiles / counts.motorRoadTiles : 0,
+      avenueShare,
     },
     deliveries: { ...state.lastDeliveries },
     transit: { ...state.lastTransit },

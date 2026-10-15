@@ -4,7 +4,7 @@ import { MAX_STOP_AGE, PlantType, RoadLane, StopState } from '../shared/types.ts
 import type { BusDepotInfo, TransitStats } from '../shared/types.ts';
 import { depotRoadTile } from './deliveries.ts';
 import { isTileConnected } from './energy.ts';
-import { findRoadPath, nearestNeighbourOrder, roadDistances } from './routing.ts';
+import { findRoadPath, isMotorRoad, nearestNeighbourOrder, roadDistances } from './routing.ts';
 import type { BuildResult } from './roads.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
@@ -139,10 +139,8 @@ function createBus(state: SimState, depot: number, depotRoad: number): Bus {
  * the missing ones parked at the depot.
  */
 export function syncBusFleet(state: SimState): void {
-  const { tileType } = state.layers;
-  state.buses = state.buses.filter(
-    (bus) => isBusDepot(state, bus.depot) && tileType[bus.depotRoad] === TileType.Road,
-  );
+  const motor = isMotorRoad(state);
+  state.buses = state.buses.filter((bus) => isBusDepot(state, bus.depot) && motor(bus.depotRoad));
   const perDepot = new Map<number, number>();
   for (const bus of state.buses) perDepot.set(bus.depot, (perDepot.get(bus.depot) ?? 0) + 1);
   for (const depot of busDepotTiles(state)) {

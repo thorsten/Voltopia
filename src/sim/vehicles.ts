@@ -4,7 +4,7 @@ import { PlantType, RoadClass, RoadLane, Zone } from '../shared/types.ts';
 import { closedCrossings } from './crossings.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { plantNetwork } from './rail.ts';
-import { findRoadPath } from './routing.ts';
+import { findRoadPath, isMotorRoad } from './routing.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
   BusPhase,
@@ -345,7 +345,7 @@ export function vehiclesStep(state: SimState): Map<number, number> {
     });
   }
 
-  const { tileType, transitCover } = state.layers;
+  const { transitCover } = state.layers;
   const step = BALANCE.vehicles.speedTilesPerSecond / TICK_RATE;
   const ticksIntoDay = state.tick % TICKS_PER_DAY;
   const morningDeparture = ticksAtHour(BALANCE.vehicles.commute.morningStartHour);
@@ -359,14 +359,15 @@ export function vehiclesStep(state: SimState): Map<number, number> {
 
   const surplus = surplusAvailable(state);
 
+  const motor = isMotorRoad(state);
   for (const vehicle of state.vehicles) {
     // Reassign endpoints that were bulldozed or lost their buildings.
-    if (tileType[vehicle.homeRoad] !== TileType.Road) {
+    if (!motor(vehicle.homeRoad)) {
       vehicle.homeRoad = homeRoads[state.rng.nextInt(homeRoads.length)];
       vehicle.phase = VehiclePhase.ParkedHome;
       parkAt(state, vehicle, vehicle.homeRoad);
     }
-    if (vehicle.workRoad >= 0 && tileType[vehicle.workRoad] !== TileType.Road) {
+    if (vehicle.workRoad >= 0 && !motor(vehicle.workRoad)) {
       vehicle.workRoad = workRoads.length > 0 ? workRoads[state.rng.nextInt(workRoads.length)] : -1;
       if (vehicle.phase !== VehiclePhase.ParkedHome) {
         vehicle.phase = VehiclePhase.ParkedHome;

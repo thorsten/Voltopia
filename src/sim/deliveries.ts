@@ -3,7 +3,7 @@ import { neighbors4, tileX, tileY } from '../shared/grid.ts';
 import { DeliveryState, MAX_DELIVERY_AGE, PlantType, Zone } from '../shared/types.ts';
 import type { DeliveryStats, DepotInfo } from '../shared/types.ts';
 import { isTileConnected } from './energy.ts';
-import { findRoadPath, nearestNeighbourOrder, roadDistances } from './routing.ts';
+import { findRoadPath, isMotorRoad, nearestNeighbourOrder, roadDistances } from './routing.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import { advanceAlongPath, surplusAvailable, ticksAtHour, vehicleTile } from './vehicles.ts';
 import {
@@ -98,12 +98,12 @@ export function depotTiles(state: SimState): number[] {
   return depots;
 }
 
-/** The lowest-index road tile next to a depot, or -1. */
+/** The lowest-index motor road tile (not a pedestrian street) next to a depot, or -1. */
 export function depotRoadTile(state: SimState, depot: number): number {
-  const { tileType } = state.layers;
+  const motor = isMotorRoad(state);
   let road = -1;
   for (const n of neighbors4(depot, state.size)) {
-    if (tileType[n] === TileType.Road && (road < 0 || n < road)) road = n;
+    if (motor(n) && (road < 0 || n < road)) road = n;
   }
   return road;
 }
@@ -134,10 +134,8 @@ function createVan(state: SimState, depot: number, depotRoad: number): Van {
  * whose home was bulldozed), spawn the missing ones parked at the depot.
  */
 export function syncFleet(state: SimState): void {
-  const { tileType } = state.layers;
-  state.vans = state.vans.filter(
-    (van) => isDepot(state, van.depot) && tileType[van.depotRoad] === TileType.Road,
-  );
+  const motor = isMotorRoad(state);
+  state.vans = state.vans.filter((van) => isDepot(state, van.depot) && motor(van.depotRoad));
   const perDepot = new Map<number, number>();
   for (const van of state.vans) perDepot.set(van.depot, (perDepot.get(van.depot) ?? 0) + 1);
   for (const depot of depotTiles(state)) {

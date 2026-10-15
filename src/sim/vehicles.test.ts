@@ -1117,8 +1117,25 @@ describe('level crossings', () => {
 describe('pedestrian streets', () => {
   it('new commuters never get a pedestrian home or work road', () => {
     const state = commuterTown(5, 200);
-    buildLanes(state, [at(3, 10), at(15, 10)], RoadLane.Pedestrian);
     setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    // Precondition: both tiles are real candidates (they touch buildings).
+    expect(state.vehicles.some((v) => v.homeRoad === at(3, 10))).toBe(true);
+    expect(state.vehicles.some((v) => v.workRoad === at(15, 10))).toBe(true);
+    buildLanes(state, [at(3, 10), at(15, 10)], RoadLane.Pedestrian);
+    stepVehicles(state);
+    for (const v of state.vehicles) {
+      expect(state.layers.roadLane[v.homeRoad]).toBe(RoadLane.None);
+      if (v.workRoad >= 0) expect(state.layers.roadLane[v.workRoad]).toBe(RoadLane.None);
+    }
+  });
+
+  it('re-homes a commuter whose home or work road turns into a pedestrian street', () => {
+    const state = commuterTown(5, 200);
+    setHour(state, BALANCE.vehicles.commute.morningStartHour - 1);
+    stepVehicles(state);
+    expect(state.vehicles.some((v) => v.homeRoad === at(3, 10))).toBe(true);
+    buildLanes(state, [at(3, 10), at(15, 10)], RoadLane.Pedestrian);
     stepVehicles(state);
     for (const v of state.vehicles) {
       expect(state.layers.roadLane[v.homeRoad]).toBe(RoadLane.None);
