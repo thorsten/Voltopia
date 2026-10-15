@@ -148,6 +148,10 @@ describe('lane strips, paving and bollards', () => {
     // openEnds: direction bits of arms whose neighbour is NOT pedestrian.
     const spots = bollardSpots(DIR_E | DIR_W, DIR_E, 0.62);
     expect(spots.length).toBe(BOLLARDS_PER_ARM);
-    for (const s of spots) expect(s.cx).toBeGreaterThan(0.31);
+    for (const s of spots) {
+      expect(s.cx).toBeGreaterThan(0.31);
+      expect(s.cx).toBeLessThan(0.5);
+      expect(Math.abs(s.cz)).toBeLessThan(0.31);
+    }
   });
 });

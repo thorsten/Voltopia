@@ -181,7 +181,7 @@ export class RoadsMesh implements DiffLayer {
   readonly mesh: THREE.InstancedMesh;
   /** Centre pads on land: two prisms per tile, each flush with one ground triangle. */
   private readonly pads: THREE.InstancedMesh;
-  private readonly centreLines: THREE.InstancedMesh;
+  readonly centreLines: THREE.InstancedMesh;
   /** Kerbs along the open edges of land road tiles. */
   readonly kerbs: GrowingMesh;
   /** Bike lane strips along both kerbs of bike-laned road tiles. */
@@ -486,7 +486,8 @@ export class RoadsMesh implements DiffLayer {
           dx !== 0 ? armLength : size,
           dy !== 0 ? armLength : size,
         );
-        if (isAvenue) {
+        // A pedestrian street is paved over: no centre line.
+        if (isAvenue && this.roadLane[index] !== RoadLane.Pedestrian) {
           // Dashed centre line from the tile centre to the edge: each dash
           // sits between half gaps, so neighbouring tiles meet with a full
           // gap at the edge and the crossing itself stays clear.
@@ -531,8 +532,9 @@ export class RoadsMesh implements DiffLayer {
 
   /**
    * Kerbs on every land road tile; zebra crossings on land junctions
-   * except level crossings, where the rails run across the arms. Bridges
-   * have railings instead.
+   * except level crossings, where the rails run across the arms (and
+   * pedestrian streets, which are paved instead). Bike lane strips, paving
+   * and bollards follow each tile's roadLane. Bridges have railings instead.
    */
   private rebuildFurniture(): void {
     let kerbCount = 0;

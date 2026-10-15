@@ -548,6 +548,8 @@ describe('RoadsMesh lanes', () => {
     expect(layer.laneStrips.mesh.count).toBe(2); // dead end: one arm, two sides
     expect(layer.paving.mesh.count).toBe(0);
     expect(layer.bollards.mesh.count).toBe(0);
+    expect(layer.laneStrips.mesh.frustumCulled).toBe(false);
+    expect(layer.paving.mesh.frustumCulled).toBe(false);
   });
 
   it('paves a pedestrian tile, drops its zebra, and bollards the ends that meet motor roads', () => {
@@ -558,6 +560,19 @@ describe('RoadsMesh lanes', () => {
     expect(layer.stripes.mesh.count).toBe(0);
     expect(layer.bollards.mesh.count).toBe(3 * BOLLARDS_PER_ARM);
     expect(layer.bollards.mesh.frustumCulled).toBe(false);
+  });
+
+  it('leaves the centre line off a pedestrian avenue, which would z-fight the paving', () => {
+    const plain = tJunction();
+    plain[at(2, 2)].roadClass = RoadClass.Avenue;
+    const avenue = layerWith(plain);
+    expect(avenue.centreLines.count).toBeGreaterThan(0);
+    const list = tJunction();
+    list[at(2, 2)].roadClass = RoadClass.Avenue;
+    list[at(2, 2)].roadLane = RoadLane.Pedestrian;
+    const paved = layerWith(list);
+    expect(paved.centreLines.count).toBe(0);
+    expect(paved.paving.mesh.count).toBe(4);
   });
 
   it('two adjacent pedestrian tiles share no bollards on their common edge', () => {
