@@ -2,6 +2,29 @@ import { SAVE_VERSION, TICKS_PER_DAY } from '../shared/constants.ts';
 import type { SaveGame } from '../shared/types.ts';
 import type { SaveSummary } from './storage.ts';
 
+/** The city's display name in default save names. */
+export const CITY_LABEL = 'Voltopia';
+
+/** English default-name template; the UI passes its translated one. */
+export const DEFAULT_SAVE_NAME_TEMPLATE = '{city} – day {day}';
+
+/** In-game day (1-based) of a tick. */
+export function dayOfTick(tick: number): number {
+  return Math.floor(tick / TICKS_PER_DAY) + 1;
+}
+
+/**
+ * The name a new save gets unless the player types one, e.g.
+ * "Voltopia – day 12". `template` fills `{city}` and `{day}`.
+ */
+export function defaultSaveName(
+  day: number,
+  template: string = DEFAULT_SAVE_NAME_TEMPLATE,
+  city: string = CITY_LABEL,
+): string {
+  return template.replace('{city}', city).replace('{day}', String(day));
+}
+
 /**
  * The list entry for a save. `id` is left empty for the catalogue to
  * fill in. Population defaults to the last daily lifetime sample (0 on
@@ -19,7 +42,7 @@ export function summarizeSave(
     id: '',
     name,
     savedAt,
-    day: Math.floor(save.tick / TICKS_PER_DAY) + 1,
+    day: dayOfTick(save.tick),
     population: population ?? lifetime.at(-1)?.population ?? 0,
     money: save.money,
     size: save.size,

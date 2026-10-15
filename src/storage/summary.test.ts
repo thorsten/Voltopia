@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SAVE_VERSION, TICKS_PER_DAY } from '../shared/constants.ts';
 import type { LifetimeSample, SaveGame } from '../shared/types.ts';
 import { newSlotId } from './storage.ts';
-import { summarizeSave } from './summary.ts';
+import { dayOfTick, defaultSaveName, summarizeSave } from './summary.ts';
 
 function sample(day: number, population: number): LifetimeSample {
   return {
@@ -77,5 +77,20 @@ describe('newSlotId', () => {
 
   it('produces different ids for different random draws', () => {
     expect(newSlotId(1, () => 0.1)).not.toBe(newSlotId(1, () => 0.2));
+  });
+});
+
+describe('defaultSaveName', () => {
+  it('names the city and the day in English by default', () => {
+    expect(defaultSaveName(12)).toBe('Voltopia – day 12');
+  });
+
+  it('fills a translated template', () => {
+    expect(defaultSaveName(3, '{city} – Tag {day}')).toBe('Voltopia – Tag 3');
+  });
+
+  it('counts days from 1', () => {
+    expect(dayOfTick(0)).toBe(1);
+    expect(dayOfTick(TICKS_PER_DAY)).toBe(2);
   });
 });

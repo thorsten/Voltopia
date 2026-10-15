@@ -22,6 +22,7 @@ const SECTIONS: Array<{ title: TranslationKey; body: TranslationKey }> = [
   { title: 'help.services.title', body: 'help.services.body' },
   { title: 'help.icons.title', body: 'help.icons.body' },
   { title: 'help.controls.title', body: 'help.controls.body' },
+  { title: 'help.saves.title', body: 'help.saves.body' },
 ];
 
 export function HelpPage({ onClose }: { onClose: () => void }) {

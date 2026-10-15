@@ -26,6 +26,7 @@ import {
   type NewGameOptions,
 } from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
+import { SavesPage } from './SavesPage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
 import { SmallScreenNotice } from './SmallScreenNotice.tsx';
 import {
@@ -131,9 +132,9 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   );
   const [overlay, setOverlay] = useState<OverlayMode>(OverlayMode.None);
   const [selectedIsland, setSelectedIsland] = useState(0);
-  const [page, setPage] = useState<'help' | 'imprint' | 'settings' | 'newGame' | 'stats' | null>(
-    null,
-  );
+  const [page, setPage] = useState<
+    'help' | 'imprint' | 'settings' | 'saves' | 'newGame' | 'stats' | null
+  >(null);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [detailsOpen, setDetailsOpen] = useState(loadDetailsOpen);
   // The tutorial runs for brand-new cities only (no autosave existed).
@@ -381,6 +382,9 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               <button type="button" data-testid="open-imprint" onClick={() => setPage('imprint')}>
                 {t('footer.imprint')}
               </button>
+              <button type="button" data-testid="open-saves" onClick={() => setPage('saves')}>
+                {t('footer.saves')}
+              </button>
               <button type="button" data-testid="open-settings" onClick={() => setPage('settings')}>
                 {t('footer.settings')}
               </button>
@@ -428,9 +432,16 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
         <SettingsPage
           settings={settings}
           onSettingsChange={setSettings}
+          onClose={() => setPage(null)}
+        />
+      )}
+      {page === 'saves' && stats && (
+        <SavesPage
           storage={storage}
           requestSnapshot={requestSnapshot}
           replaceCityAndReload={cityReloader.replaceCityAndReload}
+          population={stats.population}
+          tick={stats.tick}
           onClose={() => setPage(null)}
         />
       )}

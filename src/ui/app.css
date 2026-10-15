@@ -1610,7 +1610,7 @@ body,
   font-size: 13px;
 }
 
-.settings-slot {
+.saves-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1618,13 +1618,73 @@ body,
   margin: 6px 0;
 }
 
-.settings-slot-buttons {
+.saves-new {
   display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.saves-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--hud-hover-strong);
+  border: 1px solid var(--hud-border);
+  border-radius: 8px;
+  color: var(--hud-text);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+/* Info above, buttons below: five buttons never fit beside the name in German. */
+.saves-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+}
+
+.saves-entry.highlight {
+  border-color: var(--accent);
+}
+
+.saves-entry-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.saves-entry-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.saves-entry-meta,
+.saves-hint {
+  color: var(--hud-muted);
+  font-size: 12px;
+}
+
+.saves-incompatible {
+  color: var(--hud-warn);
+}
+
+.saves-row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 6px;
 }
 
-.settings-slot button,
-.settings-import {
+.saves-row button,
+.saves-new button,
+.saves-row-buttons button,
+.saves-import {
   background: transparent;
   border: 1px solid var(--hud-border);
   border-radius: 8px;
@@ -1632,22 +1692,23 @@ body,
   padding: 4px 10px;
   cursor: pointer;
   font-size: 12px;
+  white-space: nowrap;
 }
 
-.settings-slot button:disabled {
-  opacity: 0.35;
-  cursor: default;
+.saves-row-buttons button.armed {
+  border-color: var(--hud-negative);
+  color: var(--hud-negative);
 }
 
-.settings-import {
+.saves-import {
   display: inline-block;
 }
 
-.settings-import input {
+.saves-import input {
   display: none;
 }
 
-.settings-message {
+.saves-message {
   margin-top: 10px;
   color: var(--accent);
   font-size: 12px;
