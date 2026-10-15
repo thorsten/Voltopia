@@ -14,6 +14,7 @@ export function SettingsPage({
   onSettingsChange,
   storage,
   requestSnapshot,
+  replaceCityAndReload,
   onClose,
 }: {
   settings: AppSettings;
@@ -21,6 +22,8 @@ export function SettingsPage({
   storage: SaveStorage;
   /** Asks the sim for a fresh SaveGame snapshot. */
   requestSnapshot: () => Promise<SaveGame>;
+  /** Makes `save` the running city via the autosave and reloads. */
+  replaceCityAndReload: (save: SaveGame) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -54,9 +57,7 @@ export function SettingsPage({
 
   const loadFromSlot = async (slot: string): Promise<void> => {
     const save = await storage.load(slot);
-    if (!save) return;
-    await storage.save(save); // becomes the autosave
-    window.location.reload();
+    if (save) await replaceCityAndReload(save); // becomes the autosave
   };
 
   const exportSave = async (): Promise<void> => {
@@ -69,9 +70,7 @@ export function SettingsPage({
 
   const importSave = async (file: File): Promise<void> => {
     try {
-      const save = saveFromJson(await file.text());
-      await storage.save(save);
-      window.location.reload();
+      await replaceCityAndReload(saveFromJson(await file.text()));
     } catch (error) {
       setMessage(String(error instanceof Error ? error.message : error));
     }

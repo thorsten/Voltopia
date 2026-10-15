@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { OverlayMode, type SaveGame } from '../shared/types.ts';
 import { IndexedDbStorage } from '../storage/indexeddb.ts';
 import type { GameRenderer, RendererCallbacks } from '../render/renderer.ts';
+import { createCityReloader } from './cityReload.ts';
 import { CityVitals } from './CityVitals.tsx';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { DisasterBanner } from './DisasterBanner.tsx';
@@ -44,6 +45,13 @@ import { useTools } from './useTools.ts';
 const AUTOSAVE_INTERVAL_MS = 10_000;
 
 const storage = new IndexedDbStorage();
+
+/**
+ * Every "replace the city and reload" (load, new game, start_new_city)
+ * goes through this, and every autosave too, so no autosave can write the
+ * old city back between the copy and the reload.
+ */
+const cityReloader = createCityReloader(storage, () => window.location.reload());
 
 /** Remembers whether the HUD detail drawer is open, across sessions. */
 const DETAILS_STORAGE_KEY = 'voltopia.hudDetails';
@@ -172,7 +180,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   const { send, onSaveData } = bridge;
   useEffect(() => {
     const unsubscribe = onSaveData((save) => {
-      storage.save(save).catch((error) => console.warn('Autosave failed', error));
+      cityReloader.autosave(save).catch((error) => console.warn('Autosave failed', error));
     });
     const timer = setInterval(() => send({ type: 'requestSave' }), AUTOSAVE_INTERVAL_MS);
     // Quick-save on Ctrl/Cmd+S (autosave covers the rest); plain S pans.
@@ -192,7 +200,9 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     const stopNativeClose = listenForNativeClose({
       send,
       onSaveData,
-      persist: (save) => storage.save(save),
+      // While a city is being replaced this resolves without writing,
+      // so the window still closes and the new city stays the autosave.
+      persist: (save) => cityReloader.autosave(save),
       closeApp: invokeCloseApp,
     });
     return () => {
@@ -204,10 +214,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     };
   }, [send, onSaveData]);
 
-  const startNewGame = async (): Promise<void> => {
-    await storage.clear();
-    window.location.reload();
-  };
+  const startNewGame = (): Promise<void> => cityReloader.replaceCityAndReload(null);
 
   // Agent tools (WebMCP + window.voltopia); a new city from a tool goes
   // through the same pending-options reload as the new-game dialog.
@@ -218,7 +225,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
       ...options,
       disasterScale: options.disasterScale ?? DEFAULT_NEW_GAME.disasterScale,
     });
-    void storage.clear().then(() => window.location.reload());
+    void cityReloader.replaceCityAndReload(null);
   }, []);
   useAgentTools(bridge, gridSize, startNewCityFromTool);
 
@@ -423,6 +430,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
           onSettingsChange={setSettings}
           storage={storage}
           requestSnapshot={requestSnapshot}
+          replaceCityAndReload={cityReloader.replaceCityAndReload}
           onClose={() => setPage(null)}
         />
       )}
