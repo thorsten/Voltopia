@@ -11,7 +11,15 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileX, tileY } from '../shared/grid.ts';
 import { HEATED_SERVED } from '../shared/types.ts';
 import type { GrowthBlocker, TileInfo } from '../shared/types.ts';
-import { PlantType, RoadClass, SupplyStatus, Terrain, TileType, Zone } from '../shared/types.ts';
+import {
+  PlantType,
+  RoadClass,
+  RoadLane,
+  SupplyStatus,
+  Terrain,
+  TileType,
+  Zone,
+} from '../shared/types.ts';
 import { deliveryState, depotInfo, isShopSupplied } from './deliveries.ts';
 import { disasterKindAt } from './disasters.ts';
 import { policeTaxFactor } from './economy.ts';
@@ -373,6 +381,7 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
     roadClass: (tileType === TileType.Road
       ? layers.roadClass[index]
       : RoadClass.Street) as RoadClass,
+    roadLane: (tileType === TileType.Road ? layers.roadLane[index] : RoadLane.None) as RoadLane,
     trafficLoad: tileType === TileType.Road ? layers.trafficLoad[index] : 0,
     laneCapacity: tileType === TileType.Road ? laneCapacity(state, index) : 0,
     deliveryState: deliveryState(state, index),

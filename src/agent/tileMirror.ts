@@ -25,6 +25,7 @@ export interface MirroredTile {
   supplied: SupplyStatus;
   plantType: PlantType;
   roadMask: number;
+  roadLane: number;
   powerLine: number;
   busStop: number;
   stopState: number;
@@ -46,6 +47,7 @@ export class TileMirror {
   readonly supplied: Uint8Array;
   readonly plantType: Uint8Array;
   readonly roadMask: Uint8Array;
+  readonly roadLane: Uint8Array;
   readonly powerLine: Uint8Array;
   readonly busStop: Uint8Array;
   readonly stopState: Uint8Array;
@@ -72,6 +74,7 @@ export class TileMirror {
     this.supplied = new Uint8Array(count);
     this.plantType = new Uint8Array(count);
     this.roadMask = new Uint8Array(count);
+    this.roadLane = new Uint8Array(count);
     this.powerLine = new Uint8Array(count);
     this.busStop = new Uint8Array(count);
     this.stopState = new Uint8Array(count);
@@ -95,6 +98,7 @@ export class TileMirror {
       this.supplied[i] = diff.supplied;
       this.plantType[i] = diff.plantType;
       this.roadMask[i] = diff.roadMask;
+      this.roadLane[i] = diff.roadLane;
       this.powerLine[i] = diff.powerLine;
       this.busStop[i] = diff.busStop;
       this.stopState[i] = diff.stopState;
@@ -126,6 +130,7 @@ export class TileMirror {
       supplied: this.supplied[index] as SupplyStatus,
       plantType: this.plantType[index] as PlantType,
       roadMask: this.roadMask[index],
+      roadLane: this.roadLane[index],
       powerLine: this.powerLine[index],
       busStop: this.busStop[index],
       stopState: this.stopState[index],

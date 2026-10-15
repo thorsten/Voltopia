@@ -81,6 +81,13 @@ describe('TileMirror', () => {
     expect(mirror.damage[2]).toBe(77);
   });
 
+  it('mirrors the road lane kind', () => {
+    const mirror = new TileMirror(4);
+    mirror.applyDiffs([{ ...emptyDiff(5), roadLane: 2 }]);
+    expect(mirror.roadLane[5]).toBe(2);
+    expect(mirror.at(1, 1).roadLane).toBe(2);
+  });
+
   it('ignores out-of-range diffs and reports bounds', () => {
     const mirror = new TileMirror(4);
     mirror.applyDiffs([

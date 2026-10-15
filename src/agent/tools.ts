@@ -13,6 +13,7 @@ import { isSupplySource } from '../shared/plants.ts';
 import {
   DisasterKind,
   PlantType,
+  RoadLane,
   StopState,
   SupplyStatus,
   Terrain,
@@ -400,6 +401,13 @@ function requireStats(ctx: AgentContext): GlobalStats {
   return stats;
 }
 
+const LANE_NAME = ['none', 'bike', 'pedestrian'] as const;
+const LANE_BY_NAME: Record<string, RoadLane> = {
+  none: RoadLane.None,
+  bike: RoadLane.Bike,
+  pedestrian: RoadLane.Pedestrian,
+};
+
 function describeTile(ctx: AgentContext, index: number): Record<string, unknown> {
   const { tiles } = ctx;
   const t = tiles.at(tileX(index, tiles.size), tileY(index, tiles.size));
@@ -414,6 +422,7 @@ function describeTile(ctx: AgentContext, index: number): Record<string, unknown>
     hasRoad: t.tileType === TileType.Road,
     hasPowerLine: t.powerLine !== 0,
     hasRail: t.rail !== 0,
+    lane: LANE_NAME[t.roadLane],
     supply: SUPPLY_NAME[t.supplied],
     damage: t.damage,
   };
@@ -821,6 +830,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             busStop: costs.busStop,
             railPerTile: costs.railPerTile,
             railBridgePerTile: costs.railBridgePerTile,
+            bikeLanePerTile: costs.bikeLanePerTile,
+            pedestrianPerTile: costs.pedestrianPerTile,
           },
           upkeepPerTick: {
             roadPerTile: BALANCE.upkeepPerTick.roadPerTile,
@@ -828,6 +839,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             biogasFuelCostPerEnergyUnit: BALANCE.upkeepPerTick.biogasFuelCostPerEnergyUnit,
             busStop: BALANCE.upkeepPerTick.busStop,
             railPerTile: BALANCE.upkeepPerTick.railPerTile,
+            bikeLanePerTile: BALANCE.upkeepPerTick.bikeLanePerTile,
+            pedestrianPerTile: BALANCE.upkeepPerTick.pedestrianPerTile,
           },
           plants: (Object.keys(PLANT_NAMES) as PlantName[]).map((name) => {
             const type = PLANT_NAMES[name];
@@ -1132,6 +1145,39 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           tiles: [tileIndex(x, y, size)],
         });
         return outcomeResult(outcome, { x, y, ...spent(ctx, before) });
+      },
+    },
+    {
+      name: 'build_lanes',
+      description:
+        'Put a bike lane (kind "bike") or a pedestrian street (kind "pedestrian") on existing road ' +
+        'tiles along an L-shaped path (or explicit tiles); kind "none" removes lanes for free. ' +
+        'Tiles that are not roads or already carry the kind are skipped; a path with nothing to ' +
+        'build is rejected (needsExistingRoad). A pedestrian street is closed to cars, vans and ' +
+        'buses, which route around it, and is refused on a bus stop, a river bridge, a level ' +
+        'crossing or an overpass ramp (pedestrianBlocked). Commuters within ' +
+        `${BALANCE.cycling.walkTiles} road tiles of work walk; a lane route of at most ` +
+        `${BALANCE.cycling.bikeTiles} tiles between home and work makes them cycle. Either way the ` +
+        'car stays home and draws no evening charging load.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ...PATH_SCHEMA.properties!,
+          kind: { type: 'string', enum: ['bike', 'pedestrian', 'none'] },
+        },
+        required: ['kind'],
+      },
+      async execute(input) {
+        const kindName = readEnum(input, 'kind', ['bike', 'pedestrian', 'none'] as const);
+        const kind = LANE_BY_NAME[kindName];
+        const path = readPathTiles(input, tiles);
+        const before = requireStats(ctx).money;
+        const outcome = await ctx.sendCommand({ type: 'buildLanes', tiles: path, kind });
+        return outcomeResult(outcome, {
+          tiles: path.length,
+          kind: kindName,
+          ...spent(ctx, before),
+        });
       },
     },
     {

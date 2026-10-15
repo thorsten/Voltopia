@@ -2,7 +2,14 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4, tileIndex } from '../shared/grid.ts';
-import { DeliveryState, DisasterKind, RoadClass, StopState, TileType } from '../shared/types.ts';
+import {
+  DeliveryState,
+  DisasterKind,
+  RoadClass,
+  RoadLane,
+  StopState,
+  TileType,
+} from '../shared/types.ts';
 import { syncFleet } from './deliveries.ts';
 import { addDamage } from './disasters.ts';
 import { economyStep } from './economy.ts';
@@ -12,6 +19,7 @@ import { heatPumpCop, recomputeHeated } from './heat.ts';
 import { inspectTile } from './inspect.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { islandKey, islandOf } from './powerGrid.ts';
+import { buildLanes } from './lanes.ts';
 import { buildOverpasses } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles } from './roads.ts';
@@ -410,6 +418,9 @@ describe('traffic in the inspector', () => {
     expect(avenue.roadClass).toBe(RoadClass.Avenue);
     expect(avenue.laneCapacity).toBe(BALANCE.vehicles.avenueMaxPerTile);
     expect(avenue.trafficLoad).toBe(200);
+    state.money = 1e6;
+    buildLanes(state, [at(2, 2)], RoadLane.Bike);
+    expect(inspectTile(state, at(2, 2))!.roadLane).toBe(RoadLane.Bike);
     expect(inspectTile(state, at(9, 9))!.laneCapacity).toBe(0);
   });
 });

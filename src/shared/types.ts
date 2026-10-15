@@ -592,6 +592,8 @@ export interface TileInfo {
   stationActive: boolean;
   /** Road class of a road tile (Street for everything else). */
   roadClass: RoadClass;
+  /** Lane kind of a road tile (None for everything else). */
+  roadLane: RoadLane;
   /** Smoothed traffic load 0..255 (0 off-road). */
   trafficLoad: number;
   /** Cars per lane this tile holds (0 off-road). */

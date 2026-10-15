@@ -10,6 +10,7 @@ import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import {
   DisasterKind,
   PlantType,
+  RoadLane,
   Terrain,
   TileType,
   Zone,
@@ -143,6 +144,7 @@ describe('agent tools: reading', () => {
       'build_power_line',
       'build_bus_stop',
       'build_overpass',
+      'build_lanes',
       'build_rail',
       'paint_zone',
       'place_plant',
@@ -595,6 +597,29 @@ describe('agent tools: building', () => {
     const info = await call('inspect_tile', { x, y: y + 1 });
     expect(info).toMatchObject({ ok: true, plant: 'logistics_depot' });
     expect(info.depot).toMatchObject({ vansTotal: BALANCE.deliveries.vansPerDepot });
+  });
+
+  it('build_lanes paints lanes along a path, reports rejections and shows up in inspect_tile', async () => {
+    const { call, engine } = createHarness();
+    engine.state.layers.elevation.fill(0);
+    engine.state.money = 1e6;
+    const { x, y } = findLand(engine);
+    await call('build_road', { from: { x, y }, to: { x: x + 4, y } });
+    const off = await call('build_lanes', {
+      from: { x, y: y + 3 },
+      to: { x: x + 2, y: y + 3 },
+      kind: 'bike',
+    });
+    expect(off).toMatchObject({ ok: false, error: 'needsExistingRoad' });
+    const bike = await call('build_lanes', { from: { x, y }, to: { x: x + 4, y }, kind: 'bike' });
+    expect(bike).toMatchObject({ ok: true });
+    expect(engine.state.layers.roadLane[tileIndex(x + 2, y, SIZE)]).toBe(RoadLane.Bike);
+    const ped = await call('build_lanes', { tiles: [{ x: x + 2, y }], kind: 'pedestrian' });
+    expect(ped).toMatchObject({ ok: true });
+    const info = await call('inspect_tile', { x: x + 2, y });
+    expect(info).toMatchObject({ lane: 'pedestrian' });
+    const bad = await call('build_lanes', { tiles: [{ x: x + 2, y }], kind: 'tram' });
+    expect(bad).toMatchObject({ ok: false });
   });
 
   it('build_overpass upgrades a level crossing and reports the rejection otherwise', async () => {
