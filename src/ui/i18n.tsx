@@ -18,7 +18,7 @@ const en = {
     "{supplied} of {shops} shops supplied · {vans} vans on the road · {factories} factories · {local} % of today's tours loaded locally",
   'hud.transit': 'transit',
   'hud.transit.title':
-    '{riders} riders ({busRiders} by bus · {railRiders} by train) · {buses} buses and {trains} trains on the move · {served} of {stops} stops served',
+    '{riders} commuters without a car ({walkRiders} on foot · {bikeRiders} by bike · {busRiders} by bus · {railRiders} by train) · {buses} buses and {trains} trains on the move · {served} of {stops} stops served',
   'traffic.flowing': 'flowing',
   'traffic.slow': 'slow',
   'traffic.jammed': 'jammed',
@@ -51,6 +51,18 @@ const en = {
   'tool.power-line': 'Power line',
   'tool.bus-stop': 'Bus stop',
   'tool.rail': 'Track',
+  'tool.bike-lane': 'Bike lane',
+  'tool.pedestrian': 'Pedestrian street',
+  'tool.bike-lane.desc':
+    'Paint a bike lane on existing roads. A commuter with a lane route of at most {bike} tiles between home and work cycles and leaves the car at home.',
+  'tool.pedestrian.desc':
+    'Close an existing road to cars, vans and buses; they drive around it. Counts as a bike route, and anyone within {walk} tiles of work walks anyway. Not on bus stops, bridges, level crossings or overpass ramps.',
+  'inspect.roadLane': 'Lane',
+  'inspect.roadLane.bike': 'Bike lane',
+  'inspect.roadLane.pedestrian': 'Pedestrian street — closed to motor traffic',
+  'help.cycling.title': 'Cycling and walking',
+  'help.cycling.body':
+    'Short car trips are the most avoidable load on your grid. A commuter who lives within four road tiles of work walks whatever you build. Paint Bike lanes on existing streets and avenues: a commuter whose home and workplace are joined by a lane route of at most twenty tiles cycles instead of driving. A Pedestrian street counts as a bike route and is closed to cars, vans and buses, which drive around it — so it cannot carry a bus stop, a bridge, a level crossing or an overpass ramp, and a shop on it is stocked from a neighbouring street. Every walker or cyclist is a car that stays parked all day and never plugs in at dusk, which is where the evening charging peak comes from.',
   'tool.overpass': 'Overpass',
   'tool.zone-residential': 'Residential',
   'tool.zone-commercial': 'Commercial',
@@ -702,7 +714,7 @@ const de: Record<TranslationKey, string> = {
     '{supplied} von {shops} Läden beliefert · {vans} Lieferwagen unterwegs · {factories} Fabriken · {local} % der heutigen Touren lokal beladen',
   'hud.transit': 'ÖPNV',
   'hud.transit.title':
-    '{riders} Fahrgäste ({busRiders} Bus · {railRiders} Bahn) · {buses} Busse und {trains} Züge unterwegs · {served} von {stops} Halten bedient',
+    '{riders} Pendler ohne Auto ({walkRiders} zu Fuß · {bikeRiders} Rad · {busRiders} Bus · {railRiders} Bahn) · {buses} Busse und {trains} Züge unterwegs · {served} von {stops} Halten bedient',
   'traffic.flowing': 'fließend',
   'traffic.slow': 'zäh',
   'traffic.jammed': 'Stau',
@@ -735,6 +747,18 @@ const de: Record<TranslationKey, string> = {
   'tool.power-line': 'Stromleitung',
   'tool.bus-stop': 'Haltestelle',
   'tool.rail': 'Gleis',
+  'tool.bike-lane': 'Radweg',
+  'tool.pedestrian': 'Fußgängerzone',
+  'tool.bike-lane.desc':
+    'Markiere einen Radweg auf bestehenden Straßen. Pendler mit einer Radwegroute von höchstens {bike} Kacheln zwischen Wohnung und Arbeit fahren Rad und lassen das Auto stehen.',
+  'tool.pedestrian.desc':
+    'Sperre eine bestehende Straße für Autos, Lieferwagen und Busse; sie fahren außen herum. Zählt als Radroute, und wer ohnehin binnen {walk} Kacheln zur Arbeit wohnt, geht zu Fuß. Nicht auf Haltestellen, Brücken, Bahnübergängen oder Überführungsrampen.',
+  'inspect.roadLane': 'Spur',
+  'inspect.roadLane.bike': 'Radweg',
+  'inspect.roadLane.pedestrian': 'Fußgängerzone – für Kraftverkehr gesperrt',
+  'help.cycling.title': 'Rad und Fuß',
+  'help.cycling.body':
+    'Kurze Autofahrten sind die vermeidbarste Last in deinem Netz. Wer binnen vier Straßenkacheln von der Arbeit wohnt, geht zu Fuß, egal was du baust. Markiere Radwege auf bestehenden Straßen und Alleen: Pendler, deren Wohnung und Arbeitsplatz eine Radwegroute von höchstens zwanzig Kacheln verbindet, fahren Rad statt Auto. Eine Fußgängerzone zählt als Radroute und ist für Autos, Lieferwagen und Busse gesperrt, die außen herum fahren – deshalb verträgt sie keine Haltestelle, Brücke, keinen Bahnübergang und keine Überführungsrampe, und ein Laden dort wird von der Nachbarstraße beliefert. Jeder Fußgänger oder Radler ist ein Auto, das den ganzen Tag steht und abends nicht lädt – und genau daher kommt die Abendladespitze.',
   'tool.overpass': 'Überführung',
   'tool.zone-residential': 'Wohngebiet',
   'tool.zone-commercial': 'Gewerbe',

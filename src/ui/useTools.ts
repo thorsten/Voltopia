@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { GameRenderer, PickedTile, RendererCallbacks } from '../render/renderer.ts';
 import { lShapedPath, rectTiles } from '../shared/grid.ts';
 import { BALANCE } from '../shared/constants.ts';
-import { PlantType, Terrain, Zone } from '../shared/types.ts';
+import { PlantType, RoadLane, Terrain, Zone } from '../shared/types.ts';
 import { sound } from './sound.ts';
 import type { SimCommand } from '../shared/messages.ts';
 import type { SimBridge } from './useSimBridge.ts';
@@ -14,6 +14,8 @@ export type ToolId =
   | 'power-line'
   | 'bus-stop'
   | 'overpass'
+  | 'bike-lane'
+  | 'pedestrian'
   | 'rail'
   | 'zone-residential'
   | 'zone-commercial'
@@ -118,6 +120,10 @@ export function lineToolCommand(tool: ToolId, path: number[]): SimCommand | null
       return { type: 'buildRail', tiles: path };
     case 'overpass':
       return { type: 'buildOverpass', tiles: path };
+    case 'bike-lane':
+      return { type: 'buildLanes', tiles: path, kind: RoadLane.Bike };
+    case 'pedestrian':
+      return { type: 'buildLanes', tiles: path, kind: RoadLane.Pedestrian };
     default:
       return null;
   }
@@ -213,9 +219,21 @@ export function useTools(
       stop: boolean,
       rail: boolean,
       overpass: boolean,
+      lane: RoadLane,
     ): void => {
       const renderer = rendererRef.current;
       const cost = tiles.reduce((sum, index) => {
+        if (lane !== RoadLane.None) {
+          // Mirrors src/sim/lanes.ts: one price per road tile that does not carry the kind yet.
+          const existing = renderer?.roadLaneAt(index) ?? -1; // -1 no road
+          if (existing < 0 || existing === lane) return sum;
+          return (
+            sum +
+            (lane === RoadLane.Bike
+              ? BALANCE.costs.bikeLanePerTile
+              : BALANCE.costs.pedestrianPerTile)
+          );
+        }
         if (overpass) {
           // Mirrors src/sim/overpass.ts: one price per level crossing without an overpass.
           const crossing =
@@ -306,6 +324,8 @@ export function useTools(
       tool === 'power-line' ||
       tool === 'bus-stop' ||
       tool === 'overpass' ||
+      tool === 'bike-lane' ||
+      tool === 'pedestrian' ||
       tool === 'rail'
     ) {
       const line = tool === 'power-line';
@@ -313,18 +333,24 @@ export function useTools(
       const stop = tool === 'bus-stop';
       const rail = tool === 'rail';
       const overpass = tool === 'overpass';
+      const lane =
+        tool === 'bike-lane'
+          ? RoadLane.Bike
+          : tool === 'pedestrian'
+            ? RoadLane.Pedestrian
+            : RoadLane.None;
       if (stop) renderer?.setHoverRadius(BALANCE.transit.stopRadius);
       callbacks.onBuildStart = (tile) => {
         anchor = tile;
         path = [tile.index];
         rendererRef.current?.setPreviewTiles(path);
-        showPathCost(path, line, avenue, stop, rail, overpass);
+        showPathCost(path, line, avenue, stop, rail, overpass, lane);
       };
       callbacks.onBuildDrag = (tile) => {
         if (!anchor) return;
         path = lShapedPath(anchor.x, anchor.y, tile.x, tile.y, gridSize);
         rendererRef.current?.setPreviewTiles(path);
-        showPathCost(path, line, avenue, stop, rail, overpass);
+        showPathCost(path, line, avenue, stop, rail, overpass, lane);
       };
       callbacks.onBuildEnd = (tile) => {
         if (anchor && tile) {

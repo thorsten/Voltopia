@@ -12,6 +12,7 @@ import {
   MAX_DELIVERY_AGE,
   PlantType,
   RoadClass,
+  RoadLane,
   StopState,
   SupplyStatus,
   Terrain,
@@ -457,6 +458,16 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
             label={t('inspect.roadClass')}
             value={info.roadClass === RoadClass.Avenue ? t('inspect.avenue') : t('inspect.street')}
           />
+          {info.roadLane !== RoadLane.None && (
+            <Row
+              label={t('inspect.roadLane')}
+              value={
+                info.roadLane === RoadLane.Bike
+                  ? t('inspect.roadLane.bike')
+                  : t('inspect.roadLane.pedestrian')
+              }
+            />
+          )}
           <Row
             label={t('inspect.trafficLoad')}
             value={`${Math.round((info.trafficLoad / 255) * 100)}%`}

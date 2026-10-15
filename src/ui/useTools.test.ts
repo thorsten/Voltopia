@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PlantType, Terrain } from '../shared/types.ts';
+import { PlantType, RoadLane, Terrain } from '../shared/types.ts';
 import {
   bridgeTileCount,
   lineToolCommand,
@@ -62,6 +62,19 @@ describe('tool hotkeys', () => {
 });
 
 describe('line tool commands', () => {
+  it('the lane tools send buildLanes with their kind', () => {
+    expect(lineToolCommand('bike-lane', [1, 2])).toEqual({
+      type: 'buildLanes',
+      tiles: [1, 2],
+      kind: RoadLane.Bike,
+    });
+    expect(lineToolCommand('pedestrian', [3])).toEqual({
+      type: 'buildLanes',
+      tiles: [3],
+      kind: RoadLane.Pedestrian,
+    });
+  });
+
   it('the overpass tool sends buildOverpass for the clicked tile', () => {
     expect(lineToolCommand('overpass', [42])).toEqual({ type: 'buildOverpass', tiles: [42] });
   });
@@ -96,7 +109,14 @@ describe('bridge tile count', () => {
   });
 
   it('is zero for tools that build no bridges', () => {
-    for (const tool of ['power-line', 'bus-stop', 'overpass', 'zone-residential'] as const) {
+    for (const tool of [
+      'power-line',
+      'bus-stop',
+      'overpass',
+      'bike-lane',
+      'pedestrian',
+      'zone-residential',
+    ] as const) {
       expect(bridgeTileCount(tool, [2, 3], terrainAt)).toBe(0);
     }
   });
