@@ -65,7 +65,7 @@ const en = {
   'inspect.roadLane.pedestrian': 'Pedestrian street — closed to motor traffic',
   'help.cycling.title': 'Cycling and walking',
   'help.cycling.body':
-    'Short car trips are the most avoidable load on your grid. A commuter who lives within four road tiles of work walks whatever you build. Paint Bike lanes on existing streets and avenues: a commuter whose home and workplace are joined by a lane route of at most twenty tiles cycles instead of driving. A Pedestrian street counts as a bike route and is closed to cars, vans and buses, which drive around it — so it cannot carry a bus stop, a bridge, a level crossing or an overpass ramp, and a shop on it is stocked from a neighbouring street. Every walker or cyclist is a car that stays parked all day and never plugs in at dusk, which is where the evening charging peak comes from.',
+    'Short car trips are the most avoidable load on your grid. A commuter who lives within four road tiles of work walks whatever you build. Paint Bike lanes on existing streets and avenues: a commuter whose home and workplace are joined by a lane route of at most twenty tiles cycles instead of driving. A Pedestrian street counts as a bike route and is closed to cars, vans and buses, which drive around it — so it cannot carry a bus stop, a bridge, a level crossing or an overpass ramp, and a shop on it is stocked only if a neighbouring motor street also touches it. Every walker or cyclist is a car that stays parked all day and never plugs in at dusk, which is where the evening charging peak comes from.',
   'tool.overpass': 'Overpass',
   'tool.zone-residential': 'Residential',
   'tool.zone-commercial': 'Commercial',
@@ -502,7 +502,8 @@ const en = {
   'goal.wellStocked.title': 'Well stocked',
   'goal.wellStocked.body': 'A whole day with 95% of shops supplied (20+ shops).',
   'goal.modalShift.title': 'Modal shift',
-  'goal.modalShift.body': 'A whole day with 30% of commuters on the bus (300+ residents).',
+  'goal.modalShift.body':
+    'A whole day with 30% of commuters leaving the car at home (bus, train, foot or bike) (300+ residents).',
   'goal.stormProof.title': 'Storm-proof',
   'goal.stormProof.body': 'Ride out a whole storm without a single undersupplied tick.',
   'goal.warmWinter.title': 'Warm winter',
@@ -764,7 +765,7 @@ const de: Record<TranslationKey, string> = {
   'inspect.roadLane.pedestrian': 'Fußgängerzone – für Kraftverkehr gesperrt',
   'help.cycling.title': 'Rad und Fuß',
   'help.cycling.body':
-    'Kurze Autofahrten sind die vermeidbarste Last in deinem Netz. Wer binnen vier Straßenkacheln von der Arbeit wohnt, geht zu Fuß, egal was du baust. Markiere Radwege auf bestehenden Straßen und Alleen: Pendler, deren Wohnung und Arbeitsplatz eine Radwegroute von höchstens zwanzig Kacheln verbindet, fahren Rad statt Auto. Eine Fußgängerzone zählt als Radroute und ist für Autos, Lieferwagen und Busse gesperrt, die außen herum fahren – deshalb verträgt sie keine Haltestelle, Brücke, keinen Bahnübergang und keine Überführungsrampe, und ein Laden dort wird von der Nachbarstraße beliefert. Jeder Fußgänger oder Radler ist ein Auto, das den ganzen Tag steht und abends nicht lädt – und genau daher kommt die Abendladespitze.',
+    'Kurze Autofahrten sind die vermeidbarste Last in deinem Netz. Wer binnen vier Straßenkacheln von der Arbeit wohnt, geht zu Fuß, egal was du baust. Markiere Radwege auf bestehenden Straßen und Alleen: Pendler, deren Wohnung und Arbeitsplatz eine Radwegroute von höchstens zwanzig Kacheln verbindet, fahren Rad statt Auto. Eine Fußgängerzone zählt als Radroute und ist für Autos, Lieferwagen und Busse gesperrt, die außen herum fahren – deshalb verträgt sie keine Haltestelle, Brücke, keinen Bahnübergang und keine Überführungsrampe, und ein Laden dort wird nur beliefert, wenn auch eine benachbarte Straße für Kraftverkehr an ihn grenzt. Jeder Fußgänger oder Radler ist ein Auto, das den ganzen Tag steht und abends nicht lädt – und genau daher kommt die Abendladespitze.',
   'tool.overpass': 'Überführung',
   'tool.zone-residential': 'Wohngebiet',
   'tool.zone-commercial': 'Gewerbe',
@@ -1206,7 +1207,8 @@ const de: Record<TranslationKey, string> = {
   'goal.wellStocked.title': 'Gut versorgt',
   'goal.wellStocked.body': 'Einen ganzen Tag lang 95 % der Läden beliefert (ab 20 Läden).',
   'goal.modalShift.title': 'Verkehrswende',
-  'goal.modalShift.body': 'Einen ganzen Tag lang 30 % der Pendler im Bus (ab 300 Einwohnern).',
+  'goal.modalShift.body':
+    'Einen ganzen Tag lang lassen 30 % der Pendler das Auto zu Hause (Bus, Bahn, zu Fuß oder Rad) (ab 300 Einwohnern).',
   'goal.stormProof.title': 'Sturmfest',
   'goal.stormProof.body': 'Überstehe einen ganzen Sturm ohne einen einzigen unterversorgten Tick.',
   'goal.warmWinter.title': 'Warmer Winter',

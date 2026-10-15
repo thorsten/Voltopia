@@ -331,7 +331,8 @@ feature set real play goals.
 - **Cycling and walking** (done): bike lanes and pedestrian streets
   (a road lane kind) replace short car trips. A commuter walks when
   home and work are at most 4 tiles apart and cycles up to 20 tiles
-  when a connected bike lane or pedestrian street covers both ends;
+  when bike lanes or pedestrian streets cover the tiles between home
+  and work (the end tiles need none);
   riders leave the car parked, so they draw no charging load. Probe
   (48x48 grid, seed 3, bike lanes on every road, 12 days with the
   last 6 measured): active share 0.32 with lanes versus 0.004

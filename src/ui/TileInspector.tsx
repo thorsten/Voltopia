@@ -468,15 +468,27 @@ export function TileInspector({ info, onClose }: { info: TileInfo; onClose: () =
               }
             />
           )}
-          <Row
-            label={t('inspect.trafficLoad')}
-            value={`${Math.round((info.trafficLoad / 255) * 100)}%`}
-            tone={
-              info.trafficLoad > 191 ? 'negative' : info.trafficLoad > 95 ? undefined : 'positive'
-            }
-            testId="inspect-traffic-load"
-          />
-          <Row label={t('inspect.laneCapacity')} value={String(info.laneCapacity)} tone="muted" />
+          {info.roadLane !== RoadLane.Pedestrian && (
+            <>
+              <Row
+                label={t('inspect.trafficLoad')}
+                value={`${Math.round((info.trafficLoad / 255) * 100)}%`}
+                tone={
+                  info.trafficLoad > 191
+                    ? 'negative'
+                    : info.trafficLoad > 95
+                      ? undefined
+                      : 'positive'
+                }
+                testId="inspect-traffic-load"
+              />
+              <Row
+                label={t('inspect.laneCapacity')}
+                value={String(info.laneCapacity)}
+                tone="muted"
+              />
+            </>
+          )}
         </section>
       )}
 
