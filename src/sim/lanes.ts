@@ -11,6 +11,7 @@ import {
   type UndoEntry,
 } from './state.ts';
 import { isOverpassRamp } from './overpass.ts';
+import { distances, isAnyRoad } from './routing.ts';
 
 /** Price of putting `kind` on one road tile (None is free). */
 export function lanePrice(kind: RoadLane): number {
@@ -68,4 +69,27 @@ export function buildLanes(state: SimState, tiles: number[], kind: RoadLane): Bu
   }
   state.undoStack.push(undo);
   return {};
+}
+
+const unit = () => 1;
+
+/** Home and work at most `walkTiles` road tiles apart (any road; pavements need no lane). */
+export function canWalk(state: SimState, homeRoad: number, workRoad: number): boolean {
+  if (homeRoad < 0 || workRoad < 0) return false;
+  return distances(state, homeRoad, isAnyRoad(state), unit, BALANCE.cycling.walkTiles).has(
+    workRoad,
+  );
+}
+
+/**
+ * A route of at most `bikeTiles` from home to work whose inner tiles all
+ * carry a bike lane or are pedestrian streets. The end tiles need none.
+ */
+export function canCycle(state: SimState, homeRoad: number, workRoad: number): boolean {
+  if (homeRoad < 0 || workRoad < 0) return false;
+  const { tileType, roadLane } = state.layers;
+  const bikeFriendly = (tile: number): boolean =>
+    tileType[tile] === TileType.Road &&
+    (tile === homeRoad || tile === workRoad || roadLane[tile] !== RoadLane.None);
+  return distances(state, homeRoad, bikeFriendly, unit, BALANCE.cycling.bikeTiles).has(workRoad);
 }

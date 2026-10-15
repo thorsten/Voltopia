@@ -378,6 +378,8 @@ describe('goals', () => {
         depots: 1,
         busRiders: 30,
         railRiders: 0,
+        walkRiders: 0,
+        bikeRiders: 0,
         commuters: 100,
       };
       for (let t = 0; t < TICKS_PER_DAY - 1; t++) goalsStep(state);
@@ -397,6 +399,8 @@ describe('goals', () => {
         depots: 1,
         busRiders: 30,
         railRiders: 0,
+        walkRiders: 0,
+        bikeRiders: 0,
         commuters: 100,
       };
       for (let t = 0; t < 50; t++) goalsStep(state);
@@ -419,6 +423,8 @@ describe('goals', () => {
         riders: 100,
         busRiders: 10,
         railRiders: 90,
+        walkRiders: 0,
+        bikeRiders: 0,
         commuters: 200,
         driving: 1,
         stops: 0,

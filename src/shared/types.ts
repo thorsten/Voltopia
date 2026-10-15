@@ -424,6 +424,8 @@ export interface TransitStats {
   /** Today's riders by mode (sum = riders). */
   busRiders: number;
   railRiders: number;
+  walkRiders: number;
+  bikeRiders: number;
   /** Commuters with a workplace. */
   commuters: number;
   /** Buses on the road. */

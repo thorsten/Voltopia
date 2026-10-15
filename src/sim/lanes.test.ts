@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { RoadLane, Terrain } from '../shared/types.ts';
-import { buildLanes } from './lanes.ts';
+import { buildLanes, canCycle, canWalk } from './lanes.ts';
 import { buildOverpasses } from './overpass.ts';
 import { buildRail } from './rail.ts';
 import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
@@ -110,5 +110,43 @@ describe('buildLanes', () => {
     expect(state.layers.roadLane[at(2, 8)]).toBe(RoadLane.None);
     undoLastAction(state);
     expect(state.layers.roadLane[at(2, 8)]).toBe(RoadLane.Pedestrian);
+  });
+});
+
+describe('trip rules', () => {
+  it('walks when home and work lie within walkTiles over any road', () => {
+    const state = town(); // street x=2..11 at y=8
+    const w = BALANCE.cycling.walkTiles;
+    expect(canWalk(state, at(2, 8), at(2 + w, 8))).toBe(true);
+    expect(canWalk(state, at(2, 8), at(3 + w, 8))).toBe(false);
+    // A pedestrian street is walkable.
+    buildLanes(state, [at(3, 8)], RoadLane.Pedestrian);
+    expect(canWalk(state, at(2, 8), at(2 + w, 8))).toBe(true);
+  });
+
+  it('cycles only along bike lanes or pedestrian streets, within bikeTiles', () => {
+    const state = town();
+    expect(canCycle(state, at(2, 8), at(9, 8))).toBe(false);
+    buildLanes(state, [at(3, 8), at(4, 8), at(5, 8), at(6, 8), at(7, 8), at(8, 8)], RoadLane.Bike);
+    // Home and work tiles themselves need no lane.
+    expect(canCycle(state, at(2, 8), at(9, 8))).toBe(true);
+    // One gap breaks the route.
+    buildLanes(state, [at(5, 8)], RoadLane.None);
+    expect(canCycle(state, at(2, 8), at(9, 8))).toBe(false);
+    buildLanes(state, [at(5, 8)], RoadLane.Pedestrian);
+    expect(canCycle(state, at(2, 8), at(9, 8))).toBe(true);
+  });
+
+  it('respects the bikeTiles bound even on a fully laned road', () => {
+    const state = createSimState(1, 40);
+    state.layers.elevation.fill(0);
+    state.layers.terrain.fill(Terrain.Land);
+    state.money = 1e6;
+    const n = BALANCE.cycling.bikeTiles + 3;
+    const row = Array.from({ length: n }, (_, x) => tileIndex(x + 1, 5, 40));
+    buildRoads(state, row);
+    buildLanes(state, row, RoadLane.Bike);
+    expect(canCycle(state, row[0], row[BALANCE.cycling.bikeTiles])).toBe(true);
+    expect(canCycle(state, row[0], row[BALANCE.cycling.bikeTiles + 1])).toBe(false);
   });
 });

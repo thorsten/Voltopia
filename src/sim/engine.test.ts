@@ -238,6 +238,8 @@ describe('SimEngine basics', () => {
       riders: 0,
       busRiders: 0,
       railRiders: 0,
+      walkRiders: 0,
+      bikeRiders: 0,
       commuters: 0,
       driving: 0,
       stops: 0,

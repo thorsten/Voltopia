@@ -404,6 +404,8 @@ export function transitStats(state: SimState): TransitStats {
   let riders = 0;
   let busRiders = 0;
   let railRiders = 0;
+  let walkRiders = 0;
+  let bikeRiders = 0;
   let commuters = 0;
   for (const vehicle of state.vehicles) {
     if (vehicle.workRoad < 0) continue;
@@ -411,6 +413,8 @@ export function transitStats(state: SimState): TransitStats {
     if (!isRider(state, vehicle)) continue;
     riders++;
     if (vehicle.riderMode === 'rail') railRiders++;
+    else if (vehicle.riderMode === 'walk') walkRiders++;
+    else if (vehicle.riderMode === 'bike') bikeRiders++;
     else busRiders++;
   }
   return {
@@ -418,6 +422,8 @@ export function transitStats(state: SimState): TransitStats {
     riders,
     busRiders,
     railRiders,
+    walkRiders,
+    bikeRiders,
     commuters,
     driving: drivingBusCount(state),
     stops,

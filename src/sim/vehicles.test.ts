@@ -1159,3 +1159,79 @@ describe('pedestrian streets', () => {
     expect(stranded.length).toBeGreaterThan(0);
   });
 });
+
+describe('walking and cycling', () => {
+  it('a commuter on a laned street cycles, stays parked and does not charge', () => {
+    const state = commuterTown(7, 200);
+    // Lane the whole street: every home-to-work route runs over lanes.
+    buildLanes(
+      state,
+      Array.from({ length: 16 }, (_, x) => at(x + 3, 10)),
+      RoadLane.Bike,
+    );
+    setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    // Cars start part-charged and top up at home; fill them so any
+    // charging load later could only come from driving.
+    for (const v of state.vehicles) v.charge = 1;
+    runHours(state, 4);
+    expect(drivingVehicles(state)).toHaveLength(0);
+    expect(state.vehicles.every((v) => isRider(state, v))).toBe(true);
+    expect(
+      state.vehicles.filter((v) => v.riderMode === 'bike' || v.riderMode === 'walk'),
+    ).toHaveLength(state.vehicles.length);
+    const stats = transitStats(state);
+    expect(stats.bikeRiders + stats.walkRiders).toBe(stats.commuters);
+    expect(stats.riderShare).toBe(1);
+    // Evening: nobody plugs in.
+    setHour(state, 20);
+    runHours(state, 2);
+    expect(chargingDemand(state)).toBe(0);
+  });
+
+  it('walking wins over the bus, cycling over the train', () => {
+    const state = commuterTown(7, 200);
+    for (let i = 0; i < state.layers.tileType.length; i++) {
+      state.layers.transitCover[i] = state.layers.tileType[i] === TileType.Road ? 1 : 0;
+    }
+    buildLanes(
+      state,
+      Array.from({ length: 16 }, (_, x) => at(x + 3, 10)),
+      RoadLane.Bike,
+    );
+    setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    runHours(state, 4);
+    expect(state.vehicles.some((v) => v.riderMode === 'bus')).toBe(false);
+  });
+
+  it('a short plain-road route does not make a cyclist; lanes decide', () => {
+    const state = commuterTown(7, 200);
+    setHour(state, BALANCE.vehicles.commute.morningStartHour);
+    stepVehicles(state);
+    runHours(state, 4);
+    // Homes x=3.., jobs x=15..: well over walkTiles apart, no lanes → everyone drives.
+    expect(state.vehicles.some((v) => v.riderMode === 'bike' && isRider(state, v))).toBe(false);
+    expect(
+      drivingVehicles(state).length +
+        state.vehicles.filter((v) => v.phase === VehiclePhase.ParkedWork).length,
+    ).toBe(state.vehicles.length);
+  });
+
+  it('is deterministic with lanes', () => {
+    const run = () => {
+      const state = commuterTown(9, 200);
+      buildLanes(
+        state,
+        Array.from({ length: 8 }, (_, x) => at(x + 7, 10)),
+        RoadLane.Bike,
+      );
+      setHour(state, BALANCE.vehicles.commute.morningStartHour);
+      runHours(state, 30);
+      return state.vehicles
+        .map((v) => `${v.riderMode}:${v.riderDay}:${v.phase}:${v.charge.toFixed(4)}`)
+        .join('|');
+    };
+    expect(run()).toBe(run());
+  });
+});

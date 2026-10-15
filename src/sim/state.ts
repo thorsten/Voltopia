@@ -93,7 +93,7 @@ export interface Vehicle {
   /** Day of the last decision to ride the bus instead of driving; -1 = drives. Not persisted. */
   riderDay: number;
   /** How the rider travels today ('bus' when both apply). Meaningless while riderDay < 0. Not persisted. */
-  riderMode: 'bus' | 'rail';
+  riderMode: 'walk' | 'bike' | 'bus' | 'rail';
 }
 
 /** Tour phases of a delivery van. */
@@ -736,6 +736,8 @@ export function createSimState(
       riders: 0,
       busRiders: 0,
       railRiders: 0,
+      walkRiders: 0,
+      bikeRiders: 0,
       commuters: 0,
       driving: 0,
       stops: 0,

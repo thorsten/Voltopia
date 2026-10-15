@@ -4,6 +4,7 @@ import { PlantType, RoadClass, RoadLane, Zone } from '../shared/types.ts';
 import { closedCrossings } from './crossings.ts';
 import { recomputeGrid } from './powerGrid.ts';
 import { plantNetwork } from './rail.ts';
+import { canCycle, canWalk } from './lanes.ts';
 import { findRoadPath, isMotorRoad } from './routing.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
@@ -385,11 +386,16 @@ export function vehiclesStep(state: SimState): Map<number, number> {
           const day = Math.floor(state.tick / TICKS_PER_DAY);
           // Decided to ride today: the car stays parked all day.
           if (vehicle.riderDay === day) break;
+          const walk = canWalk(state, vehicle.homeRoad, vehicle.workRoad);
+          const bike = !walk && canCycle(state, vehicle.homeRoad, vehicle.workRoad);
           const busRide =
-            transitCover[vehicle.homeRoad] === 1 && transitCover[vehicle.workRoad] === 1;
-          if (busRide || ridesRail(state, vehicle.homeRoad, vehicle.workRoad)) {
+            !walk &&
+            !bike &&
+            transitCover[vehicle.homeRoad] === 1 &&
+            transitCover[vehicle.workRoad] === 1;
+          if (walk || bike || busRide || ridesRail(state, vehicle.homeRoad, vehicle.workRoad)) {
             vehicle.riderDay = day;
-            vehicle.riderMode = busRide ? 'bus' : 'rail';
+            vehicle.riderMode = walk ? 'walk' : bike ? 'bike' : busRide ? 'bus' : 'rail';
             break;
           }
           const path = findRoadPath(state, vehicle.homeRoad, vehicle.workRoad);
