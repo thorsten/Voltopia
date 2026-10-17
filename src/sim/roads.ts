@@ -85,6 +85,7 @@ export function buildRoads(state: SimState, tiles: number[], avenue = false): Bu
     layers.roadClass[index] = avenue ? RoadClass.Avenue : RoadClass.Street;
     layers.zone[index] = Zone.None;
     layers.density[index] = 0;
+    layers.pvMandated[index] = 0;
     layers.variant[index] = 0;
     layers.buildingAge[index] = 0;
     clearForest(state, index);
@@ -173,6 +174,7 @@ export function bulldozeTiles(state: SimState, tiles: number[]): BuildResult {
     layers.roadClass[index] = RoadClass.Street;
     layers.zone[index] = Zone.None;
     layers.density[index] = 0;
+    layers.pvMandated[index] = 0;
     layers.variant[index] = 0;
     layers.plantType[index] = 0;
     // Whatever a battery, tank or store held goes with the wreck.

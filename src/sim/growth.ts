@@ -3,6 +3,7 @@ import { neighbors4 } from '../shared/grid.ts';
 import { isShopSupplied } from './deliveries.ts';
 import { hasPowerInfrastructure } from './energy.ts';
 import { SERVICE_FIRE } from './services.ts';
+import { onBuildingSpawned } from './policies.ts';
 import type { DemandStats } from '../shared/types.ts';
 import {
   countPopulationAndJobs,
@@ -144,6 +145,7 @@ export function growthStep(state: SimState, demand: DemandStats): void {
       layers.density[index] = 1;
       layers.variant[index] = state.rng.nextInt(BUILDING_VARIANTS);
       layers.buildingAge[index] = 0;
+      onBuildingSpawned(state, index);
       markDirty(state, index);
     } else if (density < 3) {
       if (!canDensify(state, index)) continue;
@@ -205,6 +207,7 @@ export function decayStep(state: SimState): void {
     if (layers.troubledTicks[i] < BALANCE.growth.abandonAfterTicks) continue;
     if (!state.rng.chance(BALANCE.growth.abandonChancePerTick)) continue;
     layers.density[i]--;
+    if (layers.density[i] === 0) layers.pvMandated[i] = 0;
     layers.buildingAge[i] = 0;
     layers.troubledTicks[i] = 0;
     markDirty(state, i);

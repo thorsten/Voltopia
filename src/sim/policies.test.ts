@@ -3,9 +3,11 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { Zone } from '../shared/types.ts';
 import { happinessStep } from './happiness.ts';
-import { policiesStep, policyDailyCost, policyHappiness } from './policies.ts';
+import { policiesStep, policyDailyCost, policyHappiness, rooftopPeakAt } from './policies.ts';
+import { growthStep, computeDemand } from './growth.ts';
+import { bulldozeTiles } from './roads.ts';
 import { buildRoads } from './roads.ts';
-import { createSimState, deserializeState, serializeState } from './state.ts';
+import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
 import { buildStats } from './tick.ts';
 import { paintZones } from './zones.ts';
 
@@ -80,5 +82,71 @@ describe('policies registry', () => {
     const loaded = deserializeState(save);
     expect(loaded.policies.speedLimit).toBe(true);
     expect('bogus' in loaded.policies).toBe(false);
+  });
+});
+
+describe('rooftop-PV mandate', () => {
+  /** A zoned, road-adjacent tile that growth will fill; demand forced high. */
+  function readyState(): { state: SimState; tile: number } {
+    const state = createSimState(3, SIZE);
+    state.happiness = 1;
+    buildRoads(state, [at(2, 5), at(3, 5), at(4, 5)]);
+    paintZones(state, [at(3, 4)], Zone.Residential);
+    return { state, tile: at(3, 4) };
+  }
+  function growUntil(state: SimState, tile: number): void {
+    for (let i = 0; i < 2000 && state.layers.density[tile] === 0; i++) {
+      growthStep(state, { ...computeDemand(state), residential: 1 });
+    }
+    expect(state.layers.density[tile]).toBe(1);
+  }
+
+  it('a building that spawns under the mandate gets the bit, PV and a subsidy', () => {
+    const { state, tile } = readyState();
+    state.policies.rooftopPvMandate = true;
+    growUntil(state, tile);
+    expect(state.layers.pvMandated[tile]).toBe(1);
+    expect(rooftopPeakAt(state, tile)).toBe(BALANCE.policies.rooftopPvMandate.mandatePeakDensity1);
+    expect(state.lastPolicySubsidy).toBe(BALANCE.policies.rooftopPvMandate.subsidyPerBuilding);
+    policiesStep(state);
+    expect(state.lastPolicySubsidy).toBe(0);
+  });
+
+  it('a building that spawned without the mandate has no PV at density 1 and is not retro-fitted', () => {
+    const { state, tile } = readyState();
+    growUntil(state, tile);
+    expect(state.layers.pvMandated[tile]).toBe(0);
+    expect(rooftopPeakAt(state, tile)).toBe(BALANCE.energy.rooftopSolarPeakByDensity[1]);
+    state.policies.rooftopPvMandate = true;
+    expect(rooftopPeakAt(state, tile)).toBe(BALANCE.energy.rooftopSolarPeakByDensity[1]);
+  });
+
+  it('keeps the panels when the mandate is switched off, and the density table wins from density 2', () => {
+    const { state, tile } = readyState();
+    state.policies.rooftopPvMandate = true;
+    growUntil(state, tile);
+    state.policies.rooftopPvMandate = false;
+    expect(rooftopPeakAt(state, tile)).toBe(BALANCE.policies.rooftopPvMandate.mandatePeakDensity1);
+    state.layers.density[tile] = 2;
+    expect(rooftopPeakAt(state, tile)).toBe(BALANCE.energy.rooftopSolarPeakByDensity[2]);
+  });
+
+  it('bulldozing clears the bit', () => {
+    const { state, tile } = readyState();
+    state.policies.rooftopPvMandate = true;
+    growUntil(state, tile);
+    state.money = 1_000_000;
+    bulldozeTiles(state, [tile]);
+    expect(state.layers.pvMandated[tile]).toBe(0);
+  });
+
+  it('the bit survives a save round trip and is absent in old saves', () => {
+    const { state, tile } = readyState();
+    state.policies.rooftopPvMandate = true;
+    growUntil(state, tile);
+    const save = serializeState(state);
+    expect(deserializeState(save).layers.pvMandated[tile]).toBe(1);
+    delete save.layers.pvMandated;
+    expect(deserializeState(save).layers.pvMandated[tile]).toBe(0);
   });
 });

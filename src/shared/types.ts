@@ -1076,5 +1076,7 @@ export interface SaveGame {
     reservoirHeat?: ArrayBuffer;
     /** Damage layer; absent in saves from before disasters (all intact). */
     damage?: ArrayBuffer;
+    /** Buildings built under the rooftop-PV mandate (absent in older saves). */
+    pvMandated?: ArrayBuffer;
   };
 }

@@ -54,3 +54,20 @@ export function policiesStep(state: SimState): void {
   state.lastPolicySubsidy = 0;
   if (spent > 0) state.statsDirty = true;
 }
+
+/** Rooftop PV peak of the building on `index`: density table, or the mandate's density-1 panels. */
+export function rooftopPeakAt(state: SimState, index: number): number {
+  const density = state.layers.density[index];
+  const table = BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0;
+  if (density === 1 && state.layers.pvMandated[index] === 1) {
+    return Math.max(table, BALANCE.policies.rooftopPvMandate.mandatePeakDensity1);
+  }
+  return table;
+}
+
+/** Growth calls this when a building spawns (density 0 to 1). */
+export function onBuildingSpawned(state: SimState, index: number): void {
+  if (!state.policies.rooftopPvMandate) return;
+  state.layers.pvMandated[index] = 1;
+  state.lastPolicySubsidy += BALANCE.policies.rooftopPvMandate.subsidyPerBuilding;
+}

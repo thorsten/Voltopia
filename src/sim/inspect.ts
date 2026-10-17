@@ -33,6 +33,7 @@ import {
 import { FULL_HEAT, fieldAt } from './geothermal.ts';
 import { demandFor, energySystemActive, hasRoadAccess } from './growth.ts';
 import { heatPumpCop, plantReach } from './heat.ts';
+import { rooftopPeakAt } from './policies.ts';
 import { isSupplySource, islandKey, islandOf, isTiedToGrid } from './powerGrid.ts';
 import {
   hasRail,
@@ -240,7 +241,7 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
       ? BALANCE.services.stationConsumption
       : 0;
 
-  const rooftopPeak = isBuilding ? (BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0) : 0;
+  const rooftopPeak = isBuilding ? rooftopPeakAt(state, index) : 0;
   const rooftop = connected ? rooftopPeak * currentSolarFactor(state) : 0;
   const plantOutput =
     tileType === TileType.Plant ? plantGeneration(state, plant, index) : { generation: 0, peak: 0 };

@@ -6,6 +6,7 @@ import { IDLE_HEAT, nightNeedsHeat, type HeatTickResult } from './heat.ts';
 import { balanceIsland, type IslandResult } from './islandBalance.ts';
 import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { poolForIsland, syncIslandPools } from './islandPools.ts';
+import { rooftopPeakAt } from './policies.ts';
 import { meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -431,7 +432,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
     if (layers.heated[i] === HEATED_SERVED) servedHeat[n] += heating;
     else heatingDemand[n] += heating;
     coolingDemand[n] += coolingConsumption(zone, density, temperature, state.insulation);
-    rooftop[n] += (BALANCE.energy.rooftopSolarPeakByDensity[density] ?? 0) * solarFactorNow;
+    rooftop[n] += rooftopPeakAt(state, i) * solarFactorNow;
   }
 
   // Supply plants: flag the ones that serve nothing (icon + overlay).

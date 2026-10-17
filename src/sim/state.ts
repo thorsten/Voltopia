@@ -255,6 +255,8 @@ export interface TileLayers {
   roadLane: Uint8Array;
   zone: Uint8Array;
   density: Uint8Array;
+  /** 1 = building spawned under the rooftop-PV mandate (has density-1 panels). Persisted. */
+  pvMandated: Uint8Array;
   variant: Uint8Array;
   supplied: Uint8Array;
   plantType: Uint8Array;
@@ -642,6 +644,7 @@ export function createTileLayers(size: number): TileLayers {
     roadLane: new Uint8Array(tiles),
     zone: new Uint8Array(tiles),
     density: new Uint8Array(tiles),
+    pvMandated: new Uint8Array(tiles),
     variant: new Uint8Array(tiles),
     supplied: new Uint8Array(tiles),
     plantType: new Uint8Array(tiles),
@@ -1365,6 +1368,7 @@ export function serializeState(state: SimState): SaveGame {
       roadMask: copyBuffer(layers.roadMask),
       zone: copyBuffer(layers.zone),
       density: copyBuffer(layers.density),
+      pvMandated: copyBuffer(layers.pvMandated),
       variant: copyBuffer(layers.variant),
       supplied: copyBuffer(layers.supplied),
       plantType: copyBuffer(layers.plantType),
@@ -1516,6 +1520,7 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.overpass) state.layers.overpass.set(new Uint8Array(save.layers.overpass));
   // Saves from before the ramp fallback store 1 for every overpass.
   refitAllOverpasses(state);
+  if (save.layers.pvMandated) state.layers.pvMandated.set(new Uint8Array(save.layers.pvMandated));
   if (save.layers.damage) state.layers.damage.set(new Uint8Array(save.layers.damage));
   // A save from before disasters keeps its calm: the city only faces them
   // when it was founded with an intensity (see NewGameOptions).
