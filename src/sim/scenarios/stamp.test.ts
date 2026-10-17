@@ -30,7 +30,7 @@ describe('stamp helpers', () => {
       stampZone(state, [at(2, 4), at(3, 4)], Zone.Residential);
       stampBuildings(state, [at(2, 4), at(3, 4)], 2);
       stampPlant(state, at(6, 5), PlantType.SolarFarm);
-      stampLines(state, [at(5, 5), at(6, 5)]);
+      stampLines(state, [at(7, 5), at(8, 5)]);
     });
     expect(state.money).toBe(money);
     expect(state.layers.tileType[at(3, 5)]).toBe(TileType.Road);
@@ -50,11 +50,22 @@ describe('stamp helpers', () => {
     expect(() => stampBuildings(state, [at(2, 4)], 1)).toThrow(ScenarioSetupError);
   });
 
-  it('throws when the underlying build is rejected', () => {
-    // buildRoads silently skips unbuildable tiles; it rejects only on funds.
+  it('throws when a road does not land on sea', () => {
+    const state = flatState();
+    state.layers.terrain[at(1, 1)] = Terrain.Sea;
+    expect(() => stampRoads(state, [at(1, 1)])).toThrow(ScenarioSetupError);
+  });
+
+  it('throws when the underlying build is rejected for funds', () => {
     const state = flatState();
     state.money = 0;
     expect(() => stampRoads(state, [at(1, 1)])).toThrow(ScenarioSetupError);
+  });
+
+  it('throws when a zone does not land on a road', () => {
+    const state = flatState();
+    stampRoads(state, [at(2, 5)]);
+    expect(() => stampZone(state, [at(2, 5)], Zone.Residential)).toThrow(ScenarioSetupError);
   });
 
   it('restores the money even when setup throws', () => {

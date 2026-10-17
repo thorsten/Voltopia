@@ -1,5 +1,5 @@
 import { BALANCE } from '../../shared/constants.ts';
-import { type PlantType, Terrain, TileType, Zone } from '../../shared/types.ts';
+import { type PlantType, RoadClass, Terrain, TileType, Zone } from '../../shared/types.ts';
 import { placePlant } from '../energy.ts';
 import { BUILDING_VARIANTS, hasRoadAccess } from '../growth.ts';
 import { buildPowerLines } from '../powerLines.ts';
@@ -28,20 +28,42 @@ export function withFreeBuild(state: SimState, setup: () => void): void {
   }
 }
 
+/** Throw naming the first tile for which `landed` is false. */
+function verify(tiles: number[], what: string, landed: (index: number) => boolean): void {
+  for (const index of tiles) {
+    if (!landed(index)) throw new ScenarioSetupError(`${what} did not land on tile ${index}`);
+  }
+}
+
 export function stampRoads(state: SimState, tiles: number[], avenue = false): void {
   check(buildRoads(state, tiles, avenue), 'road');
+  const { layers } = state;
+  verify(
+    tiles,
+    'road',
+    (i) =>
+      layers.tileType[i] === TileType.Road && (!avenue || layers.roadClass[i] === RoadClass.Avenue),
+  );
 }
 
 export function stampZone(state: SimState, tiles: number[], zone: Zone): void {
   check(paintZones(state, tiles, zone), 'zone');
+  verify(tiles, 'zone', (i) => state.layers.zone[i] === zone);
 }
 
 export function stampPlant(state: SimState, tile: number, plant: PlantType): void {
   check(placePlant(state, tile, plant), `plant ${plant}`);
+  const { layers } = state;
+  verify(
+    [tile],
+    `plant ${plant}`,
+    (i) => layers.tileType[i] === TileType.Plant && layers.plantType[i] === plant,
+  );
 }
 
 export function stampLines(state: SimState, tiles: number[]): void {
   check(buildPowerLines(state, tiles), 'power line');
+  verify(tiles, 'power line', (i) => state.layers.powerLine[i] !== 0);
 }
 
 /**
