@@ -3,7 +3,15 @@ import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { Zone } from '../shared/types.ts';
 import { happinessStep } from './happiness.ts';
-import { policiesStep, policyDailyCost, policyHappiness, rooftopPeakAt } from './policies.ts';
+import {
+  homeChargingAllowed,
+  householdFlexShare,
+  policiesStep,
+  policyDailyCost,
+  policyHappiness,
+  rooftopPeakAt,
+} from './policies.ts';
+import { ticksAtHour } from './vehicles.ts';
 import { growthStep, computeDemand } from './growth.ts';
 import { bulldozeTiles, undoLastAction } from './roads.ts';
 import { buildRoads } from './roads.ts';
@@ -159,5 +167,38 @@ describe('rooftop-PV mandate', () => {
     expect(deserializeState(save).layers.pvMandated[tile]).toBe(1);
     delete save.layers.pvMandated;
     expect(deserializeState(save).layers.pvMandated[tile]).toBe(0);
+  });
+});
+
+describe('night tariff', () => {
+  it('without the tariff a non-smart car may charge at home any time', () => {
+    const state = createSimState(1, SIZE);
+    expect(homeChargingAllowed(state, false, 0.9, ticksAtHour(12))).toBe(true);
+  });
+
+  it('with the tariff a non-smart car charges at night, or any time below the floor', () => {
+    const state = createSimState(1, SIZE);
+    state.policies.nightTariff = true;
+    expect(homeChargingAllowed(state, false, 0.9, ticksAtHour(12))).toBe(false);
+    expect(homeChargingAllowed(state, false, 0.9, ticksAtHour(23))).toBe(true);
+    expect(homeChargingAllowed(state, false, 0.9, ticksAtHour(3))).toBe(true);
+    expect(homeChargingAllowed(state, false, 0.9, ticksAtHour(6))).toBe(false);
+    const floor = BALANCE.vehicles.smartChargeFloor;
+    expect(homeChargingAllowed(state, false, floor - 0.01, ticksAtHour(12))).toBe(true);
+  });
+
+  it('leaves smart cars to the surplus gate', () => {
+    const state = createSimState(1, SIZE);
+    state.policies.nightTariff = true;
+    expect(homeChargingAllowed(state, true, 0.9, ticksAtHour(12))).toBe(true);
+  });
+
+  it('raises the household flex share', () => {
+    const state = createSimState(1, SIZE);
+    expect(householdFlexShare(state)).toBe(BALANCE.smartMeters.householdFlexShare);
+    state.policies.nightTariff = true;
+    expect(householdFlexShare(state)).toBeCloseTo(
+      BALANCE.smartMeters.householdFlexShare * BALANCE.policies.nightTariff.flexShareFactor,
+    );
   });
 });

@@ -6,6 +6,7 @@ import { recomputeGrid } from './powerGrid.ts';
 import { plantNetwork } from './rail.ts';
 import { canCycle, canWalk } from './lanes.ts';
 import { findRoadPath, isMotorRoad } from './routing.ts';
+import { homeChargingAllowed } from './policies.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
   BusPhase,
@@ -468,7 +469,9 @@ function decideCharging(
 
   if (vehicle.phase === VehiclePhase.ParkedHome) {
     if (island[vehicle.homeRoad] === 0) return -1;
-    if (!isSmartVehicle(state, vehicle.id)) return vehicle.homeRoad;
+    const smart = isSmartVehicle(state, vehicle.id);
+    if (!homeChargingAllowed(state, smart, vehicle.charge, state.tick)) return -1;
+    if (!smart) return vehicle.homeRoad;
     return surplusAvailable || vehicle.charge < BALANCE.vehicles.smartChargeFloor
       ? vehicle.homeRoad
       : -1;

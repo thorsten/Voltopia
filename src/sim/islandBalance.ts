@@ -62,6 +62,8 @@ export interface IslandInput {
   substations: number;
   /** Scenario rule: multiplies the import link (1 in free play, 0 = none). */
   importCapacityFactor: number;
+  /** Share of household load the meters may defer (policy-adjusted). */
+  householdFlexShare: number;
 }
 
 /**
@@ -188,7 +190,8 @@ export function balanceIsland(input: IslandInput, pool: IslandPool): IslandResul
   // every term is 0 and the step is unchanged.
   const unshifted =
     buildingDemand + heatingDemand + coolingDemand + chargingDemand + pumpPower + tractionDemand;
-  const { householdFlexShare, heatingFlexShare, maxDrainShare } = BALANCE.smartMeters;
+  const { heatingFlexShare, maxDrainShare } = BALANCE.smartMeters;
+  const householdFlexShare = input.householdFlexShare;
   const flexible =
     input.coverage * (householdFlexShare * buildingDemand + heatingFlexShare * heatingDemand);
   const inflexible = unshifted - flexible;

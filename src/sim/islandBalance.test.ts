@@ -45,6 +45,7 @@ function input(over: Partial<IslandInput> = {}): IslandInput {
     heatStore: { headroom: 0, pumpPowerLeft: 0, cop: 1, nightNeedsHeat: false },
     substations: 0,
     importCapacityFactor: 1,
+    householdFlexShare: BALANCE.smartMeters.householdFlexShare,
     ...over,
   };
 }
@@ -414,5 +415,16 @@ describe('balanceIsland', () => {
     expect(loaded.consumptionThisTick).toBeCloseTo(quiet.consumptionThisTick + 30);
     // No generation, no biogas, no storage in the factory's defaults: the whole load is a deficit.
     expect(loaded.deficit).toBeCloseTo(quiet.deficit + 30);
+  });
+
+  it('a larger household flex share defers more load without surplus', () => {
+    const base = input({
+      timeOfDay: 0.1,
+      coverage: 1,
+      demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
+    });
+    const small = balanceIsland({ ...base, householdFlexShare: 0.1 }, pool());
+    const large = balanceIsland({ ...base, householdFlexShare: 0.3 }, pool());
+    expect(large.flexDeferred).toBeGreaterThan(small.flexDeferred);
   });
 });

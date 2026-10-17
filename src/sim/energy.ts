@@ -6,7 +6,7 @@ import { IDLE_HEAT, nightNeedsHeat, type HeatTickResult } from './heat.ts';
 import { balanceIsland, type IslandResult } from './islandBalance.ts';
 import { isIsolatedPlant, isolatedPlants, isSupplySource, recomputeGrid } from './powerGrid.ts';
 import { poolForIsland, syncIslandPools } from './islandPools.ts';
-import { rooftopPeakAt } from './policies.ts';
+import { householdFlexShare, rooftopPeakAt } from './policies.ts';
 import { meteredCoverage } from './smartMeters.ts';
 import type { BuildResult } from './roads.ts';
 import { tideFactor, tidalSiteFactor, windTurbineFactor } from './sea.ts';
@@ -527,6 +527,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
         },
         substations: c.substations,
         importCapacityFactor: state.rules.importCapacityFactor,
+        householdFlexShare: householdFlexShare(state),
       },
       poolForIsland(state, n),
     );

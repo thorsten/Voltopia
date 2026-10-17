@@ -71,3 +71,31 @@ export function onBuildingSpawned(state: SimState, index: number): void {
   state.layers.pvMandated[index] = 1;
   state.lastPolicySubsidy += BALANCE.policies.rooftopPvMandate.subsidyPerBuilding;
 }
+
+function hourOfTick(tick: number): number {
+  return ((tick % TICKS_PER_DAY) / TICKS_PER_DAY) * 24;
+}
+
+/**
+ * May a car parked at home plug in now? Smart cars follow the surplus
+ * gate in vehicles.ts regardless; under the night tariff a plain car
+ * waits for the cheap hours unless it is nearly empty.
+ */
+export function homeChargingAllowed(
+  state: SimState,
+  smart: boolean,
+  charge: number,
+  tick: number,
+): boolean {
+  if (smart || !state.policies.nightTariff) return true;
+  if (charge < BALANCE.vehicles.smartChargeFloor) return true;
+  const { nightStartHour, nightEndHour } = BALANCE.policies.nightTariff;
+  const hour = hourOfTick(tick);
+  return hour >= nightStartHour || hour < nightEndHour;
+}
+
+/** Share of household load the smart meters may defer. */
+export function householdFlexShare(state: SimState): number {
+  const base = BALANCE.smartMeters.householdFlexShare;
+  return state.policies.nightTariff ? base * BALANCE.policies.nightTariff.flexShareFactor : base;
+}
