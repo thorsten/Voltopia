@@ -47,6 +47,7 @@ function createHarness(seed = 11): {
   storage: ReturnType<typeof createMemoryStorage>;
   /** Saves `load_save` made the running city, in order. */
   loaded: SaveGame[];
+  startedScenarios: string[];
   call: (name: string, input?: unknown) => Promise<Record<string, unknown>>;
 } {
   const engine = new SimEngine(seed, SIZE);
@@ -64,6 +65,7 @@ function createHarness(seed = 11): {
   const storage = createMemoryStorage(() => clock++);
   const loaded: SaveGame[] = [];
   let nextId = 1;
+  const startedScenarios: string[] = [];
   const ctx: AgentContext = {
     tiles,
     getStats: () => stats,
@@ -100,6 +102,9 @@ function createHarness(seed = 11): {
       },
       newId: () => `save-${nextId++}`,
     }),
+    startScenario(id) {
+      startedScenarios.push(id);
+    },
   };
   const tools = createAgentTools(ctx);
   return {
@@ -109,6 +114,7 @@ function createHarness(seed = 11): {
     newCities,
     storage,
     loaded,
+    startedScenarios,
     call: (name, input = {}) => callTool(tools, name, input) as Promise<Record<string, unknown>>,
   };
 }
@@ -189,6 +195,8 @@ describe('agent tools: reading', () => {
       'load_save',
       'delete_save',
       'start_new_city',
+      'list_scenarios',
+      'start_scenario',
     ]);
     for (const tool of tools) {
       expect(tool.description.length).toBeGreaterThan(20);
@@ -705,6 +713,44 @@ describe('agent tools: building', () => {
       ok: false,
       error: 'invalidInput',
     });
+  });
+
+  it('list_scenarios names every shipped scenario with its conditions', async () => {
+    const { call } = createHarness();
+    const result = (await call('list_scenarios', {})) as {
+      scenarios: { id: string; win: unknown[] }[];
+    };
+    expect(result.scenarios.map((s) => s.id)).toEqual([
+      'island',
+      'dunkelflaute',
+      'oldTown',
+      'stormSeason',
+    ]);
+    expect(result.scenarios[0].win.length).toBeGreaterThan(0);
+  });
+
+  it('start_scenario hands the id to the host and rejects unknown or missing ids', async () => {
+    const { call, startedScenarios } = createHarness();
+    expect(await call('start_scenario', { id: 'island' })).toMatchObject({ ok: true });
+    expect(startedScenarios).toEqual(['island']);
+    expect(await call('start_scenario', { id: 'nope' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+    expect(await call('start_scenario', {})).toMatchObject({ ok: false, error: 'invalidInput' });
+    expect(startedScenarios).toEqual(['island']);
+  });
+
+  it('get_game_overview carries the scenario block when one runs', async () => {
+    const { call, engine, ctx } = createHarness();
+    expect((await call('get_game_overview', {})).scenario).toBeUndefined();
+    engine.applyCommand({ type: 'init', seed: 1, size: 16, scenario: 'island' });
+    await ctx.waitForTick(ctx.getStats()!.tick + 1);
+    const overview = (await call('get_game_overview', {})) as {
+      scenario: { conditions: object[] };
+    };
+    expect(overview.scenario).toMatchObject({ id: 'island', status: 'running', day: 0 });
+    expect(overview.scenario.conditions[0]).toHaveProperty('met');
   });
 
   it('places a logistics depot next to a road and reports deliveries', async () => {

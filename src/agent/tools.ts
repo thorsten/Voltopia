@@ -14,6 +14,7 @@ import {
   DisasterKind,
   PlantType,
   RoadLane,
+  SCENARIO_IDS,
   StopState,
   SupplyStatus,
   Terrain,
@@ -22,12 +23,15 @@ import {
   type DisasterInfo,
   type GlobalStats,
   type LifetimeSample,
+  type ScenarioId,
   type Speed,
   type SaveGame,
   type TileInfo,
 } from '../shared/types.ts';
 import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
 import { dayOfTick, defaultSaveName } from '../storage/summary.ts';
+import '../sim/scenarios/defs/index.ts';
+import { scenarioDefs } from '../sim/scenarios/registry.ts';
 import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
 // Pure data (no localStorage call at import time, no React) — same kind of
 // cross-layer import as ../ui/i18n.tsx above. Reusing it keeps an agent's
@@ -64,6 +68,8 @@ export interface AgentContext {
   requestLifetime(): Promise<LifetimeSample[]>;
   /** Start a brand-new city (the app reloads the page). */
   startNewCity(options: NewCityOptions): void;
+  /** Start a shipped scenario (the app reloads the page). */
+  startScenario(id: ScenarioId): void;
   /** The named saves (the saves page's catalogue). */
   saves: AgentSaves;
 }
@@ -835,6 +841,24 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             title: englishText(`goal.${goal.id}.title` as TranslationKey),
             description: englishText(`goal.${goal.id}.body` as TranslationKey),
           })),
+          ...(s.scenario
+            ? {
+                scenario: {
+                  id: s.scenario.id,
+                  title: englishText(`scenario.${s.scenario.id}.title` as TranslationKey),
+                  status: s.scenario.status,
+                  day: s.scenario.day,
+                  deadlineDays: s.scenario.deadlineDays,
+                  conditions: s.scenario.conditions.map((c) => ({
+                    role: c.role,
+                    name: englishText(c.label as TranslationKey),
+                    met: c.met,
+                    current: round(c.current, 3),
+                    target: c.target,
+                  })),
+                },
+              }
+            : {}),
           counts: s.counts,
         };
       },
@@ -1626,6 +1650,45 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           disasters,
           note: 'The page is reloading with the new city.',
         };
+      },
+    },
+    {
+      name: 'list_scenarios',
+      description:
+        'The shipped scenarios: id, title, teaser, deadline in days, win conditions (all must ' +
+        'hold at the deadline) and fail conditions (any one ends the run).',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        return {
+          scenarios: scenarioDefs().map((def) => ({
+            id: def.id,
+            title: englishText(`scenario.${def.id}.title` as TranslationKey),
+            teaser: englishText(`scenario.${def.id}.teaser` as TranslationKey),
+            deadlineDays: def.deadlineDays,
+            size: def.size,
+            startingMoney: def.startingMoney,
+            win: def.win,
+            fail: def.fail,
+          })),
+        };
+      },
+    },
+    {
+      name: 'start_scenario',
+      description:
+        'Abandon the current city and start a shipped scenario (the page reloads; the autosave ' +
+        'is replaced). See list_scenarios.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'string', enum: [...SCENARIO_IDS] } },
+        required: ['id'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const id = readEnum(input, 'id', SCENARIO_IDS);
+        ctx.startScenario(id);
+        return { ok: true, scenario: id, note: 'The page is reloading with the scenario.' };
       },
     },
   ];

@@ -239,8 +239,6 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     });
     void cityReloader.replaceCityAndReload(null);
   }, []);
-  useAgentTools(bridge, gridSize, startNewCityFromTool, agentSaveHost);
-
   // A scenario always runs on its definition's seed, so a replay would
   // find the end screen already marked as shown — clear that mark first.
   const startScenario = useCallback((id: ScenarioId) => {
@@ -252,6 +250,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     storePendingScenario(id);
     void storage.clear().then(() => window.location.reload());
   }, []);
+  useAgentTools(bridge, gridSize, startNewCityFromTool, agentSaveHost, startScenario);
 
   useEffect(() => {
     if (stats) rendererRef.current?.setStats(stats);

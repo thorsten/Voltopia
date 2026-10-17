@@ -8,7 +8,7 @@ import {
 import { TileMirror } from '../agent/tileMirror.ts';
 import { registerAgentTools } from '../agent/webmcp.ts';
 import type { SimCommand } from '../shared/messages.ts';
-import type { SaveGame } from '../shared/types.ts';
+import type { SaveGame, ScenarioId } from '../shared/types.ts';
 import type { SaveStorage } from '../storage/storage.ts';
 import type { SimBridge } from './useSimBridge.ts';
 
@@ -29,6 +29,7 @@ export function useAgentTools(
   gridSize: number,
   onNewCity: (options: NewCityOptions) => void,
   saveHost: AgentSaveHost,
+  onStartScenario: (id: ScenarioId) => void,
 ): void {
   // Stable callbacks only — the bridge object changes identity every tick.
   const { send, onDiffs, onTick, onCommandResult, onLifetime, onSaveData, getStats } = bridge;
@@ -94,6 +95,7 @@ export function useAgentTools(
         population: () => getStats()?.population ?? null,
         replaceCity: saveHost.replaceCity,
       }),
+      startScenario: onStartScenario,
     };
 
     const unregister = registerAgentTools(createAgentTools(ctx));
@@ -114,5 +116,6 @@ export function useAgentTools(
     gridSize,
     onNewCity,
     saveHost,
+    onStartScenario,
   ]);
 }
