@@ -18,7 +18,13 @@ export function conditionLabel(c: Condition): string {
   return c.kind === 'goal' ? `goal.${c.id}.title` : `scenario.condition.${c.metric}`;
 }
 
-function metricValue(run: ScenarioRun, metric: ScenarioMetric, windowDays?: number): number {
+/**
+ * The metric's value for a condition: a window sum (zero before the first
+ * day, which is a true zero), or the last completed day's sample — null
+ * until one exists, so an "at most" rule is not met by the mere absence
+ * of data on the first day.
+ */
+function metricValue(run: ScenarioRun, metric: ScenarioMetric, windowDays?: number): number | null {
   const samples = run.samples[metric];
   if (WINDOW_METRICS.has(metric)) {
     const from = windowDays === undefined ? 0 : Math.max(0, samples.length - windowDays);
@@ -26,7 +32,7 @@ function metricValue(run: ScenarioRun, metric: ScenarioMetric, windowDays?: numb
     for (let i = from; i < samples.length; i++) sum += samples[i];
     return sum;
   }
-  return samples.length === 0 ? 0 : samples[samples.length - 1];
+  return samples.length === 0 ? null : samples[samples.length - 1];
 }
 
 export function evaluateCondition(
@@ -38,7 +44,8 @@ export function evaluateCondition(
     const met = state.goalsAchieved.has(c.id);
     return { met, current: met ? 1 : 0, target: 1 };
   }
-  const current = metricValue(run, c.metric, c.windowDays);
-  const met = c.op === '>=' ? current >= c.value : current <= c.value;
-  return { met, current, target: c.value };
+  const value = metricValue(run, c.metric, c.windowDays);
+  if (value === null) return { met: false, current: 0, target: c.value };
+  const met = c.op === '>=' ? value >= c.value : value <= c.value;
+  return { met, current: value, target: c.value };
 }

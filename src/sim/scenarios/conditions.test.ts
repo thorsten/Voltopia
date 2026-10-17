@@ -18,6 +18,27 @@ describe('scenario conditions', () => {
     ).toBe(true);
   });
 
+  it('an "at most" rule is not met before the first sample exists', () => {
+    const state = createSimState(1, 16);
+    const run = emptyRun('stormSeason', 0);
+    const r = evaluateCondition(state, run, {
+      kind: 'metric',
+      metric: 'suppliedShare',
+      op: '<=',
+      value: 0.5,
+    });
+    expect(r).toEqual({ met: false, current: 0, target: 0.5 });
+    run.samples.suppliedShare = [0.4];
+    expect(
+      evaluateCondition(state, run, {
+        kind: 'metric',
+        metric: 'suppliedShare',
+        op: '<=',
+        value: 0.5,
+      }).met,
+    ).toBe(true);
+  });
+
   it('a metric with no sample yet is unmet with current 0', () => {
     const state = createSimState(1, 16);
     const run = emptyRun('island', 0);
