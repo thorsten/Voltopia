@@ -45,6 +45,7 @@ function* allRecipes(indices: Iterable<number>): Generator<{
   variant: number;
   face: StreetFace;
   index: number;
+  rooftopPv: boolean;
   parts: BuildingPart[];
 }> {
   for (const zone of ZONES) {
@@ -58,6 +59,7 @@ function* allRecipes(indices: Iterable<number>): Generator<{
               variant,
               face,
               index,
+              rooftopPv: false,
               parts: buildingParts(zone, density, variant, index, face),
             };
           }
@@ -66,6 +68,37 @@ function* allRecipes(indices: Iterable<number>): Generator<{
     }
   }
 }
+
+/** Density-1 recipes built under the rooftop-PV mandate (forced panels). */
+function* forcedPvRecipes(indices: Iterable<number>): ReturnType<typeof allRecipes> {
+  for (const zone of ZONES) {
+    for (let variant = 0; variant < VARIANTS; variant++) {
+      for (const face of STREET_FACES) {
+        for (const index of indices) {
+          yield {
+            zone,
+            density: 1,
+            variant,
+            face,
+            index,
+            rooftopPv: true,
+            parts: buildingParts(zone, 1, variant, index, face, true),
+          };
+        }
+      }
+    }
+  }
+}
+
+/** Every recipe plus the forced-PV density-1 variants. */
+function* allRecipesWithForcedPv(indices: Iterable<number>): ReturnType<typeof allRecipes> {
+  yield* allRecipes(indices);
+  yield* forcedPvRecipes(indices);
+}
+
+/** True for a non-detail part in the rooftop PV colour. */
+const isRooftopPv = (p: BuildingPart) =>
+  !p.detail && p.color.getHex() === ACCENT.rooftopPv.getHex();
 
 const FULL_GRID = Array.from({ length: GRID * GRID }, (_, i) => i);
 const SAMPLE = Array.from({ length: 64 }, (_, i) => i * 61 + 7);
@@ -185,12 +218,19 @@ describe('building recipes', () => {
       // than inside the hot loop) to keep this test fast with ~400k part lists.
       const violations: string[] = [];
       const counts = PART_KINDS.map(() => 0);
-      for (const density of [1, 2, 3]) {
+      // Density 1 also under the rooftop-PV mandate, which adds panels.
+      const cases: ReadonlyArray<readonly [number, boolean]> = [
+        [1, false],
+        [1, true],
+        [2, false],
+        [3, false],
+      ];
+      for (const [density, rooftopPv] of cases) {
         for (let variant = 0; variant < VARIANTS; variant++) {
           for (const face of STREET_FACES) {
             for (const index of FULL_GRID) {
-              const parts = buildingParts(zone, density, variant, index, face);
-              const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+              const parts = buildingParts(zone, density, variant, index, face, rooftopPv);
+              const tag = `${zone}/${density}/${variant}/${face}/${index}/${rooftopPv}`;
               if (parts.length > MAX_PARTS_PER_TILE) {
                 violations.push(`${tag}: ${parts.length} parts > ${MAX_PARTS_PER_TILE}`);
               }
@@ -216,8 +256,10 @@ describe('building recipes', () => {
     // loop (rather than inside it) to keep this test fast even with tens of
     // thousands of part lists across all zones, densities and faces.
     const violations: string[] = [];
-    for (const { parts, zone, density, variant, face, index } of allRecipes(SAMPLE)) {
-      const tag = `${zone}/${density}/${variant}/${face}/${index}`;
+    for (const { parts, zone, density, variant, face, index, rooftopPv } of allRecipesWithForcedPv(
+      SAMPLE,
+    )) {
+      const tag = `${zone}/${density}/${variant}/${face}/${index}/${rooftopPv}`;
       for (const p of parts) {
         const edge = partEdge(p);
         if (edge > FOOTPRINT_HALF + 1e-9)
@@ -234,13 +276,17 @@ describe('building recipes', () => {
   it('have exactly one main body and buildingHeight equals the tallest top', () => {
     // See the footprint test above for why violations are batched.
     const violations: string[] = [];
-    for (const { parts, zone, density, variant, index } of allRecipes(SAMPLE)) {
-      const tag = `${zone}/${density}/${variant}/${index}`;
+    for (const { parts, zone, density, variant, index, rooftopPv } of allRecipesWithForcedPv(
+      SAMPLE,
+    )) {
+      const tag = `${zone}/${density}/${variant}/${index}/${rooftopPv}`;
       const mains = parts.filter((p) => p.main);
       if (mains.length !== 1) violations.push(`${tag}: ${mains.length} main parts, expected 1`);
       if (mainBody(parts) !== parts.find((p) => p.main)) {
         violations.push(`${tag}: mainBody() does not match parts.find(main)`);
       }
+      // buildingHeight ignores the mandate panels (a slab's thickness at most).
+      if (rooftopPv) continue;
       const top = Math.max(...parts.map((p) => p.oy + p.sy));
       const height = buildingHeight(zone, density, variant, index);
       if (Math.abs(height - top) > 1e-9) {
@@ -271,6 +317,35 @@ describe('building recipes', () => {
       const pv = parts.some((p) => !p.detail && p.color.getHex() === ACCENT.rooftopPv.getHex());
       expect(pv).toBe(density >= 2);
     }
+  });
+
+  it('put rooftop PV on every density-1 building under the mandate, keeping the rest', () => {
+    const violations: string[] = [];
+    for (const { parts, zone, variant, face, index } of forcedPvRecipes(SAMPLE)) {
+      const tag = `${zone}/${variant}/${face}/${index}`;
+      const plain = buildingParts(zone, 1, variant, index, face);
+      if (!parts.some(isRooftopPv)) violations.push(`${tag}: no rooftop PV`);
+      if (plain.some(isRooftopPv)) violations.push(`${tag}: PV without the mandate`);
+      // The mandate only adds panels: every other part stays as it was.
+      const others = parts.filter((p) => !isRooftopPv(p));
+      if (JSON.stringify(others) !== JSON.stringify(plain)) {
+        violations.push(`${tag}: the mandate changed other parts`);
+      }
+    }
+    for (const zone of ZONES) {
+      for (const density of [2, 3]) {
+        for (const index of SAMPLE) {
+          const forced = buildingParts(zone, density, 3, index, StreetFace.East, true);
+          const plain = buildingParts(zone, density, 3, index, StreetFace.East);
+          if (JSON.stringify(forced) !== JSON.stringify(plain)) {
+            violations.push(
+              `${zone}/${density}/${index}: the mandate changed a density-${density}`,
+            );
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
   });
 
   it('never tilt or rotate the main body', () => {
@@ -1705,5 +1780,60 @@ describe('silhouettes (stage 4)', () => {
     }
     expect(violations).toEqual([]);
     expect(seen).toBeGreaterThan(0);
+  });
+
+  it('lays the mandated density-1 PV on its roof, clear of the chimney', () => {
+    const violations: string[] = [];
+    const contains = (r: Rect, x: number, z: number) =>
+      x >= r.minX - EPS && x <= r.maxX + EPS && z >= r.minZ - EPS && z <= r.maxZ + EPS;
+    for (const { zone, variant, face, index, parts } of forcedPvRecipes(SAMPLE)) {
+      const tag = `${zone}/${silhouetteOf(zone, 1, variant, index)}/${face}/${index}`;
+      for (const pv of parts.filter(isRooftopPv)) {
+        const world = corners(pv, StreetFace.South);
+        const base = world.filter((_, i) => i % 4 < 2);
+        // The roof under the slab: the highest part whose outline holds its centre.
+        const under = parts
+          .filter((q) => q !== pv && !q.detail && contains(bounds(q), pv.ox, pv.oz))
+          .filter((q) => q.oy <= pv.oy + EPS)
+          .reduce<BuildingPart | undefined>((a, q) => (!a || top(q) > top(a) ? q : a), undefined);
+        if (!under) {
+          violations.push(`${tag}: PV over nothing`);
+          continue;
+        }
+        const r = bounds(under);
+        if (base.some((v) => !contains(r, v.x, v.z))) violations.push(`${tag}: PV past the roof`);
+        let surface: (x: number, z: number) => number;
+        if (under.kind === PartKind.ShedRoof) {
+          surface = (x, z) => shedSurface(under, x, z);
+        } else if (under.kind === PartKind.GableRoof || under.kind === PartKind.HipRoof) {
+          // The slope the slab faces (its own turn), falling from the ridge.
+          const [ex, ez] = faceOffset(0, 1, pv.turn as StreetFace);
+          const run = Math.abs(ex) > 0 ? (r.maxX - r.minX) / 2 : (r.maxZ - r.minZ) / 2;
+          surface = (x, z) =>
+            under.oy + under.sy * (1 - ((x - under.ox) * ex + (z - under.oz) * ez) / run);
+        } else {
+          if (pv.tilt !== undefined) violations.push(`${tag}: tilted PV on a flat roof`);
+          surface = () => top(under);
+        }
+        for (const v of base) {
+          const gap = v.y - surface(v.x, v.z);
+          if (gap < -EPS || gap > 0.02) violations.push(`${tag}: PV corner ${gap} off the roof`);
+        }
+        const xs = world.map((v) => v.x);
+        const zs = world.map((v) => v.z);
+        for (const c of parts.filter((q) => q.role === PartRole.Chimney)) {
+          const b = bounds(c);
+          if (
+            Math.min(...xs) < b.maxX &&
+            Math.max(...xs) > b.minX &&
+            Math.min(...zs) < b.maxZ &&
+            Math.max(...zs) > b.minZ
+          ) {
+            violations.push(`${tag}: PV under the chimney`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
   });
 });

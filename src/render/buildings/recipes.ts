@@ -162,6 +162,19 @@ const HALL_SHED_PITCH = 0.1;
 const SHED_PV_DEPTH_FRACTION = 0.4;
 /** Gap between a rooftop PV slab's pivot and the slope under it. */
 const PV_LIFT = 0.01;
+/**
+ * Panels of the rooftop-PV mandate on the density-1 recipes without PV of
+ * their own: flat slabs on the flat roofs (sizes, face-frame offset from
+ * the body centre; the low office in world axes like the office block),
+ * slab width, offset and position up the slope on the shed roofs.
+ */
+const MANDATE_PV = {
+  shop: { w: 0.4, d: 0.3, lz: -0.08 },
+  canopyShop: { w: 0.4, d: 0.3, lz: -0.05 },
+  lowOffice: { w: 0.3, d: 0.24, ox: -0.12, oz: 0.12 },
+  pavilion: { w: 0.36, at: 0.4 },
+  leanToHall: { w: 0.3, lx: 0.06, at: 0.4 },
+} as const;
 /** Lean-to against the hall's side wall and its shed roof. */
 const LEAN_TO = { w: 0.2, d: 0.36, h: 0.2, pitch: 0.06 } as const;
 /** The lean-to hall's roll-up door width as a fraction of the facade. */
@@ -497,7 +510,7 @@ const HIP_PV_FIT: PvFit = { w: 0.3, d: 0.3, at: 0.35 };
  * hair above the slope midpoint along the slope normal.
  */
 function pvOnSlope(
-  body: BuildingPart,
+  body: Pick<BuildingPart, 'ox' | 'oy' | 'oz'>,
   face: StreetFace,
   roofWidth: number,
   roofDepth: number,
@@ -534,7 +547,17 @@ interface Look {
   trim: THREE.Color;
 }
 
-type Builder = (p: Picker, face: StreetFace, family: ZoneFamily, look: Look) => BuildingPart[];
+/**
+ * `rooftopPv` asks a density-1 recipe for the panels of the rooftop-PV
+ * mandate; the denser recipes carry PV anyway and ignore it.
+ */
+type Builder = (
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv?: boolean,
+) => BuildingPart[];
 
 /** Recipes keep densities 1 and 2 apart and treat everything else as density 3. */
 function densityKey(density: number): 1 | 2 | 3 {
@@ -605,12 +628,43 @@ function houseChimney(ox: number, oy: number, oz: number, height: number): Build
   });
 }
 
+/**
+ * The mandated panels of a detached house, on the main roof's slope that
+ * faces away from the chimney: of the two slopes either side of a gable's
+ * ridge, or of the hip's two slopes on the street axis.
+ */
+function detachedPv(
+  body: BuildingPart,
+  roof: BuildingPart,
+  face: StreetFace,
+  sideX: number,
+  sideZ: number,
+): BuildingPart {
+  const gable = roof.kind === PartKind.GableRoof;
+  // A gable turned a quarter has its ridge along z, so its slopes face east and west.
+  const slopesAlongX = gable ? roof.turn % 2 === 1 : face % 2 === 1;
+  let pvFace: StreetFace;
+  if (slopesAlongX) pvFace = sideX > 0 ? StreetFace.West : StreetFace.East;
+  else pvFace = sideZ > 0 ? StreetFace.North : StreetFace.South;
+  if (gable) return pvOnSlope(body, pvFace, roof.sx, roof.sz, roof.sy, roof.oy);
+  return pvOnSlope(
+    body,
+    pvFace,
+    faceWidth(body, pvFace) + 2 * ROOF_OVERHANG,
+    faceDepth(body, pvFace) + 2 * ROOF_OVERHANG,
+    roof.sy,
+    roof.oy,
+    HIP_PV_FIT,
+  );
+}
+
 /** Detached house, off centre, gable or hip roof, chimney, door, maybe an extension. */
 function detachedHouse(
   p: Picker,
   face: StreetFace,
   family: ZoneFamily,
   look: Look,
+  rooftopPv = false,
 ): BuildingPart[] {
   const { wall, roof } = look;
   const parts: BuildingPart[] = [];
@@ -622,8 +676,9 @@ function detachedHouse(
   const body = box(w, h, d, ox, 0, oz, wall, { main: true });
   parts.push(body, plinth(body, family));
   const roofHeight = 0.14;
+  let mainRoof: BuildingPart;
   if (p.chance(0.25)) {
-    parts.push({
+    mainRoof = {
       kind: PartKind.HipRoof,
       sx: w + 2 * ROOF_OVERHANG,
       sy: roofHeight,
@@ -633,7 +688,8 @@ function detachedHouse(
       oz,
       turn: 0,
       color: roof,
-    });
+    };
+    parts.push(mainRoof);
   } else {
     const turn = p.pick(2);
     const gable: BuildingPart = {
@@ -647,6 +703,7 @@ function detachedHouse(
       turn,
       color: roof,
     };
+    mainRoof = gable;
     parts.push(gable, ...gableDetails(gable));
   }
   const sideX = p.chance(0.5) ? 1 : -1;
@@ -696,6 +753,7 @@ function detachedHouse(
       color: roof,
     });
   }
+  if (rooftopPv) parts.push(detachedPv(body, mainRoof, face, sideX, sideZ));
   return parts;
 }
 
@@ -703,7 +761,13 @@ function detachedHouse(
  * L-house: a body along the street and a wing of the same eave height
  * behind one end; the two gables meet at right angles and share a pitch.
  */
-function lHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function lHouse(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof } = look;
   const w = 0.5 + p.unit() * 0.06;
   const h = 0.3 + p.unit() * 0.08;
@@ -756,7 +820,7 @@ function lHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): Bu
   );
   // The chimney stands on the body's back slope at the end away from the wing.
   const [cx, cz] = faceOffset(-side * w * 0.3, -d * 0.2, face);
-  return [
+  const parts = [
     body,
     plinth(body, family),
     wingBody,
@@ -767,6 +831,11 @@ function lHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): Bu
     houseChimney(body.ox + cx, h, body.oz + cz, CHIMNEY.h),
     doorAt(body, face, doorAlong * (w / 2 - DOOR.width / 2)),
   ];
+  // Mandated panels on the street slope, the chimney stands on the back one.
+  if (rooftopPv) {
+    parts.push(pvOnSlope(body, face, w + 2 * ROOF_OVERHANG, d + 2 * ROOF_OVERHANG, roofHeight, h));
+  }
+  return parts;
 }
 
 /**
@@ -774,7 +843,13 @@ function lHouse(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): Bu
  * each in its own wall tone with its door at the outer end, under one
  * shared ridge with one chimney on the party wall. The left half is main.
  */
-function semiDetached(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function semiDetached(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof } = look;
   const half = 0.34 + p.unit() * 0.04;
   const d = 0.42 + p.unit() * 0.04;
@@ -804,7 +879,7 @@ function semiDetached(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
     roof,
   );
   const doorLx = SEMI_DOOR_ALONG * (half / 2 - DOOR.width / 2);
-  return [
+  const parts = [
     left,
     plinth(left, family),
     right,
@@ -816,6 +891,13 @@ function semiDetached(p: Picker, face: StreetFace, family: ZoneFamily, look: Loo
     doorAt(left, face, -doorLx),
     doorAt(right, face, doorLx),
   ];
+  // Mandated panels: one array per half on the street slope, clear of the party-wall chimney.
+  if (rooftopPv) {
+    for (const house of [left, right]) {
+      parts.push(pvOnSlope(house, face, half, gable.sz, gable.sy, h));
+    }
+  }
+  return parts;
 }
 
 /** Town house: gable roof with a dormer on half the variants, ledge band, PV on the slope. */
@@ -1133,9 +1215,10 @@ function residential(
   p: Picker,
   face: StreetFace,
   family: ZoneFamily,
+  rooftopPv: boolean,
 ): BuildingPart[] {
   const { look, silhouette } = drawLook(p, family, RESIDENTIAL_SILHOUETTES[densityKey(density)]);
-  return RESIDENTIAL_BUILDERS[silhouette](p, face, family, look);
+  return RESIDENTIAL_BUILDERS[silhouette](p, face, family, look, rooftopPv);
 }
 
 /** A rooftop antenna mast carrying the stage 2 beacon. */
@@ -1156,25 +1239,45 @@ function antenna(ox: number, oy: number, oz: number, height: number): BuildingPa
 }
 
 /** Low office: cornice band, entrance canopy, one AC unit. */
-function lowOffice(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function lowOffice(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, trim } = look;
   const w = 0.62;
   const h = 0.4 + p.unit() * 0.06;
   const body = box(w, h, w, 0, 0, 0, wall, { main: true });
-  return [
+  const parts = [
     body,
     plinth(body, family),
     box(w + 0.04, 0.03, w + 0.04, 0, h - 0.03, 0, trim, { accent: true, band: true }),
     onStreetFace(body, face, 0.5, 0.03, 0.1, h * 0.55, trim),
     box(0.1, 0.08, 0.1, 0.15, h, -0.15, ACCENT.acUnit, { accent: true }),
   ];
+  if (rooftopPv) {
+    // Flat panels on the flat roof, in the corner diagonal to the AC unit.
+    const pv = MANDATE_PV.lowOffice;
+    parts.push(
+      box(pv.w, ROOFTOP_PV_THICKNESS, pv.d, pv.ox, h, pv.oz, ACCENT.rooftopPv, { accent: true }),
+    );
+  }
+  return parts;
 }
 
 /**
  * Pavilion: a low body under a shed roof that rises toward the street over
  * a glass front, two trim fins dividing the glass.
  */
-function pavilion(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function pavilion(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof, trim } = look;
   const w = 0.66;
   const d = 0.56;
@@ -1200,7 +1303,7 @@ function pavilion(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): 
       trim,
       { accent: true },
     );
-  return [
+  const parts = [
     body,
     plinth(body, family),
     // Turned half way: the high edge (local -z) stands over the street.
@@ -1231,6 +1334,13 @@ function pavilion(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): 
     fin(-glassW / 6),
     fin(glassW / 6),
   ];
+  if (rooftopPv) {
+    // The roof falls away from the street: seen from the back it is a hall shed.
+    const back = ((face + 2) % 4) as StreetFace;
+    const pv = MANDATE_PV.pavilion;
+    parts.push(pvOnShed(body, back, 0, pv.w, pv.at, PAVILION.roofHeight));
+  }
+  return parts;
 }
 
 /** Office block: two facade bands, two AC units, antenna, flat PV. */
@@ -1414,9 +1524,10 @@ function commercial(
   p: Picker,
   face: StreetFace,
   family: ZoneFamily,
+  rooftopPv: boolean,
 ): BuildingPart[] {
   const { look, silhouette } = drawLook(p, family, COMMERCIAL_SILHOUETTES[densityKey(density)]);
-  return COMMERCIAL_BUILDERS[silhouette](p, face, family, look);
+  return COMMERCIAL_BUILDERS[silhouette](p, face, family, look, rooftopPv);
 }
 
 /** Retail recipes draw the sign colour from the trim without consuming a draw. */
@@ -1425,27 +1536,52 @@ function signColor(family: ZoneFamily, trim: THREE.Color): THREE.Color {
 }
 
 /** Shop: flat roof slab, awning and sign on the street face. */
-function shop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function shop(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof, trim } = look;
   const sign = signColor(family, trim);
   const w = 0.7;
   const d = 0.6;
   const h = 0.3 + p.unit() * 0.05;
   const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-  return [
+  const parts = [
     body,
     plinth(body, family),
     box(w + PARAPET_MARGIN.shop, 0.03, d + PARAPET_MARGIN.shop, 0, h, 0, roof),
     onStreetFace(body, face, 0.9, 0.04, 0.08, h * 0.6, trim),
     onStreetFace(body, face, 0.6, 0.08, 0.03, h * 0.6 + 0.05, sign),
   ];
+  if (rooftopPv) {
+    // Flat panels on the roof slab, set back from the sign.
+    const pv = MANDATE_PV.shop;
+    parts.push(
+      uprightBox(
+        face,
+        { w: pv.w, h: ROOFTOP_PV_THICKNESS, d: pv.d, lx: 0, ly: h + 0.03, lz: pv.lz },
+        ACCENT.rooftopPv,
+        { accent: true },
+      ),
+    );
+  }
+  return parts;
 }
 
 /**
  * Canopy shop: a shallower flat-roofed shop set back from the street, a
  * wide shed-roof canopy on two posts over the forecourt, a sign above it.
  */
-function canopyShop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function canopyShop(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof, trim } = look;
   const sign = signColor(family, trim);
   const w = 0.7;
@@ -1475,7 +1611,7 @@ function canopyShop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look)
       trim,
       { accent: true },
     );
-  return [
+  const parts = [
     body,
     plinth(body, family),
     uprightBox(
@@ -1501,6 +1637,26 @@ function canopyShop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look)
     post(1),
     onStreetFace(body, face, 0.6, CANOPY.signHeight, 0.03, canopyY + CANOPY.pitch + 0.005, sign),
   ];
+  if (rooftopPv) {
+    // Flat panels on the roof slab of the set-back shop.
+    const pv = MANDATE_PV.canopyShop;
+    parts.push(
+      uprightBox(
+        face,
+        {
+          w: pv.w,
+          h: ROOFTOP_PV_THICKNESS,
+          d: pv.d,
+          lx: 0,
+          ly: h + 0.03,
+          lz: -CANOPY.depth / 2 + pv.lz,
+        },
+        ACCENT.rooftopPv,
+        { accent: true },
+      ),
+    );
+  }
+  return parts;
 }
 
 /** Wider shop: pitched roof over the back half, flat front with awning, sign and PV. */
@@ -1725,9 +1881,15 @@ const RETAIL_BUILDERS: Record<RetailSilhouette, Builder> = {
   supermarket,
 };
 
-function retail(density: number, p: Picker, face: StreetFace, family: ZoneFamily): BuildingPart[] {
+function retail(
+  density: number,
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  rooftopPv: boolean,
+): BuildingPart[] {
   const { look, silhouette } = drawLook(p, family, RETAIL_SILHOUETTES[densityKey(density)]);
-  return RETAIL_BUILDERS[silhouette](p, face, family, look);
+  return RETAIL_BUILDERS[silhouette](p, face, family, look, rooftopPv);
 }
 
 /**
@@ -1793,7 +1955,8 @@ function hallShed(hall: BuildingPart, face: StreetFace, color: THREE.Color): Bui
 }
 
 /**
- * Rooftop PV lying on the street-facing slope of `hallShed(hall)`, `lx`
+ * Rooftop PV lying on the street-facing slope of `hallShed(hall)` (or of
+ * any shed roof over `hall` rising `pitch` toward the back of `face`), `lx`
  * along the facade from the hall centre and centred `at` that fraction up
  * the slope from the front eave; it pivots a hair above the slope.
  */
@@ -1803,10 +1966,11 @@ function pvOnShed(
   lx: number,
   width: number,
   at: number,
+  pitch: number = HALL_SHED_PITCH,
 ): BuildingPart {
   const run = faceDepth(hall, face) + 2 * ROOF_OVERHANG;
-  const angle = Math.atan2(HALL_SHED_PITCH, run);
-  const slope = Math.hypot(run, HALL_SHED_PITCH);
+  const angle = Math.atan2(pitch, run);
+  const slope = Math.hypot(run, pitch);
   return facePart(
     PartKind.Box,
     hall,
@@ -1816,7 +1980,7 @@ function pvOnShed(
       h: ROOFTOP_PV_THICKNESS,
       d: slope * SHED_PV_DEPTH_FRACTION,
       lx,
-      ly: hall.sy + HALL_SHED_PITCH * at + PV_LIFT * Math.cos(angle),
+      ly: hall.sy + pitch * at + PV_LIFT * Math.cos(angle),
       lz: run * (0.5 - at) + PV_LIFT * Math.sin(angle),
       tilt: angle,
     },
@@ -1826,19 +1990,34 @@ function pvOnShed(
 }
 
 /** Workshop: one hall, saw-tooth roof, door, chimney at the back. */
-function workshop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function workshop(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof, trim } = look;
   const w = 0.7;
   const d = 0.5;
   const h = 0.28 + p.unit() * 0.04;
   const body = box(w, h, d, 0, 0, 0, wall, { main: true });
-  return [
+  const teeth = sawTooth(w, d, h, 0, 0, roof);
+  const parts = [
     body,
     plinth(body, family),
-    ...sawTooth(w, d, h, 0, 0, roof),
+    ...teeth,
     onStreetFace(body, face, 0.4, h * 0.7, ROLL_UP_DOOR_DEPTH, 0, trim),
     factoryChimney(0.06, 0.22, -0.25, h, -0.15),
   ];
+  if (rooftopPv) {
+    // Mandated panels on the east tooth, away from the chimney, on the
+    // slope toward the street (the south slope when the street is east or west).
+    const tooth = teeth[1];
+    const pvFace = face === StreetFace.North ? StreetFace.North : StreetFace.South;
+    parts.push(pvOnSlope({ ...tooth, oy: 0 }, pvFace, tooth.sx, tooth.sz, tooth.sy, tooth.oy));
+  }
+  return parts;
 }
 
 /**
@@ -1846,7 +2025,13 @@ function workshop(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): 
  * side wall, its own shed roof falling away from the hall below the hall's
  * eave; a roll-up door with a ramp up to it, a chimney at the back.
  */
-function leanToHall(p: Picker, face: StreetFace, family: ZoneFamily, look: Look): BuildingPart[] {
+function leanToHall(
+  p: Picker,
+  face: StreetFace,
+  family: ZoneFamily,
+  look: Look,
+  rooftopPv = false,
+): BuildingPart[] {
   const { wall, roof, trim } = look;
   const w = 0.56;
   const d = 0.5;
@@ -1905,7 +2090,7 @@ function leanToHall(p: Picker, face: StreetFace, family: ZoneFamily, look: Look)
     family.plinth,
   );
   const [cx, cz] = faceOffset(lx - side * 0.18, lz - 0.15, face);
-  return [
+  const parts = [
     hall,
     plinth(hall, family),
     hallShed(hall, face, roof),
@@ -1916,6 +2101,12 @@ function leanToHall(p: Picker, face: StreetFace, family: ZoneFamily, look: Look)
     ramp,
     factoryChimney(0.06, 0.22, cx, h, cz),
   ];
+  if (rooftopPv) {
+    // Mandated panels low on the street slope, toward the lean-to, away from the chimney.
+    const pv = MANDATE_PV.leanToHall;
+    parts.push(pvOnShed(hall, face, side * pv.lx, pv.w, pv.at));
+  }
+  return parts;
 }
 
 /** Plant: main hall behind, lower annex in front, tank, chimney, PV. */
@@ -2156,15 +2347,18 @@ function industrial(
   p: Picker,
   face: StreetFace,
   family: ZoneFamily,
+  rooftopPv: boolean,
 ): BuildingPart[] {
   const { look, silhouette } = drawLook(p, family, INDUSTRIAL_SILHOUETTES[densityKey(density)]);
-  return INDUSTRIAL_BUILDERS[silhouette](p, face, family, look);
+  return INDUSTRIAL_BUILDERS[silhouette](p, face, family, look, rooftopPv);
 }
 
 /**
  * Procedural low-poly building parts for a zone/density/variant/tile
  * triple facing `face`. Deterministic in its inputs so every client
- * renders the same city.
+ * renders the same city. `rooftopPv` (built under the rooftop-PV mandate)
+ * adds panels to the density-1 recipes, appended after their other parts,
+ * which stay unchanged; the denser recipes carry PV anyway.
  */
 export function buildingParts(
   zone: Zone,
@@ -2172,19 +2366,20 @@ export function buildingParts(
   variant: number,
   index: number,
   face: StreetFace,
+  rooftopPv = false,
 ): BuildingPart[] {
   const family = ZONE_FAMILIES[zone];
   if (!family) return [];
   const picker = createPicker(variant, index);
   switch (zone) {
     case Zone.Residential:
-      return residential(density, picker, face, family);
+      return residential(density, picker, face, family, rooftopPv);
     case Zone.Commercial:
-      return commercial(density, picker, face, family);
+      return commercial(density, picker, face, family, rooftopPv);
     case Zone.Retail:
-      return retail(density, picker, face, family);
+      return retail(density, picker, face, family, rooftopPv);
     case Zone.Industrial:
-      return industrial(density, picker, face, family);
+      return industrial(density, picker, face, family, rooftopPv);
     default:
       return [];
   }

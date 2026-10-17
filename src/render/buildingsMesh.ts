@@ -72,6 +72,8 @@ interface TileBuilding {
   damaged: boolean;
   /** TileDiff.ageStage: 0 new, 1 lived-in, 2 weathered. */
   ageStage: number;
+  /** TileDiff.pvMandated === 1: built under the rooftop-PV mandate. */
+  rooftopPv: boolean;
   face: StreetFace;
   parts: BuildingPart[];
   /**
@@ -230,12 +232,14 @@ export class BuildingsMesh implements DiffLayer {
       const heated = diff.heated === HEATED_SERVED;
       const damaged = (diff.damage ?? 0) > 0;
       const ageStage = diff.ageStage ?? 0;
+      const rooftopPv = diff.pvMandated === 1;
       if (hasBuilding) {
         if (
           !existing ||
           existing.density !== diff.density ||
           existing.zone !== diff.zone ||
-          existing.variant !== diff.variant
+          existing.variant !== diff.variant ||
+          existing.rooftopPv !== rooftopPv
         ) {
           this.place(
             diff.index,
@@ -246,6 +250,7 @@ export class BuildingsMesh implements DiffLayer {
             heated,
             damaged,
             ageStage,
+            rooftopPv,
             true,
           );
           reissue.delete(diff.index);
@@ -282,6 +287,7 @@ export class BuildingsMesh implements DiffLayer {
           b.heated,
           b.damaged,
           b.ageStage,
+          b.rooftopPv,
           false,
         );
         windowsDirty = true;
@@ -337,10 +343,11 @@ export class BuildingsMesh implements DiffLayer {
     heated: boolean,
     damaged: boolean,
     ageStage: number,
+    rooftopPv: boolean,
     animate: boolean,
   ): void {
     const face = this.streetFace(index);
-    const parts = buildingParts(zone, density, variant, index, face);
+    const parts = buildingParts(zone, density, variant, index, face, rooftopPv);
     const windows = layoutWindows(parts, face, zone, density);
     let building = this.buildings.get(index);
     if (!building) {
@@ -352,6 +359,7 @@ export class BuildingsMesh implements DiffLayer {
         heated,
         damaged,
         ageStage,
+        rooftopPv,
         face,
         parts,
         windows,
@@ -367,6 +375,7 @@ export class BuildingsMesh implements DiffLayer {
       building.heated = heated;
       building.damaged = damaged;
       building.ageStage = ageStage;
+      building.rooftopPv = rooftopPv;
       building.face = face;
       building.parts = parts;
       building.windows = windows;

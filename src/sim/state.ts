@@ -933,6 +933,7 @@ export function collectDiffs(state: SimState): TileDiff[] {
       powerLine: layers.powerLine[index],
       zone: layers.zone[index] as TileDiff['zone'],
       density: layers.density[index],
+      pvMandated: layers.pvMandated[index],
       variant: layers.variant[index],
       supplied: layers.supplied[index] as TileDiff['supplied'],
       services: layers.services[index],

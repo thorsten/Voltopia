@@ -273,6 +273,24 @@ describe('BuildingsMesh', () => {
     expect(after).not.toEqual(before);
   });
 
+  it('re-places a density-1 building when its rooftop-PV mandate bit flips', () => {
+    const { mesh } = setup();
+    mesh.setReducedMotion(true);
+    const isPv = (p: { color: THREE.Color }) => p.color.getHex() === ACCENT.rooftopPv.getHex();
+    mesh.applyDiffs([{ ...building(CENTRE, Zone.Residential, 1, 0), pvMandated: 0 }]);
+    const plain = mesh.partsAt(CENTRE)!;
+    expect(plain.some(isPv)).toBe(false);
+    const boxesBefore = drawn(mesh.kindMeshes[PartKind.Box]).length;
+    mesh.applyDiffs([{ ...building(CENTRE, Zone.Residential, 1, 0), pvMandated: 1 }]);
+    const mandated = mesh.partsAt(CENTRE)!;
+    expect(mandated).toEqual(buildingParts(Zone.Residential, 1, 0, CENTRE, StreetFace.South, true));
+    expect(mandated.some(isPv)).toBe(true);
+    expect(drawn(mesh.kindMeshes[PartKind.Box]).length).toBeGreaterThan(boxesBefore);
+    // A diff without the field counts as no mandate.
+    mesh.applyDiffs([building(CENTRE, Zone.Residential, 1, 0)]);
+    expect(mesh.partsAt(CENTRE)!.some(isPv)).toBe(false);
+  });
+
   it('uses a road that arrives in the same batch as the building', () => {
     const { mesh } = setup();
     mesh.setReducedMotion(true);

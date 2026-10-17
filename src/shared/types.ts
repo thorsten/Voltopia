@@ -899,6 +899,8 @@ export interface TileDiff {
   zone: Zone;
   /** 0 = no building, 1..3 = density level. */
   density: number;
+  /** 1 when the building spawned under the rooftop-PV mandate (draws panels at density 1). */
+  pvMandated?: number;
   /** Seeded per-tile variation for procedural building shapes. */
   variant: number;
   supplied: SupplyStatus;

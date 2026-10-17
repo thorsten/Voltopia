@@ -602,6 +602,22 @@ describe('geothermal', () => {
   });
 });
 
+describe('rooftop-PV mandate', () => {
+  it('carries the mandate bit in tile diffs', () => {
+    const state = createSimState(7, 8);
+    state.layers.zone[5] = Zone.Residential;
+    state.layers.density[5] = 1;
+    state.layers.pvMandated[5] = 1;
+    state.layers.zone[6] = Zone.Residential;
+    state.layers.density[6] = 1;
+    markDirty(state, 5);
+    markDirty(state, 6);
+    const diffs = collectDiffs(state);
+    expect(diffs.find((d) => d.index === 5)?.pvMandated).toBe(1);
+    expect(diffs.find((d) => d.index === 6)?.pvMandated).toBe(0);
+  });
+});
+
 describe('tooSteep', () => {
   function steepState() {
     const state = createSimState(1, 8);
