@@ -328,6 +328,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               onSetDemandResponse={(active) => bridge.send({ type: 'setDemandResponse', active })}
               onSetMarketTrading={(enabled) => bridge.send({ type: 'setMarketTrading', enabled })}
               onBuyInsulation={() => bridge.send({ type: 'buyInsulation' })}
+              onSetPolicy={(id, active) => bridge.send({ type: 'setPolicy', id, active })}
               selectedIsland={selectedIsland}
               onSelectIsland={selectIsland}
             />

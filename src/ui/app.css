@@ -1178,6 +1178,16 @@ body,
   accent-color: var(--accent);
 }
 
+.policies {
+  margin-top: 8px;
+}
+
+.policies-title {
+  font-size: 11px;
+  color: var(--hud-muted);
+  margin-bottom: 4px;
+}
+
 .smart-charging-toggle {
   background: var(--hud-hover-soft);
   border: 1px solid var(--hud-border);

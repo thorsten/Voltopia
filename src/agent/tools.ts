@@ -771,6 +771,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             gridExportRevenue: round(s.budget.gridExportRevenue, 3),
             hydrogenRevenue: round(s.budget.hydrogenRevenue, 3),
             goodsImport: round(s.budget.goodsImport, 3),
+            policies: round(s.budget.policies, 3),
             net: round(s.budget.net, 3),
             ticksPerDay: TICKS_PER_DAY,
           },

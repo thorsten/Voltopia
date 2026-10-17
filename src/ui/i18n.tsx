@@ -238,6 +238,20 @@ const en = {
     'One-off upgrade: halves the electric heating and cooling load of every building',
   'insulation.buy': 'Buy for {cost} ⌁',
   'insulation.bought': 'installed',
+  'policies.title': 'Ordinances',
+  'policies.cost': '{cost}/day',
+  'policy.rooftopPvMandate.title': 'Rooftop-PV mandate',
+  'policy.rooftopPvMandate.body':
+    'New buildings get rooftop panels from the first storey. The city pays a subsidy per building.',
+  'policy.nightTariff.title': 'Night tariff',
+  'policy.nightTariff.body':
+    'Cars without a smart meter charge at home only at night; metered households shift more load.',
+  'policy.speedLimit.title': 'Speed limit',
+  'policy.speedLimit.body':
+    'Cars drive slower and use less energy per trip, but commutes take longer.',
+  'policy.smartMeterMandate.title': 'Mandatory smart meters',
+  'policy.smartMeterMandate.body':
+    'Households pay half of every meter and crews install twice as fast while the rollout runs.',
   'newGame.title': 'New city',
   'newGame.mapSize': 'Map size',
   'newGame.difficulty': 'Difficulty',
@@ -605,6 +619,7 @@ const en = {
   'budget.repair': 'Repairs',
   'budget.smartMeters': 'Smart meters',
   'budget.demandResponse': 'Demand response',
+  'budget.policies': 'Ordinances',
   'budget.goodsImport': 'Goods import',
   'budget.import': 'Grid import',
   'budget.note': 'Upkeep is a money cost only — it does not consume energy.',
@@ -1001,6 +1016,20 @@ const de: Record<TranslationKey, string> = {
     'Einmaliges Upgrade: halbiert die elektrische Heiz- und Kühllast aller Gebäude',
   'insulation.buy': 'Kaufen für {cost} ⌁',
   'insulation.bought': 'installiert',
+  'policies.title': 'Verordnungen',
+  'policies.cost': '{cost}/Tag',
+  'policy.rooftopPvMandate.title': 'Dach-PV-Pflicht',
+  'policy.rooftopPvMandate.body':
+    'Neue Gebäude bekommen ab dem ersten Stockwerk Dachpaneele. Die Stadt zahlt einen Zuschuss pro Gebäude.',
+  'policy.nightTariff.title': 'Nachttarif',
+  'policy.nightTariff.body':
+    'Autos ohne Smart Meter laden zu Hause nur nachts; gemessene Haushalte verschieben mehr Last.',
+  'policy.speedLimit.title': 'Tempolimit',
+  'policy.speedLimit.body':
+    'Autos fahren langsamer und brauchen weniger Energie pro Fahrt, aber der Arbeitsweg dauert länger.',
+  'policy.smartMeterMandate.title': 'Smart-Meter-Pflicht',
+  'policy.smartMeterMandate.body':
+    'Haushalte zahlen die Hälfte jedes Zählers, und die Trupps installieren doppelt so schnell, solange der Rollout läuft.',
   'newGame.title': 'Neue Stadt',
   'newGame.mapSize': 'Kartengröße',
   'newGame.difficulty': 'Schwierigkeit',
@@ -1374,6 +1403,7 @@ const de: Record<TranslationKey, string> = {
   'budget.repair': 'Reparaturen',
   'budget.smartMeters': 'Smart Meter',
   'budget.demandResponse': 'Demand Response',
+  'budget.policies': 'Verordnungen',
   'budget.goodsImport': 'Güterimport',
   'budget.import': 'Netzbezug',
   'budget.note': 'Unterhalt kostet nur Geld – er verbraucht keine Energie.',

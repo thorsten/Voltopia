@@ -4,12 +4,12 @@
  * City vitals and time controls live in their own corner plates.
  */
 import { BALANCE } from '../shared/constants.ts';
-import type { GlobalStats } from '../shared/types.ts';
+import { POLICY_IDS, type GlobalStats, type PolicyId } from '../shared/types.ts';
 import { BudgetPanel } from './BudgetPanel.tsx';
 import { EnergyGraph } from './EnergyGraph.tsx';
 import { EnergyPanel } from './EnergyPanel.tsx';
 import { EnergyStrip } from './EnergyStrip.tsx';
-import { useI18n } from './i18n.tsx';
+import { useI18n, type TranslationKey } from './i18n.tsx';
 import { TaxSlider } from './TaxSlider.tsx';
 
 export function HudConsole({
@@ -21,6 +21,7 @@ export function HudConsole({
   onSetDemandResponse,
   onSetMarketTrading,
   onBuyInsulation,
+  onSetPolicy,
   selectedIsland,
   onSelectIsland,
 }: {
@@ -32,6 +33,7 @@ export function HudConsole({
   onSetDemandResponse: (active: boolean) => void;
   onSetMarketTrading: (enabled: boolean) => void;
   onBuyInsulation: () => void;
+  onSetPolicy: (id: PolicyId, active: boolean) => void;
   selectedIsland: number;
   onSelectIsland: (n: number) => void;
 }) {
@@ -148,6 +150,27 @@ export function HudConsole({
                   {t('insulation.buy', { cost: BALANCE.costs.insulation.toLocaleString('en-US') })}
                 </button>
               )}
+            </div>
+            <div className="policies" data-testid="policies">
+              <div className="policies-title">{t('policies.title')}</div>
+              {POLICY_IDS.map((id) => (
+                <label
+                  key={id}
+                  className="smart-charging-toggle policy-row"
+                  data-testid={`policy-${id}`}
+                  title={t(`policy.${id}.body` as TranslationKey)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={stats.policies.active[id]}
+                    onChange={(e) => onSetPolicy(id, e.target.checked)}
+                  />
+                  <span>{t(`policy.${id}.title` as TranslationKey)}</span>
+                  <span className="smart-meters-coverage">
+                    {t('policies.cost', { cost: BALANCE.policies[id].dailyCost })}
+                  </span>
+                </label>
+              ))}
             </div>
             {/* Debug-grade figure; stays mounted so tooling can read it. */}
             <div className="hud-tick" data-testid="tick-counter">
