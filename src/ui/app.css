@@ -2355,12 +2355,23 @@ body,
 /* Scenario objectives (HUD), scenario list and end screen. */
 .scenario-panel {
   max-width: 20rem;
+  padding: 10px 12px;
+  font-size: 12px;
 }
 .scenario-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 0.8rem;
+  gap: 2px 8px;
   align-items: baseline;
+  margin-bottom: 6px;
+}
+.scenario-head strong {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+.scenario-head span {
+  color: var(--hud-muted);
+  font-size: 11px;
 }
 .scenario-status-won {
   color: var(--hud-positive);
@@ -2370,9 +2381,13 @@ body,
 }
 .scenario-list {
   list-style: none;
-  margin: 0.3rem 0;
+  margin: 0;
   padding: 0;
-  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 .scenario-list li.met {
   opacity: 0.85;
@@ -2381,15 +2396,118 @@ body,
   color: var(--hud-negative);
 }
 .scenario-fail-head {
-  margin: 0.4rem 0 0;
-  font-size: 0.75rem;
+  margin: 8px 0 2px;
+  font-size: 11px;
   color: var(--hud-muted);
 }
 .scenario-card {
-  border-top: 1px solid var(--hud-border);
-  padding-top: 0.6rem;
+  margin-top: 14px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--hud-border);
+  border-radius: 12px;
+  background: var(--hud-hover-soft);
+}
+.scenario-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.modal-content .scenario-card h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--hud-text);
+}
+.scenario-best {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--hud-muted);
+  white-space: nowrap;
+}
+.scenario-best-won {
+  color: var(--hud-positive);
+}
+.scenario-best-failed {
+  color: var(--hud-negative);
+}
+.scenario-teaser {
+  margin: 6px 0 10px;
+  color: var(--hud-text);
+}
+.scenario-rules {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.scenario-rules dt {
+  color: var(--hud-muted);
+}
+.scenario-rules dd {
+  margin: 0;
+}
+.scenario-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
 }
 .scenario-meta {
   color: var(--hud-muted);
-  font-size: 0.85rem;
+  font-size: 12px;
+}
+.scenario-start {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: var(--hud-on-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition:
+    filter 120ms ease,
+    transform 120ms ease;
+}
+.scenario-start:hover {
+  filter: brightness(1.08);
+}
+.scenario-start:active {
+  transform: translateY(1px);
+}
+.scenario-start:focus-visible {
+  outline: 2px solid var(--hud-text);
+  outline-offset: 2px;
+}
+/* End screen: one button size for the whole row, the primary action filled. */
+.win-card .option-row {
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.win-card .option-row button {
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 10px;
+}
+.win-card .option-row button:hover {
+  background: var(--hud-hover);
+}
+.win-card .option-row button.primary {
+  border: 1px solid var(--accent);
+}
+.win-card .option-row button.primary:hover {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scenario-start {
+    transition: none;
+  }
+  .scenario-start:active {
+    transform: none;
+  }
 }
