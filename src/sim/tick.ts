@@ -17,6 +17,8 @@ import { happinessStep } from './happiness.ts';
 import { countPowerLineTiles } from './powerLines.ts';
 import { railStats } from './rail.ts';
 import { tideState } from './sea.ts';
+import { scenarioDef } from './scenarios/registry.ts';
+import { scenarioStep } from './scenarios/step.ts';
 import { seasonState } from './seasons.ts';
 import { storedByKind } from './storage.ts';
 import { recomputeServices, serviceCoverage } from './services.ts';
@@ -97,6 +99,7 @@ export function stepTick(state: SimState): void {
   repairStep(state);
   happinessStep(state, population);
   goalsStep(state);
+  if (state.scenario) scenarioStep(state, scenarioDef(state.scenario.id));
   recordLifetime(state, population, jobs);
 }
 

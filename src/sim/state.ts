@@ -47,7 +47,7 @@ import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { TRAIL_TILES } from './trains.ts';
-import { DEFAULT_RULES, type ScenarioRules } from './scenarios/types.ts';
+import { DEFAULT_RULES, type ScenarioRules, type ScenarioRun } from './scenarios/types.ts';
 
 /** Commute phases of a vehicle. */
 export const VehiclePhase = {
@@ -374,6 +374,8 @@ export interface SimState {
   seasonOriginDay: number;
   /** Scenario rules; DEFAULT_RULES in free play. */
   rules: ScenarioRules;
+  /** The running (or finished) scenario; absent in free play. */
+  scenario?: ScenarioRun;
   /** Seasonal signal for the current tick, recomputed in stepTick. */
   season: SeasonState;
   happiness: number;
@@ -1312,6 +1314,7 @@ export function serializeState(state: SimState): SaveGame {
     riverFlow: state.weather.riverFlow,
     seasonOriginDay: state.seasonOriginDay,
     rules: { ...state.rules },
+    ...(state.scenario ? { scenario: structuredClone(state.scenario) } : {}),
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
     smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
@@ -1453,6 +1456,7 @@ export function deserializeState(save: SaveGame): SimState {
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.rules = { ...DEFAULT_RULES, ...save.rules };
+  if (save.scenario) state.scenario = structuredClone(save.scenario) as ScenarioRun;
   state.season = seasonState({
     day: Math.floor(save.tick / TICKS_PER_DAY),
     timeOfDay: (save.tick % TICKS_PER_DAY) / TICKS_PER_DAY,

@@ -913,6 +913,22 @@ export interface VehicleState {
   tail?: true;
 }
 
+export interface SavedScenario {
+  id: string;
+  startTick: number;
+  status: 'running' | 'won' | 'failed';
+  endedTick?: number;
+  samples: Record<string, number[]>;
+  today: {
+    deficitTicks: number;
+    importedEnergy: number;
+    renewable: number;
+    generation: number;
+    suppliedShareSum: number;
+    ticks: number;
+  };
+}
+
 export interface SaveGame {
   version: number;
   seed: number;
@@ -946,6 +962,8 @@ export interface SaveGame {
   seasonOriginDay?: number;
   /** Scenario rules (absent in older saves → free-play defaults). */
   rules?: { importCapacityFactor: number; startSeason: SeasonId };
+  /** Scenario run (absent in free play and older saves). */
+  scenario?: SavedScenario;
   /** Snow cover 0..1 (absent in older saves → 0). */
   snowpack?: number;
   /** Building insulation bought (absent in older saves → false). */
