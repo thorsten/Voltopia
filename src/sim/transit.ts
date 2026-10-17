@@ -358,7 +358,13 @@ export function transitStep(state: SimState, occupancy: Map<number, number>): vo
           break;
         }
         case BusPhase.Driving: {
-          const result = advanceAlongPath(state, bus, step, occupancy);
+          const result = advanceAlongPath(
+            state,
+            bus,
+            step,
+            occupancy,
+            BALANCE.vehicles.batteryDrainPerTile,
+          );
           if (result === 'arrived') arrive(state, bus);
           else if (result === 'lost') {
             bus.stops.shift();

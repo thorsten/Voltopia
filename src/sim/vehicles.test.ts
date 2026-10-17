@@ -110,7 +110,9 @@ describe('advanceAlongPath', () => {
     const step = 0.4;
     for (let tick = 0; tick < 10; tick++) {
       const { x, y } = mover;
-      expect(advanceAlongPath(state, mover, step, new Map())).toBe('moving');
+      expect(
+        advanceAlongPath(state, mover, step, new Map(), BALANCE.vehicles.batteryDrainPerTile),
+      ).toBe('moving');
       expect(Math.hypot(mover.x - x, mover.y - y)).toBeCloseTo(step, 9);
     }
     expect(mover.x).toBeCloseTo(3.5 + 4, 9);
@@ -123,7 +125,8 @@ describe('advanceAlongPath', () => {
     const mover = moverOn(path);
     // 0.3 per tick from 5.5: tick 7 reaches 7.6 along the path, which is
     // the corner at (7.5, 5.5) with 0.1 to spare, spent heading south.
-    for (let tick = 0; tick < 7; tick++) advanceAlongPath(state, mover, 0.3, new Map());
+    for (let tick = 0; tick < 7; tick++)
+      advanceAlongPath(state, mover, 0.3, new Map(), BALANCE.vehicles.batteryDrainPerTile);
     expect(mover.x).toBeCloseTo(7.5, 9);
     expect(mover.y).toBeCloseTo(5.6, 9);
     expect(mover.angle).toBeCloseTo(Math.PI / 2, 9);
@@ -134,9 +137,15 @@ describe('advanceAlongPath', () => {
     const state = createSimState(1, SIZE);
     buildRoads(state, [at(5, 5), at(6, 5)]);
     const mover = moverOn([at(5, 5), at(6, 5)]);
-    expect(advanceAlongPath(state, mover, 0.4, new Map())).toBe('moving');
-    expect(advanceAlongPath(state, mover, 0.4, new Map())).toBe('moving');
-    expect(advanceAlongPath(state, mover, 0.4, new Map())).toBe('arrived');
+    expect(
+      advanceAlongPath(state, mover, 0.4, new Map(), BALANCE.vehicles.batteryDrainPerTile),
+    ).toBe('moving');
+    expect(
+      advanceAlongPath(state, mover, 0.4, new Map(), BALANCE.vehicles.batteryDrainPerTile),
+    ).toBe('moving');
+    expect(
+      advanceAlongPath(state, mover, 0.4, new Map(), BALANCE.vehicles.batteryDrainPerTile),
+    ).toBe('arrived');
     expect(mover.x).toBeCloseTo(6.5, 9);
     expect(mover.path).toEqual([]);
   });

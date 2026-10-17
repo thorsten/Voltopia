@@ -99,3 +99,29 @@ export function householdFlexShare(state: SimState): number {
   const base = BALANCE.smartMeters.householdFlexShare;
   return state.policies.nightTariff ? base * BALANCE.policies.nightTariff.flexShareFactor : base;
 }
+
+/** Commuter car speed; buses, vans and trains keep their own speed. */
+export function carSpeedTilesPerSecond(state: SimState): number {
+  const base = BALANCE.vehicles.speedTilesPerSecond;
+  return state.policies.speedLimit ? base * BALANCE.policies.speedLimit.speedFactor : base;
+}
+
+export function batteryDrainPerTile(state: SimState): number {
+  const base = BALANCE.vehicles.batteryDrainPerTile;
+  return state.policies.speedLimit ? base * BALANCE.policies.speedLimit.drainFactor : base;
+}
+
+export function smartMeterInstallsPerDay(state: SimState): number {
+  const base = BALANCE.smartMeters.installsPerDay;
+  return state.policies.smartMeterMandate
+    ? base * BALANCE.policies.smartMeterMandate.installFactor
+    : base;
+}
+
+/** What the city pays per installed meter (households cover the rest under the mandate). */
+export function smartMeterCityCost(state: SimState): number {
+  const base = BALANCE.smartMeters.costPerMeter;
+  return state.policies.smartMeterMandate
+    ? base * BALANCE.policies.smartMeterMandate.cityCostShare
+    : base;
+}

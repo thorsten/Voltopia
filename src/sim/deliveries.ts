@@ -418,7 +418,13 @@ export function deliveriesStep(state: SimState, occupancy: Map<number, number>):
         break;
       }
       case VanPhase.Driving: {
-        const result = advanceAlongPath(state, van, step, occupancy);
+        const result = advanceAlongPath(
+          state,
+          van,
+          step,
+          occupancy,
+          BALANCE.vehicles.batteryDrainPerTile,
+        );
         if (result === 'arrived') arrive(state, van);
         else if (result === 'lost') {
           // The road under stops[0] vanished mid-trip (e.g. a bulldozed

@@ -6,7 +6,7 @@ import { recomputeGrid } from './powerGrid.ts';
 import { plantNetwork } from './rail.ts';
 import { canCycle, canWalk } from './lanes.ts';
 import { findRoadPath, isMotorRoad } from './routing.ts';
-import { homeChargingAllowed } from './policies.ts';
+import { batteryDrainPerTile, carSpeedTilesPerSecond, homeChargingAllowed } from './policies.ts';
 import { isSmartVehicle } from './smartMeters.ts';
 import {
   BusPhase,
@@ -126,6 +126,7 @@ export function advanceAlongPath(
   mover: Mover,
   step: number,
   occupancy: Map<number, number>,
+  drainPerTile: number,
 ): MoveResult {
   const startTile = vehicleTile(state, mover);
   let remaining =
@@ -175,7 +176,7 @@ export function advanceAlongPath(
     mover.y = nextY;
     if (move > 1e-9) {
       mover.angle = Math.atan2(dy, dx);
-      mover.charge = Math.max(0, mover.charge - move * BALANCE.vehicles.batteryDrainPerTile);
+      mover.charge = Math.max(0, mover.charge - move * drainPerTile);
     }
     moved += move;
     remaining -= move;
@@ -201,7 +202,7 @@ function driveAlongPath(
   step: number,
   occupancy: Map<number, number>,
 ): void {
-  const result = advanceAlongPath(state, vehicle, step, occupancy);
+  const result = advanceAlongPath(state, vehicle, step, occupancy, batteryDrainPerTile(state));
   if (result === 'lost') {
     // A bulldozed tile on the route: abort the trip and re-plan next tick.
     const parked = vehicle.phase === VehiclePhase.ToWork ? vehicle.homeRoad : vehicle.workRoad;
@@ -348,7 +349,7 @@ export function vehiclesStep(state: SimState): Map<number, number> {
   }
 
   const { transitCover } = state.layers;
-  const step = BALANCE.vehicles.speedTilesPerSecond / TICK_RATE;
+  const step = carSpeedTilesPerSecond(state) / TICK_RATE;
   const ticksIntoDay = state.tick % TICKS_PER_DAY;
   const morningDeparture = ticksAtHour(BALANCE.vehicles.commute.morningStartHour);
   const eveningDeparture = ticksAtHour(BALANCE.vehicles.commute.eveningStartHour);

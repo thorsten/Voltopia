@@ -1,4 +1,5 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
+import { smartMeterCityCost, smartMeterInstallsPerDay } from './policies.ts';
 import { countBuildings, type SimState } from './state.ts';
 
 export { countBuildings };
@@ -51,7 +52,8 @@ export function smartMetersStep(state: SimState): number {
   if (meters.metered > buildings) meters.metered = buildings;
   let spent = 0;
   if (meters.active && meters.metered < buildings) {
-    const { installsPerDay, costPerMeter } = BALANCE.smartMeters;
+    const installsPerDay = smartMeterInstallsPerDay(state);
+    const costPerMeter = smartMeterCityCost(state);
     // Integer arithmetic on purpose: the carry counts ticks' worth of
     // crew time (installsPerDay per tick, TICKS_PER_DAY per meter), so
     // a day installs exactly installsPerDay meters for any rate. Adding

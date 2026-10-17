@@ -4,13 +4,18 @@ import { tileIndex } from '../shared/grid.ts';
 import { Zone } from '../shared/types.ts';
 import { happinessStep } from './happiness.ts';
 import {
+  batteryDrainPerTile,
+  carSpeedTilesPerSecond,
   homeChargingAllowed,
   householdFlexShare,
   policiesStep,
   policyDailyCost,
   policyHappiness,
   rooftopPeakAt,
+  smartMeterCityCost,
+  smartMeterInstallsPerDay,
 } from './policies.ts';
+import { refreshBuildingCount, setSmartMeterRollout, smartMetersStep } from './smartMeters.ts';
 import { ticksAtHour } from './vehicles.ts';
 import { growthStep, computeDemand } from './growth.ts';
 import { bulldozeTiles, undoLastAction } from './roads.ts';
@@ -199,6 +204,68 @@ describe('night tariff', () => {
     state.policies.nightTariff = true;
     expect(householdFlexShare(state)).toBeCloseTo(
       BALANCE.smartMeters.householdFlexShare * BALANCE.policies.nightTariff.flexShareFactor,
+    );
+  });
+});
+
+describe('speed limit', () => {
+  it('scales car speed and battery drain only while active', () => {
+    const state = createSimState(1, SIZE);
+    expect(carSpeedTilesPerSecond(state)).toBe(BALANCE.vehicles.speedTilesPerSecond);
+    expect(batteryDrainPerTile(state)).toBe(BALANCE.vehicles.batteryDrainPerTile);
+    state.policies.speedLimit = true;
+    expect(carSpeedTilesPerSecond(state)).toBeCloseTo(
+      BALANCE.vehicles.speedTilesPerSecond * BALANCE.policies.speedLimit.speedFactor,
+    );
+    expect(batteryDrainPerTile(state)).toBeCloseTo(
+      BALANCE.vehicles.batteryDrainPerTile * BALANCE.policies.speedLimit.drainFactor,
+    );
+  });
+});
+
+describe('smart-meter mandate', () => {
+  it('doubles the install pace and halves the city share', () => {
+    const state = createSimState(1, SIZE);
+    expect(smartMeterInstallsPerDay(state)).toBe(BALANCE.smartMeters.installsPerDay);
+    expect(smartMeterCityCost(state)).toBe(BALANCE.smartMeters.costPerMeter);
+    state.policies.smartMeterMandate = true;
+    expect(smartMeterInstallsPerDay(state)).toBe(
+      BALANCE.smartMeters.installsPerDay * BALANCE.policies.smartMeterMandate.installFactor,
+    );
+    expect(smartMeterCityCost(state)).toBeCloseTo(
+      BALANCE.smartMeters.costPerMeter * BALANCE.policies.smartMeterMandate.cityCostShare,
+    );
+  });
+
+  it('a day of rollout installs installFactor times more meters at cityCostShare each', () => {
+    const size = 32;
+    const idx = (x: number, y: number) => tileIndex(x, y, size);
+    const run = (mandate: boolean): { metered: number; spent: number } => {
+      const state = createSimState(2, size);
+      const road = [];
+      const homes = [];
+      for (let x = 2; x <= 26; x++) {
+        road.push(idx(x, 8));
+        homes.push(idx(x, 7), idx(x, 9));
+      }
+      buildRoads(state, road);
+      paintZones(state, homes, Zone.Residential);
+      for (const h of homes) state.layers.density[h] = 1;
+      refreshBuildingCount(state);
+      state.policies.smartMeterMandate = mandate;
+      setSmartMeterRollout(state, true);
+      state.money = 1_000_000;
+      let spent = 0;
+      for (let i = 0; i < TICKS_PER_DAY; i++) spent += smartMetersStep(state);
+      return { metered: state.smartMeters.metered, spent };
+    };
+    const plain = run(false);
+    const forced = run(true);
+    expect(plain.metered).toBeGreaterThan(0);
+    expect(forced.metered).toBeLessThan(50);
+    expect(forced.metered).toBe(plain.metered * BALANCE.policies.smartMeterMandate.installFactor);
+    expect(forced.spent / forced.metered).toBeCloseTo(
+      BALANCE.smartMeters.costPerMeter * BALANCE.policies.smartMeterMandate.cityCostShare,
     );
   });
 });
