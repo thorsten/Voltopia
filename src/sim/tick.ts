@@ -5,6 +5,7 @@ import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
+import { policiesStep } from './policies.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
@@ -96,6 +97,7 @@ export function stepTick(state: SimState): void {
   // The contract bills what the energy step shed this tick.
   demandResponseStep(state);
   economyStep(state, population, jobs, industrialJobs);
+  policiesStep(state);
   // After the income of this tick has landed: repairs are paid out of it.
   repairStep(state);
   happinessStep(state, population);
@@ -348,6 +350,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     smartMeters: state.lastSmartMeterCost,
     demandResponse: state.lastDemandResponseCost,
     goodsImport: state.lastGoodsImportCost,
+    policies: state.lastPolicyCost,
     gridImportCost: b.gridImportCost,
     net:
       b.taxIncome +
@@ -360,6 +363,7 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
       state.lastRepairCost -
       state.lastSmartMeterCost -
       state.lastDemandResponseCost -
-      state.lastGoodsImportCost,
+      state.lastGoodsImportCost -
+      state.lastPolicyCost,
   };
 }

@@ -2,6 +2,7 @@ import { BALANCE } from '../shared/constants.ts';
 import { tileX, tileY } from '../shared/grid.ts';
 import { PlantType, SupplyStatus, TileType, Zone } from '../shared/types.ts';
 import { damagedBuildingShare } from './disasters.ts';
+import { policyHappiness } from './policies.ts';
 import { seaCoverage } from './sea.ts';
 import { forestCoverage } from './forest.ts';
 import type { SimState } from './state.ts';
@@ -106,6 +107,7 @@ export function happinessStep(state: SimState, population: number): void {
   const forestBonus = forestCoverage(state) * BALANCE.forest.coverBonus;
   // A sea view is worth its own bonus, like woods and parks.
   const coastBonus = seaCoverage(state) * BALANCE.sea.coastBonus;
+  const policyTerm = policyHappiness(state);
   // Factories are unwelcome neighbours: homes in their reach weigh on the city.
   const industryPenalty = industryCoverage(state) * config.industryPenaltyWeight;
   const commutePenalty = Math.min(
@@ -132,7 +134,8 @@ export function happinessStep(state: SimState, population: number): void {
       config.base +
         parkBonus +
         forestBonus +
-        coastBonus -
+        coastBonus +
+        policyTerm -
         taxPenalty -
         supplyPenalty -
         industryPenalty -

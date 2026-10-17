@@ -6,6 +6,7 @@ import {
 } from '../shared/constants.ts';
 import { neighbors4 } from '../shared/grid.ts';
 import { Rng } from '../shared/rng.ts';
+import { POLICY_IDS } from '../shared/types.ts';
 import type {
   DemandStats,
   DeliveryStats,
@@ -18,6 +19,7 @@ import type {
   SavedDisasters,
   SeasonState,
   Speed,
+  PolicyId,
   TileDiff,
   TransitStats,
   Weather,
@@ -34,6 +36,7 @@ import {
   TileType,
   Zone,
 } from '../shared/types.ts';
+import { defaultPolicies } from './policies.ts';
 import { callBudgetTicks } from './demandResponse.ts';
 import { emptyPlantMap, type EconomyBreakdown } from './economy.ts';
 import {
@@ -452,6 +455,12 @@ export interface SimState {
   };
   /** Import fees paid this tick (budget line). */
   lastGoodsImportCost: number;
+  /** Active ordinances (see policies.ts). */
+  policies: Record<PolicyId, boolean>;
+  /** Ordinance admin cost plus subsidies paid last tick (budget line). */
+  lastPolicyCost: number;
+  /** Rooftop-PV subsidies booked by growth since the last policiesStep. */
+  lastPolicySubsidy: number;
   buses: Bus[];
   trains: Train[];
   /** Bumped by every track build or removal; the network labelling is recomputed when it differs from railComputedVersion. */
@@ -724,6 +733,9 @@ export function createSimState(
       lastDay: { local: 0, imported: 0, partial: false },
     },
     lastGoodsImportCost: 0,
+    policies: defaultPolicies(),
+    lastPolicyCost: 0,
+    lastPolicySubsidy: 0,
     buses: [],
     trains: [],
     railVersion: 0,
@@ -1315,6 +1327,7 @@ export function serializeState(state: SimState): SaveGame {
     money: state.money,
     taxRate: state.taxRate,
     marketTrading: state.marketTrading,
+    policies: { ...state.policies },
     stored: storedPairs(state),
     goals: [...state.goalsAchieved],
     lifetime: state.lifetime.samples.map((sample) => ({ ...sample })),
@@ -1406,6 +1419,8 @@ export function deserializeState(save: SaveGame): SimState {
   state.money = save.money;
   state.taxRate = save.taxRate;
   state.marketTrading = save.marketTrading ?? false;
+  state.policies = defaultPolicies();
+  for (const id of POLICY_IDS) if (save.policies?.[id] === true) state.policies[id] = true;
   state.goalsAchieved = new Set(save.goals ?? []);
   state.lifetime.samples = (save.lifetime ?? []).map((sample) => ({ ...sample }));
   state.layers.tileType.set(new Uint8Array(save.layers.tileType));

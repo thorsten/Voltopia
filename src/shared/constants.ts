@@ -1835,4 +1835,41 @@ export const BALANCE = {
       minSuppliedShare: 0.5,
     },
   },
+  /**
+   * City ordinances: each costs `dailyCost` a day in administration,
+   * moves happiness by `happiness` while active and changes one sim
+   * parameter. First guesses; Task 8's probe tunes them.
+   */
+  policies: {
+    rooftopPvMandate: {
+      dailyCost: 40,
+      happiness: -0.02,
+      /** Paid once per building that spawns under the mandate. */
+      subsidyPerBuilding: 150,
+      /** Rooftop peak of a density-1 building built under the mandate. */
+      mandatePeakDensity1: 2,
+    },
+    nightTariff: {
+      dailyCost: 30,
+      happiness: 0.02,
+      nightStartHour: 22,
+      nightEndHour: 6,
+      /** Multiplies smartMeters.householdFlexShare. */
+      flexShareFactor: 1.5,
+    },
+    speedLimit: {
+      dailyCost: 10,
+      happiness: -0.03,
+      speedFactor: 0.75,
+      drainFactor: 0.8,
+    },
+    smartMeterMandate: {
+      dailyCost: 20,
+      /** Applies only while metered coverage is below 1. */
+      happiness: -0.03,
+      installFactor: 2,
+      /** Share of costPerMeter the city pays; households pay the rest. */
+      cityCostShare: 0.5,
+    },
+  },
 } as const;

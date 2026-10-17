@@ -161,6 +161,14 @@ export type SeasonId = (typeof SEASON_ORDER)[number];
 export const SCENARIO_IDS = ['island', 'dunkelflaute', 'oldTown', 'stormSeason'] as const;
 export type ScenarioId = (typeof SCENARIO_IDS)[number];
 
+export const POLICY_IDS = [
+  'rooftopPvMandate',
+  'nightTariff',
+  'speedLimit',
+  'smartMeterMandate',
+] as const;
+export type PolicyId = (typeof POLICY_IDS)[number];
+
 /** Deterministic seasonal signal for one tick (no random component). */
 export interface SeasonState {
   /** 0..1 through the year, 0 = first spring day, continuous within a day. */
@@ -382,6 +390,8 @@ export interface BudgetStats {
   demandResponse: number;
   /** Import fees for tours that started without a factory in reach. */
   goodsImport: number;
+  /** Ordinance admin cost plus rooftop-PV subsidies paid this tick. */
+  policies: number;
   gridImportCost: number;
   /** Income - expenses for this tick. */
   net: number;
@@ -956,6 +966,8 @@ export interface SavedScenario {
 }
 
 export interface SaveGame {
+  /** Active ordinances (absent in older saves → all off). */
+  policies?: Partial<Record<PolicyId, boolean>>;
   version: number;
   seed: number;
   size: number;
