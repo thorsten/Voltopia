@@ -525,6 +525,7 @@ export function energyStep(state: SimState, input: EnergyTickInput): void {
           nightNeedsHeat: nightNeedsHeat(temperature),
         },
         substations: c.substations,
+        importCapacityFactor: state.rules.importCapacityFactor,
       },
       poolForIsland(state, n),
     );

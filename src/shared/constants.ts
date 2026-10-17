@@ -1758,4 +1758,43 @@ export const BALANCE = {
       share: 0.25,
     },
   },
+  scenarios: {
+    /** Money at or below which any scenario is lost. */
+    bankruptMoney: -5_000,
+    /** Longest metric window any scenario uses; samples beyond it are dropped. */
+    maxSamples: 365,
+    island: {
+      seed: 11,
+      size: 48,
+      startingMoney: 30_000,
+      deadlineDays: 4 * DAYS_PER_SEASON,
+      population: 300,
+      deficitWindowDays: 30,
+    },
+    dunkelflaute: {
+      seed: 12,
+      size: 48,
+      startingMoney: 20_000,
+      deadlineDays: 90,
+      maxDeficitTicks: 200,
+    },
+    oldTown: {
+      seed: 13,
+      size: 48,
+      startingMoney: 35_000,
+      deadlineDays: 180,
+      suppliedShare: 0.95,
+      renewableShare: 0.8,
+    },
+    stormSeason: {
+      seed: 14,
+      size: 48,
+      startingMoney: 25_000,
+      disasterScale: 1.6,
+      deadlineDays: 120,
+      maxDeficitTicks: 300,
+      deficitWindowDays: 30,
+      minSuppliedShare: 0.5,
+    },
+  },
 } as const;

@@ -60,6 +60,8 @@ export interface IslandInput {
   heatStore: { headroom: number; pumpPowerLeft: number; cop: number; nightNeedsHeat: boolean };
   /** Substations on this island: each one adds an import and an export link. */
   substations: number;
+  /** Scenario rule: multiplies the import link (1 in free play, 0 = none). */
+  importCapacityFactor: number;
 }
 
 /**
@@ -169,7 +171,8 @@ export function balanceIsland(input: IslandInput, pool: IslandPool): IslandResul
 
   // The island's links: no substation, no link. Everything below that
   // used to read the BALANCE figures directly scales with them.
-  const importCapacity = input.substations * BALANCE.market.importCapacity;
+  const importCapacity =
+    input.substations * BALANCE.market.importCapacity * input.importCapacityFactor;
   const exportCapacity = input.substations * BALANCE.market.exportCapacity;
 
   let buildingDemand = input.demand.buildings;

@@ -158,6 +158,9 @@ export interface TideState {
 export const SEASON_ORDER = ['spring', 'summer', 'autumn', 'winter'] as const;
 export type SeasonId = (typeof SEASON_ORDER)[number];
 
+export const SCENARIO_IDS = ['island', 'dunkelflaute', 'oldTown', 'stormSeason'] as const;
+export type ScenarioId = (typeof SCENARIO_IDS)[number];
+
 /** Deterministic seasonal signal for one tick (no random component). */
 export interface SeasonState {
   /** 0..1 through the year, 0 = first spring day, continuous within a day. */
@@ -941,6 +944,8 @@ export interface SaveGame {
   marketTrading?: boolean;
   /** Day number on which year 1 started (absent in older saves → the save's current day). */
   seasonOriginDay?: number;
+  /** Scenario rules (absent in older saves → free-play defaults). */
+  rules?: { importCapacityFactor: number; startSeason: SeasonId };
   /** Snow cover 0..1 (absent in older saves → 0). */
   snowpack?: number;
   /** Building insulation bought (absent in older saves → false). */

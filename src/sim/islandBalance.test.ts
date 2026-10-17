@@ -44,6 +44,7 @@ function input(over: Partial<IslandInput> = {}): IslandInput {
     },
     heatStore: { headroom: 0, pumpPowerLeft: 0, cop: 1, nightNeedsHeat: false },
     substations: 0,
+    importCapacityFactor: 1,
     ...over,
   };
 }
@@ -74,6 +75,18 @@ describe('balanceIsland', () => {
     expect(one.importCapacity).toBe(BALANCE.market.importCapacity);
     const two = balanceIsland({ ...short, substations: 2 }, pool());
     expect(two.gridImport).toBeCloseTo(Math.min(100, 2 * BALANCE.market.importCapacity), 9);
+  });
+
+  it('importCapacityFactor scales the import link', () => {
+    const short = input({
+      substations: 1,
+      demand: { buildings: 100, heating: 0, cooling: 0, charging: 0, heatPumps: 0, traction: 0 },
+    });
+    const full = balanceIsland({ ...short, importCapacityFactor: 1 }, pool());
+    const none = balanceIsland({ ...short, importCapacityFactor: 0 }, pool());
+    expect(full.gridImport).toBeGreaterThan(0);
+    expect(none.gridImport).toBe(0);
+    expect(none.deficit).toBeGreaterThan(full.deficit);
   });
 
   it('surplus charges the battery before exporting and reports the signed delta', () => {

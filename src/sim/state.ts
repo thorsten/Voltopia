@@ -47,6 +47,7 @@ import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { TRAIL_TILES } from './trains.ts';
+import { DEFAULT_RULES, type ScenarioRules } from './scenarios/types.ts';
 
 /** Commute phases of a vehicle. */
 export const VehiclePhase = {
@@ -371,6 +372,8 @@ export interface SimState {
   lastDemandResponseCost: number;
   /** Day number on which year 1 started; 0 for new games. */
   seasonOriginDay: number;
+  /** Scenario rules; DEFAULT_RULES in free play. */
+  rules: ScenarioRules;
   /** Seasonal signal for the current tick, recomputed in stepTick. */
   season: SeasonState;
   happiness: number;
@@ -677,6 +680,7 @@ export function createSimState(
     demandResponse: { active: false },
     lastDemandResponseCost: 0,
     seasonOriginDay: 0,
+    rules: { ...DEFAULT_RULES },
     season: seasonState({ day: 0, timeOfDay: 0, seasonOriginDay: 0, cloudCover: 0.3 }),
     happiness: BALANCE.happiness.base,
     gridVersion: 0,
@@ -1307,6 +1311,7 @@ export function serializeState(state: SimState): SaveGame {
     lifetime: state.lifetime.samples.map((sample) => ({ ...sample })),
     riverFlow: state.weather.riverFlow,
     seasonOriginDay: state.seasonOriginDay,
+    rules: { ...state.rules },
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
     smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
@@ -1447,6 +1452,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.demandResponse = { active: save.demandResponse?.active === true };
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
+  state.rules = { ...DEFAULT_RULES, ...save.rules };
   state.season = seasonState({
     day: Math.floor(save.tick / TICKS_PER_DAY),
     timeOfDay: (save.tick % TICKS_PER_DAY) / TICKS_PER_DAY,
