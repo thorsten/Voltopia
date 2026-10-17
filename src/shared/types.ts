@@ -338,6 +338,15 @@ export interface ScenarioStats {
   conditions: ConditionStatus[];
 }
 
+/** Ordinances in force, with their daily administration cost and happiness term. */
+export interface PolicyStats {
+  active: Record<PolicyId, boolean>;
+  /** Administration cost per in-game day of the active ordinances. */
+  dailyCost: number;
+  /** Happiness term the active ordinances contribute. */
+  happiness: number;
+}
+
 /** Rough tile counts for the HUD and the tutorial. */
 export interface TileCounts {
   roadTiles: number;
@@ -741,6 +750,8 @@ export interface GlobalStats {
   marketTrading: boolean;
   /** Whether the building insulation upgrade has been bought. */
   insulation: boolean;
+  /** Ordinances in force, their daily cost and happiness term. */
+  policies: PolicyStats;
   /** Share of buildings with fire / police coverage, 0..1. */
   services: { fire: number; police: number };
   /** Disasters in flight, damage and the repair bill. */

@@ -5,7 +5,7 @@ import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
-import { policiesStep } from './policies.ts';
+import { policiesStep, policyDailyCost, policyHappiness } from './policies.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
@@ -287,6 +287,11 @@ export function buildStats(state: SimState): GlobalStats {
     },
     marketTrading: state.marketTrading,
     insulation: state.insulation,
+    policies: {
+      active: { ...state.policies },
+      dailyCost: policyDailyCost(state),
+      happiness: policyHappiness(state),
+    },
     services: { ...state.lastServices },
     disasters: disasterStats(state),
     forestShare: forestShare(state),

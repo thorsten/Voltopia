@@ -133,6 +133,10 @@ export class SimEngine {
       case 'buyInsulation':
         state.statsDirty = true;
         return this.toEvents(buyInsulation(state));
+      case 'setPolicy':
+        state.policies[command.id] = command.active;
+        state.statsDirty = true;
+        return [];
     }
   }
 

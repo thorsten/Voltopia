@@ -13,7 +13,7 @@ import {
 import { SimEngine } from './engine.ts';
 import { buildRail } from './rail.ts';
 import { BusPhase, TileType, TrainKind, TrainPhase, VanPhase } from './state.ts';
-import { timeOfDay, dayNumber } from './tick.ts';
+import { buildStats, timeOfDay, dayNumber } from './tick.ts';
 import { placePlant } from './energy.ts';
 import { buildPowerLines } from './powerLines.ts';
 import { buildRoads } from './roads.ts';
@@ -582,4 +582,17 @@ describe('time helpers', () => {
     expect(dayNumber(0)).toBe(0);
     expect(dayNumber(TICKS_PER_DAY * 3 + 5)).toBe(3);
   });
+});
+
+it('setPolicy toggles an ordinance and the stats report it', () => {
+  const engine = new SimEngine(1, 16);
+  engine.applyCommand({ type: 'init', seed: 1, size: 16 });
+  engine.applyCommand({ type: 'setPolicy', id: 'speedLimit', active: true });
+  expect(engine.state.policies.speedLimit).toBe(true);
+  const stats = buildStats(engine.state);
+  expect(stats.policies.active.speedLimit).toBe(true);
+  expect(stats.policies.dailyCost).toBe(BALANCE.policies.speedLimit.dailyCost);
+  expect(stats.policies.happiness).toBeCloseTo(BALANCE.policies.speedLimit.happiness);
+  engine.applyCommand({ type: 'setPolicy', id: 'speedLimit', active: false });
+  expect(buildStats(engine.state).policies.dailyCost).toBe(0);
 });

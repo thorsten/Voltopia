@@ -2,6 +2,7 @@ import type {
   GlobalStats,
   LifetimeSample,
   PlantType,
+  PolicyId,
   RoadLane,
   SaveGame,
   ScenarioId,
@@ -48,6 +49,7 @@ type SimCommandBody =
   | { type: 'setMarketTrading'; enabled: boolean }
   | { type: 'plantForest'; tiles: number[] }
   | { type: 'buyInsulation' }
+  | { type: 'setPolicy'; id: PolicyId; active: boolean }
   /** Select a tile for the inspector (null clears it). */
   | { type: 'inspectTile'; tile: number | null }
   | { type: 'requestSave' }
