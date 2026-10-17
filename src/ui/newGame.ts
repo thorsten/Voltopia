@@ -80,10 +80,16 @@ function readPendingNewGame(): NewGameOptions {
     localStorage.removeItem(PENDING_KEY);
     if (!raw) return { ...DEFAULT_NEW_GAME };
     const parsed = JSON.parse(raw) as Partial<NewGameOptions>;
+    const scenario = SCENARIO_IDS.includes(parsed.scenario as ScenarioId)
+      ? (parsed.scenario as ScenarioId)
+      : undefined;
     return {
-      size: MAP_SIZES.includes(parsed.size as (typeof MAP_SIZES)[number])
-        ? (parsed.size as number)
-        : DEFAULT_NEW_GAME.size,
+      // A scenario fixes its own map size (the sim builds it from BALANCE).
+      size: scenario
+        ? BALANCE.scenarios[scenario].size
+        : MAP_SIZES.includes(parsed.size as (typeof MAP_SIZES)[number])
+          ? (parsed.size as number)
+          : DEFAULT_NEW_GAME.size,
       startingMoney:
         typeof parsed.startingMoney === 'number' && parsed.startingMoney > 0
           ? parsed.startingMoney
@@ -92,9 +98,7 @@ function readPendingNewGame(): NewGameOptions {
       disasterScale: DISASTER_LEVELS.some((level) => level.scale === parsed.disasterScale)
         ? (parsed.disasterScale as number)
         : DEFAULT_NEW_GAME.disasterScale,
-      ...(SCENARIO_IDS.includes(parsed.scenario as ScenarioId)
-        ? { scenario: parsed.scenario as ScenarioId }
-        : {}),
+      ...(scenario ? { scenario } : {}),
     };
   } catch {
     return { ...DEFAULT_NEW_GAME };

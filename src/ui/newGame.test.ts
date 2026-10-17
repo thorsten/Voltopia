@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BALANCE } from '../shared/constants.ts';
 import { DEFAULT_NEW_GAME, DISASTER_LEVELS } from './newGame.ts';
 
 function memoryStorage(): Storage {
@@ -41,7 +42,9 @@ describe('pending scenario', () => {
   it('stores and consumes a pending scenario', async () => {
     const m = await import('./newGame.ts');
     m.storePendingScenario('island');
-    expect(m.consumePendingNewGame().scenario).toBe('island');
+    const options = m.consumePendingNewGame();
+    expect(options.scenario).toBe('island');
+    expect(options.size).toBe(BALANCE.scenarios.island.size);
   });
 
   it('drops an unknown scenario id', async () => {
