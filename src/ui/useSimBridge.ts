@@ -5,6 +5,7 @@ import type {
   GlobalStats,
   LifetimeSample,
   SaveGame,
+  ScenarioId,
   TileDiff,
   VehicleState,
 } from '../shared/types.ts';
@@ -43,6 +44,8 @@ export interface SimBridgeOptions {
   startingMoney?: number;
   /** Disaster intensity for a brand-new city: 0 = off .. 1.6 = harsh. */
   disasterScale?: number;
+  /** Start this scenario (brand-new city only). */
+  scenario?: ScenarioId;
 }
 
 const REJECTION_DISPLAY_MS = 2500;
@@ -112,6 +115,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
       size: options.size ?? GRID_SIZE,
       ...(options.startingMoney !== undefined ? { startingMoney: options.startingMoney } : {}),
       ...(options.disasterScale !== undefined ? { disasterScale: options.disasterScale } : {}),
+      ...(options.scenario ? { scenario: options.scenario } : {}),
       ...(options.save ? { save: options.save } : {}),
     };
     worker.postMessage(init);

@@ -122,6 +122,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     size: gridSize,
     startingMoney: options.startingMoney,
     disasterScale: options.disasterScale,
+    ...(save === null && options.scenario ? { scenario: options.scenario } : {}),
     ...(save ? { save } : {}),
   });
   const callbacksRef = useRef<RendererCallbacks>({});

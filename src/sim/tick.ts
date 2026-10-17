@@ -26,6 +26,7 @@ import { updateTrafficLoad } from './traffic.ts';
 import { transitStep, transitStats } from './transit.ts';
 import { tractionDemandByIsland, trainsStep } from './trains.ts';
 import { chargingDemandByIsland, drivingVehicleCount, vehiclesStep } from './vehicles.ts';
+import { scenarioStats } from './scenarios/stats.ts';
 import { updateWeather } from './weather.ts';
 import {
   countPopulationAndJobs,
@@ -297,6 +298,7 @@ export function buildStats(state: SimState): GlobalStats {
     transit: { ...state.lastTransit },
     rail: { ...state.lastRail },
     goals: goalStates(state),
+    ...(state.scenario ? { scenario: scenarioStats(state) } : {}),
     counts,
     budget: buildBudget(state),
     inspected: state.inspectedTile >= 0 ? inspectTile(state, state.inspectedTile) : null,

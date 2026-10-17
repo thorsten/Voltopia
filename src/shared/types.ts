@@ -306,6 +306,25 @@ export interface GoalState {
   achieved: boolean;
 }
 
+/** One win or fail condition of the running scenario, as shown in the HUD. */
+export interface ConditionStatus {
+  role: 'win' | 'fail';
+  kind: 'goal' | 'metric';
+  label: string;
+  met: boolean;
+  current: number;
+  target: number;
+}
+
+export interface ScenarioStats {
+  id: string;
+  status: 'running' | 'won' | 'failed';
+  day: number;
+  deadlineDays: number;
+  endedDay?: number;
+  conditions: ConditionStatus[];
+}
+
 /** Rough tile counts for the HUD and the tutorial. */
 export interface TileCounts {
   roadTiles: number;
@@ -727,6 +746,7 @@ export interface GlobalStats {
   transit: TransitStats;
   rail: RailStats;
   goals: GoalState[];
+  scenario?: ScenarioStats;
   counts: TileCounts;
   /** Per-tick budget breakdown for the budget panel. */
   budget: BudgetStats;

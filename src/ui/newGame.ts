@@ -1,4 +1,5 @@
 import { BALANCE, GRID_SIZE } from '../shared/constants.ts';
+import { SCENARIO_IDS, type ScenarioId } from '../shared/types.ts';
 
 /** Options chosen in the new-game dialog, applied on the next boot. */
 export interface NewGameOptions {
@@ -8,6 +9,8 @@ export interface NewGameOptions {
   seed: number | null;
   /** Disaster intensity: 0 = off .. 1.6 = harsh, see DISASTER_LEVELS. */
   disasterScale: number;
+  /** Start this scenario instead of a free city; the other options are ignored. */
+  scenario?: ScenarioId;
 }
 
 /**
@@ -53,6 +56,11 @@ export function storePendingNewGame(options: NewGameOptions): void {
   }
 }
 
+/** Persist a scenario start for the reload that begins it. */
+export function storePendingScenario(id: ScenarioId): void {
+  storePendingNewGame({ ...DEFAULT_NEW_GAME, scenario: id });
+}
+
 let consumedThisLoad: NewGameOptions | null = null;
 
 /**
@@ -84,6 +92,9 @@ function readPendingNewGame(): NewGameOptions {
       disasterScale: DISASTER_LEVELS.some((level) => level.scale === parsed.disasterScale)
         ? (parsed.disasterScale as number)
         : DEFAULT_NEW_GAME.disasterScale,
+      ...(SCENARIO_IDS.includes(parsed.scenario as ScenarioId)
+        ? { scenario: parsed.scenario as ScenarioId }
+        : {}),
     };
   } catch {
     return { ...DEFAULT_NEW_GAME };
