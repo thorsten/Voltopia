@@ -372,7 +372,10 @@ export function inspectTile(state: SimState, index: number): TileInfo | null {
             island: n,
             gridImport: islandStats.gridImport,
             gridExport: islandStats.gridExport,
-            importCapacity: islandStats.substations * BALANCE.market.importCapacity,
+            importCapacity:
+              islandStats.substations *
+              BALANCE.market.importCapacity *
+              state.rules.importCapacityFactor,
             exportCapacity: islandStats.substations * BALANCE.market.exportCapacity,
           },
         }

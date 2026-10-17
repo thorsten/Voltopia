@@ -48,7 +48,13 @@ import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { TRAIL_TILES } from './trains.ts';
-import { DEFAULT_RULES, type ScenarioRules, type ScenarioRun } from './scenarios/types.ts';
+import {
+  DEFAULT_RULES,
+  emptyRun,
+  type ScenarioId,
+  type ScenarioRules,
+  type ScenarioRun,
+} from './scenarios/types.ts';
 
 /** Commute phases of a vehicle. */
 export const VehiclePhase = {
@@ -1457,9 +1463,23 @@ export function deserializeState(save: SaveGame): SimState {
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.rules = { ...DEFAULT_RULES, ...save.rules };
-  // A save naming a scenario this build does not ship stays free play.
-  if (save.scenario && (SCENARIO_IDS as readonly string[]).includes(save.scenario.id))
-    state.scenario = structuredClone(save.scenario) as ScenarioRun;
+  // A save naming a scenario this build does not ship stays free play,
+  // rules included.
+  if (save.scenario && (SCENARIO_IDS as readonly string[]).includes(save.scenario.id)) {
+    const saved = structuredClone(save.scenario);
+    const id = saved.id as ScenarioId;
+    const base = emptyRun(id, saved.startTick);
+    // Merge over an empty run so a metric added later starts empty.
+    state.scenario = {
+      ...base,
+      ...saved,
+      id,
+      samples: { ...base.samples, ...saved.samples },
+      today: { ...base.today, ...saved.today },
+    };
+  } else if (save.scenario) {
+    state.rules = { ...DEFAULT_RULES };
+  }
   state.season = seasonState({
     day: Math.floor(save.tick / TICKS_PER_DAY),
     timeOfDay: (save.tick % TICKS_PER_DAY) / TICKS_PER_DAY,

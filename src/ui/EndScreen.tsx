@@ -85,11 +85,7 @@ export function EndScreen({
             >
               {t('scenario.end.continue')}
             </button>
-            <button
-              type="button"
-              data-testid="end-retry"
-              onClick={() => onRetry(scenario.id as ScenarioId)}
-            >
+            <button type="button" data-testid="end-retry" onClick={() => onRetry(scenario.id)}>
               {t('scenario.end.retry')}
             </button>
             <button

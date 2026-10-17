@@ -585,6 +585,18 @@ describe('district grid inspection', () => {
     expect(info.island?.number).toBe(1);
   });
 
+  it('a substation reports no import capacity without an import link', () => {
+    const state = createSimState(3, SIZE);
+    state.money = 1e9;
+    state.rules = { ...state.rules, importCapacityFactor: 0 };
+    placePlant(state, at(8, 8), PlantType.Substation);
+    bumpGridVersion(state);
+    energyStep(state, { chargingByIsland: new Float64Array(2) });
+    const info = inspectTile(state, at(8, 8))!;
+    expect(info.substation!.importCapacity).toBe(0);
+    expect(info.substation!.exportCapacity).toBe(BALANCE.market.exportCapacity);
+  });
+
   it('matches the island figures by key, not by a renumbered island number', () => {
     const state = createSimState(3, SIZE);
     state.money = 1e9;

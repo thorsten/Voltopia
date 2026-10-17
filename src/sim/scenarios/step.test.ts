@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TICKS_PER_DAY } from '../../shared/constants.ts';
+import type { SavedScenario } from '../../shared/types.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from '../state.ts';
 import { scenarioDay, scenarioStep } from './step.ts';
-import { emptyRun, type ScenarioDef } from './types.ts';
+import { DEFAULT_RULES, emptyRun, type ScenarioDef } from './types.ts';
 
 function def(over: Partial<ScenarioDef> = {}): ScenarioDef {
   return {
@@ -105,6 +106,21 @@ describe('scenarioStep', () => {
   it('drops a saved scenario this build does not ship', () => {
     const save = serializeState(running());
     save.scenario = { ...save.scenario!, id: 'nope' };
-    expect(deserializeState(save).scenario).toBeUndefined();
+    save.rules = { importCapacityFactor: 0, startSeason: 'winter' };
+    const loaded = deserializeState(save);
+    expect(loaded.scenario).toBeUndefined();
+    expect(loaded.rules).toEqual(DEFAULT_RULES);
+  });
+
+  it('fills metrics and counters a save lacks from an empty run', () => {
+    const save = serializeState(running());
+    const samples = save.scenario!.samples as Record<string, number[]>;
+    delete samples.suppliedShare;
+    const today = save.scenario!.today as Partial<SavedScenario['today']>;
+    delete today.suppliedShareSum;
+    const loaded = deserializeState(save);
+    expect(loaded.scenario!.samples.suppliedShare).toEqual([]);
+    expect(loaded.scenario!.today.suppliedShareSum).toBe(0);
+    expect(loaded.scenario!.id).toBe('island');
   });
 });

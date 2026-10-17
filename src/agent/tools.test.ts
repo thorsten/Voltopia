@@ -19,6 +19,7 @@ import {
 } from '../shared/types.ts';
 import { addDamage } from '../sim/disasters.ts';
 import { placePlant } from '../sim/energy.ts';
+import { scenarioDef } from '../sim/scenarios/registry.ts';
 import { SimEngine } from '../sim/engine.ts';
 import { discoverGeothermalFields } from '../sim/geothermal.ts';
 import { buildPowerLines } from '../sim/powerLines.ts';
@@ -718,7 +719,12 @@ describe('agent tools: building', () => {
   it('list_scenarios names every shipped scenario with its conditions', async () => {
     const { call } = createHarness();
     const result = (await call('list_scenarios', {})) as {
-      scenarios: { id: string; win: unknown[] }[];
+      scenarios: {
+        id: string;
+        win: unknown[];
+        disasterScale: number;
+        rules: { importCapacityFactor: number; startSeason: string };
+      }[];
     };
     expect(result.scenarios.map((s) => s.id)).toEqual([
       'island',
@@ -727,6 +733,15 @@ describe('agent tools: building', () => {
       'stormSeason',
     ]);
     expect(result.scenarios[0].win.length).toBeGreaterThan(0);
+    const byId = new Map(result.scenarios.map((s) => [s.id, s]));
+    expect(byId.get('island')!.rules).toEqual(scenarioDef('island').rules);
+    expect(byId.get('island')!.rules.importCapacityFactor).toBe(0);
+    expect(byId.get('dunkelflaute')!.rules.startSeason).toBe(
+      scenarioDef('dunkelflaute').rules.startSeason,
+    );
+    expect(byId.get('stormSeason')!.disasterScale).toBe(
+      BALANCE.scenarios.stormSeason.disasterScale,
+    );
   });
 
   it('start_scenario hands the id to the host and rejects unknown or missing ids', async () => {
@@ -747,10 +762,25 @@ describe('agent tools: building', () => {
     engine.applyCommand({ type: 'init', seed: 1, size: 16, scenario: 'island' });
     await ctx.waitForTick(ctx.getStats()!.tick + 1);
     const overview = (await call('get_game_overview', {})) as {
-      scenario: { conditions: object[] };
+      scenario: { conditions: object[]; endedDay?: number };
     };
-    expect(overview.scenario).toMatchObject({ id: 'island', status: 'running', day: 0 });
+    expect(overview.scenario).toMatchObject({
+      id: 'island',
+      status: 'running',
+      day: 0,
+      rules: { importCapacityFactor: 0, startSeason: 'spring' },
+    });
+    expect(overview.scenario.endedDay).toBeUndefined();
     expect(overview.scenario.conditions[0]).toHaveProperty('met');
+
+    const run = engine.state.scenario!;
+    run.status = 'failed';
+    run.endedTick = engine.state.tick;
+    await ctx.waitForTick(ctx.getStats()!.tick + 1);
+    expect((await call('get_game_overview', {})).scenario).toMatchObject({
+      status: 'failed',
+      endedDay: 0,
+    });
   });
 
   it('places a logistics depot next to a road and reports deliveries', async () => {

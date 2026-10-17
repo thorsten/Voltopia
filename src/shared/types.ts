@@ -322,7 +322,7 @@ export interface ConditionStatus {
 }
 
 export interface ScenarioStats {
-  id: string;
+  id: ScenarioId;
   status: 'running' | 'won' | 'failed';
   day: number;
   deadlineDays: number;
@@ -939,6 +939,7 @@ export interface VehicleState {
 }
 
 export interface SavedScenario {
+  /** Plain string: a save may name a scenario this build does not ship. */
   id: string;
   startTick: number;
   status: 'running' | 'won' | 'failed';

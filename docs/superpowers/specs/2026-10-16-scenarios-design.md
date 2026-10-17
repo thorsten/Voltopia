@@ -83,12 +83,12 @@ Metric semantics (all evaluated at day rollover):
 
 ### Shipped scenarios, `src/sim/scenarios/defs/<id>.ts`
 
-| id           | start                                            | rules                                | deadline | win                                                              | fail                                           |
-| ------------ | ------------------------------------------------ | ------------------------------------ | -------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| island       | small coastal town, no substation possible       | importCapacityFactor 0, spring       | 1 year   | population >= 300; deficitTicks <= 0 over last 30 days           | money <= bankruptcy line                       |
-| dunkelflaute | mid-size town with solar farms and few batteries | autumn end (winter begins at day 10) | 90 days  | deficitTicks <= N over whole run; population >= start population | money <= bankruptcy line                       |
-| oldTown      | dense unpowered town, no plants, no lines        | normal import, spring                | 180 days | suppliedShare >= 0.95; renewableShare >= 0.8                     | money <= bankruptcy line                       |
-| stormSeason  | town with a large onshore wind fleet, few pylons | disasterScale 1.6, autumn            | 120 days | goal stormProof; deficitTicks <= N over last 30 days             | money <= bankruptcy line; suppliedShare <= 0.5 |
+| id           | start                                            | rules                                 | deadline | win                                                     | fail                                           |
+| ------------ | ------------------------------------------------ | ------------------------------------- | -------- | ------------------------------------------------------- | ---------------------------------------------- |
+| island       | small coastal town, no import link               | importCapacityFactor 0, spring        | 20 days  | population >= 360; deficitTicks <= 800 over last 5 days | money <= bankruptcy line                       |
+| dunkelflaute | mid-size town with solar farms and few batteries | autumn start (winter begins on day 5) | 90 days  | deficitTicks <= 5_400 over whole run; population >= 510 | money <= bankruptcy line                       |
+| oldTown      | dense unpowered town, no plants, no lines        | normal import, spring                 | 180 days | suppliedShare >= 0.95; renewableShare >= 0.8            | money <= bankruptcy line                       |
+| stormSeason  | town with a large onshore wind fleet, few pylons | disasterScale 1.6, autumn             | 120 days | goal stormProof; deficitTicks <= 300 over last 30 days  | money <= bankruptcy line; suppliedShare <= 0.5 |
 
 Seeds, sizes (48 or 64), funds and all N values live in
 `BALANCE.scenarios.<id>` and are tuned with a headless probe during

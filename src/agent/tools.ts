@@ -31,7 +31,7 @@ import {
 import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
 import { dayOfTick, defaultSaveName } from '../storage/summary.ts';
 import '../sim/scenarios/defs/index.ts';
-import { scenarioDefs } from '../sim/scenarios/registry.ts';
+import { scenarioDef, scenarioDefs } from '../sim/scenarios/registry.ts';
 import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
 // Pure data (no localStorage call at import time, no React) — same kind of
 // cross-layer import as ../ui/i18n.tsx above. Reusing it keeps an agent's
@@ -678,7 +678,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'season, weather, energy balance summary, budget per tick, tax rate, upgrades, goals, ' +
         'tile counts, grid size, grid islands (count, in deficit) and a disasters summary ' +
         '(intensity, warning/active counts, damaged tiles, repair cost — see get_disasters for ' +
-        'the detail). Call this first and after every advance_time.',
+        'the detail), and while a scenario runs its block (status, day, endedDay once over, ' +
+        'rules, conditions). Call this first and after every advance_time.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -849,6 +850,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
                   status: s.scenario.status,
                   day: s.scenario.day,
                   deadlineDays: s.scenario.deadlineDays,
+                  ...(s.scenario.endedDay !== undefined ? { endedDay: s.scenario.endedDay } : {}),
+                  rules: { ...scenarioDef(s.scenario.id).rules },
                   conditions: s.scenario.conditions.map((c) => ({
                     role: c.role,
                     name: englishText(c.label as TranslationKey),
@@ -1655,8 +1658,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
     {
       name: 'list_scenarios',
       description:
-        'The shipped scenarios: id, title, teaser, deadline in days, win conditions (all must ' +
-        'hold at the deadline) and fail conditions (any one ends the run).',
+        'The shipped scenarios: id, title, teaser, deadline in days, map size, starting money, ' +
+        'disasterScale (0 = off .. 1.6 = harsh), rules (importCapacityFactor: 0 = no import ' +
+        'link through substations; startSeason), win conditions (all must hold at the ' +
+        'deadline) and fail conditions (any one ends the run).',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -1668,6 +1673,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             deadlineDays: def.deadlineDays,
             size: def.size,
             startingMoney: def.startingMoney,
+            disasterScale: def.disasterScale,
+            rules: { ...def.rules },
             win: def.win,
             fail: def.fail,
           })),
