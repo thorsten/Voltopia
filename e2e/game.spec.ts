@@ -60,16 +60,19 @@ test('new-game dialog starts a fresh city with chosen difficulty', async ({ page
 });
 
 test('a scenario starts from the scenarios page and survives a reload', async ({ page }) => {
+  // Starting a scenario reloads the page and stamps a 48x48 town; under
+  // SwiftShader that takes 25-30 s before the HUD shows the panel.
+  test.setTimeout(150_000);
   await page.getByTestId('open-scenarios').click();
   await expect(page.getByTestId('scenarios-page')).toBeVisible();
   await page.getByTestId('start-scenario-dunkelflaute').click();
   await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('scenario-panel')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('scenario-panel')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('scenario-day')).toContainText('90');
   await page.keyboard.press('Control+s');
   await page.waitForTimeout(500);
   await page.reload();
-  await expect(page.getByTestId('scenario-panel')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('scenario-panel')).toBeVisible({ timeout: 60_000 });
 });
 
 test('settings page toggles persist', async ({ page }) => {
