@@ -1777,6 +1777,8 @@ export const BALANCE = {
       startingMoney: 20_000,
       deadlineDays: 90,
       maxDeficitTicks: 200,
+      /** About 90 % of the stamped start population (573): residents may not leave. */
+      population: 510,
     },
     oldTown: {
       seed: 13,

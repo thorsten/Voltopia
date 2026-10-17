@@ -4,6 +4,7 @@ import type {
   PlantType,
   RoadLane,
   SaveGame,
+  ScenarioId,
   Speed,
   TileDiff,
   VehicleState,
@@ -27,6 +28,8 @@ type SimCommandBody =
       startingMoney?: number;
       /** Disaster intensity: 0 = off .. 1.6 = harsh (new games only). */
       disasterScale?: number;
+      /** Start a shipped scenario; seed/size/startingMoney/disasterScale are taken from its definition. */
+      scenario?: ScenarioId;
     }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'buildRoad'; tiles: number[]; avenue?: boolean }

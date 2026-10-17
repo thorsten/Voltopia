@@ -149,6 +149,13 @@ describe('SimEngine basics', () => {
     expect(engine.state.layers.terrain[0]).toBe(Terrain.River);
   });
 
+  it('init with a scenario ignores seed and size from the command', () => {
+    const engine = new SimEngine(7, 16);
+    engine.applyCommand({ type: 'init', seed: 7, size: 16, scenario: 'island' });
+    expect(engine.state.size).toBe(BALANCE.scenarios.island.size);
+    expect(engine.state.scenario?.id).toBe('island');
+  });
+
   it('init generates terrain before water', () => {
     const engine = new SimEngine(1, 48);
     engine.applyCommand({ type: 'init', seed: 9, size: 48 });

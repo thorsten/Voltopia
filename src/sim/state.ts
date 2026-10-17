@@ -27,6 +27,7 @@ import {
   DisasterKind,
   MAX_RAIL_AGE,
   PlantType,
+  SCENARIO_IDS,
   StopState,
   SupplyStatus,
   Terrain,
@@ -1456,7 +1457,9 @@ export function deserializeState(save: SaveGame): SimState {
   // Saves from before seasons start their year on the day they are loaded.
   state.seasonOriginDay = Math.floor(save.seasonOriginDay ?? save.tick / TICKS_PER_DAY);
   state.rules = { ...DEFAULT_RULES, ...save.rules };
-  if (save.scenario) state.scenario = structuredClone(save.scenario) as ScenarioRun;
+  // A save naming a scenario this build does not ship stays free play.
+  if (save.scenario && (SCENARIO_IDS as readonly string[]).includes(save.scenario.id))
+    state.scenario = structuredClone(save.scenario) as ScenarioRun;
   state.season = seasonState({
     day: Math.floor(save.tick / TICKS_PER_DAY),
     timeOfDay: (save.tick % TICKS_PER_DAY) / TICKS_PER_DAY,

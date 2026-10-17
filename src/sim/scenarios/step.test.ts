@@ -101,4 +101,10 @@ describe('scenarioStep', () => {
     delete save.scenario;
     expect(deserializeState(save).scenario).toBeUndefined();
   });
+
+  it('drops a saved scenario this build does not ship', () => {
+    const save = serializeState(running());
+    save.scenario = { ...save.scenario!, id: 'nope' };
+    expect(deserializeState(save).scenario).toBeUndefined();
+  });
 });

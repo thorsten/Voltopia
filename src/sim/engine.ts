@@ -1,3 +1,4 @@
+import './scenarios/defs/index.ts';
 import { BALANCE } from '../shared/constants.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import type { VehicleState } from '../shared/types.ts';
@@ -26,6 +27,8 @@ import {
   TrainKind,
   type SimState,
 } from './state.ts';
+import { scenarioDef } from './scenarios/registry.ts';
+import { startScenario } from './scenarios/start.ts';
 import { generateTerrain } from './terrain.ts';
 import { buildStats, stepTick } from './tick.ts';
 import { generateForest, plantForest } from './forest.ts';
@@ -54,6 +57,15 @@ export class SimEngine {
       case 'init':
         if (command.save) {
           this.state = deserializeState(command.save);
+        } else if (command.scenario) {
+          const def = scenarioDef(command.scenario);
+          this.state = createSimState(def.seed, def.size, def.startingMoney);
+          generateTerrain(this.state);
+          generateWater(this.state);
+          generateGeothermal(this.state);
+          discoverGeothermalFields(this.state);
+          generateForest(this.state);
+          startScenario(this.state, def);
         } else {
           this.state = createSimState(command.seed, command.size, command.startingMoney);
           // createSimState defaults to 0 (disasters off) so tests never run
