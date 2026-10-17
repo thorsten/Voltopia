@@ -204,7 +204,7 @@ describe('agent tools: reading', () => {
       expect(tool.inputSchema.type).toBe('object');
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toHaveLength(9);
+    expect(readOnly).toHaveLength(10);
   });
 
   it('get_game_overview reports funds, clock, goals and counts', async () => {
