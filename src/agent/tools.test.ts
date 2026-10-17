@@ -13,6 +13,7 @@ import {
   RoadLane,
   Terrain,
   TileType,
+  POLICY_IDS,
   Zone,
   type GlobalStats,
   type SaveGame,
@@ -189,6 +190,7 @@ describe('agent tools: reading', () => {
       'plant_forest',
       'set_market_trading',
       'buy_insulation',
+      'set_policy',
       'advance_time',
       'save_game',
       'list_saves',
@@ -742,6 +744,28 @@ describe('agent tools: building', () => {
     expect(byId.get('stormSeason')!.disasterScale).toBe(
       BALANCE.scenarios.stormSeason.disasterScale,
     );
+  });
+
+  it('set_policy toggles an ordinance and the overview reports it', async () => {
+    const { call } = createHarness();
+    await call('set_policy', { id: 'speedLimit', active: true });
+    const overview = await call('get_game_overview', {});
+    expect((overview.policies as { active: Record<string, boolean> }).active.speedLimit).toBe(true);
+    expect((overview.policies as { dailyCost: number }).dailyCost).toBe(
+      BALANCE.policies.speedLimit.dailyCost,
+    );
+    const bad = await call('set_policy', { id: 'nope', active: true });
+    expect(bad).toMatchObject({ ok: false, error: 'invalidInput' });
+    const missing = await call('set_policy', { id: 'speedLimit' });
+    expect(missing).toMatchObject({ ok: false, error: 'invalidInput' });
+  });
+
+  it('get_build_catalog lists the ordinances with their cost and effect', async () => {
+    const { call } = createHarness();
+    const catalog = await call('get_build_catalog', {});
+    const policies = catalog.policies as Record<string, { dailyCost: number; happiness: number }>;
+    expect(Object.keys(policies).sort()).toEqual([...POLICY_IDS].sort());
+    expect(policies.speedLimit.dailyCost).toBe(BALANCE.policies.speedLimit.dailyCost);
   });
 
   it('start_scenario hands the id to the host and rejects unknown or missing ids', async () => {

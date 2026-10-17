@@ -12,6 +12,7 @@ import type { SimCommand } from '../shared/messages.ts';
 import { isSupplySource } from '../shared/plants.ts';
 import {
   DisasterKind,
+  POLICY_IDS,
   PlantType,
   RoadLane,
   SCENARIO_IDS,
@@ -380,6 +381,12 @@ function readEnum<T extends string>(
     throw new ToolInputError(`"${key}" must be one of: ${allowed.join(', ')}`);
   }
   return value as T;
+}
+
+function readBoolean(input: Record<string, unknown>, key: string): boolean {
+  const value = input[key];
+  if (typeof value !== 'boolean') throw new ToolInputError(`"${key}" must be boolean`);
+  return value;
 }
 
 /** Tiles of an L-shaped path from→to, or the explicit `tiles` list. */
@@ -837,6 +844,11 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           marketTrading: s.marketTrading,
           forestShare: round(s.forestShare, 3),
           insulation: s.insulation,
+          policies: {
+            active: s.policies.active,
+            dailyCost: s.policies.dailyCost,
+            happiness: round(s.policies.happiness, 3),
+          },
           goals: s.goals.map((goal) => ({
             id: goal.id,
             achieved: goal.achieved,
@@ -880,6 +892,16 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           coordinates: 'Tiles are { x, y }, 0-based, x grows east, y grows south.',
           gridSize: size,
           ticksPerDay: TICKS_PER_DAY,
+          policies: Object.fromEntries(
+            POLICY_IDS.map((id) => [
+              id,
+              {
+                ...BALANCE.policies[id],
+                title: englishText(`policy.${id}.title` as TranslationKey),
+                description: englishText(`policy.${id}.body` as TranslationKey),
+              },
+            ]),
+          ),
           rules: [
             'Roads connect the city; buildings only appear on zoned tiles next to a road.',
             'Zones (residential, commercial, retail, industrial) grow on their own when demand is positive ' +
@@ -1450,10 +1472,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         required: ['enabled'],
       },
       async execute(input) {
-        if (typeof input.enabled !== 'boolean')
-          throw new ToolInputError('"enabled" must be boolean');
-        const outcome = await ctx.sendCommand({ type: 'setMarketTrading', enabled: input.enabled });
-        return outcomeResult(outcome, { marketTrading: input.enabled });
+        const enabled = readBoolean(input, 'enabled');
+        const outcome = await ctx.sendCommand({ type: 'setMarketTrading', enabled });
+        return outcomeResult(outcome, { marketTrading: enabled });
       },
     },
     {
@@ -1464,6 +1485,30 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         const before = requireStats(ctx).money;
         const outcome = await ctx.sendCommand({ type: 'buyInsulation' });
         return outcomeResult(outcome, spent(ctx, before));
+      },
+    },
+    {
+      name: 'set_policy',
+      description:
+        'Switch a city ordinance on or off: rooftopPvMandate (new buildings get rooftop PV, ' +
+        'subsidy per building), nightTariff (plain cars charge at home only at night, bigger ' +
+        'flex pool), speedLimit (slower cars, less charging energy, more congestion), ' +
+        'smartMeterMandate (rollout twice as fast, city pays half). Each costs money per day ' +
+        'and moves happiness; see get_build_catalog.policies.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', enum: [...POLICY_IDS] },
+          active: { type: 'boolean' },
+        },
+        required: ['id', 'active'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const id = readEnum(input, 'id', POLICY_IDS);
+        const active = readBoolean(input, 'active');
+        const outcome = await ctx.sendCommand({ type: 'setPolicy', id, active });
+        return outcomeResult(outcome);
       },
     },
     {
