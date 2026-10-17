@@ -1768,16 +1768,39 @@ export const BALANCE = {
       size: 48,
       startingMoney: 30_000,
       deadlineDays: 4 * DAYS_PER_SEASON,
-      population: 300,
-      deficitWindowDays: 30,
+      /**
+       * Probe (2026-10-17, scripted plan: wind, solar and batteries bought
+       * from income, two new blocks zoned): the town grew to 448 residents.
+       * About 80 % of that. Was 300.
+       */
+      population: 360,
+      /**
+       * The deficit window is the closing season — winter, since the run
+       * starts in spring. The probe's plan ran 554 deficit ticks in it;
+       * the limit is about 1.5 times that. Was 0 over 30 days, which no
+       * plan without an import link met: the window spanned the whole
+       * 20-day run, the first night and the winter included.
+       */
+      deficitWindowDays: DAYS_PER_SEASON,
+      maxDeficitTicks: 800,
     },
     dunkelflaute: {
       seed: 12,
       size: 48,
       startingMoney: 20_000,
       deadlineDays: 90,
-      maxDeficitTicks: 200,
-      /** About 90 % of the stamped start population (573): residents may not leave. */
+      /**
+       * Over the whole run. Probe (2026-10-17): a plan reinvesting all
+       * income in wind and batteries ran 3_614 deficit ticks, 2_533 of
+       * them in the first 20 days before the fleet was built; about
+       * 1.5 times that. Was 200, which that plan missed by 18 times.
+       * Ignored, the town runs ~52_000 and shrinks to 360 residents.
+       */
+      maxDeficitTicks: 5_400,
+      /**
+       * About 90 % of the stamped start population (573, confirmed by the
+       * probe): residents may not leave. The planned run ended at 643.
+       */
       population: 510,
     },
     oldTown: {
@@ -1785,6 +1808,12 @@ export const BALANCE = {
       size: 48,
       startingMoney: 35_000,
       deadlineDays: 180,
+      /**
+       * Confirmed by the probe (2026-10-17): lines along the roads, solar,
+       * wind and batteries bought from income (no substation: imports
+       * bankrupted the first plan) end at 1.00 supplied and 1.00
+       * renewable. Ignored, the town stays dark (0.00).
+       */
       suppliedShare: 0.95,
       renewableShare: 0.8,
     },
@@ -1794,6 +1823,13 @@ export const BALANCE = {
       startingMoney: 25_000,
       disasterScale: 1.6,
       deadlineDays: 120,
+      /**
+       * Confirmed by the probe (2026-10-17): a second line, a fire
+       * station, and batteries, solar and wind near the town bought from
+       * income ran 189 deficit ticks in the last 30 days (limit about 1.5
+       * times that), and its worst day was 0.59 supplied. Ignored, the
+       * town falls under minSuppliedShare on day 8.
+       */
       maxDeficitTicks: 300,
       deficitWindowDays: 30,
       minSuppliedShare: 0.5,

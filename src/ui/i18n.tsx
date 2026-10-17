@@ -440,7 +440,7 @@ const en = {
   'scenarios.fail': 'Lose if',
   'scenario.island.title': 'Island without an import link',
   'scenario.island.teaser':
-    'No substation can bring power in. Grow the town and keep the last month free of blackouts.',
+    'No substation can bring power in. Grow the town and get it through the closing winter with few blackouts.',
   'scenario.dunkelflaute.title': 'Survive a winter Dunkelflaute',
   'scenario.dunkelflaute.teaser':
     'A solar town on the edge of winter. Storage, wind and biogas decide who keeps the lights on.',
@@ -1200,7 +1200,7 @@ const de: Record<TranslationKey, string> = {
   'scenarios.fail': 'Verloren, wenn',
   'scenario.island.title': 'Insel ohne Importleitung',
   'scenario.island.teaser':
-    'Kein Umspannwerk bringt Strom herein. Lass die Stadt wachsen und halte den letzten Monat frei von Blackouts.',
+    'Kein Umspannwerk bringt Strom herein. Lass die Stadt wachsen und bring sie mit wenigen Blackouts durch den abschließenden Winter.',
   'scenario.dunkelflaute.title': 'Eine Winter-Dunkelflaute überstehen',
   'scenario.dunkelflaute.teaser':
     'Eine Solarstadt am Rand des Winters. Speicher, Wind und Biogas entscheiden, wer das Licht anbehält.',

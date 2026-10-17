@@ -1,6 +1,13 @@
 import { BALANCE } from '../../../shared/constants.ts';
 import { PlantType, Zone } from '../../../shared/types.ts';
-import { stampBuildings, stampPlant, stampRoads, stampZone, withFreeBuild } from '../stamp.ts';
+import {
+  stampBuildings,
+  stampLines,
+  stampPlant,
+  stampRoads,
+  stampZone,
+  withFreeBuild,
+} from '../stamp.ts';
 import type { ScenarioDef } from '../types.ts';
 import { rect, row } from './layout.ts';
 
@@ -8,8 +15,8 @@ const cfg = BALANCE.scenarios.island;
 
 /**
  * Island without an import link: a small town with one solar farm and
- * no way to import. Grow it to the target population and keep the last
- * month deficit-free.
+ * no way to import. Grow it to the target population and get it through
+ * the closing winter with few deficit ticks.
  */
 export const island: ScenarioDef = {
   id: 'island',
@@ -25,7 +32,7 @@ export const island: ScenarioDef = {
       kind: 'metric',
       metric: 'deficitTicks',
       op: '<=',
-      value: 0,
+      value: cfg.maxDeficitTicks,
       windowDays: cfg.deficitWindowDays,
     },
   ],
@@ -44,6 +51,8 @@ export const island: ScenarioDef = {
       stampBuildings(state, rect(s, 15, 23, 20, 23), 1);
       stampBuildings(state, rect(s, 24, 23, 27, 23), 1);
       stampPlant(state, rect(s, 32, 20, 32, 20)[0], PlantType.SolarFarm);
+      // One line along the main road wires every block row to the farm.
+      stampLines(state, row(s, 20, 14, 31));
     });
   },
 };

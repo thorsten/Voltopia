@@ -297,20 +297,37 @@ Collected 2026-09-24; roughly in the order we want to build them.
   surplus, so a substation pays for itself in six weeks on the island
   with a surplus to sell and is a bill worth paying on the one that
   goes short.
+- **Scenarios** (done): four fixed maps with a stamped starting town,
+  rules (import link, start season, disaster intensity), starting
+  funds, a deadline in days and win/fail conditions evaluated once a
+  day — "island without an import link", "survive a winter
+  Dunkelflaute", "electrify an old town" and "storm season with a
+  fragile wind fleet". A scenarios page starts them, an objectives
+  panel tracks the conditions and an end screen reports the result;
+  agents can list and start them too. A headless probe (each scenario
+  once ignored, once with a scripted plan that reinvests its income in
+  plants) set the targets in `BALANCE.scenarios`:
+  - Island (20 days): ignored → failed on day 20 (34 residents, 15_341
+    deficit ticks); planned (9 wind, 2 solar, 17 batteries, two blocks
+    zoned) → won with 448 residents (target 360) and 554 deficit ticks
+    in the closing winter (limit 800).
+  - Dunkelflaute (90 days): ignored → failed on day 90 (360 residents,
+    51_774 deficit ticks); planned (23 wind, 41 batteries) → won with
+    643 residents (target 510) and 3_614 deficit ticks (limit 5_400).
+  - Old town (180 days): ignored → failed on day 180 (0.00 supplied);
+    planned (lines along the roads, 16 solar, 35 wind, 64 batteries) →
+    won at 1.00 supplied and 1.00 renewable (targets 0.95 and 0.8).
+  - Storm season (120 days): ignored → failed on day 8 (0.44 supplied,
+    under the 0.5 floor); planned (second line, fire station, 10 solar,
+    6 wind, 13 batteries near the town) → won with stormProof and 189
+    deficit ticks in the last 30 days (limit 300), worst day 0.59
+    supplied.
 
 ### Next ideas (collected 2026-10-11)
 
 Everything above has shipped. These are the candidates for what comes
-next, roughly in the order we would build them; the first two reuse
-the existing simulation without new balance risk and give the finished
-feature set real play goals.
+next, roughly in the order we would build them.
 
-- **Scenarios / campaign**: fixed maps with a starting situation and a
-  goal set on top of the existing goals system — "island without an
-  import link", "survive a winter Dunkelflaute", "electrify an old
-  town", "storm season with a fragile wind fleet". Each scenario fixes
-  seed, size, disaster intensity and starting funds and ends with a win
-  screen that scores the chosen metrics.
 - **Save slots** (done): named slots with load, delete and
   export/import in the web build as well as the native app (settings
   page).

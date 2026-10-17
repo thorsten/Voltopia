@@ -55,6 +55,12 @@ export const stormSeason: ScenarioDef = {
       stampBuildings(state, rect(s, 10, 26, 26, 26), 1);
       for (const tile of rect(s, 10, 3, 18, 3)) stampPlant(state, tile, PlantType.WindTurbine);
       stampLines(state, column(s, 14, 4, 21));
+      // The town grid hangs off the end of that one line: a feeder north
+      // of the houses, a spur round the west end and one between the
+      // houses and the shops.
+      stampLines(state, row(s, 21, 9, 26));
+      stampLines(state, column(s, 9, 22, 25));
+      stampLines(state, row(s, 25, 10, 26));
     });
   },
 };

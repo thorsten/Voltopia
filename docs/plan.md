@@ -222,6 +222,10 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [ ] Mac: `pnpm tauri build` and the Cmd+Q save-then-relaunch check
 - [ ] Follow-up: Developer ID signing + notarization
 
+## Post-MVP
+
+- [x] Scenarios: four fixed maps with win/fail conditions, a scenarios page, an objectives panel, an end screen and agent tools; targets tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-16-scenarios-design.md`)
+
 ## Testing Strategy
 
 - Sim is pure & deterministic → unit tests drive everything: same seed ⇒ identical state hashes after N ticks

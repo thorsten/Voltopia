@@ -1,15 +1,22 @@
 import { BALANCE } from '../../../shared/constants.ts';
 import { PlantType, Zone } from '../../../shared/types.ts';
-import { stampBuildings, stampPlant, stampRoads, stampZone, withFreeBuild } from '../stamp.ts';
+import {
+  stampBuildings,
+  stampLines,
+  stampPlant,
+  stampRoads,
+  stampZone,
+  withFreeBuild,
+} from '../stamp.ts';
 import type { ScenarioDef } from '../types.ts';
 import { column, rect, row } from './layout.ts';
 
 const cfg = BALANCE.scenarios.dunkelflaute;
 
 /**
- * Survive a winter Dunkelflaute: a solar-only town ten days before
- * winter. Keep the deficit ticks under the limit for the whole run and do
- * not lose residents.
+ * Survive a winter Dunkelflaute: a solar-only town at the start of
+ * autumn, one season before its first winter. Keep the deficit ticks
+ * under the limit for the whole run and do not lose residents.
  */
 export const dunkelflaute: ScenarioDef = {
   id: 'dunkelflaute',
@@ -49,6 +56,9 @@ export const dunkelflaute: ScenarioDef = {
       stampBuildings(state, [...rect(s, 22, 25, 30, 25), ...rect(s, 32, 25, 38, 25)], 1);
       for (const tile of rect(s, 45, 18, 46, 24)) stampPlant(state, tile, PlantType.SolarFarm);
       stampPlant(state, rect(s, 45, 26, 45, 26)[0], PlantType.Battery);
+      // Lines along the two upper roads wire the town to the solar park.
+      stampLines(state, row(s, 18, 20, 44));
+      stampLines(state, row(s, 22, 20, 44));
     });
   },
 };
