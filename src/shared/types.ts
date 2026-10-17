@@ -310,7 +310,12 @@ export interface GoalState {
 export interface ConditionStatus {
   role: 'win' | 'fail';
   kind: 'goal' | 'metric';
+  /** i18n key: `goal.<id>.title` or `scenario.condition.<metric>`. */
   label: string;
+  /** Goal rows are `>=` with target 1 (achieved). */
+  op: '>=' | '<=';
+  /** Summed over the last N days (absent: last day, or the whole run for sums). */
+  windowDays?: number;
   met: boolean;
   current: number;
   target: number;

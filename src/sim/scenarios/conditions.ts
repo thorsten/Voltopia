@@ -8,7 +8,15 @@ export interface ConditionResult {
 }
 
 /** Metrics summed over a window; the rest read the last completed day. */
-const WINDOW_METRICS: ReadonlySet<ScenarioMetric> = new Set(['deficitTicks', 'importedEnergy']);
+export const WINDOW_METRICS: ReadonlySet<ScenarioMetric> = new Set([
+  'deficitTicks',
+  'importedEnergy',
+]);
+
+/** i18n key naming a condition: the goal title or the metric label. */
+export function conditionLabel(c: Condition): string {
+  return c.kind === 'goal' ? `goal.${c.id}.title` : `scenario.condition.${c.metric}`;
+}
 
 function metricValue(run: ScenarioRun, metric: ScenarioMetric, windowDays?: number): number {
   const samples = run.samples[metric];

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GlobalStats, ScenarioId } from '../shared/types.ts';
 import { useI18n, type TranslationKey } from './i18n.tsx';
+import { describeStatus, scenarioDisplayDay, statusIcon } from './scenarioFormat.ts';
 import { recordResult } from './scenarioResults.ts';
 
 function winShownKey(seed: number): string {
@@ -46,11 +47,7 @@ export function EndScreen({
       // storage unavailable: still show, just maybe twice
     }
     if (scenarioEnded) {
-      recordResult(
-        scenario.id,
-        scenario.status as 'won' | 'failed',
-        scenario.endedDay ?? scenario.day,
-      );
+      recordResult(scenario.id, scenario.status as 'won' | 'failed', scenarioDisplayDay(scenario));
     }
     setVisible(true);
     if (allDone || scenario?.status === 'won') onCelebrate?.();
@@ -63,19 +60,21 @@ export function EndScreen({
     return (
       <div className="win-backdrop" data-testid="end-screen">
         <div className="win-card">
-          <div className="win-emoji">{scenario.status === 'won' ? '🏆⚡🎉' : '🌑'}</div>
+          <div className="win-emoji" aria-hidden="true">
+            {scenario.status === 'won' ? '🏆⚡🎉' : '🌑'}
+          </div>
           <h2>{t(`scenario.end.${scenario.status}.title` as TranslationKey)}</h2>
-          <p>{t('scenario.end.day', { n: scenario.endedDay ?? scenario.day })}</p>
+          <p>{t('scenario.end.day', { n: scenarioDisplayDay(scenario) })}</p>
           <ul className="scenario-list">
-            {scenario.conditions.map((c, i) => (
-              <li key={i} className={c.met ? 'met' : ''}>
-                {c.role === 'fail' ? '⚠ ' : c.met ? '✓ ' : '○ '}
-                {t(c.label as TranslationKey)}:{' '}
-                {c.label.endsWith('Share')
-                  ? `${Math.round(c.current * 100)}%`
-                  : Math.round(c.current)}
-              </li>
-            ))}
+            {scenario.conditions.map((c, i) => {
+              const icon = statusIcon(c);
+              return (
+                <li key={i} className={c.met ? 'met' : ''}>
+                  {icon && <span aria-hidden="true">{icon} </span>}
+                  {describeStatus(c, t)}
+                </li>
+              );
+            })}
           </ul>
           <div className="option-row">
             <button
@@ -112,7 +111,9 @@ export function EndScreen({
   return (
     <div className="win-backdrop" data-testid="win-screen">
       <div className="win-card">
-        <div className="win-emoji">🏆⚡🎉</div>
+        <div className="win-emoji" aria-hidden="true">
+          🏆⚡🎉
+        </div>
         <h2>{t('win.title')}</h2>
         <p>{t('win.body')}</p>
         <p className="win-stats">

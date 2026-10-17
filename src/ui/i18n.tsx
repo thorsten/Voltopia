@@ -443,7 +443,7 @@ const en = {
     'No substation can bring power in. Grow the town and get it through the closing winter with few blackouts.',
   'scenario.dunkelflaute.title': 'Survive a winter Dunkelflaute',
   'scenario.dunkelflaute.teaser':
-    'A solar town on the edge of winter. Storage, wind and biogas decide who keeps the lights on.',
+    'A solar town on the edge of winter. Storage and wind decide who keeps the lights on.',
   'scenario.oldTown.title': 'Electrify an old town',
   'scenario.oldTown.teaser':
     'A dense town with no plant and no line. Supply it, mostly from renewables.',
@@ -457,6 +457,10 @@ const en = {
   'scenario.condition.renewableShare': 'Renewable share',
   'scenario.condition.suppliedShare': 'Buildings supplied',
   'scenario.panel.day': 'Day {day} of {total}',
+  'scenario.cond.atLeast': 'at least {v}',
+  'scenario.cond.atMost': 'at most {v}',
+  'scenario.window.lastDays': 'over the last {n} days',
+  'scenario.window.wholeRun': 'over the whole run',
   'scenario.status.running': 'Running',
   'scenario.status.won': 'Won',
   'scenario.status.failed': 'Lost',
@@ -1203,7 +1207,7 @@ const de: Record<TranslationKey, string> = {
     'Kein Umspannwerk bringt Strom herein. Lass die Stadt wachsen und bring sie mit wenigen Blackouts durch den abschließenden Winter.',
   'scenario.dunkelflaute.title': 'Eine Winter-Dunkelflaute überstehen',
   'scenario.dunkelflaute.teaser':
-    'Eine Solarstadt am Rand des Winters. Speicher, Wind und Biogas entscheiden, wer das Licht anbehält.',
+    'Eine Solarstadt am Rand des Winters. Speicher und Wind entscheiden, wer das Licht anbehält.',
   'scenario.oldTown.title': 'Eine Altstadt elektrifizieren',
   'scenario.oldTown.teaser':
     'Eine dichte Stadt ohne Kraftwerk und Leitung. Versorge sie, überwiegend erneuerbar.',
@@ -1217,6 +1221,10 @@ const de: Record<TranslationKey, string> = {
   'scenario.condition.renewableShare': 'Erneuerbarer Anteil',
   'scenario.condition.suppliedShare': 'Versorgte Gebäude',
   'scenario.panel.day': 'Tag {day} von {total}',
+  'scenario.cond.atLeast': 'mindestens {v}',
+  'scenario.cond.atMost': 'höchstens {v}',
+  'scenario.window.lastDays': 'in den letzten {n} Tagen',
+  'scenario.window.wholeRun': 'über die gesamte Laufzeit',
   'scenario.status.running': 'Läuft',
   'scenario.status.won': 'Gewonnen',
   'scenario.status.failed': 'Verloren',

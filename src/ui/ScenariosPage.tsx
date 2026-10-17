@@ -1,25 +1,11 @@
 // Side effect: registers the shipped scenario definitions in this bundle.
 import '../sim/scenarios/defs/index.ts';
 import { scenarioDefs } from '../sim/scenarios/registry.ts';
-import type { Condition, ScenarioId } from '../sim/scenarios/types.ts';
+import type { ScenarioId } from '../sim/scenarios/types.ts';
 import { useI18n, type TranslationKey } from './i18n.tsx';
 import { Modal } from './Modal.tsx';
+import { describeRule, ruleFromDef } from './scenarioFormat.ts';
 import { readBestResult } from './scenarioResults.ts';
-
-type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string;
-
-function conditionKey(c: Condition): TranslationKey {
-  return (
-    c.kind === 'goal' ? `goal.${c.id}.title` : `scenario.condition.${c.metric}`
-  ) as TranslationKey;
-}
-
-function conditionText(c: Condition, t: Translate): string {
-  if (c.kind === 'goal') return t(conditionKey(c));
-  const value = c.metric.endsWith('Share') ? `${Math.round(c.value * 100)}%` : String(c.value);
-  const window = c.windowDays ? ` (${c.windowDays} d)` : '';
-  return `${t(conditionKey(c))} ${c.op} ${value}${window}`;
-}
 
 /** Lists the shipped scenarios with their rules and the best result so far. */
 export function ScenariosPage({
@@ -46,11 +32,11 @@ export function ScenariosPage({
             </p>
             <p>
               <strong>{t('scenarios.win')}:</strong>{' '}
-              {def.win.map((c) => conditionText(c, t)).join(' · ')}
+              {def.win.map((c) => describeRule(ruleFromDef(c), t)).join(' · ')}
             </p>
             <p>
               <strong>{t('scenarios.fail')}:</strong>{' '}
-              {def.fail.map((c) => conditionText(c, t)).join(' · ')}
+              {def.fail.map((c) => describeRule(ruleFromDef(c), t)).join(' · ')}
             </p>
             <button
               type="button"

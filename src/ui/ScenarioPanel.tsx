@@ -1,11 +1,6 @@
 import type { ScenarioStats } from '../shared/types.ts';
 import { useI18n, type TranslationKey } from './i18n.tsx';
-
-function fmt(kind: 'goal' | 'metric', label: string, value: number): string {
-  if (kind === 'goal') return value >= 1 ? '✓' : '–';
-  if (label.endsWith('Share')) return `${Math.round(value * 100)}%`;
-  return String(Math.round(value));
-}
+import { describeStatus, scenarioDisplayDay, statusIcon } from './scenarioFormat.ts';
 
 /** HUD objectives of the running scenario; takes the goals panel's slot. */
 export function ScenarioPanel({ scenario }: { scenario: ScenarioStats }) {
@@ -17,7 +12,7 @@ export function ScenarioPanel({ scenario }: { scenario: ScenarioStats }) {
         <strong>{t(`scenario.${scenario.id}.title` as TranslationKey)}</strong>
         <span data-testid="scenario-day">
           {t('scenario.panel.day', {
-            day: Math.min(scenario.day, scenario.deadlineDays),
+            day: scenarioDisplayDay(scenario),
             total: scenario.deadlineDays,
           })}
         </span>
@@ -28,8 +23,7 @@ export function ScenarioPanel({ scenario }: { scenario: ScenarioStats }) {
       <ul className="scenario-list">
         {rows('win').map((c, i) => (
           <li key={`w${i}`} className={c.met ? 'met' : ''}>
-            <span>{c.met ? '✓' : '○'}</span> {t(c.label as TranslationKey)}:{' '}
-            {fmt(c.kind, c.label, c.current)} / {fmt(c.kind, c.label, c.target)}
+            <span aria-hidden="true">{statusIcon(c)}</span> {describeStatus(c, t)}
           </li>
         ))}
       </ul>
@@ -37,8 +31,8 @@ export function ScenarioPanel({ scenario }: { scenario: ScenarioStats }) {
       <ul className="scenario-list scenario-fail">
         {rows('fail').map((c, i) => (
           <li key={`f${i}`} className={c.met ? 'met' : ''}>
-            {t(c.label as TranslationKey)}: {fmt(c.kind, c.label, c.current)} (
-            {fmt(c.kind, c.label, c.target)})
+            {c.met && <span aria-hidden="true">{statusIcon(c)} </span>}
+            {describeStatus(c, t)}
           </li>
         ))}
       </ul>

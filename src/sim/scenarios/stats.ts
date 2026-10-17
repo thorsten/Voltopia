@@ -1,13 +1,9 @@
 import type { ConditionStatus, ScenarioStats } from '../../shared/types.ts';
 import type { SimState } from '../state.ts';
-import { evaluateCondition } from './conditions.ts';
+import { conditionLabel, evaluateCondition } from './conditions.ts';
 import { scenarioDef } from './registry.ts';
 import { scenarioDay } from './step.ts';
 import type { Condition } from './types.ts';
-
-function labelFor(c: Condition): string {
-  return c.kind === 'goal' ? `goal.${c.id}.title` : `scenario.condition.${c.metric}`;
-}
 
 export function scenarioStats(state: SimState): ScenarioStats | undefined {
   const run = state.scenario;
@@ -17,7 +13,9 @@ export function scenarioStats(state: SimState): ScenarioStats | undefined {
     list.map((c) => ({
       role,
       kind: c.kind,
-      label: labelFor(c),
+      label: conditionLabel(c),
+      op: c.kind === 'goal' ? '>=' : c.op,
+      ...(c.kind === 'metric' && c.windowDays !== undefined ? { windowDays: c.windowDays } : {}),
       ...evaluateCondition(state, run, c),
     }));
   return {

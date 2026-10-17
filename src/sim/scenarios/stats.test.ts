@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BALANCE } from '../../shared/constants.ts';
 import { SimEngine } from '../engine.ts';
 import { buildStats } from '../tick.ts';
 import { scenarioDef } from './registry.ts';
@@ -26,11 +27,21 @@ describe('scenario stats', () => {
       role: 'win',
       kind: 'goal',
       label: 'goal.stormProof.title',
+      op: '>=',
       met: false,
+      target: 1,
     });
     const money = s.conditions.find(
       (c) => c.role === 'fail' && c.label === 'scenario.condition.money',
     );
-    expect(money).toBeDefined();
+    expect(money).toMatchObject({ op: '<=' });
+    expect(money?.windowDays).toBeUndefined();
+    const deficit = s.conditions.find(
+      (c) => c.role === 'win' && c.label === 'scenario.condition.deficitTicks',
+    );
+    expect(deficit).toMatchObject({
+      op: '<=',
+      windowDays: BALANCE.scenarios.stormSeason.deficitWindowDays,
+    });
   });
 });
