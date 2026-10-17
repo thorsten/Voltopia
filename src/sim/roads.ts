@@ -215,6 +215,7 @@ export function undoLastAction(state: SimState): BuildResult {
     layers.roadLane[tile.index] = tile.roadLane;
     layers.zone[tile.index] = tile.zone;
     layers.density[tile.index] = tile.density;
+    layers.pvMandated[tile.index] = tile.pvMandated;
     layers.variant[tile.index] = tile.variant;
     layers.plantType[tile.index] = tile.plantType;
     layers.forest[tile.index] = tile.forest;

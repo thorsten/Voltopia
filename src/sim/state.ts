@@ -236,6 +236,7 @@ export interface UndoEntry {
     powerLine: number;
     zone: number;
     density: number;
+    pvMandated: number;
     variant: number;
     plantType: number;
     busStop: number;
@@ -890,6 +891,7 @@ export function snapshotTile(state: SimState, index: number): UndoEntry['tiles']
     powerLine: layers.powerLine[index],
     zone: layers.zone[index],
     density: layers.density[index],
+    pvMandated: layers.pvMandated[index],
     variant: layers.variant[index],
     plantType: layers.plantType[index],
     busStop: layers.busStop[index],

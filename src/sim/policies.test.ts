@@ -5,7 +5,7 @@ import { Zone } from '../shared/types.ts';
 import { happinessStep } from './happiness.ts';
 import { policiesStep, policyDailyCost, policyHappiness, rooftopPeakAt } from './policies.ts';
 import { growthStep, computeDemand } from './growth.ts';
-import { bulldozeTiles } from './roads.ts';
+import { bulldozeTiles, undoLastAction } from './roads.ts';
 import { buildRoads } from './roads.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
 import { buildStats } from './tick.ts';
@@ -138,6 +138,17 @@ describe('rooftop-PV mandate', () => {
     state.money = 1_000_000;
     bulldozeTiles(state, [tile]);
     expect(state.layers.pvMandated[tile]).toBe(0);
+  });
+
+  it('an undone bulldoze keeps the mandated rooftop panels', () => {
+    const { state, tile } = readyState();
+    state.policies.rooftopPvMandate = true;
+    growUntil(state, tile);
+    state.money = 1_000_000;
+    bulldozeTiles(state, [tile]);
+    undoLastAction(state);
+    expect(state.layers.pvMandated[tile]).toBe(1);
+    expect(rooftopPeakAt(state, tile)).toBe(BALANCE.policies.rooftopPvMandate.mandatePeakDensity1);
   });
 
   it('the bit survives a save round trip and is absent in old saves', () => {
