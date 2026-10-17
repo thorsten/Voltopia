@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { OverlayMode, type SaveGame } from '../shared/types.ts';
+import { OverlayMode, type SaveGame, type ScenarioId } from '../shared/types.ts';
 import { IndexedDbStorage } from '../storage/indexeddb.ts';
 import type { GameRenderer, RendererCallbacks } from '../render/renderer.ts';
 import { createCityReloader } from './cityReload.ts';
@@ -14,19 +14,26 @@ import { ImprintPage } from './ImprintPage.tsx';
 import { rejectionKey, useI18n, type Locale } from './i18n.tsx';
 import { GameView } from './GameView.tsx';
 import { invokeCloseApp, listenForNativeClose } from './nativeClose.ts';
+import { EndScreen, endShownKey } from './EndScreen.tsx';
 import { GoalsPanel } from './GoalsPanel.tsx';
 import { Minimap } from './Minimap.tsx';
 import { OverlayToggle } from './OverlayToggle.tsx';
 import { BuildBar } from './BuildBar.tsx';
 import type { NewCityOptions } from '../agent/tools.ts';
+// Side effect: registers the shipped scenario definitions in this bundle.
+import '../sim/scenarios/defs/index.ts';
+import { scenarioDef } from '../sim/scenarios/registry.ts';
 import {
   consumePendingNewGame,
   DEFAULT_NEW_GAME,
   storePendingNewGame,
+  storePendingScenario,
   type NewGameOptions,
 } from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
 import { SavesPage } from './SavesPage.tsx';
+import { ScenarioPanel } from './ScenarioPanel.tsx';
+import { ScenariosPage } from './ScenariosPage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
 import { SmallScreenNotice } from './SmallScreenNotice.tsx';
 import {
@@ -38,7 +45,6 @@ import { StatsPage } from './StatsPage.tsx';
 import { loadSettings, persistSettings, type AppSettings } from './settings.ts';
 import { sound } from './sound.ts';
 import { isTutorialDone, Tutorial } from './Tutorial.tsx';
-import { WinScreen } from './WinScreen.tsx';
 import { useAgentTools } from './useAgentTools.ts';
 import { useSimBridge } from './useSimBridge.ts';
 import { useTools } from './useTools.ts';
@@ -136,12 +142,14 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   const [overlay, setOverlay] = useState<OverlayMode>(OverlayMode.None);
   const [selectedIsland, setSelectedIsland] = useState(0);
   const [page, setPage] = useState<
-    'help' | 'imprint' | 'settings' | 'saves' | 'newGame' | 'stats' | null
+    'help' | 'imprint' | 'settings' | 'saves' | 'newGame' | 'stats' | 'scenarios' | null
   >(null);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [detailsOpen, setDetailsOpen] = useState(loadDetailsOpen);
-  // The tutorial runs for brand-new cities only (no autosave existed).
-  const [showTutorial, setShowTutorial] = useState(() => save === null && !isTutorialDone());
+  // The tutorial runs for brand-new free-play cities only (no autosave existed).
+  const [showTutorial, setShowTutorial] = useState(
+    () => save === null && !options.scenario && !isTutorialDone(),
+  );
   // Evaluated once at startup; no resize listener — a phone rotated into
   // landscape is still a phone.
   const [showSmallScreenNotice, setShowSmallScreenNotice] = useState(
@@ -233,6 +241,18 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
   }, []);
   useAgentTools(bridge, gridSize, startNewCityFromTool, agentSaveHost);
 
+  // A scenario always runs on its definition's seed, so a replay would
+  // find the end screen already marked as shown — clear that mark first.
+  const startScenario = useCallback((id: ScenarioId) => {
+    try {
+      localStorage.removeItem(endShownKey(scenarioDef(id).seed, id));
+    } catch {
+      // best effort only
+    }
+    storePendingScenario(id);
+    void storage.clear().then(() => window.location.reload());
+  }, []);
+
   useEffect(() => {
     if (stats) rendererRef.current?.setStats(stats);
   }, [stats]);
@@ -318,6 +338,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               stats={stats}
               onSetSpeed={(speed) => bridge.send({ type: 'setSpeed', speed })}
               onNewGame={() => setPage('newGame')}
+              onScenarios={() => setPage('scenarios')}
             />
           )}
           {stats && (
@@ -339,12 +360,16 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
 
         <div className="hud-slot hud-slot-left">
           <div className="hud-rail-bottom">
-            {stats && (
-              <GoalsPanel
-                goals={stats.goals}
-                services={stats.services}
-                onAchievement={() => sound.play('achievement')}
-              />
+            {stats?.scenario ? (
+              <ScenarioPanel scenario={stats.scenario} />
+            ) : (
+              stats && (
+                <GoalsPanel
+                  goals={stats.goals}
+                  services={stats.services}
+                  onAchievement={() => sound.play('achievement')}
+                />
+              )
             )}
             {/* One plate in the corner: minimap, overlay switch and the
                 controls hint share it, so the corner has a single edge. */}
@@ -424,10 +449,20 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
       {showTutorial && stats && (
         <Tutorial stats={stats} onFinished={() => setShowTutorial(false)} />
       )}
-      {stats && <WinScreen stats={stats} onCelebrate={() => sound.play('achievement')} />}
+      {stats && (
+        <EndScreen
+          stats={stats}
+          onCelebrate={() => sound.play('achievement')}
+          onRetry={startScenario}
+          onScenarios={() => setPage('scenarios')}
+        />
+      )}
       {page === 'help' && <HelpPage onClose={() => setPage(null)} />}
       {page === 'imprint' && <ImprintPage onClose={() => setPage(null)} />}
       {page === 'stats' && <StatsPage bridge={bridge} onClose={() => setPage(null)} />}
+      {page === 'scenarios' && (
+        <ScenariosPage onStart={startScenario} onClose={() => setPage(null)} />
+      )}
       {page === 'newGame' && (
         <NewGamePage onStart={() => void startNewGame()} onClose={() => setPage(null)} />
       )}

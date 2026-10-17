@@ -2351,3 +2351,45 @@ body,
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+
+/* Scenario objectives (HUD), scenario list and end screen. */
+.scenario-panel {
+  max-width: 20rem;
+}
+.scenario-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  align-items: baseline;
+}
+.scenario-status-won {
+  color: var(--hud-positive);
+}
+.scenario-status-failed {
+  color: var(--hud-negative);
+}
+.scenario-list {
+  list-style: none;
+  margin: 0.3rem 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.scenario-list li.met {
+  opacity: 0.85;
+}
+.scenario-fail li.met {
+  color: var(--hud-negative);
+}
+.scenario-fail-head {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  color: var(--hud-muted);
+}
+.scenario-card {
+  border-top: 1px solid var(--hud-border);
+  padding-top: 0.6rem;
+}
+.scenario-meta {
+  color: var(--hud-muted);
+  font-size: 0.85rem;
+}

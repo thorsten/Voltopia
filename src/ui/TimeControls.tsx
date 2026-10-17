@@ -26,10 +26,12 @@ export function TimeControls({
   stats,
   onSetSpeed,
   onNewGame,
+  onScenarios,
 }: {
   stats: GlobalStats;
   onSetSpeed: (speed: Speed) => void;
   onNewGame: () => void;
+  onScenarios: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -65,6 +67,14 @@ export function TimeControls({
       <SpeedControls speed={stats.speed as Speed} onChange={onSetSpeed} />
       <button type="button" className="new-game-button" data-testid="new-game" onClick={onNewGame}>
         {t('newCity.label')}
+      </button>
+      <button
+        type="button"
+        className="new-game-button"
+        data-testid="open-scenarios"
+        onClick={onScenarios}
+      >
+        {t('scenarios.open')}
       </button>
     </div>
   );
