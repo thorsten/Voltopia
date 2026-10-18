@@ -336,10 +336,26 @@ next, roughly in the order we would build them.
   frequency, batteries and demand response hold it, too little reserve
   cascades into a blackout. Already noted under demand response, never
   built.
-- **Policies / ordinances**: rooftop-PV mandate for new buildings,
-  night-time tariff, speed limit, combustion-car ban, mandatory smart
-  meters — each a toggle with a cost, a happiness effect and a sim
-  effect.
+- **Policies / ordinances** (done): four switches in the console, each
+  with a daily administration cost (budget line "policies"), a
+  happiness term and one sim effect — rooftop-PV mandate (new
+  buildings get panels, subsidy per building), night tariff (plain
+  cars charge at home only at night, bigger household flex share),
+  speed limit (slower commuter cars, less battery drain) and
+  smart-meter mandate (twice the install rate, households pay half,
+  unpopular until coverage is full). Agents switch them with
+  `set_policy`. The combustion-car ban was dropped: the fleet is
+  already electric. Probe (dunkelflaute town with a substation, 20
+  days measured per ordinance): night tariff cut evening (18:00-22:00)
+  charging 60 → 41 per tick without smart meters; the speed limit cut
+  charging energy 6-11 % and raised congestion 1.02 → 1.07; the
+  mandate reached full meter coverage ~3 days sooner (75 → 111 of 111
+  after 5 days); the PV mandate put panels on 5-11 new buildings, too
+  few to show above the weather noise. `BALANCE.policies`: night
+  tariff 30 → 60 and speed limit 10 → 50 a day (10-14 % of their
+  import savings), speed limit and smart-meter mandate happiness
+  -0.03 → -0.02 so any two ordinances keep the town above the growth
+  minimum (worst pair 0.37).
 - **Finance**: loans and bonds with interest, subsidies for renewables,
   a grid-fee model. Today the tax slider is the only lever.
 - **Neighbouring cities**: the market is abstract. Concrete neighbours

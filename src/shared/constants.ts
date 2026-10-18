@@ -1838,9 +1838,25 @@ export const BALANCE = {
   /**
    * City ordinances: each costs `dailyCost` a day in administration,
    * moves happiness by `happiness` while active and changes one sim
-   * parameter. First guesses; Task 8's probe tunes them.
+   * parameter.
+   *
+   * Tuned by a headless probe: the dunkelflaute scenario town (48x48,
+   * solar only, autumn) given a substation so shortfalls become imports,
+   * smart-meter rollout on, 10 days to settle, then 20 days measured per
+   * ordinance. Without a policy it averages 0.41 happiness, ~6_800 tax
+   * and ~20_400 import cost a day; run-to-run noise in import cost is
+   * ~300 a day, so the savings below are only 1-2x the noise. Every
+   * ordinance (and every pair) costs far below a day's tax income.
    */
   policies: {
+    /**
+     * Unchanged. The stamped town is full, so in 20 days only 1 building
+     * spawned under the mandate; with an extra residential block zoned
+     * 5 spawned (11 with the speed limit on). The +2 peak each is lost in
+     * the weather noise of rooftop generation (±2_000 a day between runs
+     * without a policy), so no import saving is measurable at this size.
+     * Probe cost on the zoned run: 77.5 a day including subsidies.
+     */
     rooftopPvMandate: {
       dailyCost: 40,
       happiness: -0.02,
@@ -1849,24 +1865,48 @@ export const BALANCE = {
       /** Rooftop peak of a density-1 building built under the mandate. */
       mandatePeakDensity1: 2,
     },
+    /**
+     * dailyCost 30 -> 60. Without smart meters (plain cars) evening
+     * (18:00-22:00) charging falls 60 -> 41 per tick (-32 %) and the
+     * night share of charging rises 0.64 -> 0.78. With every building
+     * metered the cars already follow the surplus, so only the larger
+     * flex share acts: deferred load 54_000 -> 62_000 a day, import cost
+     * -590 a day (-2.9 %); 60 is ~10 % of that saving.
+     */
     nightTariff: {
-      dailyCost: 30,
+      dailyCost: 60,
       happiness: 0.02,
       nightStartHour: 22,
       nightEndHour: 6,
       /** Multiplies smartMeters.householdFlexShare. */
       flexShareFactor: 1.5,
     },
+    /**
+     * dailyCost 10 -> 50, happiness -0.03 -> -0.02. Charging energy
+     * -5.7 % metered (22_400 -> 21_100 a day) and -11 % unmetered
+     * (31_900 -> 28_400), commute congestion 1.02 -> 1.07 (1.03 -> 1.10
+     * unmetered), import cost -360 to -440 a day; 50 is 11-14 % of it.
+     * At -0.03 the metered run averaged 0.38 and lost a third of its
+     * residents (643 -> 430); at -0.02 it averages 0.39 and keeps 643.
+     */
     speedLimit: {
-      dailyCost: 10,
-      happiness: -0.03,
+      dailyCost: 50,
+      happiness: -0.02,
       speedFactor: 0.75,
       drainFactor: 0.8,
     },
+    /**
+     * dailyCost unchanged, happiness -0.03 -> -0.02. With the rollout
+     * started at the same time, metered buildings after 5 days rise
+     * 75 -> 111 of 111 (full coverage ~3 days earlier) and the city pays
+     * half of 111 x 60; no import saving shows above the noise. The worst
+     * pairs stay above growthMinimum (0.35): speed limit + mandate 0.39,
+     * PV mandate + speed limit 0.37 on average.
+     */
     smartMeterMandate: {
       dailyCost: 20,
       /** Applies only while metered coverage is below 1. */
-      happiness: -0.03,
+      happiness: -0.02,
       installFactor: 2,
       /** Share of costPerMeter the city pays; households pay the rest. */
       cityCostShare: 0.5,

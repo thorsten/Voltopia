@@ -225,6 +225,7 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 ## Post-MVP
 
 - [x] Scenarios: four fixed maps with win/fail conditions, a scenarios page, an objectives panel, an end screen and agent tools; targets tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-16-scenarios-design.md`)
+- [x] Ordinances: rooftop-PV mandate, night tariff, speed limit and smart-meter mandate as console switches with a daily cost, a happiness term and a sim effect; `set_policy` agent tool; costs tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-17-policies-design.md`)
 
 ## Testing Strategy
 
