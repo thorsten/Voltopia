@@ -291,6 +291,15 @@ test('an ordinance switches on, bills the budget and survives a reload', async (
   await expect(toggle).toBeChecked({ timeout: 10_000 });
   await page.getByTestId('speed-3').click();
   await expect.poll(async () => readTick(page), { timeout: 15_000 }).toBeGreaterThan(20);
+  // The drawer is open by default: the budget lists the ordinance line
+  // at its daily admin cost (the speed limit has no subsidies).
+  const budgetLine = page.getByTestId('budget-slice-policies');
+  await expect(budgetLine).toBeVisible({ timeout: 10_000 });
+  const perDay = Number(
+    (await budgetLine.locator('.budget-legend-value').textContent())?.replace(/,/g, ''),
+  );
+  expect(perDay).toBeCloseTo(50, 0);
+  await expect(page.getByTestId('policy-speedLimit-happiness')).toContainText('−2 %');
   await page.keyboard.press('Control+s');
   await page.waitForTimeout(500);
   await page.reload();
