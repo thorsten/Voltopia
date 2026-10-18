@@ -734,7 +734,10 @@ export interface GlobalStats {
     metered: number;
     buildings: number;
     coverage: number;
+    /** What the city pays per installed meter (halved under the mandate). */
     costPerMeter: number;
+    /** Meters the crews install per in-game day (doubled under the mandate). */
+    installsPerDay: number;
   };
   /** Demand-response contract: in force, pool and shed this tick, call hours left today, partners and prices. */
   demandResponse: {

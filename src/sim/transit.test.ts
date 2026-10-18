@@ -390,6 +390,28 @@ describe('transitStep', () => {
     expect(ticksDriving).toBeGreaterThan(50);
   });
 
+  it('the speed limit leaves bus speed and drain alone', () => {
+    let driving = false;
+    const trace = (speedLimit: boolean): number[] => {
+      const state = busTown(1, 3);
+      powerDepot(state);
+      setHour(state, 8);
+      state.layers.stopAge[at(12, 10)] = stopDueTicks();
+      state.policies.speedLimit = speedLimit;
+      const samples: number[] = [];
+      for (let t = 0; t < 200; t++) {
+        stepAll(state);
+        const bus = state.buses[0];
+        if (bus.phase === BusPhase.Driving) driving = true;
+        samples.push(bus.phase, bus.x, bus.y, bus.charge);
+      }
+      return samples;
+    };
+    const plain = trace(false);
+    expect(driving).toBe(true);
+    expect(trace(true)).toEqual(plain);
+  });
+
   it('no tour starts outside the window, without a due stop, or below minTripCharge', () => {
     const night = busTown(1, 3);
     powerDepot(night);

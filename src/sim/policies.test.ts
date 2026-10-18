@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { Zone } from '../shared/types.ts';
+import { PlantType, Zone } from '../shared/types.ts';
 import { happinessStep } from './happiness.ts';
 import {
   batteryDrainPerTile,
@@ -14,13 +14,14 @@ import {
   rooftopPeakAt,
   smartMeterCityCost,
   smartMeterInstallsPerDay,
+  type PolicyId,
 } from './policies.ts';
 import { refreshBuildingCount, setSmartMeterRollout, smartMetersStep } from './smartMeters.ts';
 import { ticksAtHour } from './vehicles.ts';
 import { growthStep, computeDemand } from './growth.ts';
-import { bulldozeTiles, undoLastAction } from './roads.ts';
-import { buildRoads } from './roads.ts';
+import { buildRoads, bulldozeTiles, undoLastAction } from './roads.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
+import { SimEngine } from './engine.ts';
 import { buildStats } from './tick.ts';
 import { paintZones } from './zones.ts';
 
@@ -66,11 +67,66 @@ describe('policies registry', () => {
     state.layers.density[at(2, 1)] = 1;
     state.lastBuildingCount = 1;
     state.smartMeters.metered = 0;
+    state.smartMeters.active = true;
     expect(policyHappiness(state)).toBeCloseTo(
       BALANCE.policies.speedLimit.happiness +
         BALANCE.policies.nightTariff.happiness +
         BALANCE.policies.smartMeterMandate.happiness,
     );
+  });
+
+  it('the mandate weighs only while the rollout runs below full coverage', () => {
+    const state = createSimState(1, SIZE);
+    state.policies.smartMeterMandate = true;
+    state.lastBuildingCount = 4;
+    state.smartMeters.metered = 1;
+    state.smartMeters.active = false;
+    // Paused rollout: no meters are forced on anyone, so no unrest...
+    expect(policyHappiness(state)).toBe(0);
+    // ...but the ordinance's standing cost is still charged.
+    expect(policyDailyCost(state)).toBe(BALANCE.policies.smartMeterMandate.dailyCost);
+    state.smartMeters.active = true;
+    expect(policyHappiness(state)).toBeCloseTo(BALANCE.policies.smartMeterMandate.happiness);
+  });
+
+  it('two engines with the same seed and ordinance script stay identical', () => {
+    const size = 24;
+    const idx = (x: number, y: number) => tileIndex(x, y, size);
+    const run = (): string => {
+      const engine = new SimEngine(5, size);
+      engine.applyCommand({ type: 'init', seed: 5, size });
+      engine.state.money = 1e9;
+      engine.state.layers.elevation.fill(0);
+      const road = Array.from({ length: 16 }, (_, i) => idx(i + 4, 12));
+      engine.applyCommand({ type: 'buildRoad', tiles: road });
+      engine.applyCommand({ type: 'placePlant', tile: idx(4, 11), plant: PlantType.WindTurbine });
+      engine.applyCommand({
+        type: 'paintZone',
+        tiles: road.flatMap((tile) => [tile - size, tile + size]).slice(2),
+        zone: Zone.Residential,
+      });
+      engine.applyCommand({ type: 'setSmartMeterRollout', active: true });
+      const script: Record<number, [PolicyId, boolean][]> = {
+        0: [
+          ['rooftopPvMandate', true],
+          ['speedLimit', true],
+        ],
+        60: [['nightTariff', true]],
+        120: [['smartMeterMandate', true]],
+        240: [['speedLimit', false]],
+        360: [['rooftopPvMandate', false]],
+      };
+      for (let t = 0; t < TICKS_PER_DAY / 2; t++) {
+        for (const [id, active] of script[t] ?? []) {
+          engine.applyCommand({ type: 'setPolicy', id, active });
+        }
+        engine.tick();
+      }
+      // The script must have grown a town, or the comparison proves little.
+      expect(engine.state.lastBuildingCount).toBeGreaterThan(0);
+      return JSON.stringify(serializeState(engine.state));
+    };
+    expect(run()).toBe(run());
   });
 
   it('happinessStep moves the target by the policy term', () => {

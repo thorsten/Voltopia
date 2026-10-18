@@ -5,7 +5,13 @@ import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
-import { policiesStep, policyDailyCost, policyHappiness } from './policies.ts';
+import {
+  policiesStep,
+  policyDailyCost,
+  policyHappiness,
+  smartMeterCityCost,
+  smartMeterInstallsPerDay,
+} from './policies.ts';
 import { energyStep } from './energy.ts';
 import { reservoirStep } from './geothermal.ts';
 import { heatStep } from './heat.ts';
@@ -274,7 +280,8 @@ export function buildStats(state: SimState): GlobalStats {
       metered: state.smartMeters.metered,
       buildings: state.lastBuildingCount,
       coverage: meteredCoverage(state),
-      costPerMeter: BALANCE.smartMeters.costPerMeter,
+      costPerMeter: smartMeterCityCost(state),
+      installsPerDay: smartMeterInstallsPerDay(state),
     },
     demandResponse: {
       active: state.demandResponse.active,

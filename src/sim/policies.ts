@@ -26,9 +26,10 @@ export function policyDailyCost(state: SimState): number {
 
 /**
  * Happiness term of the active ordinances. The smart-meter mandate only
- * weighs while meters are still being forced on households. Coverage is
- * computed inline (smartMeters.ts imports this module); zero buildings
- * count as full coverage.
+ * weighs while meters are still being forced on households: the rollout
+ * runs and coverage is below 1. Coverage is computed inline
+ * (smartMeters.ts imports this module); zero buildings count as full
+ * coverage.
  */
 export function policyHappiness(state: SimState): number {
   const buildings = state.lastBuildingCount;
@@ -36,7 +37,7 @@ export function policyHappiness(state: SimState): number {
   let total = 0;
   for (const id of POLICY_IDS) {
     if (!state.policies[id]) continue;
-    if (id === 'smartMeterMandate' && coverage >= 1) continue;
+    if (id === 'smartMeterMandate' && (!state.smartMeters.active || coverage >= 1)) continue;
     total += BALANCE.policies[id].happiness;
   }
   return total;

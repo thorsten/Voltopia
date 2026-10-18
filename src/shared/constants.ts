@@ -1904,8 +1904,12 @@ export const BALANCE = {
      * PV mandate + speed limit 0.37 on average.
      */
     smartMeterMandate: {
+      /**
+       * Standing cost of the ordinance: still charged while the rollout is
+       * paused or coverage is full (only the unrest stops then).
+       */
       dailyCost: 20,
-      /** Applies only while metered coverage is below 1. */
+      /** Applies only while the rollout runs and metered coverage is below 1. */
       happiness: -0.02,
       installFactor: 2,
       /** Share of costPerMeter the city pays; households pay the rest. */
