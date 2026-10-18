@@ -12,6 +12,12 @@ import { EnergyStrip } from './EnergyStrip.tsx';
 import { useI18n, type TranslationKey } from './i18n.tsx';
 import { TaxSlider } from './TaxSlider.tsx';
 
+/** Happiness term as a signed whole percentage, e.g. "−2 %" or "+2 %". */
+function signedPercent(value: number): string {
+  const percent = Math.round(Math.abs(value) * 100);
+  return `${value < 0 ? '−' : '+'}${percent} %`;
+}
+
 export function HudConsole({
   stats,
   detailsOpen,
@@ -77,8 +83,8 @@ export function HudConsole({
               className="smart-charging-toggle smart-meters"
               data-testid="smart-charging"
               title={t('smartMeters.title', {
-                perDay: BALANCE.smartMeters.installsPerDay,
-                cost: BALANCE.smartMeters.costPerMeter,
+                perDay: stats.smartMeters.installsPerDay,
+                cost: stats.smartMeters.costPerMeter,
               })}
             >
               <input
@@ -158,16 +164,25 @@ export function HudConsole({
                   key={id}
                   className="smart-charging-toggle policy-row"
                   data-testid={`policy-${id}`}
-                  title={t(`policy.${id}.body` as TranslationKey)}
                 >
                   <input
                     type="checkbox"
                     checked={stats.policies.active[id]}
                     onChange={(e) => onSetPolicy(id, e.target.checked)}
                   />
-                  <span>{t(`policy.${id}.title` as TranslationKey)}</span>
-                  <span className="smart-meters-coverage">
-                    {t('policies.cost', { cost: BALANCE.policies[id].dailyCost })}
+                  <span className="policy-text">
+                    <span>{t(`policy.${id}.title` as TranslationKey)}</span>
+                    <span className="policy-body">{t(`policy.${id}.body` as TranslationKey)}</span>
+                  </span>
+                  <span className="policy-figures">
+                    <span className="smart-meters-coverage">
+                      {t('policies.cost', { cost: BALANCE.policies[id].dailyCost })}
+                    </span>
+                    <span className="smart-meters-coverage" data-testid={`policy-${id}-happiness`}>
+                      {t('policies.happiness', {
+                        value: signedPercent(BALANCE.policies[id].happiness),
+                      })}
+                    </span>
                   </span>
                 </label>
               ))}

@@ -240,6 +240,7 @@ const en = {
   'insulation.bought': 'installed',
   'policies.title': 'Ordinances',
   'policies.cost': '{cost}/day',
+  'policies.happiness': '{value} happiness',
   'policy.rooftopPvMandate.title': 'Rooftop-PV mandate',
   'policy.rooftopPvMandate.body':
     'New buildings get rooftop panels from the first storey. The city pays a subsidy per building.',
@@ -1018,6 +1019,7 @@ const de: Record<TranslationKey, string> = {
   'insulation.bought': 'installiert',
   'policies.title': 'Verordnungen',
   'policies.cost': '{cost}/Tag',
+  'policies.happiness': '{value} Zufriedenheit',
   'policy.rooftopPvMandate.title': 'Dach-PV-Pflicht',
   'policy.rooftopPvMandate.body':
     'Neue Gebäude bekommen ab dem ersten Stockwerk Dachpaneele. Die Stadt zahlt einen Zuschuss pro Gebäude.',
