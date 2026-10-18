@@ -284,6 +284,22 @@ test('tax slider, smart charging and demand response are interactive', async ({ 
   await expect(demandResponse).toBeChecked({ timeout: 5_000 });
 });
 
+test('an ordinance switches on, bills the budget and survives a reload', async ({ page }) => {
+  // Checkbox follows worker stats (next tick event): click and poll.
+  const toggle = page.getByTestId('policy-speedLimit').locator('input');
+  await toggle.click();
+  await expect(toggle).toBeChecked({ timeout: 10_000 });
+  await page.getByTestId('speed-3').click();
+  await expect.poll(async () => readTick(page), { timeout: 15_000 }).toBeGreaterThan(20);
+  await page.keyboard.press('Control+s');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('policy-speedLimit').locator('input')).toBeChecked({
+    timeout: 10_000,
+  });
+});
+
 test('overlay toggle switches modes', async ({ page }) => {
   await page.getByTestId('overlay-supply').click();
   await expect(page.getByTestId('overlay-supply')).toHaveClass(/active/);
