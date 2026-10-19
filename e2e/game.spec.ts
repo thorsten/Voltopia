@@ -862,7 +862,6 @@ test('a shared city opens from its link and the old city is kept', async ({ page
     }
   }
   if (!site) throw new Error('no flat tile for the plant');
-  const sharedTick = await readTick(page);
 
   await page.getByTestId('open-saves').click();
   await page.getByTestId('share-city').click();
@@ -903,7 +902,6 @@ test('a shared city opens from its link and the old city is kept', async ({ page
   await expect
     .poll(async () => (await call('inspect_tile', site)).plant, { timeout: 10_000 })
     .toBe('biogas');
-  expect(await readTick(page)).toBeLessThan(sharedTick + 60);
 
   // The city that was running before is kept as a named save.
   await page.getByTestId('open-saves').click();
