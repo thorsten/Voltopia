@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SaveGame } from '../shared/types.ts';
 import { saveFromJson, saveToJson } from '../storage/serialization.ts';
+import { decodeShareCode, encodeShareCode } from '../storage/shareCode.ts';
 import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
 import { dayOfTick, defaultSaveName } from '../storage/summary.ts';
 import { Modal } from './Modal.tsx';
 import { useI18n } from './i18n.tsx';
 import { exportTextFile } from './platform.ts';
 import { currentCityFileName, nameFromFileName, saveFileName } from './saveFiles.ts';
+import { SharedCityDialog } from './SharedCityDialog.tsx';
+import {
+  copyToClipboard,
+  datedName,
+  extractShareCode,
+  keepAndOpenShared,
+  SHARE_LINK_WARN_LENGTH,
+  shareSupported,
+  shareUrl,
+} from './shareLink.ts';
 
 /** How long Overwrite/Delete wait in their "Really …?" state for the second click. */
 const CONFIRM_RESET_MS = 4000;
@@ -31,6 +42,7 @@ export function SavesPage({
   replaceCityAndReload,
   population,
   tick,
+  canShare,
   onClose,
 }: {
   storage: SaveStorage;
@@ -42,6 +54,8 @@ export function SavesPage({
   population: number;
   /** Current sim tick, for the default name's day. */
   tick: number;
+  /** Sharing is off during a scenario. */
+  canShare: boolean;
   onClose: () => void;
 }) {
   const { t, locale } = useI18n();
@@ -53,6 +67,14 @@ export function SavesPage({
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   // Enter commits and unmounts the field; a trailing blur must not commit twice.
   const renameDone = useRef(false);
+  // Shown when copying the share link failed, so it can be copied by hand.
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [pasted, setPasted] = useState('');
+  // A decoded share link awaiting the "Load shared city?" dialog.
+  const [shared, setShared] = useState<SaveGame | null>(null);
+  const [sharedBusy, setSharedBusy] = useState(false);
+  const [sharedError, setSharedError] = useState<string | null>(null);
+  const sharing = useMemo(() => shareSupported(), []);
 
   const refresh = useCallback(async (): Promise<void> => {
     setSaves(await storage.list());
@@ -166,6 +188,63 @@ export function SavesPage({
       await exportTextFile(currentCityFileName(new Date()), saveToJson(snapshot));
     });
 
+  const shareCurrent = (): void => {
+    setShareLink(null);
+    // Built synchronously inside the click, so the clipboard write keeps
+    // the user activation (Safari) while the snapshot is still encoding.
+    const link = requestSnapshot()
+      .then(encodeShareCode)
+      .then((code) => shareUrl(code));
+    void run(async () => {
+      const copied = await copyToClipboard(link);
+      const url = await link;
+      if (!copied) {
+        setShareLink(url);
+        setMessage(t('share.copyFailed'));
+        return;
+      }
+      const copiedText = t('share.copied', { size: Math.max(1, Math.round(url.length / 1024)) });
+      setMessage(
+        url.length > SHARE_LINK_WARN_LENGTH ? `${copiedText} ${t('share.long')}` : copiedText,
+      );
+    });
+  };
+
+  const openPasted = (): Promise<void> =>
+    run(async () => {
+      const code = extractShareCode(pasted);
+      try {
+        if (code === null) throw new Error('no share code');
+        const save = await decodeShareCode(code);
+        setSharedError(null);
+        setShared(save);
+        setPasted('');
+      } catch (error) {
+        console.warn('Shared city link rejected', error);
+        setMessage(t('share.invalid'));
+      }
+    });
+
+  const loadShared = async (): Promise<void> => {
+    if (!shared) return;
+    setSharedBusy(true);
+    setSharedError(null);
+    try {
+      await keepAndOpenShared({
+        storage,
+        current: await requestSnapshot(),
+        currentPopulation: population,
+        keptName: datedName(t('share.keptName'), new Date(), locale),
+        shared,
+        replace: replaceCityAndReload,
+      });
+    } catch (error) {
+      setSharedError(errorText(error));
+    } finally {
+      setSharedBusy(false);
+    }
+  };
+
   const importFile = (file: File): Promise<void> =>
     run(async () => {
       const save = saveFromJson(await file.text());
@@ -226,6 +305,22 @@ export function SavesPage({
       </>
     );
   };
+
+  // Instead of the saves modal, so there are never two backdrops.
+  if (shared) {
+    return (
+      <SharedCityDialog
+        save={shared}
+        busy={sharedBusy}
+        error={sharedError}
+        onLoad={() => void loadShared()}
+        onCancel={() => {
+          setShared(null);
+          setSharedError(null);
+        }}
+      />
+    );
+  }
 
   return (
     <Modal title={t('saves.title')} onClose={onClose} testId="saves-page">
@@ -319,6 +414,11 @@ export function SavesPage({
           <button type="button" data-testid="export-save" onClick={() => void exportCurrent()}>
             {t('saves.exportCurrent')}
           </button>
+          {canShare && sharing && (
+            <button type="button" data-testid="share-city" onClick={shareCurrent}>
+              {t('share.button')}
+            </button>
+          )}
           <label className="saves-import">
             {t('saves.import')}
             <input
@@ -335,6 +435,39 @@ export function SavesPage({
             />
           </label>
         </div>
+        {shareLink !== null && (
+          <input
+            type="text"
+            className="saves-input share-link-output"
+            data-testid="share-link-output"
+            aria-label={t('share.linkLabel')}
+            value={shareLink}
+            readOnly
+            onFocus={(e) => e.currentTarget.select()}
+          />
+        )}
+        {sharing && (
+          <form
+            className="saves-new share-open"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void openPasted();
+            }}
+          >
+            <input
+              type="text"
+              className="saves-input"
+              data-testid="share-open-input"
+              aria-label={t('share.openLabel')}
+              placeholder={t('share.openLabel')}
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+            />
+            <button type="submit" data-testid="share-open">
+              {t('share.open')}
+            </button>
+          </form>
+        )}
       </section>
       {message && (
         <p className="saves-message" data-testid="saves-message">

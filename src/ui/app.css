@@ -1759,6 +1759,24 @@ body,
   display: none;
 }
 
+.share-link-output {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 6px 0;
+}
+
+.share-open {
+  margin: 6px 0;
+}
+
+.shared-city-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .saves-message {
   margin-top: 10px;
   color: var(--accent);
@@ -1914,6 +1932,11 @@ body,
   border-color: var(--accent);
   color: var(--hud-on-accent);
   font-weight: 600;
+}
+
+.new-game-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .new-game-warning {

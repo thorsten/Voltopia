@@ -492,6 +492,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
           replaceCityAndReload={cityReloader.replaceCityAndReload}
           population={stats.population}
           tick={stats.tick}
+          canShare={!stats.scenario}
           onClose={() => setPage(null)}
         />
       )}
