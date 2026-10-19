@@ -17,6 +17,7 @@ import {
   PlantType,
   RoadLane,
   SCENARIO_IDS,
+  SPEEDS,
   StopState,
   SupplyStatus,
   Terrain,
@@ -980,7 +981,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             happinessNeutralRate: BALANCE.tax.happinessNeutralRate,
           },
           finance: financeCatalog(),
-          speeds: [0, 1, 3],
+          speeds: [...SPEEDS],
         };
       },
     },
@@ -1413,16 +1414,17 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
     },
     {
       name: 'set_speed',
-      description: 'Set the simulation speed: 0 pauses, 1 is normal (4 ticks/s), 3 is fast.',
+      description:
+        'Set the simulation speed: 0 pauses, 1 is normal (4 ticks/s), 3 is fast, 6 is very fast.',
       inputSchema: {
         type: 'object',
-        properties: { speed: { type: 'integer', enum: [0, 1, 3] } },
+        properties: { speed: { type: 'integer', enum: [...SPEEDS] } },
         required: ['speed'],
       },
       async execute(input) {
         const speed = readInt(input, 'speed');
-        if (speed !== 0 && speed !== 1 && speed !== 3) {
-          throw new ToolInputError('"speed" must be 0, 1 or 3');
+        if (!SPEEDS.includes(speed as Speed)) {
+          throw new ToolInputError('"speed" must be one of 0, 1, 3, 6');
         }
         const outcome = await ctx.sendCommand({ type: 'setSpeed', speed: speed as Speed });
         return outcomeResult(outcome, { speed });
@@ -1642,8 +1644,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'advance_time',
       description:
         `Run the simulation for a number of ticks or days (max ${MAX_ADVANCE_DAYS} days, ` +
-        `${TICKS_PER_DAY} ticks per day) and return when done. Runs at fast speed if the game is ` +
-        'paused and restores the previous speed afterwards. Returns the resulting overview summary.',
+        `${TICKS_PER_DAY} ticks per day) and return when done. Runs at very fast speed (6x) if the game ` +
+        'is paused and restores the previous speed afterwards. Returns the resulting overview summary.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1670,7 +1672,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         }
         const start = requireStats(ctx);
         const previousSpeed = start.speed;
-        if (previousSpeed === 0) await ctx.sendCommand({ type: 'setSpeed', speed: 3 });
+        if (previousSpeed === 0) await ctx.sendCommand({ type: 'setSpeed', speed: 6 });
         try {
           const end = await ctx.waitForTick(start.tick + ticks, options?.signal);
           return {

@@ -1,4 +1,4 @@
-import { PlantType, SEASON_ORDER, Zone } from './types.ts';
+import { PlantType, SEASON_ORDER, Zone, type Speed } from './types.ts';
 
 /** Structural constants (not balancing). */
 export const GRID_SIZE = 64;
@@ -11,6 +11,10 @@ export const TICK_RATE = 4; // simulation ticks per real-time second at 1x speed
 export const OVERPASS_LONG_RAMP_TILES = 2;
 export const OVERPASS_SHORT_RAMP_TILES = 1;
 export const TICK_MS = 1000 / TICK_RATE;
+/** Real-time milliseconds between ticks at `speed`; null while paused. */
+export function tickIntervalMs(speed: Speed): number | null {
+  return speed === 0 ? null : TICK_MS / speed;
+}
 export const SAVE_VERSION = 1;
 
 /** One in-game day lasts 4 real-time minutes at 1x speed. */

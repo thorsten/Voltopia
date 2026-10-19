@@ -7,6 +7,7 @@ import {
   Terrain,
   VehicleKind,
   WAGON_ID_OFFSET,
+  type Speed,
   type VehicleState,
   Zone,
 } from '../shared/types.ts';
@@ -48,6 +49,15 @@ describe('SimEngine basics', () => {
     expect(engine.state.speed).toBe(3);
     engine.applyCommand({ type: 'setSpeed', speed: 0 });
     expect(engine.state.speed).toBe(0);
+    engine.applyCommand({ type: 'setSpeed', speed: 6 });
+    expect(engine.state.speed).toBe(6);
+  });
+
+  it('ignores a speed outside the speed table', () => {
+    const engine = makeEngine();
+    engine.applyCommand({ type: 'setSpeed', speed: 3 });
+    engine.applyCommand({ type: 'setSpeed', speed: 2 as Speed });
+    expect(engine.state.speed).toBe(3);
   });
 
   it('clamps the tax rate to the allowed range', () => {

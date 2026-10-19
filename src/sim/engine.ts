@@ -2,7 +2,7 @@ import './scenarios/defs/index.ts';
 import { BALANCE } from '../shared/constants.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import type { VehicleState } from '../shared/types.ts';
-import { VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
+import { SPEEDS, VehicleKind, WAGON_ID_OFFSET } from '../shared/types.ts';
 import { buildRoads, bulldozeTiles, undoLastAction, type BuildResult } from './roads.ts';
 import { buyInsulation } from './economy.ts';
 import { setDemandResponse } from './demandResponse.ts';
@@ -81,7 +81,8 @@ export class SimEngine {
         }
         return [];
       case 'setSpeed':
-        state.speed = command.speed;
+        // The main thread may post anything: only accept a known speed.
+        if (SPEEDS.includes(command.speed)) state.speed = command.speed;
         return [];
       case 'setTaxRate':
         state.taxRate = Math.min(Math.max(command.rate, 0), BALANCE.tax.maxRate);

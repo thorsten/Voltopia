@@ -36,7 +36,7 @@ Do not use trademarks, assets, or code from existing games.
   `render/`, `ui/`, `shared/` (types, message protocol)
 - Simulation state stored in typed arrays per layer (tile type, zone, density,
   supply, happiness …) on a grid (initially 64×64, configurable)
-- Fixed simulation tick (e.g. 4/s) with speed settings (pause, 1×, 3×)
+- Fixed simulation tick (e.g. 4/s) with speed settings (pause, 1×, 3×, 6×)
 - Deterministic: seeded RNG (including weather) so save games and tests are
   reproducible
 - Worker ↔ main thread communication via typed messages; the worker sends only

@@ -17,7 +17,7 @@
 - Simulation deterministic: all randomness via seeded RNG (`mulberry32`), including weather
 - Worker → main messages carry only diffs of changed tiles + global values, never full state (exception: initial load/save snapshots)
 - Grid 64×64 default, size configurable in one constant
-- Fixed tick 4/s; speeds pause / 1× / 3×
+- Fixed tick 4/s; speeds pause / 1× / 3× / 6×
 - Vitest coverage of `src/sim/` ≥ 90%
 - Correct energy terminology in code & UI (generation, consumption, state of charge, curtailment, peak load)
 - No trademarks/assets/code from existing games

@@ -5,6 +5,7 @@ const SPEEDS: Array<{ value: Speed; label: string; title: TranslationKey }> = [
   { value: 0, label: '⏸', title: 'speed.pause' },
   { value: 1, label: '▶', title: 'speed.normal' },
   { value: 3, label: '▶▶▶', title: 'speed.fast' },
+  { value: 6, label: '▶▶▶▶', title: 'speed.veryFast' },
 ];
 
 export function SpeedControls({

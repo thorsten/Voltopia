@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameRenderer } from '../render/renderer.ts';
 import type { GlobalStats } from '../shared/types.ts';
-import { TICK_MS } from '../shared/constants.ts';
+import { TICK_MS, tickIntervalMs } from '../shared/constants.ts';
 import { useI18n } from './i18n.tsx';
 import { FrameWindow, type FrameSummary } from './perfStats.ts';
 
@@ -23,7 +23,7 @@ const EMPTY_FRAME: FrameSummary = { meanMs: 0, p95Ms: 0, fps: 0, samples: 0 };
 /**
  * What the game currently costs: frame time with its 95th percentile,
  * what a frame asks of the GPU, and what a simulation tick costs the
- * worker against the 250 ms it has. Shown only while the diagnostics
+ * worker against the interval of the current speed. Shown only while the diagnostics
  * setting is on — it is a measuring instrument, not a HUD element.
  */
 export function DiagnosticsPanel({
@@ -62,7 +62,9 @@ export function DiagnosticsPanel({
     // Both are stable identities: a ref object and a useCallback getter.
   }, [rendererRef, getTickMs]);
 
-  const tickShare = (tickMs / TICK_MS) * 100;
+  // The tick has the interval of the current speed (paused: the 1x interval).
+  const budgetMs = tickIntervalMs(stats?.speed ?? 1) ?? TICK_MS;
+  const tickShare = (tickMs / budgetMs) * 100;
 
   return (
     <div className="diagnostics-panel" data-testid="diagnostics-panel">
@@ -78,7 +80,7 @@ export function DiagnosticsPanel({
         <div>
           <dt>{t('diagnostics.tick')}</dt>
           <dd data-testid="diagnostics-tick">
-            {tickMs.toFixed(1)} ms · {tickShare.toFixed(0)} % ({TICK_MS} ms)
+            {tickMs.toFixed(1)} ms · {tickShare.toFixed(0)} % ({Math.round(budgetMs)} ms)
           </dd>
         </div>
         <div>

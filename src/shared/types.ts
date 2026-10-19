@@ -97,7 +97,9 @@ export const SupplyStatus = {
 } as const;
 export type SupplyStatus = (typeof SupplyStatus)[keyof typeof SupplyStatus];
 
-export type Speed = 0 | 1 | 3;
+/** Simulation speeds: 0 pauses, otherwise the multiple of the 1x tick rate. */
+export const SPEEDS = [0, 1, 3, 6] as const;
+export type Speed = (typeof SPEEDS)[number];
 
 export const OverlayMode = {
   None: 0,

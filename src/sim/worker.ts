@@ -3,7 +3,7 @@
  * and the browser: message handling and the fixed-tick scheduler live here,
  * everything else is testable engine code.
  */
-import { TICK_MS } from '../shared/constants.ts';
+import { tickIntervalMs } from '../shared/constants.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import { SimEngine } from './engine.ts';
 
@@ -19,8 +19,9 @@ function reschedule(): void {
     clearInterval(timer);
     timer = null;
   }
-  if (!engine || engine.state.speed === 0) return;
-  const interval = TICK_MS / engine.state.speed;
+  if (!engine) return;
+  const interval = tickIntervalMs(engine.state.speed);
+  if (interval === null) return;
   timer = setInterval(() => {
     if (engine) post(engine.tick());
   }, interval);

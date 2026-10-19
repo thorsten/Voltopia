@@ -234,6 +234,7 @@ describe('agent tools: reading', () => {
     const { call } = createHarness();
     const catalog = await call('get_build_catalog');
     expect((catalog.costs as { roadPerTile: number }).roadPerTile).toBe(BALANCE.costs.roadPerTile);
+    expect(catalog.speeds).toEqual([0, 1, 3, 6]);
     const plants = catalog.plants as Array<{ name: string; cost: number; placement: string }>;
     expect(plants.map((p) => p.name)).toContain('pumped_storage');
     const solar = plants.find((p) => p.name === 'solar')!;
@@ -558,6 +559,8 @@ describe('agent tools: building', () => {
     const { call, engine } = createHarness();
     expect(await call('set_speed', { speed: 3 })).toMatchObject({ ok: true, speed: 3 });
     expect(engine.state.speed).toBe(3);
+    expect(await call('set_speed', { speed: 6 })).toMatchObject({ ok: true, speed: 6 });
+    expect(engine.state.speed).toBe(6);
     expect(await call('set_tax_rate', { rate: 0.9 })).toMatchObject({
       ok: true,
       taxRate: BALANCE.tax.maxRate,

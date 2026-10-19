@@ -44,6 +44,7 @@ const en = {
   'speed.pause': 'Pause',
   'speed.normal': 'Normal speed',
   'speed.fast': 'Fast (3x)',
+  'speed.veryFast': 'Very fast (6x)',
 
   'tool.select': 'Select / pan',
   'tool.road': 'Road',
@@ -851,6 +852,7 @@ const de: Record<TranslationKey, string> = {
   'speed.pause': 'Pause',
   'speed.normal': 'Normale Geschwindigkeit',
   'speed.fast': 'Schnell (3x)',
+  'speed.veryFast': 'Sehr schnell (6x)',
 
   'tool.select': 'Auswählen / bewegen',
   'tool.road': 'Straße',
