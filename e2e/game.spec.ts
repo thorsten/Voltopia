@@ -309,6 +309,95 @@ test('an ordinance switches on, bills the budget and survives a reload', async (
   });
 });
 
+test('a loan and a grid fee show in the budget and the credit survives a reload', async ({
+  page,
+}) => {
+  // Growing the first house runs a few hundred ticks; slow runners need room.
+  test.setTimeout(150_000);
+  // The drawer is open by default; a new city may borrow right away.
+  await expect(page.getByTestId('finance-panel')).toBeVisible();
+  await expect(page.getByTestId('credit-1')).toHaveCount(0);
+  await page.getByTestId('credit-loan-5000').click();
+  // The credit list follows worker stats: wait for the next tick event.
+  await expect(page.getByTestId('credit-1')).toBeVisible({ timeout: 10_000 });
+  // Loans repay a little every tick, so the outstanding amount starts
+  // just under the principal by the time the row shows.
+  await expect(page.getByTestId('credit-1')).toContainText(/(5,000|4,9\d\d) ⌁/);
+  await expect(page.getByTestId('finance-debt')).toContainText(/(5,000|4,9\d\d) \//);
+  await expect(page.getByTestId('credit-rating')).toContainText(/[A-D]/);
+
+  // A fresh map has no buildings, so nothing would pay a grid fee: grow a
+  // small powered street through the agent tools (no WebGL needed).
+  type Api = { call: (name: string, input?: unknown) => Promise<Record<string, unknown>> };
+  const call = (name: string, input: unknown = {}): Promise<Record<string, unknown>> =>
+    page.evaluate(
+      ([name, input]) => (window as unknown as { voltopia: Api }).voltopia.call(name, input),
+      [name, input] as [string, unknown],
+    );
+  await expect
+    .poll(() => page.evaluate(() => Boolean((window as unknown as { voltopia?: Api }).voltopia)))
+    .toBe(true);
+  // A biogas plant feeding a power line along a street of houses. Hilly
+  // seeds have steep tiles a plant refuses: take the first flat one.
+  const land = await call('find_tiles', { kind: 'empty_land', near: { x: 32, y: 32 }, limit: 50 });
+  let site: { x: number; y: number } | undefined;
+  for (const tile of land.tiles as Array<{ x: number; y: number }>) {
+    if ((await call('place_plant', { plant: 'biogas', ...tile })).ok) {
+      site = tile;
+      break;
+    }
+  }
+  if (!site) throw new Error('no flat tile for the plant');
+  const { x, y } = site;
+  const street = { from: { x, y: y + 1 }, to: { x, y: y + 12 } };
+  expect((await call('build_road', street)).ok).toBe(true);
+  expect((await call('build_power_line', street)).ok).toBe(true);
+  // Growth tries three random map tiles a tick: zone plenty so a house
+  // appears within a few hundred ticks on any seed.
+  for (const [from, to] of [
+    [x - 2, x - 1],
+    [x + 1, x + 2],
+  ]) {
+    await call('paint_zone', {
+      zone: 'residential',
+      from: { x: from, y: y + 1 },
+      to: { x: to, y: y + 12 },
+    });
+  }
+  // Paused, advance_time runs the worker at full speed instead of 1x.
+  await call('set_speed', { speed: 0 });
+  // Only billed consumption pays the fee: wait until a house draws energy.
+  type Overview = { energyPerTick: { consumption: { buildings: number } } };
+  await expect
+    .poll(
+      async () => {
+        await call('advance_time', { ticks: 200 });
+        const overview = (await call('get_game_overview')) as unknown as Overview;
+        return overview.energyPerTick.consumption.buildings;
+      },
+      { timeout: 90_000 },
+    )
+    .toBeGreaterThan(0);
+  await page.getByTestId('speed-3').click();
+
+  // A non-zero grid fee bills the buildings' consumption.
+  const slider = page.getByTestId('grid-fee-slider').locator('input');
+  await slider.fill('5');
+  await expect(page.getByTestId('grid-fee-slider')).toContainText('0.005 ⌁/EU', {
+    timeout: 10_000,
+  });
+  await expect(page.getByTestId('grid-fee-happiness')).toContainText('−');
+  await expect(page.getByTestId('budget-slice-gridFees')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('budget-slice-interest')).toBeVisible({ timeout: 15_000 });
+
+  await page.keyboard.press('Control+s');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('credit-1')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('budget-slice-gridFees')).toBeVisible({ timeout: 15_000 });
+});
+
 test('overlay toggle switches modes', async ({ page }) => {
   await page.getByTestId('overlay-supply').click();
   await expect(page.getByTestId('overlay-supply')).toHaveClass(/active/);
