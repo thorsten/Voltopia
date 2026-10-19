@@ -5,6 +5,7 @@ import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
+import { financeStep } from './finance.ts';
 import {
   policiesStep,
   policyDailyCost,
@@ -106,6 +107,8 @@ export function stepTick(state: SimState): void {
   policiesStep(state);
   // After the income of this tick has landed: repairs are paid out of it.
   repairStep(state);
+  // After every operating flow of the tick: the day's income feeds the rating.
+  financeStep(state, operatingNet(state));
   happinessStep(state, population);
   goalsStep(state);
   if (state.scenario) scenarioStep(state, scenarioDef(state.scenario.id));
@@ -341,9 +344,34 @@ export function pendingHistoryPoint(state: SimState): EnergyHistoryPoint {
   };
 }
 
+/**
+ * Last tick's operating income: tax, export and hydrogen revenue minus
+ * upkeep and running costs. Excludes credit flows, interest and the grid
+ * fee; the budget net and the credit rating both read it.
+ */
+export function operatingNet(state: SimState): number {
+  const b = state.lastEconomy;
+  return (
+    b.taxIncome +
+    b.gridExportRevenue +
+    b.hydrogenRevenue -
+    b.gridUpkeep -
+    b.plantUpkeep -
+    b.biogasFuelCost -
+    b.gridImportCost -
+    state.lastRepairCost -
+    state.lastSmartMeterCost -
+    state.lastDemandResponseCost -
+    state.lastGoodsImportCost -
+    state.lastPolicyCost
+  );
+}
+
 /** Last tick's budget, flattened for the budget panel. */
 function buildBudget(state: SimState): GlobalStats['budget'] {
   const b = state.lastEconomy;
+  const f = state.lastFinance;
+  const interest = f.interest + f.overdraftInterest;
   return {
     taxIncome: b.taxIncome,
     gridExportRevenue: b.gridExportRevenue,
@@ -364,18 +392,10 @@ function buildBudget(state: SimState): GlobalStats['budget'] {
     goodsImport: state.lastGoodsImportCost,
     policies: state.lastPolicyCost,
     gridImportCost: b.gridImportCost,
-    net:
-      b.taxIncome +
-      b.gridExportRevenue +
-      b.hydrogenRevenue -
-      b.gridUpkeep -
-      b.plantUpkeep -
-      b.biogasFuelCost -
-      b.gridImportCost -
-      state.lastRepairCost -
-      state.lastSmartMeterCost -
-      state.lastDemandResponseCost -
-      state.lastGoodsImportCost -
-      state.lastPolicyCost,
+    gridFees: f.gridFeeIncome,
+    interest,
+    repayment: f.principal,
+    // Repayment is cash flow, not part of the net.
+    net: operatingNet(state) + f.gridFeeIncome - interest,
   };
 }

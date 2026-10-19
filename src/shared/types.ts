@@ -169,6 +169,44 @@ export const POLICY_IDS = [
 ] as const;
 export type PolicyId = (typeof POLICY_IDS)[number];
 
+export const CREDIT_KINDS = ['loan', 'bond'] as const;
+export type CreditKind = (typeof CREDIT_KINDS)[number];
+
+/** Credit rating, best first; D gets no new credit. */
+export const RATINGS = ['A', 'B', 'C', 'D'] as const;
+export type Rating = (typeof RATINGS)[number];
+
+/** One open loan or bond. Rates are fixed when the credit is taken. */
+export interface Credit {
+  /** Monotonically increasing, from FinanceSave.nextCreditId. */
+  id: number;
+  kind: CreditKind;
+  /** Amount borrowed. */
+  principal: number;
+  /** Principal still owed. */
+  outstanding: number;
+  ratePerYear: number;
+  startTick: number;
+  termTicks: number;
+}
+
+/** Persisted finance record (see src/sim/finance.ts). */
+export interface FinanceSave {
+  credits: Credit[];
+  nextCreditId: number;
+  /** Money per EU billed to buildings, 0..BALANCE.finance.gridFee.maxRate. */
+  gridFee: number;
+  /** Grant pot spent in the in-game year `grantYear`. */
+  grantUsedThisYear: number;
+  grantYear: number;
+  /** Recomputed at every day rollover. */
+  rating: Rating;
+  /** Trailing daily operating income, oldest first, at most rating.windowDays entries. */
+  incomeWindow: number[];
+  /** Consecutive days that ended with money below 0. */
+  overdraftDays: number;
+}
+
 /** Deterministic seasonal signal for one tick (no random component). */
 export interface SeasonState {
   /** 0..1 through the year, 0 = first spring day, continuous within a day. */
@@ -402,7 +440,13 @@ export interface BudgetStats {
   /** Ordinance admin cost plus rooftop-PV subsidies paid this tick. */
   policies: number;
   gridImportCost: number;
-  /** Income - expenses for this tick. */
+  /** Grid-fee income from the buildings this tick. */
+  gridFees: number;
+  /** Credit interest plus overdraft interest paid this tick. */
+  interest: number;
+  /** Credit principal paid back this tick: cash flow, not part of `net`. */
+  repayment: number;
+  /** Income - expenses for this tick (operating income + grid fees - interest). */
   net: number;
 }
 
@@ -984,6 +1028,8 @@ export interface SavedScenario {
 export interface SaveGame {
   /** Active ordinances (absent in older saves → all off). */
   policies?: Partial<Record<PolicyId, boolean>>;
+  /** Credits, rating, grid fee and grant pot (absent in older saves → debt-free at A). */
+  finance?: FinanceSave;
   version: number;
   seed: number;
   size: number;

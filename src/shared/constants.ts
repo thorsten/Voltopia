@@ -1916,4 +1916,58 @@ export const BALANCE = {
       cityCostShare: 0.5,
     },
   },
+
+  /**
+   * Credit, overdraft interest, the credit rating, the renewable
+   * investment grant and the grid fee (see src/sim/finance.ts). Rates
+   * are per in-game year (seasons × daysPerSeason days) and applied per
+   * tick as simple interest on the outstanding amount. Initial values,
+   * to be tuned by a headless probe.
+   */
+  finance: {
+    credit: {
+      /** Amortising: an equal principal share per tick, repayable early without fee. */
+      loan: {
+        amounts: [5_000, 10_000, 20_000],
+        termDays: 10,
+        ratePerYear: 0.08,
+        repayable: true,
+      },
+      /** Interest only; the full principal is due at maturity. */
+      bond: { amounts: [50_000, 100_000], termDays: 40, ratePerYear: 0.05, repayable: false },
+      /** Credits open at once. */
+      maxCredits: 4,
+      /** Total debt may not exceed this many days of average income. */
+      debtCapDays: 30,
+      /** Income floor for the debt cap and the rating, so a new city can borrow. */
+      minIncomeBase: 1_000,
+    },
+    /** Charged on a negative treasury. */
+    overdraftRatePerYear: 0.25,
+    rating: {
+      /** Trailing days of operating income the rating averages. */
+      windowDays: 5,
+      /** Added to the base rate of new credit; D gets none. */
+      spread: { A: 0, B: 0.02, C: 0.05 },
+      /** Highest debt per rating, in days of average income. */
+      maxDebtRatio: { A: 10, B: 20, C: 30 },
+      /** Most consecutive days ending in the red per rating. */
+      maxOverdraftDays: { A: 0, B: 1, C: 3 },
+    },
+    grant: {
+      /** Grant money per in-game year. */
+      annualPot: 15_000,
+      /** Share of the build price refunded, per plant (filled in with the grant). */
+      shareByPlant: {} as Partial<Record<PlantType, number>>,
+    },
+    gridFee: {
+      /** Money per EU billed. */
+      maxRate: 0.02,
+      step: 0.001,
+      /** Smart-metered buildings pay this share less. */
+      smartMeterDiscount: 0.5,
+      /** Happiness lost per unit of grid fee. */
+      happinessWeight: 10,
+    },
+  },
 } as const;

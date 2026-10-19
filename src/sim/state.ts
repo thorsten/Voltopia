@@ -15,6 +15,7 @@ import type {
   LifetimeSample,
   EnergyHistoryPoint,
   RailStats,
+  FinanceSave,
   SaveGame,
   SavedDisasters,
   SeasonState,
@@ -37,6 +38,7 @@ import {
   Zone,
 } from '../shared/types.ts';
 import { defaultPolicies } from './policies.ts';
+import { defaultFinance, loadFinance, saveFinance } from './finance.ts';
 import { callBudgetTicks } from './demandResponse.ts';
 import { emptyPlantMap, type EconomyBreakdown } from './economy.ts';
 import {
@@ -464,6 +466,20 @@ export interface SimState {
   lastPolicyCost: number;
   /** Rooftop-PV subsidies booked by growth since the last policiesStep. */
   lastPolicySubsidy: number;
+  /** Credits, rating, grid fee and grant pot (see finance.ts); `dayIncome` is not persisted. */
+  finance: FinanceSave & {
+    /** Operating income accumulated over the running day, pushed into incomeWindow at rollover. */
+    dayIncome: number;
+  };
+  /** What financeStep booked last tick (budget lines). */
+  lastFinance: {
+    /** Credit interest. */
+    interest: number;
+    /** Credit principal paid back. */
+    principal: number;
+    overdraftInterest: number;
+    gridFeeIncome: number;
+  };
   buses: Bus[];
   trains: Train[];
   /** Bumped by every track build or removal; the network labelling is recomputed when it differs from railComputedVersion. */
@@ -740,6 +756,8 @@ export function createSimState(
     policies: defaultPolicies(),
     lastPolicyCost: 0,
     lastPolicySubsidy: 0,
+    finance: defaultFinance(),
+    lastFinance: { interest: 0, principal: 0, overdraftInterest: 0, gridFeeIncome: 0 },
     buses: [],
     trains: [],
     railVersion: 0,
@@ -1334,6 +1352,7 @@ export function serializeState(state: SimState): SaveGame {
     taxRate: state.taxRate,
     marketTrading: state.marketTrading,
     policies: { ...state.policies },
+    finance: saveFinance(state),
     stored: storedPairs(state),
     goals: [...state.goalsAchieved],
     lifetime: state.lifetime.samples.map((sample) => ({ ...sample })),
@@ -1428,6 +1447,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.marketTrading = save.marketTrading ?? false;
   state.policies = defaultPolicies();
   for (const id of POLICY_IDS) if (save.policies?.[id] === true) state.policies[id] = true;
+  state.finance = loadFinance(save.finance);
   state.goalsAchieved = new Set(save.goals ?? []);
   state.lifetime.samples = (save.lifetime ?? []).map((sample) => ({ ...sample }));
   state.layers.tileType.set(new Uint8Array(save.layers.tileType));
