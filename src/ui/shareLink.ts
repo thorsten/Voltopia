@@ -118,9 +118,16 @@ export function datedName(template: string, date: Date, locale: string): string 
   return template.replace('{date}', formatted);
 }
 
+/** Remembers the slot the current city was kept in, across Load retries. */
+export interface KeptSlot {
+  id: string | null;
+}
+
 /**
  * Keeps `current` (if any) as a named save, then hands `shared` to `replace`.
- * If keeping fails it throws and `replace` is NOT called.
+ * If keeping fails it throws and `replace` is NOT called. With `kept`, a
+ * retry after `replace` failed overwrites the slot of the first attempt
+ * instead of writing another "Before shared city" save.
  */
 export async function keepAndOpenShared(deps: {
   storage: Pick<SaveStorage, 'save'>;
@@ -130,10 +137,14 @@ export async function keepAndOpenShared(deps: {
   shared: SaveGame;
   replace: (save: SaveGame) => Promise<void>;
   newId?: () => string;
+  kept?: KeptSlot;
 }): Promise<void> {
   const { storage, current, currentPopulation, keptName, shared, replace } = deps;
   if (current) {
-    await storage.save(current, (deps.newId ?? newSlotId)(), keptName, currentPopulation);
+    const kept = deps.kept ?? { id: null };
+    const id = kept.id ?? (deps.newId ?? newSlotId)();
+    await storage.save(current, id, keptName, currentPopulation);
+    kept.id = id;
   }
   await replace(shared);
 }

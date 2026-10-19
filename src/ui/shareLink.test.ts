@@ -248,4 +248,31 @@ describe('keepAndOpenShared', () => {
     ).rejects.toBe(error);
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it('reuses the kept slot when Load is retried after the replacement failed', async () => {
+    const storage = createMemoryStorage(() => 1000);
+    const replace = vi
+      .fn<(save: SaveGame) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('worker gone'))
+      .mockResolvedValueOnce(undefined);
+    let ids = 0;
+    const kept = { id: null as string | null };
+    const attempt = (money: number) =>
+      keepAndOpenShared({
+        storage,
+        current: makeSave(money),
+        keptName: 'Before shared city',
+        shared: makeSave(42),
+        replace,
+        newId: () => `save-${++ids}`,
+        kept,
+      });
+    await expect(attempt(7)).rejects.toThrow('worker gone');
+    expect(kept.id).toBe('save-1');
+    await attempt(8);
+    const list = await storage.list();
+    expect(list.map((s) => s.id)).toEqual(['save-1']);
+    expect((await storage.load('save-1'))?.money).toBe(8);
+    expect(replace).toHaveBeenCalledTimes(2);
+  });
 });

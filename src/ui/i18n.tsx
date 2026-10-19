@@ -574,6 +574,7 @@ const en = {
   'share.load': 'Load',
   'share.cancel': 'Cancel',
   'share.keptName': 'Before shared city – {date}',
+  'share.loadFailed': 'The shared city could not be loaded. Please try again.',
 
   'goals.title': 'Goals',
   'goals.sandbox': 'Goals are off in sandbox mode.',
@@ -1410,6 +1411,7 @@ const de: Record<TranslationKey, string> = {
   'share.load': 'Laden',
   'share.cancel': 'Abbrechen',
   'share.keptName': 'Vor geteilter Stadt – {date}',
+  'share.loadFailed': 'Die geteilte Stadt konnte nicht geladen werden. Bitte versuche es erneut.',
 
   'goals.title': 'Ziele',
   'goals.sandbox': 'Ziele sind im Sandbox-Modus aus.',

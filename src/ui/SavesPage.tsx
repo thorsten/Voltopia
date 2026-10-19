@@ -14,6 +14,7 @@ import {
   datedName,
   extractShareCode,
   keepAndOpenShared,
+  type KeptSlot,
   SHARE_LINK_WARN_LENGTH,
   shareSupported,
   shareUrl,
@@ -74,6 +75,8 @@ export function SavesPage({
   const [shared, setShared] = useState<SaveGame | null>(null);
   const [sharedBusy, setSharedBusy] = useState(false);
   const [sharedError, setSharedError] = useState<string | null>(null);
+  // The slot the current city was kept in: a retried Load reuses it.
+  const keptSlot = useRef<KeptSlot>({ id: null });
   const sharing = useMemo(() => shareSupported(), []);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -217,6 +220,7 @@ export function SavesPage({
         if (code === null) throw new Error('no share code');
         const save = await decodeShareCode(code);
         setSharedError(null);
+        keptSlot.current = { id: null };
         setShared(save);
         setPasted('');
       } catch (error) {
@@ -237,9 +241,11 @@ export function SavesPage({
         keptName: datedName(t('share.keptName'), new Date(), locale),
         shared,
         replace: replaceCityAndReload,
+        kept: keptSlot.current,
       });
     } catch (error) {
-      setSharedError(errorText(error));
+      console.error('Loading the shared city failed', error);
+      setSharedError(t('share.loadFailed'));
     } finally {
       setSharedBusy(false);
     }

@@ -34,7 +34,13 @@ import {
 import { NewGamePage } from './NewGamePage.tsx';
 import { SavesPage } from './SavesPage.tsx';
 import { SharedCityDialog } from './SharedCityDialog.tsx';
-import { datedName, keepAndOpenShared, shareSupported, takeShareCodeOnce } from './shareLink.ts';
+import {
+  datedName,
+  keepAndOpenShared,
+  type KeptSlot,
+  shareSupported,
+  takeShareCodeOnce,
+} from './shareLink.ts';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { ScenariosPage } from './ScenariosPage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
@@ -111,6 +117,8 @@ export function App() {
   } | null>(null);
   const [sharedBusy, setSharedBusy] = useState(false);
   const [sharedError, setSharedError] = useState<string | null>(null);
+  // The slot the current city was kept in: a retried Load reuses it.
+  const keptSlot = useRef<KeptSlot>({ id: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -148,9 +156,11 @@ export function App() {
           keptName: datedName(t('share.keptName'), new Date(), locale),
           shared,
           replace: cityReloader.replaceCityAndReload,
+          kept: keptSlot.current,
         });
       } catch (error) {
-        setSharedError(String(error instanceof Error ? error.message : error));
+        console.error('Loading the shared city failed', error);
+        setSharedError(t('share.loadFailed'));
         setSharedBusy(false);
       }
     };
