@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { LINE_PRESENT } from '../shared/grid.ts';
 import { buildRoads } from '../sim/roads.ts';
-import { createSimState, serializeState } from '../sim/state.ts';
+import { createSimState, deserializeState, serializeState } from '../sim/state.ts';
 import { SAVE_VERSION } from '../shared/constants.ts';
-import type { SavedTrain, SaveGame } from '../shared/types.ts';
-import { saveFromJson, saveToJson } from './serialization.ts';
+import { POLICY_IDS, SCENARIO_IDS, type SavedTrain, type SaveGame } from '../shared/types.ts';
+import { fullSave } from '../test/saveFixtures.ts';
+import { SAVE_LAYERS, saveFromJson, saveToJson } from './serialization.ts';
 
 /** Build a minimal, valid save game for size 4 to use as a test fixture. */
 function makeSave(): SaveGame {
@@ -445,5 +446,78 @@ describe('save game JSON export/import', () => {
     const restored = saveFromJson(JSON.stringify(json));
     expect(restored.disasters).toBeUndefined();
     expect(restored.disasterScale).toBe(1);
+  });
+});
+
+describe('save game JSON export covers every field', () => {
+  it('every SaveGame field survives the JSON round trip', () => {
+    const save = fullSave();
+    const back = saveFromJson(saveToJson(save));
+    for (const key of Object.keys(save) as (keyof SaveGame)[]) {
+      if (key !== 'layers') expect(back[key], key).toEqual(save[key]);
+    }
+    for (const name of SAVE_LAYERS) {
+      expect(new Uint8Array(back.layers[name]!), name).toEqual(new Uint8Array(save.layers[name]));
+    }
+  });
+
+  it('SAVE_LAYERS lists every layer exactly once', () => {
+    expect(new Set(SAVE_LAYERS).size).toBe(SAVE_LAYERS.length);
+    expect([...SAVE_LAYERS].sort()).toEqual(Object.keys(fullSave().layers).sort());
+  });
+
+  it('keeps the scenario, a credit and an ordinance through export and import', () => {
+    const save = fullSave();
+    const state = deserializeState(saveFromJson(saveToJson(save)));
+    expect(state.scenario?.id).toBe(SCENARIO_IDS[0]);
+    expect(state.finance.credits.length).toBe(1);
+    expect(state.policies[POLICY_IDS[0]]).toBe(true);
+  });
+
+  it('keeps the rooftop-PV mandate markers', () => {
+    const save = makeSave();
+    const marks = new Uint8Array(save.size * save.size);
+    marks[3] = 1;
+    save.layers.pvMandated = marks.buffer as ArrayBuffer;
+    const restored = saveFromJson(saveToJson(save));
+    expect(new Uint8Array(restored.layers.pvMandated!)[3]).toBe(1);
+  });
+
+  it('drops malformed policies, rules, scenario and finance instead of throwing', () => {
+    const json = JSON.parse(saveToJson(makeSave()));
+    json.policies = { bogus: true, [POLICY_IDS[0]]: 'yes' };
+    json.rules = { startSeason: 'monsoon' };
+    json.scenario = { id: 'x' };
+    json.finance = 7;
+    const restored = saveFromJson(JSON.stringify(json));
+    expect(restored.policies).toEqual({});
+    expect(restored.rules).toBeUndefined();
+    expect(restored.scenario).toBeUndefined();
+    expect(restored.finance).toBeUndefined();
+    expect(restored).not.toHaveProperty('rules');
+  });
+
+  it('rejects rules with a negative import capacity and keeps valid ones', () => {
+    const json = JSON.parse(saveToJson(makeSave()));
+    json.rules = { importCapacityFactor: -1, startSeason: 'winter' };
+    expect(saveFromJson(JSON.stringify(json)).rules).toBeUndefined();
+    json.rules = { importCapacityFactor: 0.5, startSeason: 'winter', extra: 1 };
+    expect(saveFromJson(JSON.stringify(json)).rules).toEqual({
+      importCapacityFactor: 0.5,
+      startSeason: 'winter',
+    });
+  });
+
+  it('drops a scenario with a non-finite sample or a bad status', () => {
+    const save = fullSave();
+    const json = JSON.parse(saveToJson(save));
+    json.scenario = { ...json.scenario, status: 'paused' };
+    expect(saveFromJson(JSON.stringify(json)).scenario).toBeUndefined();
+    json.scenario = { ...save.scenario, samples: { renewable: [1, 'x'] } };
+    expect(saveFromJson(JSON.stringify(json)).scenario).toBeUndefined();
+    json.scenario = { ...save.scenario, today: { ...save.scenario.today, ticks: null } };
+    expect(saveFromJson(JSON.stringify(json)).scenario).toBeUndefined();
+    json.scenario = { ...save.scenario, endedTick: 'soon' };
+    expect(saveFromJson(JSON.stringify(json)).scenario).toBeUndefined();
   });
 });

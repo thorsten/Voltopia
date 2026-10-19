@@ -1,52 +1,52 @@
 import { SAVE_VERSION } from '../shared/constants.ts';
-import type { LifetimeSample, SaveGame, SavedDisasters, SavedTrain } from '../shared/types.ts';
+import {
+  POLICY_IDS,
+  SEASON_ORDER,
+  type FinanceSave,
+  type LifetimeSample,
+  type PolicyId,
+  type SaveGame,
+  type SavedDisasters,
+  type SavedScenario,
+  type SavedTrain,
+  type SeasonId,
+} from '../shared/types.ts';
 
-/** JSON-friendly form of a save game (ArrayBuffers as base64). */
-interface SaveGameJson {
-  version: number;
-  seed: number;
-  size: number;
-  tick: number;
-  money: number;
-  taxRate: number;
-  smartCharging?: boolean;
-  /** Legacy battery pool; read on load, never written (see `stored`). */
-  storedEnergy?: number;
-  /** Storage per plant tile as [index, value, index, value, …]. */
-  stored?: number[];
-  smartMeters?: { active: boolean; metered: number };
-  flexBacklog?: number;
-  demandResponse?: { active: boolean; callBudget?: number };
-  /** Per-island pools as [key, flexBacklog, callBudget] triplets. */
-  islandPools?: [number, number, number][];
-  shedTotal?: number;
-  goals?: string[];
-  lifetime?: LifetimeSample[];
-  riverFlow?: number;
-  pumpedStorageEnergy?: number;
-  hydrogenEnergy?: number;
-  marketTrading?: boolean;
-  seasonOriginDay?: number;
-  snowpack?: number;
-  insulation?: boolean;
-  sandbox?: boolean;
-  winterTicks?: number;
-  summerTicks?: number;
-  freeFlowTicks?: number;
-  wellStockedTicks?: number;
-  transitTicks?: number;
-  railTicks?: number;
-  activeTicks?: number;
-  /** Trains in flight (absent in saves from before railways). */
-  trains?: SavedTrain[];
-  heatStored?: number;
-  warmWinterTicks?: number;
-  districtDeficitTicks?: number;
-  flexTicks?: number;
-  disasterScale?: number;
-  disasters?: SavedDisasters;
-  layers: Record<string, string>;
-}
+/** Canonical layer order. Share format v1 depends on it: APPEND ONLY. */
+export const SAVE_LAYERS = [
+  // required (present in every save since v1)
+  'tileType',
+  'roadMask',
+  'zone',
+  'density',
+  'variant',
+  'supplied',
+  'plantType',
+  // optional, in the order they were introduced
+  'terrain',
+  'powerLine',
+  'elevation',
+  'roadClass',
+  'busStop',
+  'forest',
+  'geothermal',
+  'reservoirHeat',
+  'damage',
+  'rail',
+  'overpass',
+  'roadLane',
+  'pvMandated',
+] as const satisfies readonly (keyof SaveGame['layers'])[];
+/** The first `REQUIRED_LAYER_COUNT` entries of `SAVE_LAYERS` are in every save. */
+export const REQUIRED_LAYER_COUNT = 7;
+export type SaveLayerName = (typeof SAVE_LAYERS)[number];
+// Compile-time exhaustiveness: a new layer key must be appended above.
+type MissingLayer = Exclude<keyof SaveGame['layers'], SaveLayerName>;
+const LAYERS_COMPLETE: [MissingLayer] extends [never] ? true : MissingLayer = true;
+void LAYERS_COMPLETE;
+
+/** Every SaveGame field except `layers`, JSON-ready (no ArrayBuffers). */
+export type SaveFields = Omit<SaveGame, 'layers'>;
 
 function bufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -74,59 +74,6 @@ function isStoredPairs(value: unknown): value is number[] {
     value.length % 2 === 0 &&
     value.every((n) => typeof n === 'number' && Number.isFinite(n))
   );
-}
-
-/** Serialize a save game to a portable JSON string (for file export). */
-export function saveToJson(save: SaveGame): string {
-  const layers: Record<string, string> = {};
-  for (const [name, buffer] of Object.entries(save.layers)) {
-    layers[name] = bufferToBase64(buffer);
-  }
-  const json: SaveGameJson = {
-    version: save.version,
-    seed: save.seed,
-    size: save.size,
-    tick: save.tick,
-    money: save.money,
-    taxRate: save.taxRate,
-    ...(save.stored !== undefined ? { stored: save.stored } : {}),
-    ...(save.smartCharging !== undefined ? { smartCharging: save.smartCharging } : {}),
-    ...(save.smartMeters !== undefined ? { smartMeters: save.smartMeters } : {}),
-    ...(save.flexBacklog !== undefined ? { flexBacklog: save.flexBacklog } : {}),
-    ...(save.islandPools !== undefined ? { islandPools: save.islandPools } : {}),
-    ...(save.goals ? { goals: save.goals } : {}),
-    ...(save.lifetime ? { lifetime: save.lifetime } : {}),
-    ...(save.riverFlow !== undefined ? { riverFlow: save.riverFlow } : {}),
-    ...(save.hydrogenEnergy !== undefined ? { hydrogenEnergy: save.hydrogenEnergy } : {}),
-    ...(save.marketTrading !== undefined ? { marketTrading: save.marketTrading } : {}),
-    ...(save.pumpedStorageEnergy !== undefined
-      ? { pumpedStorageEnergy: save.pumpedStorageEnergy }
-      : {}),
-    ...(save.seasonOriginDay !== undefined ? { seasonOriginDay: save.seasonOriginDay } : {}),
-    ...(save.snowpack !== undefined ? { snowpack: save.snowpack } : {}),
-    ...(save.insulation !== undefined ? { insulation: save.insulation } : {}),
-    ...(save.sandbox !== undefined ? { sandbox: save.sandbox } : {}),
-    ...(save.winterTicks !== undefined ? { winterTicks: save.winterTicks } : {}),
-    ...(save.summerTicks !== undefined ? { summerTicks: save.summerTicks } : {}),
-    ...(save.freeFlowTicks !== undefined ? { freeFlowTicks: save.freeFlowTicks } : {}),
-    ...(save.wellStockedTicks !== undefined ? { wellStockedTicks: save.wellStockedTicks } : {}),
-    ...(save.transitTicks !== undefined ? { transitTicks: save.transitTicks } : {}),
-    ...(save.railTicks !== undefined ? { railTicks: save.railTicks } : {}),
-    ...(save.activeTicks !== undefined ? { activeTicks: save.activeTicks } : {}),
-    ...(save.trains !== undefined ? { trains: save.trains } : {}),
-    ...(save.heatStored !== undefined ? { heatStored: save.heatStored } : {}),
-    ...(save.warmWinterTicks !== undefined ? { warmWinterTicks: save.warmWinterTicks } : {}),
-    ...(save.districtDeficitTicks !== undefined
-      ? { districtDeficitTicks: save.districtDeficitTicks }
-      : {}),
-    ...(save.flexTicks !== undefined ? { flexTicks: save.flexTicks } : {}),
-    ...(save.demandResponse !== undefined ? { demandResponse: save.demandResponse } : {}),
-    ...(save.shedTotal !== undefined ? { shedTotal: save.shedTotal } : {}),
-    ...(save.disasterScale !== undefined ? { disasterScale: save.disasterScale } : {}),
-    ...(save.disasters !== undefined ? { disasters: save.disasters } : {}),
-    layers,
-  };
-  return JSON.stringify(json, null, 2);
 }
 
 /** Shallow shape check: a hand-edited export must not break the loader. */
@@ -223,147 +170,211 @@ function isSavedIslandPools(value: unknown): value is [number, number, number][]
   );
 }
 
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
+}
+
 /**
- * Parse an exported JSON save. Throws on malformed input or an
- * unsupported version.
+ * Finite, not just a number: a persisted counter must not be poisoned by
+ * a hand-edited export's NaN (the goal could never be met).
  */
-export function saveFromJson(text: string): SaveGame {
-  const parsed = JSON.parse(text) as Partial<SaveGameJson>;
+function finiteNum(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function bool(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Shallow shape check, all or nothing (same reasoning as
+ * `isSavedDisasters`): `deserializeState` merges a known scenario over a
+ * fresh run, so every field it reads must be the right type.
+ */
+function isSavedScenario(value: unknown): value is SavedScenario {
+  if (!isPlainObject(value)) return false;
+  const s = value as Partial<Record<keyof SavedScenario, unknown>>;
+  if (typeof s.id !== 'string' || !isFiniteNumber(s.startTick)) return false;
+  if (s.status !== 'running' && s.status !== 'won' && s.status !== 'failed') return false;
+  if (s.endedTick !== undefined && !isFiniteNumber(s.endedTick)) return false;
+  if (!isPlainObject(s.samples)) return false;
+  for (const series of Object.values(s.samples)) {
+    if (!Array.isArray(series) || !series.every(isFiniteNumber)) return false;
+  }
+  if (!isPlainObject(s.today)) return false;
+  const today = s.today;
+  return (
+    [
+      'deficitTicks',
+      'importedEnergy',
+      'renewable',
+      'generation',
+      'suppliedShareSum',
+      'ticks',
+    ] as const
+  ).every((key) => isFiniteNumber(today[key]));
+}
+
+function isSeasonId(value: unknown): value is SeasonId {
+  return (SEASON_ORDER as readonly unknown[]).includes(value);
+}
+
+type BaseKey = 'version' | 'seed' | 'size' | 'tick' | 'money' | 'taxRate' | 'layers';
+type OptionalKey = Exclude<keyof SaveGame, BaseKey>;
+/**
+ * One reader per optional SaveGame field: returns the sanitised value or
+ * undefined (= drop). `-?` makes every key mandatory here, so a new
+ * SaveGame field without a reader is a type error.
+ */
+type FieldReaders = { [K in OptionalKey]-?: (value: unknown) => SaveGame[K] | undefined };
+
+const FIELD_READERS: FieldReaders = {
+  policies: (value) => {
+    if (!isPlainObject(value)) return undefined;
+    const policies: Partial<Record<PolicyId, boolean>> = {};
+    for (const id of POLICY_IDS) {
+      if (typeof value[id] === 'boolean') policies[id] = value[id];
+    }
+    return policies;
+  },
+  // Only the shape: loadFinance sanitises every member on load.
+  finance: (value) => (isPlainObject(value) ? (value as unknown as FinanceSave) : undefined),
+  rules: (value) => {
+    if (!isPlainObject(value)) return undefined;
+    const { importCapacityFactor, startSeason } = value;
+    if (!isFiniteNumber(importCapacityFactor) || importCapacityFactor < 0) return undefined;
+    if (!isSeasonId(startSeason)) return undefined;
+    return { importCapacityFactor, startSeason };
+  },
+  scenario: (value) => (isSavedScenario(value) ? value : undefined),
+  sandbox: (value) => (value === true ? true : undefined),
+  smartCharging: bool,
+  storedEnergy: num,
+  // Pairs of (tile index, level), taken whole or not at all: dropping a
+  // single bad entry would shift every later pair onto the wrong tile.
+  // The values themselves are checked on load, where the layers that
+  // decide a tile's capacity are in place.
+  stored: (value) => (isStoredPairs(value) ? value : undefined),
+  goals: (value) =>
+    Array.isArray(value) ? value.filter((g): g is string => typeof g === 'string') : undefined,
+  lifetime: (value) =>
+    Array.isArray(value)
+      ? value.filter(
+          (sample): sample is LifetimeSample =>
+            typeof sample === 'object' && sample !== null && typeof sample.day === 'number',
+        )
+      : undefined,
+  riverFlow: num,
+  pumpedStorageEnergy: num,
+  hydrogenEnergy: num,
+  marketTrading: bool,
+  seasonOriginDay: num,
+  snowpack: num,
+  insulation: bool,
+  winterTicks: num,
+  summerTicks: num,
+  freeFlowTicks: num,
+  wellStockedTicks: num,
+  transitTicks: num,
+  railTicks: finiteNum,
+  activeTicks: finiteNum,
+  // Dropped one train at a time, not the whole fleet: a bad record from
+  // a hand-edited export should not cost every other train.
+  trains: (value) => (Array.isArray(value) ? value.filter(isSavedTrain) : undefined),
+  heatStored: num,
+  warmWinterTicks: num,
+  districtDeficitTicks: finiteNum,
+  flexTicks: finiteNum,
+  smartMeters: (value) => (isSavedSmartMeters(value) ? value : undefined),
+  flexBacklog: num,
+  demandResponse: (value) => (isSavedDemandResponse(value) ? value : undefined),
+  islandPools: (value) => (isSavedIslandPools(value) ? value : undefined),
+  shedTotal: finiteNum,
+  disasterScale: num,
+  disasters: (value) => (isSavedDisasters(value) ? value : undefined),
+};
+
+/** Every field but `layers`, copied as is: the writer can never drop a field. */
+export function saveFieldsToJson(save: SaveGame): SaveFields {
+  const { layers: _layers, ...fields } = save;
+  return fields;
+}
+
+/**
+ * Read every field but `layers` from parsed JSON. Throws on a missing or
+ * malformed base field or an unsupported version; optional fields that
+ * fail their reader are dropped.
+ */
+export function saveFieldsFromJson(parsed: unknown): SaveFields {
+  if (!isPlainObject(parsed)) throw new Error('Not a valid Voltopia save file');
   if (
     parsed.version !== SAVE_VERSION ||
     typeof parsed.seed !== 'number' ||
     typeof parsed.size !== 'number' ||
     typeof parsed.tick !== 'number' ||
-    typeof parsed.money !== 'number' ||
-    typeof parsed.layers !== 'object' ||
-    parsed.layers === null
+    typeof parsed.money !== 'number'
   ) {
     throw new Error('Not a valid Voltopia save file');
   }
-  const expectedBytes = parsed.size * parsed.size;
-  const layerNames = [
-    'tileType',
-    'roadMask',
-    'zone',
-    'density',
-    'variant',
-    'supplied',
-    'plantType',
-  ] as const;
-  const layers = {} as SaveGame['layers'];
-  for (const name of layerNames) {
-    const encoded = parsed.layers[name];
-    if (typeof encoded !== 'string') {
-      throw new Error(`Save file is missing layer "${name}"`);
-    }
-    const buffer = base64ToBuffer(encoded);
-    if (buffer.byteLength !== expectedBytes) {
-      throw new Error(`Layer "${name}" has the wrong size`);
-    }
-    layers[name] = buffer;
-  }
-  const optionalLayers = [
-    'terrain',
-    'powerLine',
-    'elevation',
-    'roadClass',
-    'busStop',
-    'forest',
-    'geothermal',
-    'reservoirHeat',
-    'damage',
-    'rail',
-    'overpass',
-    'roadLane',
-  ] as const;
-  for (const name of optionalLayers) {
-    const encoded = parsed.layers[name];
-    if (typeof encoded !== 'string') continue;
-    const buffer = base64ToBuffer(encoded);
-    if (buffer.byteLength !== expectedBytes) {
-      throw new Error(`Layer "${name}" has the wrong size`);
-    }
-    layers[name] = buffer;
-  }
-  return {
+  const fields: SaveFields = {
     version: parsed.version,
     seed: parsed.seed,
     size: parsed.size,
     tick: parsed.tick,
     money: parsed.money,
     taxRate: typeof parsed.taxRate === 'number' ? parsed.taxRate : 0.1,
-    ...(typeof parsed.storedEnergy === 'number' ? { storedEnergy: parsed.storedEnergy } : {}),
-    // Pairs of (tile index, level), taken whole or not at all: dropping a
-    // single bad entry would shift every later pair onto the wrong tile.
-    // The values themselves are checked on load, where the layers that
-    // decide a tile's capacity are in place.
-    ...(isStoredPairs(parsed.stored) ? { stored: parsed.stored } : {}),
-    ...(typeof parsed.smartCharging === 'boolean' ? { smartCharging: parsed.smartCharging } : {}),
-    ...(isSavedSmartMeters(parsed.smartMeters) ? { smartMeters: parsed.smartMeters } : {}),
-    ...(typeof parsed.flexBacklog === 'number' ? { flexBacklog: parsed.flexBacklog } : {}),
-    ...(isSavedIslandPools(parsed.islandPools) ? { islandPools: parsed.islandPools } : {}),
-    ...(Array.isArray(parsed.goals)
-      ? { goals: parsed.goals.filter((g): g is string => typeof g === 'string') }
-      : {}),
-    ...(Array.isArray(parsed.lifetime)
-      ? {
-          lifetime: parsed.lifetime.filter(
-            (sample): sample is LifetimeSample =>
-              typeof sample === 'object' && sample !== null && typeof sample.day === 'number',
-          ),
-        }
-      : {}),
-    ...(typeof parsed.riverFlow === 'number' ? { riverFlow: parsed.riverFlow } : {}),
-    ...(typeof parsed.hydrogenEnergy === 'number' ? { hydrogenEnergy: parsed.hydrogenEnergy } : {}),
-    ...(typeof parsed.marketTrading === 'boolean' ? { marketTrading: parsed.marketTrading } : {}),
-    ...(typeof parsed.pumpedStorageEnergy === 'number'
-      ? { pumpedStorageEnergy: parsed.pumpedStorageEnergy }
-      : {}),
-    ...(typeof parsed.seasonOriginDay === 'number'
-      ? { seasonOriginDay: parsed.seasonOriginDay }
-      : {}),
-    ...(typeof parsed.snowpack === 'number' ? { snowpack: parsed.snowpack } : {}),
-    ...(typeof parsed.insulation === 'boolean' ? { insulation: parsed.insulation } : {}),
-    ...(parsed.sandbox === true ? { sandbox: true } : {}),
-    ...(typeof parsed.winterTicks === 'number' ? { winterTicks: parsed.winterTicks } : {}),
-    ...(typeof parsed.summerTicks === 'number' ? { summerTicks: parsed.summerTicks } : {}),
-    ...(typeof parsed.freeFlowTicks === 'number' ? { freeFlowTicks: parsed.freeFlowTicks } : {}),
-    ...(typeof parsed.wellStockedTicks === 'number'
-      ? { wellStockedTicks: parsed.wellStockedTicks }
-      : {}),
-    ...(typeof parsed.transitTicks === 'number' ? { transitTicks: parsed.transitTicks } : {}),
-    // Finite, not just a number: a persisted streak counter must not be
-    // poisoned by a hand-edited export's NaN (same reasoning as flexTicks).
-    ...(typeof parsed.railTicks === 'number' && Number.isFinite(parsed.railTicks)
-      ? { railTicks: parsed.railTicks }
-      : {}),
-    ...(typeof parsed.activeTicks === 'number' && Number.isFinite(parsed.activeTicks)
-      ? { activeTicks: parsed.activeTicks }
-      : {}),
-    // Dropped one train at a time, not the whole fleet: a bad record from
-    // a hand-edited export should not cost every other train.
-    ...(Array.isArray(parsed.trains) ? { trains: parsed.trains.filter(isSavedTrain) } : {}),
-    ...(typeof parsed.heatStored === 'number' ? { heatStored: parsed.heatStored } : {}),
-    ...(typeof parsed.warmWinterTicks === 'number'
-      ? { warmWinterTicks: parsed.warmWinterTicks }
-      : {}),
-    ...(typeof parsed.districtDeficitTicks === 'number' &&
-    Number.isFinite(parsed.districtDeficitTicks)
-      ? { districtDeficitTicks: parsed.districtDeficitTicks }
-      : {}),
-    // Finite, not just a number: NaN from a hand-edited export would
-    // poison a cumulative counter for good (the goal could never be met).
-    ...(typeof parsed.flexTicks === 'number' && Number.isFinite(parsed.flexTicks)
-      ? { flexTicks: parsed.flexTicks }
-      : {}),
-    ...(isSavedDemandResponse(parsed.demandResponse)
-      ? { demandResponse: parsed.demandResponse }
-      : {}),
-    ...(typeof parsed.shedTotal === 'number' && Number.isFinite(parsed.shedTotal)
-      ? { shedTotal: parsed.shedTotal }
-      : {}),
-    ...(typeof parsed.disasterScale === 'number' ? { disasterScale: parsed.disasterScale } : {}),
-    ...(isSavedDisasters(parsed.disasters) ? { disasters: parsed.disasters } : {}),
-    layers,
   };
+  const target = fields as Record<string, unknown>;
+  for (const key of Object.keys(FIELD_READERS) as OptionalKey[]) {
+    const value = (FIELD_READERS[key] as (value: unknown) => unknown)(parsed[key]);
+    if (value !== undefined) target[key] = value;
+  }
+  return fields;
+}
+
+/** Serialize a save game to a portable JSON string (for file export). */
+export function saveToJson(save: SaveGame): string {
+  const layers: Record<string, string> = {};
+  for (const name of SAVE_LAYERS) {
+    const buffer = save.layers[name];
+    if (buffer) layers[name] = bufferToBase64(buffer);
+  }
+  return JSON.stringify({ ...saveFieldsToJson(save), layers }, null, 2);
+}
+
+/**
+ * Parse an exported JSON save. Throws on malformed input or an
+ * unsupported version.
+ */
+export function saveFromJson(text: string): SaveGame {
+  const parsed: unknown = JSON.parse(text);
+  const rawLayers = isPlainObject(parsed) ? parsed.layers : undefined;
+  if (typeof rawLayers !== 'object' || rawLayers === null) {
+    throw new Error('Not a valid Voltopia save file');
+  }
+  const fields = saveFieldsFromJson(parsed);
+  const encodedLayers = rawLayers as Record<string, unknown>;
+  const expectedBytes = fields.size * fields.size;
+  const layers = {} as SaveGame['layers'];
+  SAVE_LAYERS.forEach((name, i) => {
+    const encoded = encodedLayers[name];
+    if (typeof encoded !== 'string') {
+      if (i < REQUIRED_LAYER_COUNT) throw new Error(`Save file is missing layer "${name}"`);
+      return;
+    }
+    const buffer = base64ToBuffer(encoded);
+    if (buffer.byteLength !== expectedBytes) {
+      throw new Error(`Layer "${name}" has the wrong size`);
+    }
+    layers[name] = buffer;
+  });
+  return { ...fields, layers };
 }
