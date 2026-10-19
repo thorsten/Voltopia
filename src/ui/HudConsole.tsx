@@ -178,25 +178,17 @@ export function HudConsole({
             <div className="policies" data-testid="policies">
               <div className="policies-title">{t('policies.title')}</div>
               {POLICY_IDS.map((id) => (
-                <label
-                  key={id}
-                  className="smart-charging-toggle policy-row"
-                  data-testid={`policy-${id}`}
-                >
+                <label key={id} className="policy-row" data-testid={`policy-${id}`}>
                   <input
                     type="checkbox"
                     checked={stats.policies.active[id]}
                     onChange={(e) => onSetPolicy(id, e.target.checked)}
                   />
-                  <span className="policy-text">
-                    <span>{t(`policy.${id}.title` as TranslationKey)}</span>
-                    <span className="policy-body">{t(`policy.${id}.body` as TranslationKey)}</span>
-                  </span>
+                  <span className="policy-title">{t(`policy.${id}.title` as TranslationKey)}</span>
+                  <span className="policy-body">{t(`policy.${id}.body` as TranslationKey)}</span>
                   <span className="policy-figures">
-                    <span className="smart-meters-coverage">
-                      {t('policies.cost', { cost: BALANCE.policies[id].dailyCost })}
-                    </span>
-                    <span className="smart-meters-coverage" data-testid={`policy-${id}-happiness`}>
+                    <span>{t('policies.cost', { cost: BALANCE.policies[id].dailyCost })}</span>
+                    <span data-testid={`policy-${id}-happiness`}>
                       {t('policies.happiness', {
                         value: signedPercent(BALANCE.policies[id].happiness),
                       })}
