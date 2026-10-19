@@ -22,7 +22,7 @@ function flatState() {
 }
 
 describe('stamp helpers', () => {
-  it('stamps a road, a zone and buildings beside it without spending money', () => {
+  it('stamps a road, a zone and buildings beside it without spending money or grant', () => {
     const state = flatState();
     const money = state.money;
     withFreeBuild(state, () => {
@@ -33,6 +33,8 @@ describe('stamp helpers', () => {
       stampLines(state, [at(7, 5), at(8, 5)]);
     });
     expect(state.money).toBe(money);
+    // The stamped solar farm draws nothing from the player's grant pot.
+    expect(state.finance.grantUsedThisYear).toBe(0);
     expect(state.layers.tileType[at(3, 5)]).toBe(TileType.Road);
     expect(state.layers.density[at(2, 4)]).toBe(2);
     expect(state.layers.buildingAge[at(2, 4)]).toBe(BALANCE.growth.ageStageTicks[0]);

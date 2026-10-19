@@ -1921,8 +1921,17 @@ export const BALANCE = {
    * Credit, overdraft interest, the credit rating, the renewable
    * investment grant and the grid fee (see src/sim/finance.ts). Rates
    * are per in-game year (seasons × daysPerSeason days) and applied per
-   * tick as simple interest on the outstanding amount. Initial values,
-   * to be tuned by a headless probe.
+   * tick as simple interest on the outstanding amount.
+   *
+   * Tuned by a headless probe (2026-10-19): the dunkelflaute scenario
+   * town (48x48, 643 residents, ~6_800 tax a day at the default rate, its
+   * 14 solar farms and battery) given a substation and a starter fleet —
+   * 8 wind turbines + 4 batteries ("supplied") or 4 + 2 ("import-heavy")
+   * — over 20 days (one year) on 8 weather seeds, the random draws
+   * re-seeded per tick so every variant of a seed sees the same weather.
+   * Daily operating income swings from -21_000 (calm, importing) to
+   * +7_000 (windy, exporting); over the year the supplied town averages
+   * +300 a day (a 16 + 8 fleet +1_300), the import-heavy one -3_000.
    */
   finance: {
     credit: {
@@ -1933,16 +1942,43 @@ export const BALANCE = {
         ratePerYear: 0.08,
         repayable: true,
       },
-      /** Interest only; the full principal is due at maturity. */
+      /**
+       * Interest only; the full principal is due at maturity. Measured:
+       * a 50_000 bond taken as soon as it was on offer (after two days on average)
+       * and spent on 10 plants (~32_000 of wind and batteries) ended the
+       * year at net worth 1_800 in the import-heavy town against 1_300
+       * for the same plants bought from cash as it came in (baseline
+       * -45_900); a 16-plant build -5_800 against -7_100. In the supplied
+       * town the cash build catches up within days and the bond's
+       * interest (2_250 a year) cancels the head start: 13_600 against
+       * 14_100 (baseline 25_600). Borrowing to build past the town's
+       * demand loses — 100_000 on 25 plants ended at -60_000, the surplus
+       * only earns the export price.
+       */
       bond: { amounts: [50_000, 100_000], termDays: 40, ratePerYear: 0.05, repayable: false },
       /** Credits open at once. */
       maxCredits: 4,
-      /** Total debt may not exceed this many days of average income. */
+      /**
+       * Total debt may not exceed this many days of average income
+       * (averageDailyIncome: the rating window's mean with days not yet
+       * played counted as 0, so one windy first day — 5_000 in the probe —
+       * opens no bond). A new city gets 30_000 of loans; the smallest
+       * bond needs 1_667 a day, the largest 3_333. The supplied town's
+       * first five days averaged 1_800-5_600 on 6 of 8 seeds: the 50_000
+       * bond came on offer after 2-3 days, the 100_000 one after ~11. A
+       * town importing at a loss (-9_500 a day) never gets a bond — it
+       * borrows loans: 20_000 + 10_000 after the first day for 9 plants ended at
+       * 3_100 in the import-heavy town, ahead of cash (1_300).
+       */
       debtCapDays: 30,
       /** Income floor for the debt cap and the rating, so a new city can borrow. */
       minIncomeBase: 1_000,
     },
-    /** Charged on a negative treasury. */
+    /**
+     * Charged on a negative treasury. Measured: a 20_000 loan burnt on
+     * nothing put the supplied town 21_500 behind its baseline at the
+     * year's end (25_600 -> 4_100) and down to D in 3 of 8 seeds.
+     */
     overdraftRatePerYear: 0.25,
     rating: {
       /** Trailing days of operating income the rating averages. */
@@ -1955,8 +1991,18 @@ export const BALANCE = {
       maxOverdraftDays: { A: 0, B: 1, C: 3 },
     },
     grant: {
-      /** Grant money per in-game year. */
-      annualPot: 15_000,
+      /**
+       * Grant money per in-game year: about three solar farms' build
+       * price — the 30 % grant on ~11 solar farms or 3 wind turbines — so
+       * it helps the first build-out and fades as the city grows. Was
+       * 15_000, which never ran dry for a small city (10 plants drew
+       * ~11_000) and acted as a flat 30 % discount. Measured with a cash
+       * build buying wind and batteries whenever it could, pot 0 / 4_000
+       * / 15_000 / 30_000: 11 / 14 / 18 / 19 plants by the year's end,
+       * import 4_500 / 4_100 / 3_600 / 3_450 a day, net worth within
+       * 1_000 of each other.
+       */
+      annualPot: 4_000,
       /**
        * Share of the build price (slope or offshore multiplier included,
        * felling excluded) paid from the pot, per plant. Renewables and
@@ -1978,7 +2024,19 @@ export const BALANCE = {
       step: 0.001,
       /** Smart-metered buildings pay this share less. */
       smartMeterDiscount: 0.5,
-      /** Happiness lost per unit of grid fee. */
+      /**
+       * Happiness lost per unit of grid fee. Unchanged: buildings draw
+       * ~386_000 EU a day against a tax base (income per unit of tax rate)
+       * of ~67_600, so a fee raising the same money as a tax increase
+       * costs 0.88 times its happiness without smart meters. Measured
+       * from tax 0.12: fee 0.002 / 0.005 / 0.01 raised 773 / 1_933 /
+       * 3_865 a day and cost 0.020 / 0.050 / 0.100 happiness; the tax at
+       * 0.131 / 0.149 / 0.177 raised the same and cost 0.023 / 0.057 /
+       * 0.114. Fully metered, the fee raises half as much for the same
+       * happiness (1.75 times the tax's cost per money); parity holds
+       * within 20 % up to about half coverage. maxRate 0.02 raises ~7_700
+       * a day unmetered, about the town's whole tax income.
+       */
       happinessWeight: 10,
     },
   },

@@ -15,16 +15,18 @@ function check(result: BuildResult, what: string): void {
 }
 
 /**
- * Run a setup with unlimited funds and restore the treasury afterwards,
- * so a stamped city costs the player nothing.
+ * Run a setup with unlimited funds and restore the treasury and the
+ * grant pot afterwards, so a stamped city costs the player nothing.
  */
 export function withFreeBuild(state: SimState, setup: () => void): void {
   const money = state.money;
+  const grantUsed = state.finance.grantUsedThisYear;
   state.money = Number.MAX_SAFE_INTEGER / 2;
   try {
     setup();
   } finally {
     state.money = money;
+    state.finance.grantUsedThisYear = grantUsed;
   }
 }
 

@@ -99,6 +99,9 @@ Commands (no undo):
 Debt cap: total outstanding after the new credit ≤
 `debtCapDays × max(averageDailyIncome, minIncomeBase)`; `debtCapDays`
 30, `minIncomeBase` 1_000 so a new city can still borrow 30_000.
+`averageDailyIncome` is the mean over the full rating window with days
+not yet played counted as 0 (changed in the balance probe), so one good
+first day cannot open the bond market.
 
 ## 2. Rating
 

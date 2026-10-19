@@ -226,6 +226,7 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 
 - [x] Scenarios: four fixed maps with win/fail conditions, a scenarios page, an objectives panel, an end screen and agent tools; targets tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-16-scenarios-design.md`)
 - [x] Ordinances: rooftop-PV mandate, night tariff, speed limit and smart-meter mandate as console switches with a daily cost, a happiness term and a sim effect; `set_policy` agent tool; costs tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-17-policies-design.md`)
+- [x] Finance: loans and bonds with fixed interest, overdraft interest and a credit rating A–D, a renewable investment grant from a yearly pot and a grid-fee slider; `take_credit`, `repay_credit`, `set_grid_fee` agent tools; scenario money goals measure net worth; tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-19-finance-design.md`)
 
 ## Testing Strategy
 

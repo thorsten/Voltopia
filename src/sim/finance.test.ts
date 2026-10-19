@@ -121,7 +121,7 @@ describe('credit', () => {
 describe('rating', () => {
   it('debt ratio and overdraft days map onto A to D', () => {
     const state = createSimState(1, SIZE, 0);
-    state.finance.incomeWindow = [2_000, 2_000];
+    state.finance.incomeWindow = Array.from({ length: rating.windowDays }, () => 2_000);
     const credits = (debt: number): void => {
       state.finance.credits = [
         {
@@ -205,6 +205,17 @@ describe('debt cap', () => {
     }
     expect(takeCredit(rich, 'loan', 5_000)).toEqual({ rejected: 'creditLimit' });
     expect(rich.finance.credits.map((c) => c.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('days not yet played count as zero income, so one good day opens no bond', () => {
+    const state = createSimState(1, SIZE, 0);
+    state.finance.incomeWindow = [5_000];
+    expect(averageDailyIncome(state)).toBe(5_000 / rating.windowDays);
+    expect(takeCredit(state, 'bond', credit.bond.amounts[0])).toEqual({
+      rejected: 'creditLimit',
+    });
+    state.finance.incomeWindow = Array.from({ length: rating.windowDays }, () => 5_000);
+    expect(takeCredit(state, 'bond', credit.bond.amounts[0])).toEqual({});
   });
 });
 

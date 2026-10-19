@@ -48,13 +48,15 @@ export function totalDebt(state: SimState): number {
   return total;
 }
 
-/** Mean daily operating income over the rating window; 0 before the first day ends. */
+/**
+ * Mean daily operating income over the full rating window. Lenders want
+ * a track record: days not yet played count as zero income, so one
+ * windy first day cannot open the bond market (see BALANCE.finance).
+ */
 export function averageDailyIncome(state: SimState): number {
-  const window = state.finance.incomeWindow;
-  if (window.length === 0) return 0;
   let sum = 0;
-  for (const income of window) sum += income;
-  return sum / window.length;
+  for (const income of state.finance.incomeWindow) sum += income;
+  return sum / BALANCE.finance.rating.windowDays;
 }
 
 /** Income the debt is measured against: never below the floor, so a new city can borrow. */

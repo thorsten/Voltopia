@@ -65,6 +65,11 @@ micromanagement.
   fuel, a budget panel, lifetime statistics and a set of city goals
   (clean day, storm-proof, flexible city, district grid and more) with a
   celebration when all are done.
+- **Finance**: loans and bonds with fixed interest, overdraft interest
+  and a credit rating A–D that sets the rate of new credit; a yearly
+  grant pot pays part of the price of renewables and storage; a grid fee
+  beside the tax raises money per unit of energy, with a discount for
+  smart-metered buildings.
 - **Scenarios**: four hand-made challenges with a stamped starting city,
   a deadline and win/fail conditions — an island without an import link,
   a winter Dunkelflaute, electrifying an old town, a storm season with a

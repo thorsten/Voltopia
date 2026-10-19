@@ -356,8 +356,31 @@ next, roughly in the order we would build them.
   import savings), speed limit and smart-meter mandate happiness
   -0.03 → -0.02 so any two ordinances keep the town above the growth
   minimum (worst pair 0.37).
-- **Finance**: loans and bonds with interest, subsidies for renewables,
-  a grid-fee model. Today the tax slider is the only lever.
+- **Finance** (done): loans (5_000-20_000, 10 days, amortising,
+  repayable early) and bonds (50_000/100_000, 40 days, interest only)
+  at fixed yearly rates, overdraft interest on a negative treasury and a
+  credit rating A-D from debt in days of income and days ending in the
+  red (spread on new credit, D refuses it); a renewable investment grant
+  (30 % on renewables, 20 % on storage) from a yearly pot; a grid-fee
+  slider beside the tax, smart-metered buildings pay half. Scenario
+  money goals measure net worth, so a loan cannot win them. Agents use
+  `take_credit`, `repay_credit` and `set_grid_fee`. Probe (dunkelflaute
+  town with a substation and a starter wind fleet, 20 days, 8 weather
+  seeds): a 50_000 bond spent on 10 plants ended the year 500 ahead of
+  the same plants bought from cash in the import-heavy town and 500
+  behind in the supplied one (cash catches up within days there);
+  20_000 + 10_000 in loans ended 1_800 ahead; a 20_000 loan burnt on
+  nothing ended 21_500 behind the baseline; overbuilding (100_000 on
+  25 plants) lost 55_000 against cash. A fee raising the same money as a
+  tax increase cost 0.88 times its happiness unmetered (fee 0.002: 773
+  a day, -0.020 against -0.023), so `happinessWeight` 10 stays. The
+  debt cap now averages income over the full window (unplayed days
+  count 0): a new city gets 30_000 of loans, the supplied town's 50_000
+  bond came on offer after 2-3 days, a town importing at a loss never
+  gets one. The grant pot went 15_000 -> 4_000 (about three solar
+  farms' price): 15_000 never ran dry for a small city; with 4_000 a
+  cash build bought 14 plants in a year against 11 without a pot and 18
+  with 15_000.
 - **Neighbouring cities**: the market is abstract. Concrete neighbours
   with their own generation mix, supply contracts and interconnectors
   whose capacity the player buys.

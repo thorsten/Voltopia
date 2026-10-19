@@ -1546,7 +1546,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'principal due at maturity, not repayable early. The credit rating (A–D) adds a spread to ' +
         'the base rate; D gets no credit. More debt relative to income and days ending in the red ' +
         `lower the rating; at most ${BALANCE.finance.credit.maxCredits} credits, total debt capped ` +
-        `at ${BALANCE.finance.credit.debtCapDays} days of income. Debt service is never skipped — ` +
+        `at ${BALANCE.finance.credit.debtCapDays} days of average daily operating income over the last ` +
+        `${BALANCE.finance.rating.windowDays} days (days not yet played count as 0, floor ` +
+        `${BALANCE.finance.credit.minIncomeBase} a day), so a new city gets loans and a bond needs a ` +
+        'track record. Debt service is never skipped — ' +
         `a negative treasury pays ${BALANCE.finance.overdraftRatePerYear} a year overdraft interest. ` +
         "See finance.offers in get_game_overview for today's rates and availability.",
       inputSchema: {
