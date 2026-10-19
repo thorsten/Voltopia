@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SAVE_VERSION } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
 import { PlantType, type SaveGame, Zone } from '../shared/types.ts';
@@ -11,6 +11,7 @@ import {
   encodeShareCode,
   fromBase64Url,
   SHARE_FORMAT_VERSION,
+  SHARE_INFLATE_SLICE,
   SHARE_MAX_BYTES,
   SHARE_MAX_CODE_LENGTH,
   ShareCodeError,
@@ -73,6 +74,36 @@ async function reasonOf(code: string): Promise<string> {
 function smallSave(): SaveGame {
   const save = fullSave();
   return { ...save, lifetime: undefined };
+}
+
+/** A valid prefix followed by `zeros` zero bytes: inflates past the cap. */
+async function zipBombCode(zeros = SHARE_MAX_BYTES): Promise<string> {
+  const header = new TextEncoder().encode(JSON.stringify(saveFieldsToJson(smallSave())));
+  const prefix = new Uint8Array(5 + header.length);
+  prefix[0] = SHARE_FORMAT_VERSION;
+  new DataView(prefix.buffer).setUint32(1, header.length, true);
+  prefix.set(header, 5);
+  const chunk = new Uint8Array(1 << 20);
+  let remaining = zeros;
+  let sentPrefix = false;
+  const source = new ReadableStream<BufferSource>({
+    pull(controller) {
+      if (!sentPrefix) {
+        sentPrefix = true;
+        controller.enqueue(prefix);
+      } else if (remaining > 0) {
+        const n = Math.min(remaining, chunk.length);
+        controller.enqueue(chunk.subarray(0, n));
+        remaining -= n;
+      } else {
+        controller.close();
+      }
+    },
+  });
+  const compressed = new Uint8Array(
+    await new Response(source.pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer(),
+  );
+  return toBase64Url(compressed);
 }
 
 describe('share code', () => {
@@ -204,32 +235,42 @@ describe('share code', () => {
   });
 
   it('stops inflating a zip bomb as tooLarge', async () => {
-    const header = new TextEncoder().encode(JSON.stringify(saveFieldsToJson(smallSave())));
-    const prefix = new Uint8Array(5 + header.length);
-    prefix[0] = SHARE_FORMAT_VERSION;
-    new DataView(prefix.buffer).setUint32(1, header.length, true);
-    prefix.set(header, 5);
-    const chunk = new Uint8Array(1 << 20);
-    let remaining = SHARE_MAX_BYTES;
-    let sentPrefix = false;
-    const source = new ReadableStream<BufferSource>({
-      pull(controller) {
-        if (!sentPrefix) {
-          sentPrefix = true;
-          controller.enqueue(prefix);
-        } else if (remaining > 0) {
-          const n = Math.min(remaining, chunk.length);
-          controller.enqueue(chunk.subarray(0, n));
-          remaining -= n;
-        } else {
-          controller.close();
-        }
-      },
-    });
-    const compressed = new Uint8Array(
-      await new Response(source.pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer(),
-    );
-    expect(await reasonOf(toBase64Url(compressed))).toBe('tooLarge');
+    expect(await reasonOf(await zipBombCode())).toBe('tooLarge');
+  });
+
+  it('feeds a large single-chunk code to the inflater in small slices', async () => {
+    // WebKit may inflate a whole input chunk at once, so the decoder must
+    // never hand it more than one slice: the code arrives as one buffer.
+    // Zeros deflate about 700:1 here, so 16 caps give several slices of input.
+    const code = await zipBombCode(16 * SHARE_MAX_BYTES);
+    const compressedLength = fromBase64Url(code).length;
+    const Real = globalThis.DecompressionStream;
+    const written: number[] = [];
+    class Recording {
+      readonly readable: ReadableStream<Uint8Array>;
+      readonly writable: WritableStream<BufferSource>;
+      constructor(format: CompressionFormat) {
+        const inner = new Real(format);
+        const innerWriter = inner.writable.getWriter();
+        this.readable = inner.readable;
+        this.writable = new WritableStream<BufferSource>({
+          write(chunk) {
+            written.push(chunk.byteLength);
+            return innerWriter.write(chunk);
+          },
+          close: () => innerWriter.close(),
+          abort: (reason) => innerWriter.abort(reason),
+        });
+      }
+    }
+    vi.stubGlobal('DecompressionStream', Recording);
+    try {
+      expect(await reasonOf(code)).toBe('tooLarge');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(compressedLength).toBeGreaterThan(SHARE_INFLATE_SLICE);
+    expect(Math.max(...written)).toBeLessThanOrEqual(SHARE_INFLATE_SLICE);
   });
 
   it('rejects an oversized code string as tooLarge without decoding', async () => {

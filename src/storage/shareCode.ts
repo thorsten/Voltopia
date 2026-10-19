@@ -72,15 +72,34 @@ async function deflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Inflates, aborting as soon as the output exceeds `limit` bytes. */
+/**
+ * Compressed bytes handed to the inflater at a time. WebKit may inflate a
+ * whole input chunk in one go, so the output cap is only effective when
+ * no single chunk can expand far past it (deflate tops out near 1:1032).
+ */
+export const SHARE_INFLATE_SLICE = 8 * 1024;
+
+/**
+ * Inflates, aborting as soon as the output exceeds `limit` bytes. The
+ * input is written in `SHARE_INFLATE_SLICE` pieces while the output is
+ * read, so a bomb stops after one slice's worth of expansion.
+ */
 async function inflateRawLimited(
   bytes: Uint8Array<ArrayBuffer>,
   limit: number,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const reader = new Blob([bytes])
-    .stream()
-    .pipeThrough(new DecompressionStream('deflate-raw'))
-    .getReader();
+  const inflater = new DecompressionStream('deflate-raw');
+  const writer = inflater.writable.getWriter();
+  const reader = inflater.readable.getReader();
+  let stopped = false;
+  const feed = (async () => {
+    for (let i = 0; i < bytes.length && !stopped; i += SHARE_INFLATE_SLICE) {
+      await writer.write(bytes.subarray(i, i + SHARE_INFLATE_SLICE));
+    }
+    if (!stopped) await writer.close();
+  })();
+  // A corrupt stream errors both sides; the reader reports it.
+  feed.catch(() => {});
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
@@ -89,12 +108,14 @@ async function inflateRawLimited(
       if (done) break;
       total += value.byteLength;
       if (total > limit) {
-        await reader.cancel().catch(() => {});
+        stopped = true;
+        await Promise.all([reader.cancel().catch(() => {}), writer.abort().catch(() => {})]);
         throw new ShareCodeError('tooLarge');
       }
       chunks.push(value);
     }
   } catch (error) {
+    stopped = true;
     if (error instanceof ShareCodeError) throw error;
     throw new ShareCodeError('corrupt', String(error));
   }
