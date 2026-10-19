@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { OverlayMode, type SaveGame, type ScenarioId } from '../shared/types.ts';
 import { IndexedDbStorage } from '../storage/indexeddb.ts';
+import { decodeShareCode } from '../storage/shareCode.ts';
 import type { GameRenderer, RendererCallbacks } from '../render/renderer.ts';
 import { createCityReloader } from './cityReload.ts';
 import { CityVitals } from './CityVitals.tsx';
@@ -32,6 +33,8 @@ import {
 } from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
 import { SavesPage } from './SavesPage.tsx';
+import { SharedCityDialog } from './SharedCityDialog.tsx';
+import { datedName, keepAndOpenShared, shareSupported, takeShareCodeOnce } from './shareLink.ts';
 import { ScenarioPanel } from './ScenarioPanel.tsx';
 import { ScenariosPage } from './ScenariosPage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
@@ -50,6 +53,8 @@ import { useSimBridge } from './useSimBridge.ts';
 import { useTools } from './useTools.ts';
 
 const AUTOSAVE_INTERVAL_MS = 10_000;
+/** How long the start-up notice toast (e.g. an invalid share link) stays. */
+const NOTICE_DURATION_MS = 6_000;
 
 const storage = new IndexedDbStorage();
 
@@ -73,20 +78,55 @@ function loadDetailsOpen(): boolean {
   }
 }
 
-/** Loads the autosave before booting the simulation. */
+type SharedLinkResult = SaveGame | 'failed' | null;
+
+/** Decodes this page load's '#city=' code; 'failed' for unusable links. */
+function readSharedLink(code: string | null): Promise<SharedLinkResult> {
+  if (!code) return Promise.resolve(null);
+  if (!shareSupported()) {
+    console.warn('Shared city link rejected', 'unsupported');
+    return Promise.resolve('failed');
+  }
+  return decodeShareCode(code).then(
+    (save) => save,
+    (error: unknown) => {
+      console.warn('Shared city link rejected', error);
+      return 'failed' as const;
+    },
+  );
+}
+
+/**
+ * Loads the autosave (and a shared city from the URL, if any) before
+ * booting the simulation. While a shared city awaits the player's answer,
+ * `Game` is not mounted, so no worker or autosave can race the replacement.
+ */
 export function App() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [boot, setBoot] = useState<{
-    save: SaveGame | null;
+    save: SaveGame | null; // the autosave
     options: NewGameOptions;
+    shared: SaveGame | null; // decoded link, awaiting the dialog
+    linkFailed: boolean;
   } | null>(null);
+  const [sharedBusy, setSharedBusy] = useState(false);
+  const [sharedError, setSharedError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    storage.load().then((save) => {
-      // Pending options only apply when starting fresh.
-      const options = consumePendingNewGame();
-      if (!cancelled) setBoot({ save, options });
+    // Strips the hash synchronously, before any await; cached per page load.
+    const decoded = readSharedLink(takeShareCodeOnce());
+    void Promise.all([storage.load(), decoded]).then(([save, shared]) => {
+      // Always consumed (cached per load); a link wins over pending options.
+      const pending = consumePendingNewGame();
+      const linked = shared !== null && shared !== 'failed';
+      if (!cancelled)
+        setBoot({
+          save,
+          options: linked ? { ...DEFAULT_NEW_GAME } : pending,
+          shared: linked ? shared : null,
+          linkFailed: shared === 'failed',
+        });
     });
     return () => {
       cancelled = true;
@@ -96,7 +136,46 @@ export function App() {
   if (!boot) {
     return <div className="boot-screen">{t('boot.loading')}</div>;
   }
-  return <Game save={boot.save} options={boot.options} />;
+  if (boot.shared) {
+    const shared = boot.shared;
+    const load = async (): Promise<void> => {
+      setSharedBusy(true);
+      setSharedError(null);
+      try {
+        await keepAndOpenShared({
+          storage,
+          current: boot.save,
+          keptName: datedName(t('share.keptName'), new Date(), locale),
+          shared,
+          replace: cityReloader.replaceCityAndReload,
+        });
+      } catch (error) {
+        setSharedError(String(error instanceof Error ? error.message : error));
+        setSharedBusy(false);
+      }
+    };
+    return (
+      <>
+        <div className="boot-screen">{t('boot.loading')}</div>
+        <SharedCityDialog
+          save={shared}
+          busy={sharedBusy}
+          error={sharedError}
+          onLoad={() => void load()}
+          onCancel={() => {
+            if (!sharedBusy) setBoot({ ...boot, shared: null });
+          }}
+        />
+      </>
+    );
+  }
+  return (
+    <Game
+      save={boot.save}
+      options={boot.options}
+      notice={boot.linkFailed ? t('share.invalid') : null}
+    />
+  );
 }
 
 function LanguageSwitch() {
@@ -119,8 +198,22 @@ function LanguageSwitch() {
   );
 }
 
-function Game({ save, options }: { save: SaveGame | null; options: NewGameOptions }) {
+function Game({
+  save,
+  options,
+  notice,
+}: {
+  save: SaveGame | null;
+  options: NewGameOptions;
+  /** A one-off message (e.g. a rejected share link), shown briefly on start. */
+  notice: string | null;
+}) {
   const { t } = useI18n();
+  const [noticeVisible, setNoticeVisible] = useState(notice !== null);
+  useEffect(() => {
+    const timer = setTimeout(() => setNoticeVisible(false), NOTICE_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, []);
   // A saved city keeps its own size/seed; new cities use the chosen options.
   const gridSize = save?.size ?? options.size;
   const bridge = useSimBridge({
@@ -428,6 +521,11 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
         </div>
       </div>
 
+      {noticeVisible && notice && (
+        <div className="notice-toast" data-testid="share-invalid">
+          {notice}
+        </div>
+      )}
       {rejection && (
         <div className="rejection-toast" data-testid="rejection">
           {rejection}

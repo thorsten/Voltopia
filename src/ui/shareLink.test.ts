@@ -92,6 +92,12 @@ describe('takeShareCodeOnce', () => {
     expect(hist.replaceState).toHaveBeenCalledOnce();
   });
 
+  it('reads the code before stripping a live location', () => {
+    const loc = { hash: `#city=${CODE}`, pathname: '/', search: '' };
+    const hist = { state: null, replaceState: vi.fn(() => (loc.hash = '')) };
+    expect(takeShareCodeOnce(loc, hist)).toBe(CODE);
+  });
+
   it('leaves other hashes alone and caches null', () => {
     const loc = { hash: '#other', pathname: '/', search: '' };
     const hist = { state: null, replaceState: vi.fn() };

@@ -563,6 +563,18 @@ body,
   font-size: 13px;
 }
 
+.notice-toast {
+  position: absolute;
+  bottom: 144px; /* above .rejection-toast, so both can show */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(40, 52, 70, 0.92);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .hud-help {
   position: absolute;
   bottom: 12px;

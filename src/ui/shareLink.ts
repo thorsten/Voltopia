@@ -60,9 +60,10 @@ export function takeShareCodeOnce(
   if (takenThisLoad !== undefined) return takenThisLoad;
   takenThisLoad = null;
   if (!loc || !loc.hash.startsWith(SHARE_HASH_PREFIX)) return takenThisLoad;
-  // Strip first, so a reload (including replaceCityAndReload's) never asks twice.
-  hist?.replaceState(hist.state, '', loc.pathname + loc.search);
+  // Read before stripping: a real `location` is live and loses the hash.
   const code = loc.hash.slice(SHARE_HASH_PREFIX.length);
+  // Strip now, so a reload (including replaceCityAndReload's) never asks twice.
+  hist?.replaceState(hist.state, '', loc.pathname + loc.search);
   takenThisLoad = code === '' ? null : code;
   return takenThisLoad;
 }
