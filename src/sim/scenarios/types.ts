@@ -7,6 +7,7 @@ export { SCENARIO_IDS, type ScenarioId } from '../../shared/types.ts';
 
 export const SCENARIO_METRICS = [
   'population',
+  /** Net worth: money minus outstanding debt (see finance.ts totalDebt). */
   'money',
   'deficitTicks',
   'importedEnergy',

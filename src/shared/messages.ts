@@ -1,4 +1,5 @@
 import type {
+  CreditKind,
   GlobalStats,
   LifetimeSample,
   PlantType,
@@ -44,6 +45,12 @@ type SimCommandBody =
   | { type: 'bulldoze'; tiles: number[] }
   | { type: 'undo' }
   | { type: 'setTaxRate'; rate: number }
+  /** Borrow one of the offered amounts; not undoable. */
+  | { type: 'takeCredit'; kind: CreditKind; amount: number }
+  /** Pay off a loan early (bonds run to maturity). */
+  | { type: 'repayCredit'; id: number }
+  /** Grid fee in money per EU, clamped to 0..BALANCE.finance.gridFee.maxRate. */
+  | { type: 'setGridFee'; rate: number }
   | { type: 'setSmartMeterRollout'; active: boolean }
   | { type: 'setDemandResponse'; active: boolean }
   | { type: 'setMarketTrading'; enabled: boolean }

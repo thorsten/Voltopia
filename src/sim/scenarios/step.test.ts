@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TICKS_PER_DAY } from '../../shared/constants.ts';
 import type { SavedScenario } from '../../shared/types.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from '../state.ts';
+import { takeCredit } from '../finance.ts';
 import { scenarioDay, scenarioStep } from './step.ts';
 import { DEFAULT_RULES, emptyRun, type ScenarioDef } from './types.ts';
 
@@ -122,5 +123,16 @@ describe('scenarioStep', () => {
     expect(loaded.scenario!.samples.suppliedShare).toEqual([]);
     expect(loaded.scenario!.today.suppliedShareSum).toBe(0);
     expect(loaded.scenario!.id).toBe('island');
+  });
+});
+
+describe('scenario net worth', () => {
+  it('records money minus debt, so a loan does not count', () => {
+    const state = running();
+    const before = state.money;
+    expect(takeCredit(state, 'loan', 20_000)).toEqual({});
+    expect(state.money).toBe(before + 20_000);
+    runDay(state, def());
+    expect(state.scenario!.samples.money).toEqual([before]);
   });
 });

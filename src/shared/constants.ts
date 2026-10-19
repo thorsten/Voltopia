@@ -1759,7 +1759,7 @@ export const BALANCE = {
     },
   },
   scenarios: {
-    /** Money at or below which any scenario is lost. */
+    /** Net worth (money minus debt) at or below which any scenario is lost. */
     bankruptMoney: -5_000,
     /** Longest metric window any scenario uses; samples beyond it are dropped. */
     maxSamples: 365,

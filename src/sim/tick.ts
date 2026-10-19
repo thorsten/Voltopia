@@ -5,7 +5,7 @@ import { callHoursLeft, demandResponseStep } from './demandResponse.ts';
 import { deliveriesStep, deliveryStats } from './deliveries.ts';
 import { disasterStats, disastersStep, repairStep } from './disasters.ts';
 import { economyStep } from './economy.ts';
-import { financeStep } from './finance.ts';
+import { financeStats, financeStep } from './finance.ts';
 import {
   policiesStep,
   policyDailyCost,
@@ -318,6 +318,7 @@ export function buildStats(state: SimState): GlobalStats {
     ...(state.scenario ? { scenario: scenarioStats(state) } : {}),
     counts,
     budget: buildBudget(state),
+    finance: financeStats(state),
     inspected: state.inspectedTile >= 0 ? inspectTile(state, state.inspectedTile) : null,
   };
 }

@@ -596,3 +596,97 @@ it('setPolicy toggles an ordinance and the stats report it', () => {
   engine.applyCommand({ type: 'setPolicy', id: 'speedLimit', active: false });
   expect(buildStats(engine.state).policies.dailyCost).toBe(0);
 });
+
+describe('SimEngine finance', () => {
+  it('takes a loan and shows it in the stats', () => {
+    const engine = makeEngine();
+    const before = engine.state.money;
+    expect(engine.applyCommand({ type: 'takeCredit', kind: 'loan', amount: 5_000 })).toEqual([]);
+    expect(engine.state.money).toBe(before + 5_000);
+    expect(engine.state.statsDirty).toBe(true);
+    const { finance } = buildStats(engine.state);
+    expect(finance.debt).toBe(5_000);
+    expect(finance.credits).toHaveLength(1);
+    expect(finance.credits[0]).toMatchObject({
+      kind: 'loan',
+      outstanding: 5_000,
+      daysLeft: BALANCE.finance.credit.loan.termDays,
+      repayable: true,
+    });
+  });
+
+  it('reports the rejection reason of a refused credit', () => {
+    const engine = makeEngine();
+    expect(engine.applyCommand({ type: 'takeCredit', kind: 'loan', amount: 1234 })).toEqual([
+      { type: 'rejected', reason: 'invalidAmount' },
+    ]);
+    engine.state.finance.rating = 'D';
+    expect(engine.applyCommand({ type: 'takeCredit', kind: 'loan', amount: 5_000 })).toEqual([
+      { type: 'rejected', reason: 'creditRefused' },
+    ]);
+  });
+
+  it('repays a loan early but never a bond', () => {
+    const engine = makeEngine();
+    engine.state.money = 1_000_000;
+    // Enough income that the cap admits a bond.
+    engine.state.finance.incomeWindow = [10_000];
+    engine.applyCommand({ type: 'takeCredit', kind: 'loan', amount: 5_000 });
+    engine.applyCommand({ type: 'takeCredit', kind: 'bond', amount: 50_000 });
+    const [loan, bond] = engine.state.finance.credits;
+    expect(buildStats(engine.state).finance.credits[1].repayable).toBe(false);
+    expect(engine.applyCommand({ type: 'repayCredit', id: bond.id })).toEqual([
+      { type: 'rejected', reason: 'notRepayable' },
+    ]);
+    expect(engine.applyCommand({ type: 'repayCredit', id: loan.id })).toEqual([]);
+    expect(engine.applyCommand({ type: 'repayCredit', id: 999 })).toEqual([
+      { type: 'rejected', reason: 'unknownCredit' },
+    ]);
+    expect(engine.state.finance.credits.map((credit) => credit.kind)).toEqual(['bond']);
+  });
+
+  it('sets the grid fee, clamped', () => {
+    const engine = makeEngine();
+    engine.applyCommand({ type: 'setGridFee', rate: 99 });
+    expect(engine.state.finance.gridFee).toBe(BALANCE.finance.gridFee.maxRate);
+    const stats = buildStats(engine.state);
+    expect(stats.finance.gridFee).toBe(BALANCE.finance.gridFee.maxRate);
+    expect(stats.finance.gridFeeHappiness).toBeLessThan(0);
+  });
+
+  it('offers credit by rating and debt cap', () => {
+    const engine = makeEngine();
+    const { credit } = BALANCE.finance;
+    let { finance } = buildStats(engine.state);
+    expect(finance.rating).toBe('A');
+    expect(finance.debtCap).toBe(credit.debtCapDays * credit.minIncomeBase);
+    expect(finance.grantPot).toBe(BALANCE.finance.grant.annualPot);
+    expect(finance.grantRemaining).toBe(BALANCE.finance.grant.annualPot);
+    const loan = finance.offers.find((offer) => offer.kind === 'loan')!;
+    expect(loan.amounts).toEqual(credit.loan.amounts);
+    expect(loan.ratePerYear).toBe(credit.loan.ratePerYear);
+    expect(loan.termDays).toBe(credit.loan.termDays);
+    expect(loan.available[5_000]).toBeNull();
+    // 100_000 exceeds the cap of 30 days of the 1_000 income floor.
+    const bond = finance.offers.find((offer) => offer.kind === 'bond')!;
+    expect(bond.available[100_000]).toBe('creditLimit');
+
+    engine.state.finance.rating = 'C';
+    finance = buildStats(engine.state).finance;
+    expect(finance.offers[0].ratePerYear).toBe(
+      credit.loan.ratePerYear + BALANCE.finance.rating.spread.C,
+    );
+    engine.state.finance.rating = 'D';
+    finance = buildStats(engine.state).finance;
+    expect(finance.offers[0].ratePerYear).toBeNull();
+    expect(finance.offers[0].available[5_000]).toBe('creditRefused');
+  });
+
+  it('counts the days left down as a credit runs', () => {
+    const engine = makeEngine();
+    engine.applyCommand({ type: 'takeCredit', kind: 'loan', amount: 10_000 });
+    for (let i = 0; i < TICKS_PER_DAY; i++) engine.tick();
+    const [loan] = buildStats(engine.state).finance.credits;
+    expect(loan.daysLeft).toBe(BALANCE.finance.credit.loan.termDays - 1);
+  });
+});

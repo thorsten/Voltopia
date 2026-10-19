@@ -1,5 +1,6 @@
 import { BALANCE, TICKS_PER_DAY } from '../../shared/constants.ts';
 import { SupplyStatus } from '../../shared/types.ts';
+import { totalDebt } from '../finance.ts';
 import { countPopulationAndJobs, type SimState } from '../state.ts';
 import { evaluateCondition } from './conditions.ts';
 import type { ScenarioDef, ScenarioMetric, ScenarioRun } from './types.ts';
@@ -49,7 +50,8 @@ export function scenarioStep(state: SimState, def: ScenarioDef): void {
   if ((state.tick - run.startTick) % TICKS_PER_DAY !== 0) return;
 
   push(run, 'population', countPopulationAndJobs(state).population);
-  push(run, 'money', state.money);
+  // Net worth: borrowed cash is owed back, so a loan cannot win a money goal.
+  push(run, 'money', state.money - totalDebt(state));
   push(run, 'deficitTicks', t.deficitTicks);
   push(run, 'importedEnergy', t.importedEnergy);
   push(run, 'renewableShare', t.generation === 0 ? 1 : t.renewable / t.generation);

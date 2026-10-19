@@ -190,6 +190,43 @@ export interface Credit {
   termTicks: number;
 }
 
+/** An open credit as the UI sees it. */
+export interface CreditView extends Credit {
+  /** Whole in-game days until maturity (rounded up), 0 once due. */
+  daysLeft: number;
+  /** Whether it can be paid off early (loans yes, bonds no). */
+  repayable: boolean;
+}
+
+/** One kind of credit on offer today. */
+export interface CreditOffer {
+  kind: CreditKind;
+  amounts: number[];
+  /** Fixed yearly rate a credit taken now would carry; null when the rating refuses credit. */
+  ratePerYear: number | null;
+  termDays: number;
+  /** Per amount: the rejection reason, or null when it can be taken. */
+  available: Record<number, string | null>;
+}
+
+export interface FinanceStats {
+  credits: CreditView[];
+  /** Principal outstanding over all credits. */
+  debt: number;
+  /** Highest total debt the lenders accept. */
+  debtCap: number;
+  rating: Rating;
+  /** Money per EU billed to buildings. */
+  gridFee: number;
+  /** Happiness term of the grid fee (0 or negative). */
+  gridFeeHappiness: number;
+  /** Grant money left in this year's pot. */
+  grantRemaining: number;
+  /** Size of the yearly grant pot. */
+  grantPot: number;
+  offers: CreditOffer[];
+}
+
 /** Persisted finance record (see src/sim/finance.ts). */
 export interface FinanceSave {
   credits: Credit[];
@@ -823,6 +860,8 @@ export interface GlobalStats {
   counts: TileCounts;
   /** Per-tick budget breakdown for the budget panel. */
   budget: BudgetStats;
+  /** Credits, rating, grid fee, grant pot and the credit on offer today. */
+  finance: FinanceStats;
   /** Details of the inspected tile, null when none selected. */
   inspected: TileInfo | null;
 }

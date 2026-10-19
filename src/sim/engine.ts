@@ -7,6 +7,7 @@ import { buildRoads, bulldozeTiles, undoLastAction, type BuildResult } from './r
 import { buyInsulation } from './economy.ts';
 import { setDemandResponse } from './demandResponse.ts';
 import { drivingVans } from './deliveries.ts';
+import { repayCredit, setGridFee, takeCredit } from './finance.ts';
 import { placePlant } from './energy.ts';
 import { discoverGeothermalFields, generateGeothermal } from './geothermal.ts';
 import { buildPowerLines } from './powerLines.ts';
@@ -85,6 +86,13 @@ export class SimEngine {
       case 'setTaxRate':
         state.taxRate = Math.min(Math.max(command.rate, 0), BALANCE.tax.maxRate);
         state.statsDirty = true;
+        return [];
+      case 'takeCredit':
+        return this.toEvents(takeCredit(state, command.kind, command.amount));
+      case 'repayCredit':
+        return this.toEvents(repayCredit(state, command.id));
+      case 'setGridFee':
+        setGridFee(state, command.rate);
         return [];
       case 'setSmartMeterRollout':
         setSmartMeterRollout(state, command.active);

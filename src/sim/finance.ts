@@ -6,7 +6,9 @@ import {
   Terrain,
   type Credit,
   type CreditKind,
+  type CreditOffer,
   type FinanceSave,
+  type FinanceStats,
   type Rating,
 } from '../shared/types.ts';
 import { fellingCost } from './forest.ts';
@@ -264,6 +266,44 @@ export function financeStep(state: SimState, operatingNet: number): void {
   if (interest > 0 || principal > 0 || overdraftInterest > 0 || feeIncome > 0) {
     state.statsDirty = true;
   }
+}
+
+/** Finance figures for GlobalStats: open credits, rating, grid fee, grant pot and today's offers. */
+export function financeStats(state: SimState): FinanceStats {
+  const { finance } = state;
+  const credits = finance.credits.map((credit) => ({
+    ...credit,
+    daysLeft: Math.max(
+      0,
+      Math.ceil((credit.startTick + credit.termTicks - state.tick) / TICKS_PER_DAY),
+    ),
+    repayable: BALANCE.finance.credit[credit.kind].repayable,
+  }));
+  const offers: CreditOffer[] = CREDIT_KINDS.map((kind) => {
+    const terms = BALANCE.finance.credit[kind];
+    const available: Record<number, string | null> = {};
+    for (const amount of terms.amounts) {
+      available[amount] = creditOfferRejection(state, kind, amount);
+    }
+    return {
+      kind,
+      amounts: [...terms.amounts],
+      ratePerYear: creditRate(state, kind),
+      termDays: terms.termDays,
+      available,
+    };
+  });
+  return {
+    credits,
+    debt: totalDebt(state),
+    debtCap: debtCap(state),
+    rating: finance.rating,
+    gridFee: finance.gridFee,
+    gridFeeHappiness: gridFeeHappiness(state),
+    grantRemaining: grantRemaining(state),
+    grantPot: BALANCE.finance.grant.annualPot,
+    offers,
+  };
 }
 
 /** The persisted part of the finance record. */

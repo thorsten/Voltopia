@@ -466,7 +466,7 @@ const en = {
   'scenario.stormSeason.teaser':
     'A wind fleet on one long line, harsh weather ahead. Harden the grid and ride it out.',
   'scenario.condition.population': 'Residents',
-  'scenario.condition.money': 'Funds',
+  'scenario.condition.money': 'Net worth',
   'scenario.condition.deficitTicks': 'Deficit ticks',
   'scenario.condition.importedEnergy': 'Imported energy',
   'scenario.condition.renewableShare': 'Renewable share',
@@ -1246,7 +1246,7 @@ const de: Record<TranslationKey, string> = {
   'scenario.stormSeason.teaser':
     'Ein Windpark an einer langen Leitung, raues Wetter voraus. Härte das Netz und steh es durch.',
   'scenario.condition.population': 'Einwohner',
-  'scenario.condition.money': 'Kasse',
+  'scenario.condition.money': 'Nettovermögen',
   'scenario.condition.deficitTicks': 'Defizit-Ticks',
   'scenario.condition.importedEnergy': 'Importierte Energie',
   'scenario.condition.renewableShare': 'Erneuerbarer Anteil',
