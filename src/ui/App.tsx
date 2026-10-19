@@ -322,6 +322,9 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
               detailsOpen={detailsOpen}
               onToggleDetails={toggleDetails}
               onSetTaxRate={(rate) => bridge.send({ type: 'setTaxRate', rate })}
+              onSetGridFee={(rate) => bridge.send({ type: 'setGridFee', rate })}
+              onTakeCredit={(kind, amount) => bridge.send({ type: 'takeCredit', kind, amount })}
+              onRepayCredit={(id) => bridge.send({ type: 'repayCredit', id })}
               onSetSmartMeterRollout={(active) =>
                 bridge.send({ type: 'setSmartMeterRollout', active })
               }
@@ -388,6 +391,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
         <div className="hud-slot hud-slot-bottom-center">
           <BuildBar
             tool={tool}
+            grantRemaining={stats?.finance.grantRemaining ?? 0}
             onSelectTool={(next) => {
               sound.play('click');
               setTool(next);

@@ -7,7 +7,13 @@
  * a stacked bar per side plus a net line.
  */
 import { TICKS_PER_DAY } from '../shared/constants.ts';
-import { PlantType, type BudgetStats } from '../shared/types.ts';
+import {
+  PlantType,
+  type BudgetStats,
+  type CreditKind,
+  type FinanceStats,
+} from '../shared/types.ts';
+import { FinancePanel } from './FinancePanel.tsx';
 import { useI18n, type TranslationKey } from './i18n.tsx';
 import { useSmoothedNumber } from './useSmoothedNumber.ts';
 
@@ -62,10 +68,16 @@ const EXPENSE_COLORS: Record<string, string> = {
   demandResponse: '#c9a58f',
   policies: '#b39ddb',
   goodsImport: '#b3a06a',
+  interest: '#e0a458',
   import: 'var(--hud-negative)',
 };
 
-const INCOME_COLORS = { tax: 'var(--hud-positive)', export: '#3f9d63', hydrogen: '#54b8c9' };
+const INCOME_COLORS = {
+  tax: 'var(--hud-positive)',
+  export: '#3f9d63',
+  hydrogen: '#54b8c9',
+  gridFees: '#7fc8a9',
+};
 
 interface Slice {
   key: string;
@@ -129,7 +141,17 @@ function StackedBar({ slices, scale }: { slices: Slice[]; scale: number }) {
   );
 }
 
-export function BudgetPanel({ budget }: { budget: BudgetStats }) {
+export function BudgetPanel({
+  budget,
+  finance,
+  onTakeCredit,
+  onRepayCredit,
+}: {
+  budget: BudgetStats;
+  finance: FinanceStats;
+  onTakeCredit: (kind: CreditKind, amount: number) => void;
+  onRepayCredit: (id: number) => void;
+}) {
   const { t } = useI18n();
 
   const income: Slice[] = [
@@ -150,6 +172,12 @@ export function BudgetPanel({ budget }: { budget: BudgetStats }) {
       label: t('budget.hydrogen'),
       value: perDay(budget.hydrogenRevenue),
       color: INCOME_COLORS.hydrogen,
+    },
+    {
+      key: 'gridFees',
+      label: t('budget.gridFees'),
+      value: perDay(budget.gridFees),
+      color: INCOME_COLORS.gridFees,
     },
   ].filter((slice) => slice.value > 0);
 
@@ -230,12 +258,20 @@ export function BudgetPanel({ budget }: { budget: BudgetStats }) {
       value: perDay(budget.gridImportCost),
       color: EXPENSE_COLORS.import,
     },
+    {
+      key: 'interest',
+      label: t('budget.interest'),
+      value: perDay(budget.interest),
+      color: EXPENSE_COLORS.interest,
+    },
   ].filter((slice) => slice.value > 0);
 
   const incomeTotal = income.reduce((sum, slice) => sum + slice.value, 0);
   const expenseTotal = expenses.reduce((sum, slice) => sum + slice.value, 0);
   const scale = Math.max(incomeTotal, expenseTotal, 1);
   const net = perDay(budget.net);
+  // Principal is cash flow, not cost: shown below the net, outside the bars.
+  const repayment = perDay(budget.repayment);
 
   // Only the headline totals ease — the bars and per-slice legend below
   // react instantly, since the slice list itself changes length (plants
@@ -280,6 +316,13 @@ export function BudgetPanel({ budget }: { budget: BudgetStats }) {
             </li>
           ))}
         </ul>
+        {repayment > 0 && (
+          <div className="budget-section-label budget-repayment" data-testid="budget-repayment">
+            <span>{t('budget.repayment')}</span>
+            <span>−{money(repayment)}</span>
+          </div>
+        )}
+        <FinancePanel finance={finance} onTakeCredit={onTakeCredit} onRepayCredit={onRepayCredit} />
         <p className="budget-note">{t('budget.note')}</p>
       </div>
     </section>

@@ -4,11 +4,12 @@
  * City vitals and time controls live in their own corner plates.
  */
 import { BALANCE } from '../shared/constants.ts';
-import { POLICY_IDS, type GlobalStats, type PolicyId } from '../shared/types.ts';
+import { POLICY_IDS, type CreditKind, type GlobalStats, type PolicyId } from '../shared/types.ts';
 import { BudgetPanel } from './BudgetPanel.tsx';
 import { EnergyGraph } from './EnergyGraph.tsx';
 import { EnergyPanel } from './EnergyPanel.tsx';
 import { EnergyStrip } from './EnergyStrip.tsx';
+import { GridFeeSlider } from './GridFeeSlider.tsx';
 import { useI18n, type TranslationKey } from './i18n.tsx';
 import { TaxSlider } from './TaxSlider.tsx';
 
@@ -23,6 +24,9 @@ export function HudConsole({
   detailsOpen,
   onToggleDetails,
   onSetTaxRate,
+  onSetGridFee,
+  onTakeCredit,
+  onRepayCredit,
   onSetSmartMeterRollout,
   onSetDemandResponse,
   onSetMarketTrading,
@@ -35,6 +39,9 @@ export function HudConsole({
   detailsOpen: boolean;
   onToggleDetails: () => void;
   onSetTaxRate: (rate: number) => void;
+  onSetGridFee: (rate: number) => void;
+  onTakeCredit: (kind: CreditKind, amount: number) => void;
+  onRepayCredit: (id: number) => void;
   onSetSmartMeterRollout: (active: boolean) => void;
   onSetDemandResponse: (active: boolean) => void;
   onSetMarketTrading: (enabled: boolean) => void;
@@ -75,10 +82,20 @@ export function HudConsole({
             selectedIsland={selectedIsland}
             onSelectIsland={onSelectIsland}
           />
-          <BudgetPanel budget={stats.budget} />
+          <BudgetPanel
+            budget={stats.budget}
+            finance={stats.finance}
+            onTakeCredit={onTakeCredit}
+            onRepayCredit={onRepayCredit}
+          />
           <section className="hud-section">
             <h2>{t('hud.section.city')}</h2>
             <TaxSlider rate={stats.taxRate} onChange={onSetTaxRate} />
+            <GridFeeSlider
+              rate={stats.finance.gridFee}
+              happiness={stats.finance.gridFeeHappiness}
+              onChange={onSetGridFee}
+            />
             <label
               className="smart-charging-toggle smart-meters"
               data-testid="smart-charging"

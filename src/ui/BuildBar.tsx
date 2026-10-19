@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BALANCE } from '../shared/constants.ts';
 import { PlantType } from '../shared/types.ts';
 import { useI18n, type TranslationKey } from './i18n.tsx';
-import { TOOL_HOTKEYS, type ToolId } from './useTools.ts';
+import { PLANT_BY_TOOL, TOOL_HOTKEYS, type ToolId } from './useTools.ts';
 
 const HOTKEY_BY_TOOL: Partial<Record<ToolId, string>> = Object.fromEntries(
   Object.entries(TOOL_HOTKEYS).map(([key, tool]) => [tool, key.toUpperCase()]),
@@ -121,6 +121,22 @@ export const CATEGORIES: Category[] = [
   },
 ];
 
+/**
+ * Flat-land price of a plant after the renewable grant, mirroring
+ * `plantPrice` in src/sim/finance.ts: the grant covers the plant's share of
+ * the price, capped by what is left in this year's pot. Slope, offshore and
+ * felling surcharges are left to the placement itself.
+ */
+export function grantedPrice(
+  cost: number,
+  plant: PlantType | undefined,
+  grantRemaining: number,
+): { net: number; grant: number } {
+  const share = plant === undefined ? 0 : (BALANCE.finance.grant.shareByPlant[plant] ?? 0);
+  const grant = share > 0 ? Math.max(0, Math.min(Math.round(cost * share), grantRemaining)) : 0;
+  return { net: cost - grant, grant };
+}
+
 const CATEGORY_BY_TOOL: Partial<Record<ToolId, string>> = Object.fromEntries(
   CATEGORIES.flatMap((category) =>
     category.buttons.filter((b) => b.id !== 'undo').map((b) => [b.id, category.id]),
@@ -131,8 +147,11 @@ export function BuildBar({
   tool,
   onSelectTool,
   onUndo,
+  grantRemaining,
 }: {
   tool: ToolId;
+  /** Grant money left this year; plants with a grant share show the net price. */
+  grantRemaining: number;
   onSelectTool: (tool: ToolId) => void;
   onUndo: () => void;
 }) {
@@ -181,13 +200,17 @@ export function BuildBar({
 
   const renderButton = (entry: BuildButton) => {
     const label = t(`tool.${entry.id}` as TranslationKey);
+    const toolId = entry.id === 'undo' ? null : entry.id;
+    const granted =
+      entry.cost !== undefined && !entry.perTile && toolId
+        ? grantedPrice(entry.cost, PLANT_BY_TOOL[toolId], grantRemaining)
+        : null;
     const cost =
       entry.cost === undefined
         ? undefined
         : entry.perTile
           ? t('tool.perTile', { cost: entry.cost })
-          : String(entry.cost);
-    const toolId = entry.id === 'undo' ? null : entry.id;
+          : String(granted ? granted.net : entry.cost);
     const hotkey = toolId ? HOTKEY_BY_TOOL[toolId] : undefined;
     return (
       <button
@@ -209,7 +232,17 @@ export function BuildBar({
             {label}
             {hotkey && <span className="build-tooltip-key">{hotkey}</span>}
           </span>
-          {cost && <span className="build-tooltip-cost">{cost} ⌁</span>}
+          {cost && (
+            <span className="build-tooltip-cost" data-testid={`tool-cost-${entry.id}`}>
+              {granted && granted.grant > 0 && (
+                <s className="build-tooltip-gross">{entry.cost} ⌁</s>
+              )}
+              {cost} ⌁
+              {granted && granted.grant > 0 && (
+                <span className="build-tooltip-grant">{t('finance.granted')}</span>
+              )}
+            </span>
+          )}
           <span className="build-tooltip-desc">
             {t(`tool.${entry.id}.desc` as TranslationKey, entry.descVars)}
           </span>

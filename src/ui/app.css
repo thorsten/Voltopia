@@ -2065,6 +2065,111 @@ body,
   color: var(--hud-muted);
 }
 
+/* ---- finance (inside the budget panel) ---- */
+
+.finance-panel {
+  margin-top: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hud-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.credit-rating {
+  font-weight: 600;
+  color: var(--hud-text);
+  border: 1px solid var(--hud-border);
+  border-radius: 4px;
+  padding: 0 6px;
+}
+.credit-rating.rating-A {
+  color: var(--hud-positive);
+}
+.credit-rating.rating-B {
+  color: #e0c158;
+}
+.credit-rating.rating-C {
+  color: #e0a458;
+}
+.credit-rating.rating-D {
+  color: var(--hud-negative);
+}
+
+.finance-row,
+.finance-offer,
+.finance-credits li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.finance-value {
+  color: var(--hud-text);
+  white-space: nowrap;
+}
+
+.finance-muted {
+  color: var(--hud-muted);
+}
+
+.finance-empty {
+  margin: 0;
+}
+
+.finance-credits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.finance-credit-text,
+.finance-offer-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.finance-offer-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.finance-panel .insulation-buy {
+  margin-left: 0;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.budget-repayment {
+  margin-top: 8px;
+}
+
+.grid-fee-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.build-tooltip-gross {
+  color: var(--hud-muted);
+  margin-right: 6px;
+}
+
+.build-tooltip-grant {
+  margin-left: 6px;
+  color: var(--hud-positive);
+}
+
 /* Fills the right rail of the HUD grid; the grid row caps its height. */
 .tile-inspector {
   background: var(--hud-bg);
