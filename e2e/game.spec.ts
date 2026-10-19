@@ -59,6 +59,64 @@ test('new-game dialog starts a fresh city with chosen difficulty', async ({ page
   await expect(page.getByTestId('money')).toContainText('15,000');
 });
 
+test('a sandbox city builds beyond any starting money and runs at 6x', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.getByTestId('new-game').click();
+  await expect(page.getByTestId('new-game-page')).toBeVisible();
+  await page.getByTestId('sandbox-toggle').check();
+  await expect(page.getByTestId('disasters-off')).toHaveClass(/active/);
+  await expect(page.getByTestId('difficulty-easy')).toBeDisabled();
+  await page.getByTestId('size-48').click();
+  await page.getByTestId('start-city').click();
+  // Starting reloads the page: wait for the badge, which only the new
+  // sandbox city shows, before talking to the page.
+  await expect(page.getByTestId('sandbox-badge')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('money')).toContainText('∞');
+
+  type Api = { call: (name: string, input?: unknown) => Promise<Record<string, unknown>> };
+  const call = (name: string, input: unknown = {}): Promise<Record<string, unknown>> =>
+    page.evaluate(
+      ([name, input]) => (window as unknown as { voltopia: Api }).voltopia.call(name, input),
+      [name, input] as [string, unknown],
+    );
+  await expect
+    .poll(() => page.evaluate(() => Boolean((window as unknown as { voltopia?: Api }).voltopia)))
+    .toBe(true);
+
+  // Ten wind turbines cost more than the easy difficulty's starting money.
+  const land = await call('find_tiles', {
+    kind: 'empty_land',
+    near: { x: 24, y: 24 },
+    limit: 30,
+  });
+  const results: Array<Record<string, unknown>> = [];
+  for (const { x, y } of land.tiles as Array<{ x: number; y: number }>) {
+    if (results.length === 10) break;
+    const placed = await call('place_plant', { plant: 'wind', x, y });
+    if (placed.ok) results.push(placed);
+  }
+  expect(results).toHaveLength(10);
+  for (const placed of results) expect(placed.sandbox).toBe(true);
+  await expect(page.getByTestId('money')).toContainText('∞');
+
+  const credit = await call('take_credit', { kind: 'loan', amount: 5000 });
+  expect(credit.ok).toBe(false);
+
+  await page.getByTestId('speed-6').click();
+  await expect(page.getByTestId('speed-6')).toHaveClass(/active/);
+  const before = await readTick(page);
+  await page.waitForTimeout(1_500);
+  // 6x gives about 36 ticks in 1.5 s, 3x about 18.
+  expect((await readTick(page)) - before).toBeGreaterThan(12);
+
+  // The sandbox flag survives the autosave.
+  await page.keyboard.press('Control+s');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('money')).toContainText('∞');
+});
+
 test('a scenario starts from the scenarios page and survives a reload', async ({ page }) => {
   // Starting a scenario reloads the page and stamps a 48x48 town; under
   // SwiftShader that takes 25-30 s before the HUD shows the panel.
@@ -248,6 +306,9 @@ test('pause stops the simulation, play resumes it', async ({ page }) => {
   await page.getByTestId('speed-3').click();
   await expect.poll(async () => readTick(page), { timeout: 5_000 }).toBeGreaterThan(paused);
   await expect(page.getByTestId('speed-3')).toHaveClass(/active/);
+  await page.getByTestId('speed-6').click();
+  await expect(page.getByTestId('speed-6')).toHaveClass(/active/);
+  await expect(page.getByTestId('speed-3')).not.toHaveClass(/active/);
 });
 
 test('Escape deselects the inspected tile and closes the inspector (needs WebGL)', async ({

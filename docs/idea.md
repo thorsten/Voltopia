@@ -397,8 +397,13 @@ next, roughly in the order we would build them.
   tick (-36%). The `BALANCE.cycling` values stayed unchanged.
 - **Annual report / statistics replay**: multi-year time series,
   comparison of two saves, CSV export.
-- **Difficulty and sandbox modes**: unlimited money, disasters off,
-  faster time.
+- **Difficulty and sandbox modes** (done): easy, normal and hard set
+  the starting money. A sandbox toggle in the new-game dialog founds a
+  city whose treasury is pinned at an unlimited amount (shown as ∞)
+  with disasters off by default; costs and flows are still booked in
+  the budget, but credit, the grant, the rating and the goals are off.
+  The flag survives saves, and `start_new_city` takes `sandbox`. A 6x
+  speed joins pause, 1x and 3x for every city.
 - **Share a city**: seed plus compressed save as a URL.
 - **Onboarding for the later systems**: the tutorial covers the basics;
   smart meters, demand response, grid islands, hydrogen and the heat

@@ -75,6 +75,9 @@ micromanagement.
   a winter Dunkelflaute, electrifying an old town, a storm season with a
   fragile wind fleet. An objectives panel tracks the run, an end screen
   scores it, and the city stays playable afterwards.
+- **Sandbox mode**: a new-game toggle founds a city with unlimited
+  money and disasters off — no credit, rating or goals, just building.
+  Every city can also run at 6x speed.
 - **Overlays** show supply, demand, services, traffic, deliveries,
   transit, damage, heat and grid islands; the energy panel tracks
   generation per source, consumption, state of charge, curtailment,
