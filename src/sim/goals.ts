@@ -53,6 +53,8 @@ const WARM_WINTER_SHARE = 0.5;
  * are part of the save game); progress counters live on the state.
  */
 export function goalsStep(state: SimState): void {
+  // A sandbox city plays without goals.
+  if (state.sandbox) return;
   const { population } = countPopulationAndJobs(state);
   const progress = state.goalProgress;
 
@@ -304,6 +306,8 @@ export function goalsStep(state: SimState): void {
 }
 
 export function goalStates(state: SimState): GoalState[] {
+  // No goals in a sandbox city, so the free-play victory can never fire.
+  if (state.sandbox) return [];
   // stormProof can only ever unlock while disasters can happen. With the
   // intensity off (an old save, or a city founded with disasters off) it
   // would sit forever as one goal nobody can complete — omit it instead so

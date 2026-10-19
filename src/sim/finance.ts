@@ -90,6 +90,8 @@ export function creditOfferRejection(
   kind: CreditKind,
   amount: number,
 ): string | null {
+  // A sandbox city has unlimited money and needs no lender.
+  if (state.sandbox) return 'sandbox';
   const { credit } = BALANCE.finance;
   if (creditRate(state, kind) === null) return 'creditRefused';
   if (!(credit[kind].amounts as readonly number[]).includes(amount)) return 'invalidAmount';
@@ -157,8 +159,9 @@ export function rollGrantYear(state: SimState): void {
   finance.grantUsedThisYear = 0;
 }
 
-/** Grant money left in this year's pot. */
+/** Grant money left in this year's pot; a sandbox city gets no grant. */
 export function grantRemaining(state: SimState): number {
+  if (state.sandbox) return 0;
   rollGrantYear(state);
   return Math.max(0, BALANCE.finance.grant.annualPot - state.finance.grantUsedThisYear);
 }
@@ -257,8 +260,9 @@ export function financeStep(state: SimState, operatingNet: number): void {
     state.money -= interest + principal;
   }
 
+  // A sandbox treasury is pinned, so it never pays overdraft interest.
   let overdraftInterest = 0;
-  if (state.money < 0) {
+  if (!state.sandbox && state.money < 0) {
     overdraftInterest = -state.money * perTick(BALANCE.finance.overdraftRatePerYear);
     state.money -= overdraftInterest;
   }
@@ -266,12 +270,15 @@ export function financeStep(state: SimState, operatingNet: number): void {
   finance.dayIncome += operatingNet + feeIncome;
   if (state.tick % TICKS_PER_DAY === 0) {
     rollGrantYear(state);
-    finance.incomeWindow.push(finance.dayIncome);
-    const excess = finance.incomeWindow.length - BALANCE.finance.rating.windowDays;
-    if (excess > 0) finance.incomeWindow.splice(0, excess);
+    // A sandbox city borrows nothing: no track record, the rating stays at A.
+    if (!state.sandbox) {
+      finance.incomeWindow.push(finance.dayIncome);
+      const excess = finance.incomeWindow.length - BALANCE.finance.rating.windowDays;
+      if (excess > 0) finance.incomeWindow.splice(0, excess);
+      finance.overdraftDays = state.money < 0 ? finance.overdraftDays + 1 : 0;
+      finance.rating = computeRating(state);
+    }
     finance.dayIncome = 0;
-    finance.overdraftDays = state.money < 0 ? finance.overdraftDays + 1 : 0;
-    finance.rating = computeRating(state);
     state.statsDirty = true;
   }
 

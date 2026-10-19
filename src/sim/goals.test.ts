@@ -773,3 +773,18 @@ describe('districtGrid', () => {
     expect(state.goalsAchieved.has('districtGrid')).toBe(true);
   });
 });
+
+describe('sandbox goals', () => {
+  it('a sandbox city achieves no goal and lists none', () => {
+    const state = createSimState(1, SIZE);
+    state.sandbox = true;
+    placePlant(state, at(3, 3), PlantType.WindTurbine);
+    for (let i = 0; i < 5; i++) {
+      state.layers.zone[at(i, 1)] = Zone.Residential;
+      state.layers.density[at(i, 1)] = 3;
+    }
+    goalsStep(state);
+    expect(state.goalsAchieved.size).toBe(0);
+    expect(goalStates(state)).toEqual([]);
+  });
+});

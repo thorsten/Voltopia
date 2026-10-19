@@ -611,3 +611,67 @@ describe('grid fee', () => {
     expect(settle(0) - settle(0.01)).toBeCloseTo(0.01 * gridFee.happinessWeight, 4);
   });
 });
+
+describe('sandbox finance', () => {
+  const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+
+  function sandboxState(): SimState {
+    const state = createSimState(1, SIZE, BALANCE.sandbox.treasury);
+    state.sandbox = true;
+    return state;
+  }
+
+  it('refuses every credit and adds none', () => {
+    const state = sandboxState();
+    expect(takeCredit(state, 'loan', credit.loan.amounts[0])).toEqual({ rejected: 'sandbox' });
+    expect(state.finance.credits).toHaveLength(0);
+    expect(state.money).toBe(BALANCE.sandbox.treasury);
+  });
+
+  it('marks every offer amount as sandbox', () => {
+    const { offers } = buildStats(sandboxState()).finance;
+    expect(offers.length).toBeGreaterThan(0);
+    for (const offer of offers) {
+      for (const amount of offer.amounts) expect(offer.available[amount]).toBe('sandbox');
+    }
+  });
+
+  it('pays no grant: the net price is the gross price and the pot stays untouched', () => {
+    const state = sandboxState();
+    const gross = BALANCE.costs.plant[PlantType.SolarFarm];
+    expect(plantPrice(state, at(5, 5), PlantType.SolarFarm)).toEqual({
+      gross,
+      grant: 0,
+      net: gross,
+    });
+    expect(placePlant(state, at(5, 5), PlantType.SolarFarm)).toEqual({});
+    expect(state.finance.grantUsedThisYear).toBe(0);
+    expect(grantRemaining(state)).toBe(0);
+    expect(buildStats(state).finance.grantRemaining).toBe(0);
+  });
+
+  it('charges no overdraft interest', () => {
+    const state = sandboxState();
+    state.money = -10_000;
+    run(state, 1);
+    expect(state.lastFinance.overdraftInterest).toBe(0);
+  });
+
+  it('keeps the rating at A and records no income window at day rollover', () => {
+    const state = sandboxState();
+    state.money = -10_000;
+    run(state, TICKS_PER_DAY * 2, -500);
+    expect(state.finance.rating).toBe('A');
+    expect(state.finance.incomeWindow).toEqual([]);
+    expect(state.finance.overdraftDays).toBe(0);
+    expect(state.finance.dayIncome).toBe(0);
+  });
+
+  it('still books grid-fee income', () => {
+    const state = sandboxState();
+    state.lastEnergy = { ...state.lastEnergy, buildingConsumption: 100 };
+    setGridFee(state, 0.01);
+    run(state, 1);
+    expect(state.lastFinance.gridFeeIncome).toBeGreaterThan(0);
+  });
+});
