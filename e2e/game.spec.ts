@@ -82,10 +82,12 @@ test('new-game dialog starts a fresh city with chosen difficulty', async ({ page
   await page.getByTestId('size-48').click();
   await page.getByTestId('difficulty-hard').click();
   await page.getByTestId('seed-input').fill('gridtown');
-  await page.getByTestId('start-city').click();
+  // Starting reloads the page; the old page's money would satisfy the
+  // waits below, so wait for the new page first.
+  await Promise.all([page.waitForEvent('load'), page.getByTestId('start-city').click()]);
   await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
   // Hard difficulty: starting funds are 15,000.
-  await expect(page.getByTestId('money')).toContainText('15,000');
+  await expect(page.getByTestId('money')).toContainText('15,000', { timeout: 15_000 });
 });
 
 test('a sandbox city builds beyond any starting money and runs at 6x', async ({ page }) => {
