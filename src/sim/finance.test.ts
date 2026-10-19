@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, Terrain, type FinanceSave } from '../shared/types.ts';
+import { PlantType, SupplyStatus, Terrain, Zone, type FinanceSave } from '../shared/types.ts';
 import { placePlant } from './energy.ts';
+import { happinessStep } from './happiness.ts';
 import {
   averageDailyIncome,
   computeRating,
@@ -11,9 +12,12 @@ import {
   defaultFinance,
   financeStep,
   grantRemaining,
+  gridFeeHappiness,
+  gridFeeIncome,
   plantPrice,
   repayCredit,
   rollGrantYear,
+  setGridFee,
   takeCredit,
   totalDebt,
 } from './finance.ts';
@@ -410,5 +414,96 @@ describe('investment grant', () => {
         BALANCE.costs.plant[PlantType.WindTurbine] * BALANCE.sea.offshoreCostFactor * share,
       ),
     );
+  });
+});
+
+describe('grid fee', () => {
+  const { gridFee } = BALANCE.finance;
+
+  /** A city that billed `building`, `heating` and `cooling` EU last tick. */
+  function billedState(building: number, heating = 0, cooling = 0): SimState {
+    const state = createSimState(1, SIZE, 0);
+    state.lastEnergy = {
+      ...state.lastEnergy,
+      buildingConsumption: building,
+      heatingConsumption: heating,
+      coolingConsumption: cooling,
+    };
+    state.lastBuildingCount = 10;
+    return state;
+  }
+
+  it('bills building, heating and cooling consumption at the fee', () => {
+    const state = billedState(100, 20, 30);
+    setGridFee(state, 0.01);
+    expect(gridFeeIncome(state)).toBeCloseTo(0.01 * 150, 10);
+    setGridFee(state, 0.02);
+    expect(gridFeeIncome(state)).toBeCloseTo(0.02 * 150, 10);
+    state.lastEnergy = { ...state.lastEnergy, buildingConsumption: 200 };
+    expect(gridFeeIncome(state)).toBeCloseTo(0.02 * 250, 10);
+  });
+
+  it('smart-metered buildings pay the discounted fee', () => {
+    const state = billedState(100);
+    setGridFee(state, 0.01);
+    state.smartMeters.metered = 10;
+    expect(gridFeeIncome(state)).toBeCloseTo(0.01 * 100 * (1 - gridFee.smartMeterDiscount), 10);
+    state.smartMeters.metered = 5;
+    expect(gridFeeIncome(state)).toBeCloseTo(
+      0.01 * 100 * (1 - 0.5 * gridFee.smartMeterDiscount),
+      10,
+    );
+  });
+
+  it('no fee earns nothing and costs no happiness', () => {
+    const state = billedState(100);
+    expect(state.finance.gridFee).toBe(0);
+    expect(gridFeeIncome(state)).toBe(0);
+    expect(gridFeeHappiness(state)).toBe(0);
+  });
+
+  it('clamps and snaps the fee to its step', () => {
+    const state = billedState(0);
+    state.statsDirty = false;
+    setGridFee(state, 0.0234);
+    expect(state.finance.gridFee).toBe(gridFee.maxRate);
+    expect(state.statsDirty).toBe(true);
+    setGridFee(state, 0.00149);
+    expect(state.finance.gridFee).toBe(0.001);
+    setGridFee(state, 0.0071);
+    expect(state.finance.gridFee).toBe(0.007);
+    setGridFee(state, -1);
+    expect(state.finance.gridFee).toBe(0);
+    setGridFee(state, 0.005);
+    setGridFee(state, NaN);
+    expect(state.finance.gridFee).toBe(0.005);
+  });
+
+  it('the finance step books the fee into money and the day income', () => {
+    const state = billedState(100);
+    setGridFee(state, 0.01);
+    run(state, 1);
+    expect(state.money).toBeCloseTo(1, 10);
+    expect(state.lastFinance.gridFeeIncome).toBeCloseTo(1, 10);
+    expect(state.finance.dayIncome).toBeCloseTo(1, 10);
+    expect(buildStats(state).budget.gridFees).toBeGreaterThan(0);
+  });
+
+  it('lowers the happiness target by fee times weight', () => {
+    function settle(fee: number): number {
+      const state = createSimState(1, SIZE);
+      for (let i = 0; i < 10; i++) {
+        state.layers.zone[tileIndex(i, 2, SIZE)] = Zone.Residential;
+        state.layers.density[tileIndex(i, 2, SIZE)] = 1;
+        state.layers.supplied[tileIndex(i, 2, SIZE)] = SupplyStatus.Supplied;
+      }
+      setGridFee(state, fee);
+      for (let i = 0; i < 2000; i++) happinessStep(state, 0);
+      return state.happiness;
+    }
+    const state = createSimState(1, SIZE);
+    setGridFee(state, 0.01);
+    expect(gridFeeHappiness(state)).toBeCloseTo(-0.01 * gridFee.happinessWeight, 10);
+    expect(settle(0) - settle(0.01)).toBeCloseTo(0.01 * gridFee.happinessWeight, 4);
   });
 });

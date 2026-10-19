@@ -12,6 +12,7 @@ import {
 import { fellingCost } from './forest.ts';
 import type { BuildResult } from './roads.ts';
 import { daysPerYear } from './seasons.ts';
+import { meteredCoverage } from './smartMeters.ts';
 import { slopeCostMultiplier, type SimState } from './state.ts';
 
 export { CREDIT_KINDS, RATINGS, type Credit, type CreditKind, type Rating };
@@ -177,7 +178,40 @@ export function plantPrice(
 }
 
 /**
- * Book this tick's debt service and overdraft interest. Runs after the
+ * Grid-fee income this tick: the fee on every unit the buildings drew
+ * last tick — their base load plus electric heating and cooling, which
+ * the energy balance books as separate lines, so each unit is billed
+ * once. Charging and traction are not billed. Smart-metered buildings
+ * pay the discounted fee.
+ */
+export function gridFeeIncome(state: SimState): number {
+  const fee = state.finance.gridFee;
+  if (fee <= 0) return 0;
+  const { buildingConsumption, heatingConsumption, coolingConsumption } = state.lastEnergy;
+  const billed = buildingConsumption + heatingConsumption + coolingConsumption;
+  const discount = meteredCoverage(state) * BALANCE.finance.gridFee.smartMeterDiscount;
+  return fee * billed * (1 - discount);
+}
+
+/** Set the grid fee, clamped to 0..maxRate and snapped to the slider step. */
+export function setGridFee(state: SimState, rate: number): void {
+  if (!Number.isFinite(rate)) return;
+  const { maxRate, step } = BALANCE.finance.gridFee;
+  const clamped = Math.min(maxRate, Math.max(0, rate));
+  // Dividing by the steps per unit (not multiplying by the step) keeps
+  // the snapped value free of float residue such as 0.009000000000000001.
+  state.finance.gridFee = Math.round(clamped / step) / Math.round(1 / step);
+  state.statsDirty = true;
+}
+
+/** Happiness term of the grid fee: any fee costs, linearly (neutral rate 0). */
+export function gridFeeHappiness(state: SimState): number {
+  const fee = state.finance.gridFee;
+  return fee > 0 ? -fee * BALANCE.finance.gridFee.happinessWeight : 0;
+}
+
+/**
+ * Book this tick's grid-fee income, debt service and overdraft interest. Runs after the
  * day's operating income has landed (after repairStep); `operatingNet`
  * is that income, which feeds the rating at each day rollover. Debt
  * service is never skipped: it may drive money negative, and a negative
@@ -185,9 +219,8 @@ export function plantPrice(
  */
 export function financeStep(state: SimState, operatingNet: number): void {
   const { finance } = state;
-  // The grid fee is not billed yet.
-  const gridFeeIncome = 0;
-  state.money += gridFeeIncome;
+  const feeIncome = finance.gridFee > 0 ? gridFeeIncome(state) : 0;
+  state.money += feeIncome;
 
   let interest = 0;
   let principal = 0;
@@ -215,7 +248,7 @@ export function financeStep(state: SimState, operatingNet: number): void {
     state.money -= overdraftInterest;
   }
 
-  finance.dayIncome += operatingNet + gridFeeIncome;
+  finance.dayIncome += operatingNet + feeIncome;
   if (state.tick % TICKS_PER_DAY === 0) {
     rollGrantYear(state);
     finance.incomeWindow.push(finance.dayIncome);
@@ -227,8 +260,8 @@ export function financeStep(state: SimState, operatingNet: number): void {
     state.statsDirty = true;
   }
 
-  state.lastFinance = { interest, principal, overdraftInterest, gridFeeIncome };
-  if (interest > 0 || principal > 0 || overdraftInterest > 0 || gridFeeIncome > 0) {
+  state.lastFinance = { interest, principal, overdraftInterest, gridFeeIncome: feeIncome };
+  if (interest > 0 || principal > 0 || overdraftInterest > 0 || feeIncome > 0) {
     state.statsDirty = true;
   }
 }
