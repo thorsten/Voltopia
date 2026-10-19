@@ -40,7 +40,7 @@ import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
 // cross-layer import as ../ui/i18n.tsx above. Reusing it keeps an agent's
 // disaster levels identical to the new-game dialog's, on purpose: a
 // "harsh" city should mean the same intensity whoever founds it.
-import { DISASTER_LEVELS, MAP_SIZES } from '../ui/newGame.ts';
+import { DIFFICULTIES, DISASTER_LEVELS, MAP_SIZES } from '../ui/newGame.ts';
 import type { TileMirror } from './tileMirror.ts';
 
 /** Outcome of a command once the worker has applied it. */
@@ -59,6 +59,8 @@ export interface NewCityOptions {
    * older save-format path) can omit it; the app fills in the default.
    */
   disasterScale?: number;
+  /** Sandbox free play: unlimited money, no credit, grant or goals. */
+  sandbox?: boolean;
 }
 
 /** What the tools need from the host (bridge in the app, engine in tests). */
@@ -691,6 +693,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'rules, conditions), and finance (debt, debtCap, rating, open credits with daysLeft and ' +
         'repayable, gridFee and its happiness term, grantRemaining of the yearly grant pot, ' +
         "today's credit offers with rate and per-amount availability). " +
+        'sandbox: money is pinned at a huge value (unlimited); finance offers are refused with ' +
+        '`sandbox`, goals are off, and build results carry sandbox: true instead of spent/money. ' +
         'Call this first and after every advance_time.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
@@ -706,6 +710,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           hour: round(s.timeOfDay * 24, 1),
           speed: s.speed,
           money: Math.round(s.money),
+          sandbox: s.sandbox,
           population: s.population,
           jobs: s.jobs,
           happiness: round(s.happiness, 2),
@@ -1407,8 +1412,11 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       async execute() {
         const before = requireStats(ctx).money;
         const outcome = await ctx.sendCommand({ type: 'undo' });
+        const after = ctx.getStats();
+        // The treasury is pinned in sandbox, so a refund would read 0.
+        if (after?.sandbox) return outcomeResult(outcome, { sandbox: true });
         return outcomeResult(outcome, {
-          refunded: Math.round((ctx.getStats()?.money ?? before) - before),
+          refunded: Math.round((after?.money ?? before) - before),
         });
       },
     },
@@ -1555,7 +1563,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         `${BALANCE.finance.credit.minIncomeBase} a day), so a new city gets loans and a bond needs a ` +
         'track record. Debt service is never skipped — ' +
         `a negative treasury pays ${BALANCE.finance.overdraftRatePerYear} a year overdraft interest. ` +
-        "See finance.offers in get_game_overview for today's rates and availability.",
+        "See finance.offers in get_game_overview for today's rates and availability. " +
+        'In a sandbox city every credit is refused with `sandbox`.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1786,16 +1795,22 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'start_new_city',
       description:
         'Abandon the current city and start a new one (the page reloads; the old autosave is ' +
-        'replaced). Optional map size (48, 64 or 96), difficulty (easy, normal, hard), seed and ' +
-        'disasters (off, mild, normal, harsh; default normal) — the same intensity dial as the ' +
-        'new-game dialog; "off" founds a city with no storms, fires or floods.',
+        `replaced). Optional map size (${MAP_SIZES.join(', ')}), difficulty ` +
+        `(${DIFFICULTIES.map((d) => d.id).join(', ')}), seed, sandbox and ` +
+        'disasters (off, mild, normal, harsh; default normal, off in a sandbox) — the same ' +
+        'intensity dial as the new-game dialog; "off" founds a city with no storms, fires or ' +
+        'floods.',
       inputSchema: {
         type: 'object',
         properties: {
-          size: { type: 'integer', enum: [48, 64, 96, 128] },
-          difficulty: { type: 'string', enum: ['easy', 'normal', 'hard'] },
+          size: { type: 'integer', enum: [...MAP_SIZES] },
+          difficulty: { type: 'string', enum: DIFFICULTIES.map((d) => d.id) },
           seed: { type: 'integer', description: 'Fixed world seed; omit for a random map.' },
           disasters: { type: 'string', enum: [...DISASTER_LEVEL_NAMES] },
+          sandbox: {
+            type: 'boolean',
+            description: 'Unlimited money, no credit, grant or goals; disasters default to off.',
+          },
         },
       },
       annotations: { consequentialHint: true },
@@ -1806,19 +1821,24 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         const difficulty = readEnum(
           input,
           'difficulty',
-          ['easy', 'normal', 'hard'] as const,
+          DIFFICULTIES.map((d) => d.id),
           'normal',
         );
-        const startingMoney = { easy: 40_000, normal: BALANCE.startingMoney, hard: 15_000 }[
-          difficulty
-        ];
+        const startingMoney = DIFFICULTIES.find((d) => d.id === difficulty)!.startingMoney;
         const seed = 'seed' in input ? readInt(input, 'seed') : null;
-        const disasters = readEnum(input, 'disasters', DISASTER_LEVEL_NAMES, 'normal');
+        const sandbox = 'sandbox' in input ? readBoolean(input, 'sandbox') : false;
+        const disasters = readEnum(
+          input,
+          'disasters',
+          DISASTER_LEVEL_NAMES,
+          sandbox ? 'off' : 'normal',
+        );
         ctx.startNewCity({
           size: mapSize,
           startingMoney,
           seed,
           disasterScale: DISASTER_LEVEL_SCALE[disasters],
+          ...(sandbox ? { sandbox: true } : {}),
         });
         return {
           ok: true,
@@ -1826,6 +1846,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           difficulty,
           seed,
           disasters,
+          sandbox,
           note: 'The page is reloading with the new city.',
         };
       },
@@ -1956,8 +1977,14 @@ function financeCatalog(): Record<string, unknown> {
   };
 }
 
-function spent(ctx: AgentContext, before: number): { spent: number; money: number } {
-  const money = ctx.getStats()?.money ?? before;
+function spent(
+  ctx: AgentContext,
+  before: number,
+): { spent: number; money: number } | { sandbox: true } {
+  const stats = ctx.getStats();
+  // The treasury is pinned in sandbox, so a money delta would read 0.
+  if (stats?.sandbox) return { sandbox: true };
+  const money = stats?.money ?? before;
   return { spent: Math.round(before - money), money: Math.round(money) };
 }
 

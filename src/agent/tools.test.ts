@@ -27,6 +27,7 @@ import { buildPowerLines } from '../sim/powerLines.ts';
 import { isCoastalSea } from '../sim/sea.ts';
 import { markDirty, slopeAt, slopeCostMultiplier } from '../sim/state.ts';
 import { createMemoryStorage } from '../storage/memory.ts';
+import { DIFFICULTIES } from '../ui/newGame.ts';
 import { TileMirror } from './tileMirror.ts';
 import {
   callTool,
@@ -41,7 +42,10 @@ import {
 const SIZE = 24;
 
 /** Drives the tools against an in-process engine, mimicking the worker. */
-function createHarness(seed = 11): {
+function createHarness(
+  seed = 11,
+  sandbox = false,
+): {
   ctx: AgentContext;
   tools: AgentTool[];
   engine: SimEngine;
@@ -53,7 +57,7 @@ function createHarness(seed = 11): {
   call: (name: string, input?: unknown) => Promise<Record<string, unknown>>;
 } {
   const engine = new SimEngine(seed, SIZE);
-  engine.applyCommand({ type: 'init', seed, size: SIZE });
+  engine.applyCommand({ type: 'init', seed, size: SIZE, ...(sandbox ? { sandbox: true } : {}) });
   const tiles = new TileMirror(SIZE);
   let stats: GlobalStats | null = null;
   const absorb = (event: SimEvent | null): void => {
@@ -732,6 +736,52 @@ describe('agent tools: building', () => {
       ok: false,
       error: 'invalidInput',
     });
+  });
+
+  it('start_new_city passes a sandbox city to the host', async () => {
+    const { call, newCities } = createHarness();
+    const result = await call('start_new_city', { sandbox: true });
+    expect(result).toMatchObject({ ok: true, sandbox: true, disasters: 'off' });
+    // Disasters default to off in a sandbox, but stay a free choice.
+    expect(newCities[0]).toEqual({
+      size: 64,
+      startingMoney: BALANCE.startingMoney,
+      seed: null,
+      disasterScale: 0,
+      sandbox: true,
+    });
+    await call('start_new_city', { sandbox: true, disasters: 'mild' });
+    expect(newCities[1]).toMatchObject({ disasterScale: 0.5, sandbox: true });
+    expect(await call('start_new_city', { sandbox: 'yes' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+  });
+
+  it('start_new_city takes difficulty money and sizes from the new-game dialog', async () => {
+    const { call, newCities } = createHarness();
+    await call('start_new_city', { difficulty: 'easy' });
+    expect(newCities[0]).toMatchObject({ startingMoney: DIFFICULTIES[0].startingMoney });
+    expect(await call('start_new_city', { size: 128 })).toMatchObject({ ok: true, size: 128 });
+    expect(newCities[1]).toMatchObject({ size: 128 });
+  });
+
+  it('reports a sandbox city in the overview, build results and credit refusals', async () => {
+    const { call, engine } = createHarness(11, true);
+    expect(await call('get_game_overview')).toMatchObject({ sandbox: true });
+    const { x, y } = findLand(engine);
+    const road = await call('build_road', { from: { x, y }, to: { x: x + 5, y } });
+    expect(road).toMatchObject({ ok: true, sandbox: true });
+    expect(road).not.toHaveProperty('spent');
+    expect(await call('take_credit', { kind: 'loan', amount: 5000 })).toMatchObject({
+      ok: false,
+      error: 'sandbox',
+    });
+  });
+
+  it('reports a normal city as not sandbox', async () => {
+    const { call } = createHarness();
+    expect(await call('get_game_overview')).toMatchObject({ sandbox: false });
   });
 
   it('list_scenarios names every shipped scenario with its conditions', async () => {
