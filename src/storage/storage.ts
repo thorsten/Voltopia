@@ -19,6 +19,8 @@ export interface SaveSummary {
   size: number;
   /** False when the stored save has another SAVE_VERSION: delete only. */
   compatible: boolean;
+  /** A sandbox city (unlimited money); absent on normal and old saves. */
+  sandbox?: boolean;
 }
 
 /**

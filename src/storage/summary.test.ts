@@ -64,6 +64,15 @@ describe('summarizeSave', () => {
     expect(summarizeSave(save, 'x', 0, 17).population).toBe(17);
   });
 
+  it('marks a sandbox save', () => {
+    expect(summarizeSave(makeSave({ sandbox: true }), 'x', 0).sandbox).toBe(true);
+  });
+
+  it('leaves the sandbox key out for a normal save', () => {
+    expect('sandbox' in summarizeSave(makeSave(), 'x', 0)).toBe(false);
+    expect('sandbox' in summarizeSave(makeSave({ sandbox: false }), 'x', 0)).toBe(false);
+  });
+
   it('flags saves of another version as incompatible', () => {
     expect(summarizeSave(makeSave({ version: SAVE_VERSION + 1 }), 'x', 0).compatible).toBe(false);
   });

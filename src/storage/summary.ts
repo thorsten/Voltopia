@@ -47,5 +47,6 @@ export function summarizeSave(
     money: save.money,
     size: save.size,
     compatible: save.version === SAVE_VERSION,
+    ...(save.sandbox ? { sandbox: true } : {}),
   };
 }

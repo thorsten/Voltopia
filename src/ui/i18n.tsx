@@ -8,6 +8,8 @@ const en = {
   'webgl.fallback': '3D view unavailable (WebGL not supported here) — simulation keeps running.',
 
   'hud.funds': 'funds',
+  'hud.funds.unlimited': 'Unlimited money (sandbox)',
+  'hud.sandbox': 'Sandbox',
   'hud.residents': 'residents',
   'hud.jobs': 'jobs',
   'hud.happiness': 'happiness',
@@ -558,6 +560,7 @@ const en = {
   'saves.import': 'Import save file',
 
   'goals.title': 'Goals',
+  'goals.sandbox': 'Goals are off in sandbox mode.',
   'goal.firstPower.title': 'Switched on',
   'goal.firstPower.body': 'Build your first power plant.',
   'goal.population100.title': 'Village',
@@ -820,6 +823,8 @@ const de: Record<TranslationKey, string> = {
     '3D-Ansicht nicht verfügbar (WebGL wird hier nicht unterstützt) — die Simulation läuft weiter.',
 
   'hud.funds': 'Guthaben',
+  'hud.funds.unlimited': 'Unbegrenztes Geld (Sandbox)',
+  'hud.sandbox': 'Sandbox',
   'hud.residents': 'Einwohner',
   'hud.jobs': 'Jobs',
   'hud.happiness': 'Zufriedenheit',
@@ -1375,6 +1380,7 @@ const de: Record<TranslationKey, string> = {
   'saves.import': 'Spielstand importieren',
 
   'goals.title': 'Ziele',
+  'goals.sandbox': 'Ziele sind im Sandbox-Modus aus.',
   'goal.firstPower.title': 'Eingeschaltet',
   'goal.firstPower.body': 'Baue dein erstes Kraftwerk.',
   'goal.population100.title': 'Dorf',

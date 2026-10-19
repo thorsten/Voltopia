@@ -37,6 +37,11 @@ export function TimeControls({
   return (
     <div className="hud-plate hud-controls hud-row" data-testid="hud-controls">
       <Clock timeOfDay={stats.timeOfDay} day={stats.day} />
+      {stats.sandbox && (
+        <span className="sandbox-badge" data-testid="sandbox-badge">
+          {t('hud.sandbox')}
+        </span>
+      )}
       <div className="hud-weather" data-testid="weather" title={t('hud.weather.title')}>
         <span data-testid="season">
           {SEASON_GLYPH[stats.season.season]}{' '}

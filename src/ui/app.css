@@ -878,6 +878,20 @@ body,
   min-width: 58px;
 }
 
+/* Sandbox badge next to the clock: a small pill in the HUD accent. */
+.sandbox-badge {
+  align-self: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--hud-on-accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* ---- condensed energy row ---- */
 
 .energy-chip {
@@ -1490,6 +1504,12 @@ body,
   max-height: min(32vh, 280px);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.goals-sandbox {
+  padding: 0 12px 10px;
+  font-size: 12px;
+  color: var(--hud-muted);
 }
 
 .goals-list li {

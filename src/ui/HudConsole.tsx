@@ -87,6 +87,7 @@ export function HudConsole({
             finance={stats.finance}
             onTakeCredit={onTakeCredit}
             onRepayCredit={onRepayCredit}
+            sandbox={stats.sandbox}
           />
           <section className="hud-section">
             <h2>{t('hud.section.city')}</h2>

@@ -297,7 +297,9 @@ export function SavesPage({
                 {t('saves.details', {
                   day: summary.day,
                   population: summary.population,
-                  money: `${Math.round(summary.money).toLocaleString('en-US')} ${CURRENCY}`,
+                  money: summary.sandbox
+                    ? `∞ ${CURRENCY}`
+                    : `${Math.round(summary.money).toLocaleString('en-US')} ${CURRENCY}`,
                   map: `${summary.size}×${summary.size}`,
                 })}
               </span>

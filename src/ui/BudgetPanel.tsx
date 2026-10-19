@@ -146,9 +146,12 @@ export function BudgetPanel({
   finance,
   onTakeCredit,
   onRepayCredit,
+  sandbox,
 }: {
   budget: BudgetStats;
   finance: FinanceStats;
+  /** Sandbox city: no rating, credits or grant, so no finance section. */
+  sandbox: boolean;
   onTakeCredit: (kind: CreditKind, amount: number) => void;
   onRepayCredit: (id: number) => void;
 }) {
@@ -322,7 +325,13 @@ export function BudgetPanel({
             <span>−{money(repayment)}</span>
           </div>
         )}
-        <FinancePanel finance={finance} onTakeCredit={onTakeCredit} onRepayCredit={onRepayCredit} />
+        {!sandbox && (
+          <FinancePanel
+            finance={finance}
+            onTakeCredit={onTakeCredit}
+            onRepayCredit={onRepayCredit}
+          />
+        )}
         <p className="budget-note">{t('budget.note')}</p>
       </div>
     </section>

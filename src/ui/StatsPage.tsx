@@ -69,7 +69,16 @@ function Chart({
 }
 
 /** Lifetime statistics: one sample per in-game day since founding. */
-export function StatsPage({ bridge, onClose }: { bridge: SimBridge; onClose: () => void }) {
+export function StatsPage({
+  bridge,
+  sandbox,
+  onClose,
+}: {
+  bridge: SimBridge;
+  /** Sandbox city: the treasury is pinned, so its chart would be a flat line. */
+  sandbox: boolean;
+  onClose: () => void;
+}) {
   const { t } = useI18n();
   const [samples, setSamples] = useState<LifetimeSample[] | null>(null);
 
@@ -112,10 +121,12 @@ export function StatsPage({ bridge, onClose }: { bridge: SimBridge; onClose: () 
               },
             ]}
           />
-          <Chart
-            title={t('stats.money')}
-            series={[{ values: samples.map((s) => s.money), color: '#ffd166', label: '⌁' }]}
-          />
+          {!sandbox && (
+            <Chart
+              title={t('stats.money')}
+              series={[{ values: samples.map((s) => s.money), color: '#ffd166', label: '⌁' }]}
+            />
+          )}
           <Chart
             title={t('stats.happiness')}
             series={[

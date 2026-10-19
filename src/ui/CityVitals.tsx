@@ -27,9 +27,13 @@ export function CityVitals({ stats }: { stats: GlobalStats }) {
   return (
     <div className="hud-plate hud-vitals hud-row" data-testid="hud-vitals">
       <div className="hud-title">Voltopia</div>
-      <div className="hud-stat hud-stat-wide" data-testid="money">
+      <div
+        className="hud-stat hud-stat-wide"
+        data-testid="money"
+        title={stats.sandbox ? t('hud.funds.unlimited') : undefined}
+      >
         <span className="hud-stat-value">
-          {Math.round(stats.money).toLocaleString('en-US')} {CURRENCY}
+          {stats.sandbox ? '∞' : Math.round(stats.money).toLocaleString('en-US')} {CURRENCY}
         </span>
         <span className="hud-stat-label">{t('hud.funds')}</span>
       </div>

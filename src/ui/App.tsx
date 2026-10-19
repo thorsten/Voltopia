@@ -371,6 +371,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
                 <GoalsPanel
                   goals={stats.goals}
                   services={stats.services}
+                  sandbox={stats.sandbox}
                   onAchievement={() => sound.play('achievement')}
                 />
               )
@@ -464,7 +465,13 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
       )}
       {page === 'help' && <HelpPage onClose={() => setPage(null)} />}
       {page === 'imprint' && <ImprintPage onClose={() => setPage(null)} />}
-      {page === 'stats' && <StatsPage bridge={bridge} onClose={() => setPage(null)} />}
+      {page === 'stats' && (
+        <StatsPage
+          bridge={bridge}
+          sandbox={bridge.stats?.sandbox ?? false}
+          onClose={() => setPage(null)}
+        />
+      )}
       {page === 'scenarios' && (
         <ScenariosPage onStart={startScenario} onClose={() => setPage(null)} />
       )}

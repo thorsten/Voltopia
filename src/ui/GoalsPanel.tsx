@@ -10,11 +10,14 @@ const TOAST_MS = 4000;
 export function GoalsPanel({
   goals,
   services,
+  sandbox = false,
   onAchievement,
 }: {
   goals: GoalState[];
   /** Share of buildings with fire / police coverage, 0..1; drives the safeCity progress line. */
   services: { fire: number; police: number };
+  /** Sandbox city: goals are off, the panel only says so. */
+  sandbox?: boolean;
   /** Called once per newly achieved goal (e.g. to play a chime). */
   onAchievement?: (id: string) => void;
 }) {
@@ -52,14 +55,20 @@ export function GoalsPanel({
           onClick={() => setOpen((value) => !value)}
         >
           <span>
-            🏆 {t('goals.title')} {achievedCount}/{goals.length}
+            🏆 {t('goals.title')}
+            {!sandbox && ` ${achievedCount}/${goals.length}`}
           </span>
           {/* Without this the card reads as a label, not something to open. */}
           <span className="goals-chevron" aria-hidden="true">
             {open ? '▾' : '▸'}
           </span>
         </button>
-        {open && (
+        {open && sandbox && (
+          <p className="goals-sandbox" data-testid="goals-sandbox">
+            {t('goals.sandbox')}
+          </p>
+        )}
+        {open && !sandbox && (
           <ul className="goals-list">
             {goals.map((goal) => (
               <li
