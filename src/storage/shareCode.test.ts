@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SAVE_VERSION } from '../shared/constants.ts';
+import { MAP_SIZES, SAVE_VERSION } from '../shared/constants.ts';
 import { tileIndex } from '../shared/grid.ts';
-import { PlantType, type SaveGame, Zone } from '../shared/types.ts';
+import { PlantType, SCENARIO_IDS, type SaveGame, Zone } from '../shared/types.ts';
 import { SimEngine } from '../sim/engine.ts';
 import { countPopulationAndJobs, deserializeState, serializeState } from '../sim/state.ts';
+import '../sim/scenarios/defs/index.ts';
+import { scenarioDef } from '../sim/scenarios/registry.ts';
 import { fullSave } from '../test/saveFixtures.ts';
 import { SAVE_LAYERS, saveFieldsToJson } from './serialization.ts';
 import {
@@ -14,11 +16,13 @@ import {
   SHARE_INFLATE_SLICE,
   SHARE_MAX_BYTES,
   SHARE_MAX_CODE_LENGTH,
+  SHARE_MAX_MAP_SIZE,
+  SHARE_MIN_MAP_SIZE,
   ShareCodeError,
   toBase64Url,
 } from './shareCode.ts';
 
-const SIZE = 32;
+const SIZE = MAP_SIZES[0];
 
 /** A small grown city: a road, zones on both sides, a solar farm, a credit and an ordinance. */
 function grownCity(): SaveGame {
@@ -200,12 +204,26 @@ describe('share code', () => {
     expect(await reasonOf(toBase64Url(await deflateRaw(overlong)))).toBe('corrupt');
   });
 
-  it('rejects a map size beyond the share limit as corrupt', async () => {
-    const save = smallSave();
-    const header = { ...saveFieldsToJson(save), size: 1000 };
-    expect(await reasonOf(await pack(SHARE_FORMAT_VERSION, header, new Uint8Array(0)))).toBe(
-      'corrupt',
-    );
+  it('accepts exactly the selectable map sizes range and every scenario map', () => {
+    expect(SHARE_MIN_MAP_SIZE).toBe(Math.min(...MAP_SIZES));
+    expect(SHARE_MAX_MAP_SIZE).toBe(Math.max(...MAP_SIZES));
+    for (const id of SCENARIO_IDS) {
+      const { size } = scenarioDef(id);
+      expect(size, id).toBeGreaterThanOrEqual(SHARE_MIN_MAP_SIZE);
+      expect(size, id).toBeLessThanOrEqual(SHARE_MAX_MAP_SIZE);
+    }
+  });
+
+  it('rejects a map size outside the share range as corrupt', async () => {
+    const fields = saveFieldsToJson(smallSave());
+    const withSize = (size: number) =>
+      pack(SHARE_FORMAT_VERSION, { ...fields, size }, new Uint8Array(size * size * 7));
+    for (const size of [1, SHARE_MIN_MAP_SIZE - 1, SHARE_MAX_MAP_SIZE + 1]) {
+      expect(await reasonOf(await withSize(size)), String(size)).toBe('corrupt');
+    }
+    for (const size of [SHARE_MIN_MAP_SIZE, SHARE_MAX_MAP_SIZE]) {
+      expect((await decodeShareCode(await withSize(size))).size).toBe(size);
+    }
   });
 
   it('rejects too few or misaligned layer bytes as corrupt', async () => {

@@ -12,7 +12,7 @@
  * DOM-free: only `CompressionStream`, `DecompressionStream`, `Blob`,
  * `Response`, `TextEncoder`/`TextDecoder` and `btoa`/`atob`.
  */
-import { SAVE_VERSION } from '../shared/constants.ts';
+import { MAP_SIZES, SAVE_VERSION } from '../shared/constants.ts';
 import type { SaveGame } from '../shared/types.ts';
 import {
   REQUIRED_LAYER_COUNT,
@@ -23,8 +23,12 @@ import {
 } from './serialization.ts';
 
 export const SHARE_FORMAT_VERSION = 1;
-/** Largest map a share code may carry (the UI offers up to 128). */
-export const SHARE_MAX_MAP_SIZE = 256;
+/**
+ * Map sizes a share code may carry: the selectable ones (every scenario
+ * map lies within them too). Anything else is a forged or broken code.
+ */
+export const SHARE_MIN_MAP_SIZE = Math.min(...MAP_SIZES);
+export const SHARE_MAX_MAP_SIZE = Math.max(...MAP_SIZES);
 /** Format byte + uint32 header length. */
 const HEADER_OFFSET = 5;
 /** 1 MB of header JSON at most. */
@@ -185,7 +189,7 @@ export async function decodeShareCode(code: string): Promise<SaveGame> {
     throw new ShareCodeError('corrupt', String(error));
   }
   const { size } = fields;
-  if (!Number.isInteger(size) || size < 1 || size > SHARE_MAX_MAP_SIZE) {
+  if (!Number.isInteger(size) || size < SHARE_MIN_MAP_SIZE || size > SHARE_MAX_MAP_SIZE) {
     throw new ShareCodeError('corrupt', `size ${size}`);
   }
   const area = size * size;

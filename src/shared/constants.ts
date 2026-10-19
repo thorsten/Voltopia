@@ -2,6 +2,15 @@ import { PlantType, SEASON_ORDER, Zone, type Speed } from './types.ts';
 
 /** Structural constants (not balancing). */
 export const GRID_SIZE = 64;
+/**
+ * Selectable map sizes. 128 is four times the tiles of 64: the
+ * simulation carries it comfortably (measured 23 ms of a tick's 250 ms
+ * budget on a grown city), while the frame cost grows with the map
+ * because the instanced meshes span the whole grid — the diagnostics
+ * panel in the settings is there to show what a given machine makes
+ * of it.
+ */
+export const MAP_SIZES = [48, 64, 96, 128] as const;
 export const TICK_RATE = 4; // simulation ticks per real-time second at 1x speed
 /**
  * Road tiles an overpass ramp runs over on each side of its deck (sim

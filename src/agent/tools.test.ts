@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BALANCE,
+  MAP_SIZES,
   OVERPASS_LONG_RAMP_TILES,
   TICKS_PER_DAY,
   TICKS_PER_HISTORY_SAMPLE,
@@ -42,11 +43,14 @@ import {
 } from './tools.ts';
 
 const SIZE = 24;
+/** Share codes only carry the selectable map sizes. */
+const SHARE_SIZE = MAP_SIZES[0];
 
 /** Drives the tools against an in-process engine, mimicking the worker. */
 function createHarness(
   seed = 11,
   sandbox = false,
+  size = SIZE,
 ): {
   ctx: AgentContext;
   tools: AgentTool[];
@@ -58,9 +62,9 @@ function createHarness(
   startedScenarios: string[];
   call: (name: string, input?: unknown) => Promise<Record<string, unknown>>;
 } {
-  const engine = new SimEngine(seed, SIZE);
-  engine.applyCommand({ type: 'init', seed, size: SIZE, ...(sandbox ? { sandbox: true } : {}) });
-  const tiles = new TileMirror(SIZE);
+  const engine = new SimEngine(seed, size);
+  engine.applyCommand({ type: 'init', seed, size, ...(sandbox ? { sandbox: true } : {}) });
+  const tiles = new TileMirror(size);
   let stats: GlobalStats | null = null;
   const absorb = (event: SimEvent | null): void => {
     if (!event || event.type !== 'tick') return;
@@ -129,17 +133,18 @@ function createHarness(
 }
 
 function findLand(engine: SimEngine, minX = 2): { x: number; y: number } {
-  const { terrain, elevation, forest } = engine.state.layers;
-  for (let y = 2; y < SIZE - 2; y++) {
-    for (let x = minX; x < SIZE - 2; x++) {
+  const { size, layers } = engine.state;
+  const { terrain, elevation, forest } = layers;
+  for (let y = 2; y < size - 2; y++) {
+    for (let x = minX; x < size - 2; x++) {
       // A 6x3 all-land block gives room for road + zone tests. The
       // one-tile margin around it must be land at the same level, so no
       // tile is sloped (slope surcharges would skew cost expectations).
       let ok = true;
-      const level = elevation[tileIndex(x, y, SIZE)];
+      const level = elevation[tileIndex(x, y, size)];
       for (let dy = -1; dy < 4 && ok; dy++) {
         for (let dx = -1; dx < 7; dx++) {
-          const index = tileIndex(x + dx, y + dy, SIZE);
+          const index = tileIndex(x + dx, y + dy, size);
           if (terrain[index] !== Terrain.Land || elevation[index] !== level) {
             ok = false;
             break;
@@ -149,7 +154,7 @@ function findLand(engine: SimEngine, minX = 2): { x: number; y: number } {
       if (ok) {
         // Clear any woods so felling fees don't skew the cost checks either.
         for (let dy = -1; dy < 4; dy++) {
-          for (let dx = -1; dx < 7; dx++) forest[tileIndex(x + dx, y + dy, SIZE)] = 0;
+          for (let dx = -1; dx < 7; dx++) forest[tileIndex(x + dx, y + dy, size)] = 0;
         }
         return { x, y };
       }
@@ -714,7 +719,7 @@ describe('agent tools: building', () => {
   });
 
   it('share_city packs the running city into a link that open_shared_city adds as a save', async () => {
-    const { call, engine, loaded, storage } = createHarness();
+    const { call, engine, loaded, storage } = createHarness(11, false, SHARE_SIZE);
     const { x, y } = findLand(engine);
     await call('build_road', { from: { x, y }, to: { x: x + 5, y } });
     await call('paint_zone', {
@@ -738,13 +743,13 @@ describe('agent tools: building', () => {
       ok: true,
       id: 'save-1',
       name: `Shared city – ${today}`,
-      save: { id: 'save-1', size: SIZE },
+      save: { id: 'save-1', size: SHARE_SIZE },
     });
     const { saves } = (await call('list_saves')) as { saves: SaveSummary[] };
     expect(saves).toHaveLength(1);
     expect(saves[0]).toMatchObject({
       id: 'save-1',
-      size: SIZE,
+      size: SHARE_SIZE,
       day: dayOfTick(original.tick),
       population: populationOfSave(original),
       compatible: true,
@@ -768,7 +773,7 @@ describe('agent tools: building', () => {
   });
 
   it('open_shared_city also takes a bare code and rejects garbage', async () => {
-    const { call } = createHarness();
+    const { call } = createHarness(11, false, SHARE_SIZE);
     const { url } = (await call('share_city')) as { url: string };
     const code = url.slice(url.indexOf('#city=') + '#city='.length);
     expect(await call('open_shared_city', { url: code })).toMatchObject({ ok: true });
