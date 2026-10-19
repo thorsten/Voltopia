@@ -63,6 +63,12 @@ test('a sandbox city builds beyond any starting money and runs at 6x', async ({ 
   test.setTimeout(90_000);
   await page.getByTestId('new-game').click();
   await expect(page.getByTestId('new-game-page')).toBeVisible();
+  await page.getByTestId('disasters-harsh').click();
+  await page.getByTestId('sandbox-toggle').check();
+  await expect(page.getByTestId('disasters-off')).toHaveClass(/active/);
+  // Leaving sandbox restores the disaster level chosen before.
+  await page.getByTestId('sandbox-toggle').uncheck();
+  await expect(page.getByTestId('disasters-harsh')).toHaveClass(/active/);
   await page.getByTestId('sandbox-toggle').check();
   await expect(page.getByTestId('disasters-off')).toHaveClass(/active/);
   await expect(page.getByTestId('difficulty-easy')).toBeDisabled();

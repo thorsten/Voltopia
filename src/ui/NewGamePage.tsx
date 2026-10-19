@@ -24,11 +24,18 @@ export function NewGamePage({
   const [seedText, setSeedText] = useState('');
   const [disasters, setDisasters] = useState<number>(DEFAULT_NEW_GAME.disasterScale);
   const [sandbox, setSandbox] = useState(false);
+  // Disaster level chosen before sandbox preset it to off, restored on uncheck.
+  const [disastersBeforeSandbox, setDisastersBeforeSandbox] = useState(disasters);
 
   const toggleSandbox = (on: boolean): void => {
     setSandbox(on);
     // Sandbox presets disasters to off; the player may switch them back on.
-    if (on) setDisasters(0);
+    if (on) {
+      setDisastersBeforeSandbox(disasters);
+      setDisasters(0);
+    } else {
+      setDisasters(disastersBeforeSandbox);
+    }
   };
 
   const start = (): void => {
