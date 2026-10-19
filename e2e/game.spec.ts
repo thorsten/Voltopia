@@ -12,6 +12,35 @@ async function rect(page: Page, testId: string) {
   return locator.first().boundingBox();
 }
 
+/** Tick and sandbox flag of the autosave in IndexedDB, or null when there is none. */
+async function readAutosave(page: Page): Promise<{ tick: number; sandbox: boolean } | null> {
+  return page.evaluate(
+    () =>
+      new Promise<{ tick: number; sandbox: boolean } | null>((resolve) => {
+        const open = indexedDB.open('voltopia');
+        open.onerror = () => resolve(null);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains('saves')) {
+            db.close();
+            resolve(null);
+            return;
+          }
+          const get = db.transaction('saves').objectStore('saves').get('autosave');
+          get.onerror = () => {
+            db.close();
+            resolve(null);
+          };
+          get.onsuccess = () => {
+            db.close();
+            const save = get.result as { tick?: number; sandbox?: boolean } | undefined;
+            resolve(save ? { tick: save.tick ?? 0, sandbox: save.sandbox === true } : null);
+          };
+        };
+      }),
+  );
+}
+
 /** True when the environment has WebGL and the 3D canvas is present. */
 async function has3dView(page: Page): Promise<boolean> {
   return (await page.locator('.game-view canvas').count()) > 0;
@@ -108,16 +137,37 @@ test('a sandbox city builds beyond any starting money and runs at 6x', async ({ 
   const credit = await call('take_credit', { kind: 'loan', amount: 5000 });
   expect(credit.ok).toBe(false);
 
+  // The sim must report 6x, and run clearly faster than at 3x. A slow
+  // runner drops ticks at both speeds, so compare paces rather than
+  // trusting an absolute tick count.
+  const ticksIn = async (ms: number): Promise<number> => {
+    const before = await readTick(page);
+    await page.waitForTimeout(ms);
+    return (await readTick(page)) - before;
+  };
+  await page.getByTestId('speed-3').click();
+  await expect(page.getByTestId('speed-3')).toHaveClass(/active/);
+  const at3x = await ticksIn(2_000);
   await page.getByTestId('speed-6').click();
   await expect(page.getByTestId('speed-6')).toHaveClass(/active/);
-  const before = await readTick(page);
-  await page.waitForTimeout(1_500);
-  // 6x gives about 36 ticks in 1.5 s, 3x about 18.
-  expect((await readTick(page)) - before).toBeGreaterThan(12);
+  expect((await call('get_game_overview')).speed).toBe(6);
+  const at6x = await ticksIn(2_000);
+  // Nominally 48 vs 24 ticks; 1.4x leaves room for timer jitter.
+  expect(at6x).toBeGreaterThan(at3x * 1.4);
 
-  // The sandbox flag survives the autosave.
+  // The sandbox flag survives the autosave: quick-save, then wait until
+  // the autosave slot holds this sandbox city before reloading.
+  const savedFrom = await readTick(page);
   await page.keyboard.press('Control+s');
-  await page.waitForTimeout(500);
+  await expect
+    .poll(
+      async () => {
+        const save = await readAutosave(page);
+        return save !== null && save.sandbox && save.tick >= savedFrom;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   await page.reload();
   await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('money')).toContainText('∞');
