@@ -439,6 +439,8 @@ describe('agent tools: building', () => {
     });
     expect(engine.state.layers.zone[tileIndex(x + 2, y + 1, SIZE)]).toBe(Zone.Residential);
 
+    // Spent grant pot: the plant costs its gross price.
+    engine.state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
     const plant = await call('place_plant', { plant: 'solar', x, y: y + 2 });
     expect(plant).toMatchObject({
       ok: true,
@@ -529,6 +531,7 @@ describe('agent tools: building', () => {
     const { call, engine } = createHarness();
     const { x, y } = findLand(engine);
     await call('build_road', { from: { x, y }, to: { x: x + 5, y } });
+    engine.state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
     const before = engine.state.money;
     await call('place_plant', { plant: 'wind', x, y: y + 1 });
     const undo = await call('undo');

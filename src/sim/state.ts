@@ -228,6 +228,8 @@ export interface Train {
 export interface UndoEntry {
   /** Money to restore (refunds the cost of the undone action). */
   moneyDelta: number;
+  /** Investment grant the undone action drew from this year's pot, returned on undo. */
+  grantDelta?: number;
   /** Tile snapshots to restore, keyed by index. */
   tiles: Array<{
     index: number;

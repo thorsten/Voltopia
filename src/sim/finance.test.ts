@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
-import type { FinanceSave } from '../shared/types.ts';
+import { tileIndex } from '../shared/grid.ts';
+import { PlantType, Terrain, type FinanceSave } from '../shared/types.ts';
+import { placePlant } from './energy.ts';
 import {
   averageDailyIncome,
   computeRating,
@@ -8,13 +10,19 @@ import {
   debtCap,
   defaultFinance,
   financeStep,
+  grantRemaining,
+  plantPrice,
   repayCredit,
+  rollGrantYear,
   takeCredit,
   totalDebt,
 } from './finance.ts';
+import { undoLastAction } from './roads.ts';
 import { daysPerYear } from './seasons.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from './state.ts';
+import { generateTerrain } from './terrain.ts';
 import { buildStats } from './tick.ts';
+import { generateWater } from './water.ts';
 
 const SIZE = 32;
 const { credit, rating } = BALANCE.finance;
@@ -284,5 +292,123 @@ describe('finance state', () => {
     expect(finance.rating).toBe('A');
     expect(finance.incomeWindow).toEqual([3, 4, 5, 6, 7]);
     expect(finance.overdraftDays).toBe(0);
+  });
+});
+
+describe('investment grant', () => {
+  const { grant } = BALANCE.finance;
+  const at = (x: number, y: number) => tileIndex(x, y, SIZE);
+  const solar = BALANCE.costs.plant[PlantType.SolarFarm];
+
+  function flatState(money = 1e6): SimState {
+    return createSimState(1, SIZE, money);
+  }
+
+  it('refunds a share of a solar farm on flat land', () => {
+    const state = flatState();
+    const share = grant.shareByPlant[PlantType.SolarFarm] ?? 0;
+    expect(share).toBeGreaterThan(0);
+    const price = plantPrice(state, at(5, 5), PlantType.SolarFarm);
+    expect(price).toEqual({
+      gross: solar,
+      grant: Math.round(solar * share),
+      net: solar - Math.round(solar * share),
+    });
+    expect(placePlant(state, at(5, 5), PlantType.SolarFarm)).toEqual({});
+    expect(state.money).toBe(1e6 - price.net);
+    expect(state.finance.grantUsedThisYear).toBe(price.grant);
+    expect(grantRemaining(state)).toBe(grant.annualPot - price.grant);
+  });
+
+  it('grants nothing for biogas', () => {
+    const state = flatState();
+    const gross = BALANCE.costs.plant[PlantType.BiogasPlant];
+    expect(plantPrice(state, at(5, 5), PlantType.BiogasPlant)).toEqual({
+      gross,
+      grant: 0,
+      net: gross,
+    });
+  });
+
+  it('pays a partial grant from a nearly empty pot, then none', () => {
+    const state = flatState();
+    state.finance.grantUsedThisYear = grant.annualPot - 100;
+    expect(plantPrice(state, at(5, 5), PlantType.SolarFarm).grant).toBe(100);
+    placePlant(state, at(5, 5), PlantType.SolarFarm);
+    expect(grantRemaining(state)).toBe(0);
+    expect(plantPrice(state, at(7, 7), PlantType.SolarFarm)).toEqual({
+      gross: solar,
+      grant: 0,
+      net: solar,
+    });
+  });
+
+  it('a plant priced above the money is refused at its net price only', () => {
+    const state = flatState();
+    const { net } = plantPrice(state, at(5, 5), PlantType.SolarFarm);
+    state.money = net;
+    expect(placePlant(state, at(5, 5), PlantType.SolarFarm)).toEqual({});
+    expect(state.money).toBe(0);
+  });
+
+  it('undo refunds the net price and returns the grant to the pot', () => {
+    const state = flatState();
+    placePlant(state, at(5, 5), PlantType.WindTurbine);
+    expect(state.finance.grantUsedThisYear).toBeGreaterThan(0);
+    expect(undoLastAction(state)).toEqual({});
+    expect(state.money).toBe(1e6);
+    expect(state.finance.grantUsedThisYear).toBe(0);
+  });
+
+  it('a new year refills the pot, the same year does not', () => {
+    const state = flatState();
+    state.finance.grantUsedThisYear = grant.annualPot;
+    rollGrantYear(state);
+    expect(grantRemaining(state)).toBe(0);
+    state.season = { ...state.season, year: state.season.year + 1 };
+    expect(plantPrice(state, at(5, 5), PlantType.SolarFarm).grant).toBeGreaterThan(0);
+    expect(state.finance.grantYear).toBe(state.season.year);
+    expect(grantRemaining(state)).toBe(grant.annualPot);
+  });
+
+  it('the finance step rolls the grant year at day rollover', () => {
+    const state = flatState();
+    state.finance.grantUsedThisYear = 500;
+    state.season = { ...state.season, year: 2 };
+    state.tick = TICKS_PER_DAY - 1;
+    run(state, 1);
+    expect(state.finance.grantUsedThisYear).toBe(0);
+    expect(state.finance.grantYear).toBe(2);
+  });
+
+  it('never grants the felling cost', () => {
+    const state = flatState();
+    state.layers.forest[at(5, 5)] = 2;
+    const felling = 2 * BALANCE.forest.fellingCostPerStage;
+    const share = grant.shareByPlant[PlantType.SolarFarm] ?? 0;
+    expect(plantPrice(state, at(5, 5), PlantType.SolarFarm)).toEqual({
+      gross: solar + felling,
+      grant: Math.round(solar * share),
+      net: solar + felling - Math.round(solar * share),
+    });
+  });
+
+  it('grants a share of the offshore price for wind at sea', () => {
+    const state = createSimState(1, 64, 1e6);
+    generateTerrain(state);
+    generateWater(state);
+    const sea = state.layers.terrain.findIndex((terrain) => terrain === Terrain.Sea);
+    expect(sea).toBeGreaterThanOrEqual(0);
+    const base = Math.round(
+      BALANCE.costs.plant[PlantType.WindTurbine] * BALANCE.sea.offshoreCostFactor,
+    );
+    const share = grant.shareByPlant[PlantType.WindTurbine] ?? 0;
+    const price = plantPrice(state, sea, PlantType.WindTurbine);
+    expect(price.gross).toBe(base);
+    expect(price.grant).toBe(
+      Math.round(
+        BALANCE.costs.plant[PlantType.WindTurbine] * BALANCE.sea.offshoreCostFactor * share,
+      ),
+    );
   });
 });

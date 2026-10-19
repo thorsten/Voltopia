@@ -78,6 +78,8 @@ function makeState(): SimState {
   // heating nor cooling; the heating and cooling tests set their own
   // temperature.
   state.season = { ...state.season, temperature: 18 };
+  // Spent grant pot: plants cost their gross price (grants: finance.test.ts).
+  state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
   return state;
 }
 
@@ -864,6 +866,8 @@ describe('offshore wind', () => {
     const state = createSimState(seed, size);
     generateTerrain(state);
     generateWater(state);
+    // Spent grant pot: plants cost their gross price.
+    state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
     return state;
   }
 

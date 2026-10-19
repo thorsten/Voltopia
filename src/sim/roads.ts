@@ -204,6 +204,12 @@ export function undoLastAction(state: SimState): BuildResult {
 
   const { layers } = state;
   state.money += entry.moneyDelta;
+  if (entry.grantDelta) {
+    state.finance.grantUsedThisYear = Math.max(
+      0,
+      state.finance.grantUsedThisYear - entry.grantDelta,
+    );
+  }
   for (const tile of entry.tiles) {
     layers.tileType[tile.index] = tile.tileType;
     layers.roadMask[tile.index] = tile.roadMask;

@@ -215,6 +215,8 @@ describe('building on woods fells them', () => {
 
   it('a plant pays the fee and clears the tile', () => {
     const state = woodedState();
+    // Spent grant pot: the plant costs its gross price.
+    state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
     const before = state.money;
     placePlant(state, at(4, 2), PlantType.SolarFarm);
     expect(state.layers.forest[at(4, 2)]).toBe(0);

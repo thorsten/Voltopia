@@ -1957,8 +1957,20 @@ export const BALANCE = {
     grant: {
       /** Grant money per in-game year. */
       annualPot: 15_000,
-      /** Share of the build price refunded, per plant (filled in with the grant). */
-      shareByPlant: {} as Partial<Record<PlantType, number>>,
+      /**
+       * Share of the build price (slope or offshore multiplier included,
+       * felling excluded) paid from the pot, per plant. Renewables and
+       * storage only; biogas burns fuel and gets none.
+       */
+      shareByPlant: {
+        [PlantType.SolarFarm]: 0.3,
+        [PlantType.WindTurbine]: 0.3,
+        [PlantType.RunOfRiver]: 0.3,
+        [PlantType.TidalPlant]: 0.3,
+        [PlantType.GeothermalPlant]: 0.3,
+        [PlantType.Battery]: 0.2,
+        [PlantType.PumpedStorage]: 0.2,
+      } as Partial<Record<PlantType, number>>,
     },
     gridFee: {
       /** Money per EU billed. */

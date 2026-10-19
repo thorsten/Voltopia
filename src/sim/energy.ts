@@ -1,6 +1,7 @@
 import { BALANCE, TICKS_PER_HISTORY_SAMPLE } from '../shared/constants.ts';
-import { HEATED_SERVED, PlantType, Terrain, Zone, type IslandStats } from '../shared/types.ts';
-import { clearForest, fellingCost, windForestFactor } from './forest.ts';
+import { HEATED_SERVED, PlantType, Zone, type IslandStats } from '../shared/types.ts';
+import { clearForest, windForestFactor } from './forest.ts';
+import { plantPrice } from './finance.ts';
 import { FULL_HEAT } from './geothermal.ts';
 import { IDLE_HEAT, nightNeedsHeat, type HeatTickResult } from './heat.ts';
 import { balanceIsland, type IslandResult } from './islandBalance.ts';
@@ -19,7 +20,6 @@ import {
   pumpedHeadAt,
   pushEnergyHistory,
   riverDropAt,
-  slopeCostMultiplier,
   snapshotTile,
   SupplyStatus,
   TileType,
@@ -69,26 +69,16 @@ export function placePlant(state: SimState, tile: number, plant: PlantType): Bui
   if (plant === PlantType.None) return { rejected: 'noPlantSelected' };
   const rejection = buildRejection(state, tile, BuildIntent.Plant, plant);
   if (rejection) return { rejected: rejection };
-  // A tidal plant can only ever stand on a sea tile, so — unlike a wind
-  // turbine — it has no "choice" of going offshore: its marine cost is
-  // already priced into the base cost, so it is exempt from the offshore
-  // surcharge (and from the slope multiplier, since a sea tile has no
-  // buildable slope of its own).
-  const isTidal = plant === PlantType.TidalPlant;
-  const offshore = !isTidal && state.layers.terrain[tile] === Terrain.Sea;
-  const costMultiplier = isTidal
-    ? 1
-    : offshore
-      ? BALANCE.sea.offshoreCostFactor
-      : slopeCostMultiplier(state, tile);
-  const cost = Math.round(BALANCE.costs.plant[plant] * costMultiplier) + fellingCost(state, tile);
-  if (cost > state.money) {
+  const { grant, net } = plantPrice(state, tile, plant);
+  if (net > state.money) {
     return { rejected: 'notEnoughMoney' };
   }
 
-  const undo: UndoEntry = { moneyDelta: cost, tiles: [snapshotTile(state, tile)] };
+  const undo: UndoEntry = { moneyDelta: net, tiles: [snapshotTile(state, tile)] };
+  if (grant > 0) undo.grantDelta = grant;
 
-  state.money -= cost;
+  state.money -= net;
+  state.finance.grantUsedThisYear += grant;
   layers.tileType[tile] = TileType.Plant;
   layers.zone[tile] = Zone.None;
   layers.plantType[tile] = plant;

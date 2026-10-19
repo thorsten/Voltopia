@@ -1,15 +1,18 @@
 import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import {
   CREDIT_KINDS,
+  PlantType,
   RATINGS,
+  Terrain,
   type Credit,
   type CreditKind,
   type FinanceSave,
   type Rating,
 } from '../shared/types.ts';
+import { fellingCost } from './forest.ts';
 import type { BuildResult } from './roads.ts';
 import { daysPerYear } from './seasons.ts';
-import type { SimState } from './state.ts';
+import { slopeCostMultiplier, type SimState } from './state.ts';
 
 export { CREDIT_KINDS, RATINGS, type Credit, type CreditKind, type Rating };
 
@@ -130,6 +133,49 @@ export function computeRating(state: SimState): Rating {
   return 'D';
 }
 
+/** Start a fresh grant pot when the in-game year has moved on. */
+export function rollGrantYear(state: SimState): void {
+  const { finance } = state;
+  if (finance.grantYear === state.season.year) return;
+  finance.grantYear = state.season.year;
+  finance.grantUsedThisYear = 0;
+}
+
+/** Grant money left in this year's pot. */
+export function grantRemaining(state: SimState): number {
+  rollGrantYear(state);
+  return Math.max(0, BALANCE.finance.grant.annualPot - state.finance.grantUsedThisYear);
+}
+
+/**
+ * What a plant on `tile` costs: the gross build price (slope or offshore
+ * multiplier, plus felling the woods), the grant the pot pays towards it
+ * (never towards felling) and the net the treasury pays.
+ */
+export function plantPrice(
+  state: SimState,
+  tile: number,
+  plant: PlantType,
+): { gross: number; grant: number; net: number } {
+  // A tidal plant can only ever stand on a sea tile, so — unlike a wind
+  // turbine — it has no "choice" of going offshore: its marine cost is
+  // already priced into the base cost, so it is exempt from the offshore
+  // surcharge (and from the slope multiplier, since a sea tile has no
+  // buildable slope of its own).
+  const isTidal = plant === PlantType.TidalPlant;
+  const offshore = !isTidal && state.layers.terrain[tile] === Terrain.Sea;
+  const costMultiplier = isTidal
+    ? 1
+    : offshore
+      ? BALANCE.sea.offshoreCostFactor
+      : slopeCostMultiplier(state, tile);
+  const base = BALANCE.costs.plant[plant] * costMultiplier;
+  const gross = Math.round(base) + fellingCost(state, tile);
+  const share = BALANCE.finance.grant.shareByPlant[plant] ?? 0;
+  const grant = share > 0 ? Math.min(Math.round(base * share), grantRemaining(state)) : 0;
+  return { gross, grant, net: gross - grant };
+}
+
 /**
  * Book this tick's debt service and overdraft interest. Runs after the
  * day's operating income has landed (after repairStep); `operatingNet`
@@ -171,6 +217,7 @@ export function financeStep(state: SimState, operatingNet: number): void {
 
   finance.dayIncome += operatingNet + gridFeeIncome;
   if (state.tick % TICKS_PER_DAY === 0) {
+    rollGrantYear(state);
     finance.incomeWindow.push(finance.dayIncome);
     const excess = finance.incomeWindow.length - BALANCE.finance.rating.windowDays;
     if (excess > 0) finance.incomeWindow.splice(0, excess);
