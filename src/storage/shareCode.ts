@@ -7,7 +7,7 @@
  * encoded as base64url. The header JSON is `saveFieldsToJson` without the
  * history (`lifetime`). The layer count follows from the payload length,
  * so a newer build that appends a layer to `SAVE_LAYERS` still reads
- * older codes.
+ * older codes, and an older build skips the layers it does not know.
  *
  * DOM-free: only `CompressionStream`, `DecompressionStream`, `Blob`,
  * `Response`, `TextEncoder`/`TextDecoder` and `btoa`/`atob`.
@@ -194,11 +194,12 @@ export async function decodeShareCode(code: string): Promise<SaveGame> {
   }
   const area = size * size;
   const count = (bytes.length - layersStart) / area;
-  if (!Number.isInteger(count) || count < REQUIRED_LAYER_COUNT || count > SAVE_LAYERS.length) {
+  if (!Number.isInteger(count) || count < REQUIRED_LAYER_COUNT) {
     throw new ShareCodeError('corrupt', 'layer bytes');
   }
+  // Whole layers beyond the known ones come from a newer build: skip them.
   const layers = {} as SaveGame['layers'];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < Math.min(count, SAVE_LAYERS.length); i++) {
     const start = layersStart + i * area;
     layers[SAVE_LAYERS[i]] = bytes.slice(start, start + area).buffer;
   }

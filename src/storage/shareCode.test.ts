@@ -238,9 +238,25 @@ describe('share code', () => {
     ).toBe('corrupt');
     expect(
       await reasonOf(
-        await pack(SHARE_FORMAT_VERSION, header, new Uint8Array(area * (SAVE_LAYERS.length + 1))),
+        await pack(SHARE_FORMAT_VERSION, header, new Uint8Array(area * SAVE_LAYERS.length + 1)),
       ),
     ).toBe('corrupt');
+  });
+
+  it('ignores whole layers beyond the known ones (a newer build appended them)', async () => {
+    const save = smallSave();
+    const area = save.size * save.size;
+    const bytes = new Uint8Array(area * (SAVE_LAYERS.length + 2));
+    bytes.fill(1, 0, area);
+    bytes.fill(9, area * SAVE_LAYERS.length);
+    const decoded = await decodeShareCode(
+      await pack(SHARE_FORMAT_VERSION, saveFieldsToJson(save), bytes),
+    );
+    expect(Object.keys(decoded.layers)).toEqual([...SAVE_LAYERS]);
+    expect(new Uint8Array(decoded.layers.tileType)[0]).toBe(1);
+    expect(new Uint8Array(decoded.layers[SAVE_LAYERS[SAVE_LAYERS.length - 1]]!)).toEqual(
+      new Uint8Array(area),
+    );
   });
 
   it('accepts the required layers alone and leaves later layers absent', async () => {
