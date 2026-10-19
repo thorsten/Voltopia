@@ -32,6 +32,8 @@ import {
   PlantType,
   SCENARIO_IDS,
   StopState,
+  RoadClass,
+  RoadLane,
   SupplyStatus,
   Terrain,
   TileType,
@@ -1446,6 +1448,63 @@ function largestIslandNumber(state: SimState): number {
   return best;
 }
 
+/** Largest value of a `{ Name: number }` enum object. */
+function enumMax(values: Readonly<Record<string, number>>): number {
+  return Math.max(...Object.values(values));
+}
+
+const KNOWN_PLANT_TYPES = new Set<number>(Object.values(PlantType));
+const MAX_TILE_TYPE = enumMax(TileType);
+const MAX_ZONE = enumMax(Zone);
+const MAX_SUPPLY = enumMax(SupplyStatus);
+const MAX_TERRAIN = enumMax(Terrain);
+const MAX_ROAD_CLASS = enumMax(RoadClass);
+const MAX_ROAD_LANE = enumMax(RoadLane);
+
+/** Replaces every byte above `max` with `fallback`. */
+function capLayer(layer: Uint8Array, max: number, fallback: number): void {
+  for (let i = 0; i < layer.length; i++) if (layer[i] > max) layer[i] = fallback;
+}
+
+/**
+ * Share links and JSON imports are untrusted: an enum byte beyond its
+ * range would crash the renderer (unknown plant model) or turn the
+ * treasury NaN (table lookups by zone and density). Valid saves pass
+ * through unchanged. Covers the required layers.
+ */
+function sanitizeBuildLayers(state: SimState): void {
+  const { tileType, plantType, zone, density, supplied } = state.layers;
+  const maxDensity = BALANCE.growth.populationByDensity.length - 1;
+  for (let i = 0; i < tileType.length; i++) {
+    if (tileType[i] > MAX_TILE_TYPE) tileType[i] = TileType.Empty;
+    const plant = plantType[i];
+    if (tileType[i] === TileType.Plant) {
+      if (plant === PlantType.None || !KNOWN_PLANT_TYPES.has(plant)) {
+        tileType[i] = TileType.Empty;
+        plantType[i] = PlantType.None;
+      }
+    } else if (!KNOWN_PLANT_TYPES.has(plant)) {
+      plantType[i] = PlantType.None;
+    }
+    if (zone[i] > MAX_ZONE) {
+      zone[i] = Zone.None;
+      density[i] = 0;
+    }
+    if (density[i] > maxDensity) density[i] = maxDensity;
+  }
+  capLayer(supplied, MAX_SUPPLY, SupplyStatus.NotConnected);
+}
+
+/** Same as `sanitizeBuildLayers` for the optional enum-like layers. */
+function sanitizeGroundLayers(state: SimState): void {
+  const { layers } = state;
+  capLayer(layers.terrain, MAX_TERRAIN, Terrain.Land);
+  capLayer(layers.elevation, BALANCE.terrain.maxLevel, BALANCE.terrain.maxLevel);
+  capLayer(layers.forest, BALANCE.forest.maxStage, BALANCE.forest.maxStage);
+  capLayer(layers.roadClass, MAX_ROAD_CLASS, RoadClass.Street);
+  capLayer(layers.roadLane, MAX_ROAD_LANE, RoadLane.None);
+}
+
 export function deserializeState(save: SaveGame): SimState {
   const state = createSimState(save.seed, save.size);
   state.tick = save.tick;
@@ -1468,6 +1527,7 @@ export function deserializeState(save: SaveGame): SimState {
   state.layers.variant.set(new Uint8Array(save.layers.variant));
   state.layers.supplied.set(new Uint8Array(save.layers.supplied));
   state.layers.plantType.set(new Uint8Array(save.layers.plantType));
+  sanitizeBuildLayers(state);
   state.weather.riverFlow = save.riverFlow ?? BALANCE.water.dryBaselineFlow;
   // Hand-edited JSON exports may hold out-of-range values; keep the
   // season readable (whole days, snow cover 0..1).
@@ -1552,6 +1612,7 @@ export function deserializeState(save: SaveGame): SimState {
   if (save.layers.busStop) state.layers.busStop.set(new Uint8Array(save.layers.busStop));
   if (save.layers.rail) state.layers.rail.set(new Uint8Array(save.layers.rail));
   if (save.layers.overpass) state.layers.overpass.set(new Uint8Array(save.layers.overpass));
+  sanitizeGroundLayers(state);
   // Saves from before the ramp fallback store 1 for every overpass.
   refitAllOverpasses(state);
   if (save.layers.pvMandated) state.layers.pvMandated.set(new Uint8Array(save.layers.pvMandated));
@@ -1579,6 +1640,8 @@ export function deserializeState(save: SaveGame): SimState {
   }
   if (save.layers.geothermal) {
     state.layers.geothermal.set(new Uint8Array(save.layers.geothermal));
+    const maxQuality = BALANCE.geothermal.qualityFactor.length - 1;
+    capLayer(state.layers.geothermal, maxQuality, maxQuality);
     if (save.layers.reservoirHeat) {
       state.layers.reservoirHeat.set(new Uint8Array(save.layers.reservoirHeat));
     } else {

@@ -52,6 +52,20 @@ describe('save game JSON export/import', () => {
     expect(() => saveFromJson('not json')).toThrow();
   });
 
+  it('rejects a non-finite or negative tick and non-finite money or seed', () => {
+    const json = saveToJson(serializeState(createSimState(1, 8)));
+    const withField = (key: string, raw: string): string =>
+      json.replace(new RegExp(`"${key}": [^,\\n]+`), `"${key}": ${raw}`);
+    // JSON has no NaN, but 1e400 parses to Infinity.
+    expect(() => saveFromJson(withField('tick', '1e400'))).toThrow();
+    expect(() => saveFromJson(withField('tick', '-4'))).toThrow();
+    expect(() => saveFromJson(withField('tick', '1.5'))).toThrow();
+    expect(() => saveFromJson(withField('money', '-1e400'))).toThrow();
+    expect(() => saveFromJson(withField('seed', '1e400'))).toThrow();
+    expect(saveFromJson(withField('taxRate', '1e400')).taxRate).toBe(0.1);
+    expect(saveFromJson(withField('money', '-250')).money).toBe(-250);
+  });
+
   it('rejects saves with truncated layers', () => {
     const state = createSimState(1, 8);
     const json = JSON.parse(saveToJson(serializeState(state)));

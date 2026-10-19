@@ -318,9 +318,13 @@ export function saveFieldsFromJson(parsed: unknown): SaveFields {
   if (
     parsed.version !== SAVE_VERSION ||
     typeof parsed.seed !== 'number' ||
+    !Number.isFinite(parsed.seed) ||
     typeof parsed.size !== 'number' ||
     typeof parsed.tick !== 'number' ||
-    typeof parsed.money !== 'number'
+    !Number.isSafeInteger(parsed.tick) ||
+    parsed.tick < 0 ||
+    typeof parsed.money !== 'number' ||
+    !Number.isFinite(parsed.money)
   ) {
     throw new Error('Not a valid Voltopia save file');
   }
@@ -330,7 +334,9 @@ export function saveFieldsFromJson(parsed: unknown): SaveFields {
     size: parsed.size,
     tick: parsed.tick,
     money: parsed.money,
-    taxRate: typeof parsed.taxRate === 'number' ? parsed.taxRate : 0.1,
+    // 1e400 parses to Infinity: an untrusted header falls back to the default.
+    taxRate:
+      typeof parsed.taxRate === 'number' && Number.isFinite(parsed.taxRate) ? parsed.taxRate : 0.1,
   };
   const target = fields as Record<string, unknown>;
   for (const key of Object.keys(FIELD_READERS) as OptionalKey[]) {
