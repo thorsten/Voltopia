@@ -10,6 +10,7 @@ import { registerAgentTools } from '../agent/webmcp.ts';
 import type { SimCommand } from '../shared/messages.ts';
 import type { SaveGame, ScenarioId } from '../shared/types.ts';
 import type { SaveStorage } from '../storage/storage.ts';
+import { shareBaseUrl } from './shareLink.ts';
 import type { SimBridge } from './useSimBridge.ts';
 
 /** Where the save tools persist; must be a stable (module-level) object. */
@@ -94,6 +95,7 @@ export function useAgentTools(
           }),
         population: () => getStats()?.population ?? null,
         replaceCity: saveHost.replaceCity,
+        shareBaseUrl: () => shareBaseUrl(),
       }),
       startScenario: onStartScenario,
     };

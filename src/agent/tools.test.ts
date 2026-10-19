@@ -27,6 +27,8 @@ import { buildPowerLines } from '../sim/powerLines.ts';
 import { isCoastalSea } from '../sim/sea.ts';
 import { markDirty, slopeAt, slopeCostMultiplier } from '../sim/state.ts';
 import { createMemoryStorage } from '../storage/memory.ts';
+import type { SaveSummary } from '../storage/storage.ts';
+import { dayOfTick, populationOfSave } from '../storage/summary.ts';
 import { DIFFICULTIES } from '../ui/newGame.ts';
 import { TileMirror } from './tileMirror.ts';
 import {
@@ -107,6 +109,7 @@ function createHarness(
         loaded.push(save);
       },
       newId: () => `save-${nextId++}`,
+      shareBaseUrl: () => 'http://test/',
     }),
     startScenario(id) {
       startedScenarios.push(id);
@@ -204,6 +207,8 @@ describe('agent tools: reading', () => {
       'save_to_slot',
       'load_save',
       'delete_save',
+      'share_city',
+      'open_shared_city',
       'start_new_city',
       'list_scenarios',
       'start_scenario',
@@ -213,7 +218,8 @@ describe('agent tools: reading', () => {
       expect(tool.inputSchema.type).toBe('object');
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toHaveLength(10);
+    expect(readOnly).toHaveLength(11);
+    expect(readOnly).toContain('share_city');
     const consequential = tools.filter((t) => t.annotations?.consequentialHint).map((t) => t.name);
     expect(consequential).toEqual(
       expect.arrayContaining(['take_credit', 'repay_credit', 'set_grid_fee']),
@@ -705,6 +711,84 @@ describe('agent tools: building', () => {
       ok: false,
       error: 'invalidInput',
     });
+  });
+
+  it('share_city packs the running city into a link that open_shared_city adds as a save', async () => {
+    const { call, engine, loaded, storage } = createHarness();
+    const { x, y } = findLand(engine);
+    await call('build_road', { from: { x, y }, to: { x: x + 5, y } });
+    await call('paint_zone', {
+      from: { x, y: y + 1 },
+      to: { x: x + 5, y: y + 1 },
+      zone: 'residential',
+    });
+    await call('advance_time', { days: 1 });
+    const [event] = engine.applyCommand({ type: 'requestSave' });
+    if (!event || event.type !== 'saveData') throw new Error('no save data');
+    const original = event.save;
+
+    const shared = (await call('share_city')) as { ok: boolean; url: string; bytes: number };
+    expect(shared.ok).toBe(true);
+    expect(shared.url.startsWith('http://test/#city=')).toBe(true);
+    expect(shared.bytes).toBe(shared.url.length);
+
+    const opened = await call('open_shared_city', { url: `  ${shared.url}  ` });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(opened).toMatchObject({
+      ok: true,
+      id: 'save-1',
+      name: `Shared city – ${today}`,
+      save: { id: 'save-1', size: SIZE },
+    });
+    const { saves } = (await call('list_saves')) as { saves: SaveSummary[] };
+    expect(saves).toHaveLength(1);
+    expect(saves[0]).toMatchObject({
+      id: 'save-1',
+      size: SIZE,
+      day: dayOfTick(original.tick),
+      population: populationOfSave(original),
+      compatible: true,
+    });
+    // Opening only adds a save: the running city is untouched.
+    expect(loaded).toEqual([]);
+
+    expect(await call('load_save', { id: 'save-1' })).toMatchObject({ ok: true });
+    expect(loaded).toHaveLength(1);
+    const city = loaded[0];
+    for (const key of Object.keys(original) as (keyof SaveGame)[]) {
+      if (key === 'layers' || key === 'lifetime') continue;
+      expect(city[key], key).toEqual(original[key]);
+    }
+    expect(city.lifetime).toBeUndefined();
+    for (const [name, layer] of Object.entries(original.layers)) {
+      const copy = city.layers[name as keyof SaveGame['layers']];
+      expect(new Uint8Array(copy!), name).toEqual(new Uint8Array(layer));
+    }
+    expect((await storage.load('save-1'))?.tick).toBe(original.tick);
+  });
+
+  it('open_shared_city also takes a bare code and rejects garbage', async () => {
+    const { call } = createHarness();
+    const { url } = (await call('share_city')) as { url: string };
+    const code = url.slice(url.indexOf('#city=') + '#city='.length);
+    expect(await call('open_shared_city', { url: code })).toMatchObject({ ok: true });
+    for (const url of ['hello', 'http://test/#city=', 'http://test/#city=!!!not-a-code!!!']) {
+      const result = await call('open_shared_city', { url });
+      expect(result, url).toMatchObject({ ok: false, error: 'invalidShareLink' });
+      expect(['format', 'version', 'corrupt', 'tooLarge']).toContain(result.reason);
+    }
+    expect(
+      await call('open_shared_city', { url: 'http://test/#city=AAAAAAAAAAAAAAAAAAAA' }),
+    ).toMatchObject({ ok: false, error: 'invalidShareLink' });
+    expect(await call('open_shared_city', {})).toMatchObject({ ok: false, error: 'invalidInput' });
+    expect((await call('list_saves')).saves).toHaveLength(1);
+  });
+
+  it('share_city refuses while a scenario runs', async () => {
+    const { call, engine, ctx } = createHarness();
+    engine.applyCommand({ type: 'init', seed: 1, size: 16, scenario: 'island' });
+    await ctx.waitForTick(ctx.getStats()!.tick + 1);
+    expect(await call('share_city')).toMatchObject({ ok: false, error: 'scenarioRunning' });
   });
 
   it('start_new_city hands validated options to the host', async () => {

@@ -32,7 +32,8 @@ import {
   type TileInfo,
 } from '../shared/types.ts';
 import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
-import { dayOfTick, defaultSaveName } from '../storage/summary.ts';
+import { decodeShareCode, encodeShareCode, ShareCodeError } from '../storage/shareCode.ts';
+import { dayOfTick, defaultSaveName, populationOfSave } from '../storage/summary.ts';
 import '../sim/scenarios/defs/index.ts';
 import { scenarioDef, scenarioDefs } from '../sim/scenarios/registry.ts';
 import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
@@ -41,6 +42,8 @@ import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
 // disaster levels identical to the new-game dialog's, on purpose: a
 // "harsh" city should mean the same intensity whoever founds it.
 import { DIFFICULTIES, DISASTER_LEVELS, MAP_SIZES } from '../ui/newGame.ts';
+// Pure helpers only (no location/navigator access in the ones used here).
+import { extractShareCode, shareSupported, shareUrl } from '../ui/shareLink.ts';
 import type { TileMirror } from './tileMirror.ts';
 
 /** Outcome of a command once the worker has applied it. */
@@ -90,6 +93,13 @@ export interface AgentSaves {
   /** Copy into the autosave and reload (does not return in the app). */
   load(id: string): Promise<void>;
   delete(id: string): Promise<void>;
+  /** Snapshot the running city into a share link; `bytes` is the link length. */
+  share(): Promise<{ url: string; bytes: number }>;
+  /**
+   * Decode a share link (full URL or bare code) into a new named save.
+   * Throws `ShareCodeError` on anything that is not a valid code.
+   */
+  importShared(input: string, name: string): Promise<SaveSummary>;
 }
 
 /** Longest save name, matching the saves page's input. */
@@ -106,6 +116,8 @@ export function createAgentSaves(deps: {
   /** Live population for the summary (null before the first tick). */
   population(): number | null;
   replaceCity(save: SaveGame): Promise<void>;
+  /** Page a share link opens (app: `shareBaseUrl()`, tests: a fixed URL). */
+  shareBaseUrl(): string;
   newId?: () => string;
 }): AgentSaves {
   const { storage } = deps;
@@ -126,6 +138,20 @@ export function createAgentSaves(deps: {
       await deps.replaceCity(save);
     },
     delete: (id) => storage.clear(id),
+    async share() {
+      const url = shareUrl(await encodeShareCode(await deps.snapshot()), deps.shareBaseUrl());
+      return { url, bytes: url.length };
+    },
+    async importShared(input, name) {
+      const code = extractShareCode(input);
+      if (code === null) throw new ShareCodeError('format', 'no share code in the input');
+      const save = await decodeShareCode(code);
+      const slot = newId();
+      await storage.save(save, slot, name, populationOfSave(save));
+      const summary = (await storage.list()).find((entry) => entry.id === slot);
+      if (!summary) throw new Error(`Saving to ${slot} failed`);
+      return summary;
+    },
   };
 }
 
@@ -1794,6 +1820,68 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         const summary = await requireSave(ctx, input.id);
         await ctx.saves.delete(summary.id);
         return { ok: true, id: summary.id, name: summary.name };
+      },
+    },
+    {
+      name: 'share_city',
+      description:
+        'Pack the running city into a link (`…#city=<code>`) that opens it in Voltopia. ' +
+        'Returns `url` and `bytes` (link length). The history is not included. Not available ' +
+        'during a scenario.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        if (ctx.getStats()?.scenario) {
+          return {
+            ok: false,
+            error: 'scenarioRunning',
+            message: 'A scenario city cannot be shared',
+          };
+        }
+        if (!shareSupported()) {
+          return {
+            ok: false,
+            error: 'unsupported',
+            message: 'This browser cannot compress share links',
+          };
+        }
+        return { ok: true, ...(await ctx.saves.share()) };
+      },
+    },
+    {
+      name: 'open_shared_city',
+      description:
+        "Add the city from a share link as a named save ('Shared city – <date>') and return " +
+        'its id. Does NOT load it — call load_save to switch.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'A full share link or just the code after #city=.' },
+        },
+        required: ['url'],
+      },
+      async execute(input) {
+        if (typeof input.url !== 'string') throw new ToolInputError('"url" must be a string');
+        if (!shareSupported()) {
+          return {
+            ok: false,
+            error: 'unsupported',
+            message: 'This browser cannot decompress share links',
+          };
+        }
+        const name = 'Shared city – ' + new Date().toISOString().slice(0, 10);
+        try {
+          const summary = await ctx.saves.importShared(input.url, name);
+          return { ok: true, id: summary.id, name: summary.name, save: summary };
+        } catch (error) {
+          if (!(error instanceof ShareCodeError)) throw error;
+          return {
+            ok: false,
+            error: 'invalidShareLink',
+            reason: error.reason,
+            message: `Not a valid share link (${error.reason})`,
+          };
+        }
       },
     },
     {
