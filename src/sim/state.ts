@@ -53,6 +53,7 @@ import { grantLegacyNetwork } from './powerGrid.ts';
 import { isCoastalSea } from './sea.ts';
 import { seasonState } from './seasons.ts';
 import { TRAIL_TILES } from './trains.ts';
+import { pinSandboxTreasury } from './sandbox.ts';
 import {
   DEFAULT_RULES,
   emptyRun,
@@ -352,6 +353,8 @@ export interface SimState {
   tick: number;
   speed: Speed;
   money: number;
+  /** Founded as a sandbox (free play only); fixed for the city's life. */
+  sandbox: boolean;
   taxRate: number;
   /** Storage trades on the spot market: sell at scarcity, buy cheap. */
   marketTrading: boolean;
@@ -745,6 +748,7 @@ export function createSimState(
     // A real new city gets normal intensity from the engine's fresh-city
     // branch instead (see applyCommand('init') in engine.ts).
     disasterScale: 0,
+    sandbox: false,
     lastRepairCost: 0,
     vehicles: [],
     vans: [],
@@ -1362,6 +1366,7 @@ export function serializeState(state: SimState): SaveGame {
     seasonOriginDay: state.seasonOriginDay,
     rules: { ...state.rules },
     ...(state.scenario ? { scenario: structuredClone(state.scenario) } : {}),
+    ...(state.sandbox ? { sandbox: true } : {}),
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
     smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
@@ -1445,6 +1450,10 @@ export function deserializeState(save: SaveGame): SimState {
   const state = createSimState(save.seed, save.size);
   state.tick = save.tick;
   state.money = save.money;
+  // Sandbox is free play only: a save that also names a scenario is not one.
+  state.sandbox = save.sandbox === true && !save.scenario;
+  // Repairs a hand-edited sandbox save with a small balance.
+  pinSandboxTreasury(state);
   state.taxRate = save.taxRate;
   state.marketTrading = save.marketTrading ?? false;
   state.policies = defaultPolicies();

@@ -36,6 +36,7 @@ import { tractionDemandByIsland, trainsStep } from './trains.ts';
 import { chargingDemandByIsland, drivingVehicleCount, vehiclesStep } from './vehicles.ts';
 import { scenarioStats } from './scenarios/stats.ts';
 import { updateWeather } from './weather.ts';
+import { pinSandboxTreasury } from './sandbox.ts';
 import {
   countPopulationAndJobs,
   TileType,
@@ -113,6 +114,8 @@ export function stepTick(state: SimState): void {
   goalsStep(state);
   if (state.scenario) scenarioStep(state, scenarioDef(state.scenario.id));
   recordLifetime(state, population, jobs);
+  // Last: every flow of the tick is booked, the next tick starts pinned.
+  pinSandboxTreasury(state);
 }
 
 /** Cap on stored daily samples (oldest are dropped beyond this). */
@@ -215,6 +218,7 @@ export function buildStats(state: SimState): GlobalStats {
     seed: state.seed,
     tick: state.tick,
     money: state.money,
+    sandbox: state.sandbox,
     population,
     jobs,
     happiness: state.happiness,

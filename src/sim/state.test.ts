@@ -253,6 +253,54 @@ describe('save round trip', () => {
     expect(restored.layers.stored[at(8, 7)]).toBeCloseTo(1234, 3);
   });
 
+  it('persists the sandbox flag and the pinned treasury', () => {
+    const state = makeState();
+    state.sandbox = true;
+    state.money = BALANCE.sandbox.treasury;
+    const save = serializeState(state);
+    expect(save.sandbox).toBe(true);
+    const restored = deserializeState(save);
+    expect(restored.sandbox).toBe(true);
+    expect(restored.money).toBe(BALANCE.sandbox.treasury);
+  });
+
+  it('writes no sandbox field for a normal city and loads an old save as no sandbox', () => {
+    const save = serializeState(makeState());
+    expect('sandbox' in save).toBe(false);
+    expect(deserializeState(save).sandbox).toBe(false);
+  });
+
+  it('re-pins a sandbox save with a small balance', () => {
+    const save = serializeState(makeState());
+    save.sandbox = true;
+    save.money = 12;
+    expect(deserializeState(save).money).toBe(BALANCE.sandbox.treasury);
+  });
+
+  it('loads a sandbox save that names a scenario as no sandbox', () => {
+    const state = makeState();
+    state.sandbox = true;
+    const save = serializeState(state);
+    save.scenario = {
+      id: 'island',
+      startTick: 0,
+      status: 'running',
+      samples: {},
+      today: {
+        deficitTicks: 0,
+        importedEnergy: 0,
+        renewable: 0,
+        generation: 0,
+        suppliedShareSum: 0,
+        ticks: 0,
+      },
+    };
+    save.money = 500;
+    const restored = deserializeState(save);
+    expect(restored.sandbox).toBe(false);
+    expect(restored.money).toBe(500);
+  });
+
   it('persists the roadLane layer and defaults it to None on old saves', () => {
     const state = makeState();
     const tile = at(8, 7);

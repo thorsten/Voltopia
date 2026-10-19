@@ -795,6 +795,8 @@ export interface GlobalStats {
   seed: number;
   tick: number;
   money: number;
+  /** Sandbox city: unlimited money, no finance, no goals. */
+  sandbox: boolean;
   population: number;
   jobs: number;
   /** 0..1 average citizen happiness. */
@@ -1107,6 +1109,8 @@ export interface SaveGame {
   rules?: { importCapacityFactor: number; startSeason: SeasonId };
   /** Scenario run (absent in free play and older saves). */
   scenario?: SavedScenario;
+  /** Sandbox city (absent in older saves → false). */
+  sandbox?: boolean;
   /** Snow cover 0..1 (absent in older saves → 0). */
   snowpack?: number;
   /** Building insulation bought (absent in older saves → false). */

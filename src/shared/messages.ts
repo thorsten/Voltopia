@@ -32,6 +32,8 @@ type SimCommandBody =
       disasterScale?: number;
       /** Start a shipped scenario; seed/size/startingMoney/disasterScale are taken from its definition. */
       scenario?: ScenarioId;
+      /** Free play with the treasury pinned (new free cities only; scenarios ignore it). */
+      sandbox?: boolean;
     }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'buildRoad'; tiles: number[]; avenue?: boolean }

@@ -32,6 +32,7 @@ import { scenarioDef } from './scenarios/registry.ts';
 import { startScenario } from './scenarios/start.ts';
 import { generateTerrain } from './terrain.ts';
 import { buildStats, stepTick } from './tick.ts';
+import { pinSandboxTreasury } from './sandbox.ts';
 import { generateForest, plantForest } from './forest.ts';
 import { generateWater } from './water.ts';
 
@@ -53,6 +54,13 @@ export class SimEngine {
    * (rejections, save data); tile changes surface via the next tick event.
    */
   applyCommand(command: SimCommand): SimEvent[] {
+    const events = this.dispatch(command);
+    // After the command, on whatever state it left (init replaces it).
+    pinSandboxTreasury(this.state);
+    return events;
+  }
+
+  private dispatch(command: SimCommand): SimEvent[] {
     const { state } = this;
     switch (command.type) {
       case 'init':
@@ -73,6 +81,7 @@ export class SimEngine {
           // with them on by accident; a real new city gets normal intensity
           // unless the caller (the new-game dialog, or an agent) chose one.
           this.state.disasterScale = command.disasterScale ?? 1;
+          this.state.sandbox = command.sandbox === true;
           generateTerrain(this.state);
           generateWater(this.state);
           generateGeothermal(this.state);

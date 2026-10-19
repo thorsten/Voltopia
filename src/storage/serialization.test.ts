@@ -249,6 +249,19 @@ describe('save game JSON export/import', () => {
     expect(restored.insulation).toBe(true);
   });
 
+  it('round-trips the sandbox flag', () => {
+    const save = makeSave();
+    save.sandbox = true;
+    expect(saveFromJson(saveToJson(save)).sandbox).toBe(true);
+    expect(saveFromJson(saveToJson(makeSave())).sandbox).toBeUndefined();
+  });
+
+  it('drops a sandbox flag that is not true', () => {
+    const json = JSON.parse(saveToJson(makeSave())) as Record<string, unknown>;
+    json.sandbox = 'yes';
+    expect(saveFromJson(JSON.stringify(json)).sandbox).toBeUndefined();
+  });
+
   it('round-trips winter resilience progress', () => {
     const save = makeSave();
     save.winterTicks = 4321;

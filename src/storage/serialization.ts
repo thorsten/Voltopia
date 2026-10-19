@@ -29,6 +29,7 @@ interface SaveGameJson {
   seasonOriginDay?: number;
   snowpack?: number;
   insulation?: boolean;
+  sandbox?: boolean;
   winterTicks?: number;
   summerTicks?: number;
   freeFlowTicks?: number;
@@ -104,6 +105,7 @@ export function saveToJson(save: SaveGame): string {
     ...(save.seasonOriginDay !== undefined ? { seasonOriginDay: save.seasonOriginDay } : {}),
     ...(save.snowpack !== undefined ? { snowpack: save.snowpack } : {}),
     ...(save.insulation !== undefined ? { insulation: save.insulation } : {}),
+    ...(save.sandbox !== undefined ? { sandbox: save.sandbox } : {}),
     ...(save.winterTicks !== undefined ? { winterTicks: save.winterTicks } : {}),
     ...(save.summerTicks !== undefined ? { summerTicks: save.summerTicks } : {}),
     ...(save.freeFlowTicks !== undefined ? { freeFlowTicks: save.freeFlowTicks } : {}),
@@ -322,6 +324,7 @@ export function saveFromJson(text: string): SaveGame {
       : {}),
     ...(typeof parsed.snowpack === 'number' ? { snowpack: parsed.snowpack } : {}),
     ...(typeof parsed.insulation === 'boolean' ? { insulation: parsed.insulation } : {}),
+    ...(parsed.sandbox === true ? { sandbox: true } : {}),
     ...(typeof parsed.winterTicks === 'number' ? { winterTicks: parsed.winterTicks } : {}),
     ...(typeof parsed.summerTicks === 'number' ? { summerTicks: parsed.summerTicks } : {}),
     ...(typeof parsed.freeFlowTicks === 'number' ? { freeFlowTicks: parsed.freeFlowTicks } : {}),

@@ -36,6 +36,16 @@ export const DAYS_PER_SEASON = 5;
 export const BALANCE = {
   startingMoney: 25_000,
 
+  sandbox: {
+    /**
+     * The treasury a sandbox city is pinned to after every tick and
+     * command: far above any single cost (the dearest plant is 5_000, a
+     * full 128 map of avenues well under 1e6) and far below where float
+     * sums of per-tick flows lose precision (2^53 ≈ 9e15).
+     */
+    treasury: 1_000_000_000,
+  },
+
   costs: {
     roadPerTile: 10,
     bridgePerTile: 40,

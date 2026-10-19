@@ -581,6 +581,52 @@ describe('SimEngine basics', () => {
   });
 });
 
+describe('SimEngine sandbox init', () => {
+  it('founds a free city as a sandbox when asked', () => {
+    const engine = new SimEngine(1, 32);
+    engine.applyCommand({ type: 'init', seed: 1, size: 32, sandbox: true });
+    expect(engine.state.sandbox).toBe(true);
+    expect(engine.state.money).toBe(BALANCE.sandbox.treasury);
+  });
+
+  it('a free city without the flag is no sandbox', () => {
+    const engine = new SimEngine(1, 32);
+    engine.applyCommand({ type: 'init', seed: 1, size: 32 });
+    expect(engine.state.sandbox).toBe(false);
+    expect(engine.state.money).toBe(BALANCE.startingMoney);
+  });
+
+  it('ignores the sandbox flag for a scenario', () => {
+    const engine = new SimEngine(7, 16);
+    engine.applyCommand({ type: 'init', seed: 7, size: 16, scenario: 'island', sandbox: true });
+    expect(engine.state.sandbox).toBe(false);
+    expect(engine.state.money).toBe(BALANCE.scenarios.island.startingMoney);
+  });
+
+  it('ignores the sandbox flag when loading a save', () => {
+    const source = new SimEngine(3, 16);
+    const event = source.applyCommand({ type: 'requestSave' })[0]!;
+    if (event.type !== 'saveData') throw new Error('expected saveData');
+    const engine = new SimEngine(0, 4);
+    engine.applyCommand({ type: 'init', seed: 3, size: 16, save: event.save, sandbox: true });
+    expect(engine.state.sandbox).toBe(false);
+    expect(engine.state.money).toBe(source.state.money);
+  });
+
+  it('a sandbox save round-trips through the engine', () => {
+    const source = new SimEngine(3, 16);
+    source.applyCommand({ type: 'init', seed: 3, size: 16, sandbox: true });
+    source.tick();
+    const event = source.applyCommand({ type: 'requestSave' })[0]!;
+    if (event.type !== 'saveData') throw new Error('expected saveData');
+    expect(event.save.sandbox).toBe(true);
+    const engine = new SimEngine(0, 4);
+    engine.applyCommand({ type: 'init', seed: 3, size: 16, save: event.save });
+    expect(engine.state.sandbox).toBe(true);
+    expect(engine.state.money).toBe(BALANCE.sandbox.treasury);
+  });
+});
+
 describe('time helpers', () => {
   it('wraps time of day over the day length', () => {
     expect(timeOfDay(0)).toBe(0);
