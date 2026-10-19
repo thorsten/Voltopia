@@ -636,6 +636,11 @@ describe('sandbox finance', () => {
     }
   });
 
+  it('quotes no rate for any credit kind', () => {
+    const { offers } = buildStats(sandboxState()).finance;
+    for (const offer of offers) expect(offer.ratePerYear).toBeNull();
+  });
+
   it('pays no grant: the net price is the gross price and the pot stays untouched', () => {
     const state = sandboxState();
     const gross = BALANCE.costs.plant[PlantType.SolarFarm];

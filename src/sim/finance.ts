@@ -308,7 +308,8 @@ export function financeStats(state: SimState): FinanceStats {
     return {
       kind,
       amounts: [...terms.amounts],
-      ratePerYear: creditRate(state, kind),
+      // Nothing is on offer in a sandbox city, so there is no rate to quote.
+      ratePerYear: state.sandbox ? null : creditRate(state, kind),
       termDays: terms.termDays,
       available,
     };
