@@ -53,3 +53,40 @@ describe('pending scenario', () => {
     expect(m.consumePendingNewGame().scenario).toBeUndefined();
   });
 });
+
+describe('pending sandbox', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    vi.resetModules();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads back a stored sandbox flag', async () => {
+    const m = await import('./newGame.ts');
+    m.storePendingNewGame({ ...m.DEFAULT_NEW_GAME, sandbox: true });
+    expect(m.consumePendingNewGame().sandbox).toBe(true);
+  });
+
+  it('drops a sandbox value that is not true', async () => {
+    const m = await import('./newGame.ts');
+    localStorage.setItem('voltopia.pendingNewGame', JSON.stringify({ sandbox: 'yes' }));
+    expect('sandbox' in m.consumePendingNewGame()).toBe(false);
+  });
+
+  it('never carries sandbox into a scenario start', async () => {
+    const m = await import('./newGame.ts');
+    localStorage.setItem(
+      'voltopia.pendingNewGame',
+      JSON.stringify({ scenario: 'island', sandbox: true }),
+    );
+    const options = m.consumePendingNewGame();
+    expect(options.scenario).toBe('island');
+    expect('sandbox' in options).toBe(false);
+  });
+
+  it('reads options without sandbox back without the key', async () => {
+    const m = await import('./newGame.ts');
+    m.storePendingNewGame({ ...m.DEFAULT_NEW_GAME });
+    expect('sandbox' in m.consumePendingNewGame()).toBe(false);
+  });
+});

@@ -46,6 +46,8 @@ export interface SimBridgeOptions {
   disasterScale?: number;
   /** Start this scenario (brand-new city only). */
   scenario?: ScenarioId;
+  /** Found a sandbox city (brand-new free city only). */
+  sandbox?: boolean;
 }
 
 const REJECTION_DISPLAY_MS = 2500;
@@ -116,6 +118,7 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
       ...(options.startingMoney !== undefined ? { startingMoney: options.startingMoney } : {}),
       ...(options.disasterScale !== undefined ? { disasterScale: options.disasterScale } : {}),
       ...(options.scenario ? { scenario: options.scenario } : {}),
+      ...(options.sandbox ? { sandbox: true } : {}),
       ...(options.save ? { save: options.save } : {}),
     };
     worker.postMessage(init);

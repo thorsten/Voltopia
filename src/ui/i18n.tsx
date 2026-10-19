@@ -269,6 +269,9 @@ const en = {
   'newGame.disasters.harsh': 'Harsh',
   'newGame.disasters.hint':
     'Storms, fires and floods damage your city; repairs cost money over time. Existing cities keep playing without them.',
+  'newGame.sandbox': 'Sandbox – unlimited money, no goals',
+  'newGame.sandbox.hint':
+    'Difficulty does not apply: money is unlimited. Disasters are off by default but can be switched on.',
   'newGame.seed': 'Seed',
   'newGame.seedPlaceholder': 'random',
   'newGame.start': 'Found city',
@@ -1079,6 +1082,9 @@ const de: Record<TranslationKey, string> = {
   'newGame.disasters.harsh': 'Hart',
   'newGame.disasters.hint':
     'Stürme, Brände und Hochwasser beschädigen deine Stadt; Reparaturen kosten über die Zeit Geld. Bestehende Städte spielen ohne sie weiter.',
+  'newGame.sandbox': 'Sandbox – unbegrenztes Geld, keine Ziele',
+  'newGame.sandbox.hint':
+    'Die Schwierigkeit entfällt: Geld ist unbegrenzt. Katastrophen sind zunächst aus, lassen sich aber einschalten.',
   'newGame.seed': 'Startwert (Seed)',
   'newGame.seedPlaceholder': 'zufällig',
   'newGame.start': 'Stadt gründen',

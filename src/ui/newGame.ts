@@ -11,6 +11,8 @@ export interface NewGameOptions {
   disasterScale: number;
   /** Start this scenario instead of a free city; the other options are ignored. */
   scenario?: ScenarioId;
+  /** Sandbox free play: unlimited money, no credit, grant or goals. */
+  sandbox?: boolean;
 }
 
 /**
@@ -99,6 +101,8 @@ function readPendingNewGame(): NewGameOptions {
         ? (parsed.disasterScale as number)
         : DEFAULT_NEW_GAME.disasterScale,
       ...(scenario ? { scenario } : {}),
+      // Sandbox is free play only: a scenario start never carries it.
+      ...(parsed.sandbox === true && !scenario ? { sandbox: true } : {}),
     };
   } catch {
     return { ...DEFAULT_NEW_GAME };

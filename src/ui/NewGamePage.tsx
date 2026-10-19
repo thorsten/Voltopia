@@ -23,6 +23,13 @@ export function NewGamePage({
   const [difficulty, setDifficulty] = useState<string>('normal');
   const [seedText, setSeedText] = useState('');
   const [disasters, setDisasters] = useState<number>(DEFAULT_NEW_GAME.disasterScale);
+  const [sandbox, setSandbox] = useState(false);
+
+  const toggleSandbox = (on: boolean): void => {
+    setSandbox(on);
+    // Sandbox presets disasters to off; the player may switch them back on.
+    if (on) setDisasters(0);
+  };
 
   const start = (): void => {
     const chosen = DIFFICULTIES.find((d) => d.id === difficulty) ?? DIFFICULTIES[1];
@@ -31,6 +38,7 @@ export function NewGamePage({
       startingMoney: chosen.startingMoney,
       seed: seedFromText(seedText),
       disasterScale: disasters,
+      ...(sandbox ? { sandbox: true } : {}),
     });
     onStart();
   };
@@ -54,6 +62,17 @@ export function NewGamePage({
         </div>
       </section>
       <section>
+        <label className="option-toggle">
+          <input
+            type="checkbox"
+            data-testid="sandbox-toggle"
+            checked={sandbox}
+            onChange={(e) => toggleSandbox(e.target.checked)}
+          />{' '}
+          {t('newGame.sandbox')}
+        </label>
+      </section>
+      <section>
         <h3>{t('newGame.difficulty')}</h3>
         <div className="option-row">
           {DIFFICULTIES.map((option) => (
@@ -63,12 +82,18 @@ export function NewGamePage({
               className={difficulty === option.id ? 'active' : ''}
               data-testid={`difficulty-${option.id}`}
               title={`${option.startingMoney.toLocaleString('en-US')} ⌁`}
+              disabled={sandbox}
               onClick={() => setDifficulty(option.id)}
             >
               {t(`newGame.difficulty.${option.id}` as TranslationKey)}
             </button>
           ))}
         </div>
+        {sandbox && (
+          <p className="option-hint" data-testid="sandbox-hint">
+            {t('newGame.sandbox.hint')}
+          </p>
+        )}
       </section>
       <section>
         <h3>{t('newGame.disasters')}</h3>

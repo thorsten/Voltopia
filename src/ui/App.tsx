@@ -129,6 +129,7 @@ function Game({ save, options }: { save: SaveGame | null; options: NewGameOption
     startingMoney: options.startingMoney,
     disasterScale: options.disasterScale,
     ...(save === null && options.scenario ? { scenario: options.scenario } : {}),
+    ...(save === null && options.sandbox ? { sandbox: true } : {}),
     ...(save ? { save } : {}),
   });
   const callbacksRef = useRef<RendererCallbacks>({});

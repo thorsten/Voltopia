@@ -1829,6 +1829,31 @@ body,
   color: var(--hud-on-accent);
 }
 
+.option-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Checkbox option in the new-game dialog, styled like the HUD switches
+   (.smart-charging-toggle). */
+.option-toggle {
+  background: var(--hud-hover-soft);
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--hud-text);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.option-toggle input {
+  accent-color: var(--accent);
+}
+
 /* Plain text, no card: same convention as .controls-hint — a static hint
    under a control row doesn't need to look like a panel. */
 .option-hint {
