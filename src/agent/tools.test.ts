@@ -908,6 +908,19 @@ describe('agent tools: building', () => {
     expect(result).toMatchObject({ ok: true, spent: gross - grant, grant });
   });
 
+  it('place_plant never reports a negative grant when the pot refills for a new year', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    // Last year's pot is spent; the stats still show it empty.
+    engine.state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
+    await call('inspect_tile', { x, y });
+    // The year has moved on: placing rolls the pot over to full.
+    engine.state.finance.grantYear = engine.state.season.year - 1;
+    const result = await call('place_plant', { plant: 'biogas', x, y });
+    expect(result).toMatchObject({ ok: true, grant: 0 });
+    expect(engine.state.finance.grantUsedThisYear).toBe(0);
+  });
+
   it('get_build_catalog lists the ordinances with their cost and effect', async () => {
     const { call } = createHarness();
     const catalog = await call('get_build_catalog', {});

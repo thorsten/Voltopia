@@ -1380,7 +1380,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           x,
           y,
           ...spent(ctx, before),
-          grant: Math.round(grantBefore - grantAfter),
+          // A new in-game year refills the pot between the two reads; the
+          // grant paid is never negative.
+          grant: Math.max(0, Math.round(grantBefore - grantAfter)),
         });
       },
     },
