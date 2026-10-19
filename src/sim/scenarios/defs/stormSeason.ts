@@ -37,7 +37,7 @@ export const stormSeason: ScenarioDef = {
     },
   ],
   fail: [
-    { kind: 'metric', metric: 'money', op: '<=', value: BALANCE.scenarios.bankruptMoney },
+    { kind: 'metric', metric: 'cash', op: '<=', value: BALANCE.scenarios.bankruptMoney },
     { kind: 'metric', metric: 'suppliedShare', op: '<=', value: cfg.minSuppliedShare },
   ],
   setup(state) {

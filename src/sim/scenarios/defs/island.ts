@@ -36,7 +36,7 @@ export const island: ScenarioDef = {
       windowDays: cfg.deficitWindowDays,
     },
   ],
-  fail: [{ kind: 'metric', metric: 'money', op: '<=', value: BALANCE.scenarios.bankruptMoney }],
+  fail: [{ kind: 'metric', metric: 'cash', op: '<=', value: BALANCE.scenarios.bankruptMoney }],
   setup(state) {
     const s = state.size;
     withFreeBuild(state, () => {

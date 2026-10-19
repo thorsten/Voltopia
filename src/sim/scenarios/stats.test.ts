@@ -31,11 +31,11 @@ describe('scenario stats', () => {
       met: false,
       target: 1,
     });
-    const money = s.conditions.find(
-      (c) => c.role === 'fail' && c.label === 'scenario.condition.money',
+    const cash = s.conditions.find(
+      (c) => c.role === 'fail' && c.label === 'scenario.condition.cash',
     );
-    expect(money).toMatchObject({ op: '<=' });
-    expect(money?.windowDays).toBeUndefined();
+    expect(cash).toMatchObject({ op: '<=' });
+    expect(cash?.windowDays).toBeUndefined();
     const deficit = s.conditions.find(
       (c) => c.role === 'win' && c.label === 'scenario.condition.deficitTicks',
     );

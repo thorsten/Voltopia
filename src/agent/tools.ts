@@ -1832,7 +1832,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'The shipped scenarios: id, title, teaser, deadline in days, map size, starting money, ' +
         'disasterScale (0 = off .. 1.6 = harsh), rules (importCapacityFactor: 0 = no import ' +
         'link through substations; startSeason), win conditions (all must hold at the ' +
-        'deadline) and fail conditions (any one ends the run).',
+        'deadline) and fail conditions (any one ends the run). Metric `money` is net worth ' +
+        '(money minus debt), `cash` is money on hand (the bankruptcy fail condition).',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {

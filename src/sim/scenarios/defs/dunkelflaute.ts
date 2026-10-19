@@ -30,7 +30,7 @@ export const dunkelflaute: ScenarioDef = {
     { kind: 'metric', metric: 'deficitTicks', op: '<=', value: cfg.maxDeficitTicks },
     { kind: 'metric', metric: 'population', op: '>=', value: cfg.population },
   ],
-  fail: [{ kind: 'metric', metric: 'money', op: '<=', value: BALANCE.scenarios.bankruptMoney }],
+  fail: [{ kind: 'metric', metric: 'cash', op: '<=', value: BALANCE.scenarios.bankruptMoney }],
   setup(state) {
     const s = state.size;
     // East of the river; the north-south road at x = 31 splits every block row.

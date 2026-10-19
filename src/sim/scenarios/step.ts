@@ -52,6 +52,9 @@ export function scenarioStep(state: SimState, def: ScenarioDef): void {
   push(run, 'population', countPopulationAndJobs(state).population);
   // Net worth: borrowed cash is owed back, so a loan cannot win a money goal.
   push(run, 'money', state.money - totalDebt(state));
+  // Cash: bankruptcy is running out of money, and a loan spent on plants
+  // (which count as no asset) must not end the run by itself.
+  push(run, 'cash', state.money);
   push(run, 'deficitTicks', t.deficitTicks);
   push(run, 'importedEnergy', t.importedEnergy);
   push(run, 'renewableShare', t.generation === 0 ? 1 : t.renewable / t.generation);

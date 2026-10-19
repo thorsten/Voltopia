@@ -9,6 +9,8 @@ export const SCENARIO_METRICS = [
   'population',
   /** Net worth: money minus outstanding debt (see finance.ts totalDebt). */
   'money',
+  /** Cash on hand (state.money), debt ignored: what a scenario goes bankrupt on. */
+  'cash',
   'deficitTicks',
   'importedEnergy',
   'renewableShare',
@@ -77,6 +79,7 @@ export function emptyRun(id: ScenarioId, startTick: number): ScenarioRun {
     samples: {
       population: [],
       money: [],
+      cash: [],
       deficitTicks: [],
       importedEnergy: [],
       renewableShare: [],

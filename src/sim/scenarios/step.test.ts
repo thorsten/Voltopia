@@ -4,7 +4,10 @@ import type { SavedScenario } from '../../shared/types.ts';
 import { createSimState, deserializeState, serializeState, type SimState } from '../state.ts';
 import { takeCredit } from '../finance.ts';
 import { scenarioDay, scenarioStep } from './step.ts';
-import { DEFAULT_RULES, emptyRun, type ScenarioDef } from './types.ts';
+import { BALANCE } from '../../shared/constants.ts';
+import './defs/index.ts';
+import { scenarioDefs } from './registry.ts';
+import { DEFAULT_RULES, emptyRun, type Condition, type ScenarioDef } from './types.ts';
 
 function def(over: Partial<ScenarioDef> = {}): ScenarioDef {
   return {
@@ -134,5 +137,58 @@ describe('scenario net worth', () => {
     expect(state.money).toBe(before + 20_000);
     runDay(state, def());
     expect(state.scenario!.samples.money).toEqual([before]);
+    expect(state.scenario!.samples.cash).toEqual([before + 20_000]);
+  });
+});
+
+describe('scenario bankruptcy', () => {
+  const bankrupt: Condition = {
+    kind: 'metric',
+    metric: 'cash',
+    op: '<=',
+    value: BALANCE.scenarios.bankruptMoney,
+  };
+
+  it('every shipped scenario goes bankrupt on cash, not net worth', () => {
+    const defs = scenarioDefs();
+    expect(defs.length).toBeGreaterThan(0);
+    for (const d of defs) expect(d.fail).toContainEqual(bankrupt);
+    for (const d of defs) {
+      expect(d.fail.some((c) => c.kind === 'metric' && c.metric === 'money')).toBe(false);
+    }
+  });
+
+  it('a loan spent on plants does not trigger the bankrupt fail', () => {
+    const state = running();
+    state.money = 1_000;
+    expect(takeCredit(state, 'loan', 20_000)).toEqual({});
+    // Spent on plants, which count as no asset: net worth -19_000, cash 1_000.
+    state.money -= 20_000;
+    const d = def({ fail: [bankrupt], win: [], deadlineDays: 5 });
+    runDay(state, d);
+    expect(state.scenario!.samples.money.at(-1)).toBeLessThan(BALANCE.scenarios.bankruptMoney);
+    expect(state.scenario!.status).toBe('running');
+  });
+
+  it('cash below the bankrupt line still fails', () => {
+    const state = running();
+    state.money = BALANCE.scenarios.bankruptMoney - 1;
+    const d = def({ fail: [bankrupt], win: [], deadlineDays: 5 });
+    runDay(state, d);
+    expect(state.scenario!.status).toBe('failed');
+  });
+
+  it('an old save without the cash series loads with it empty and keeps running', () => {
+    const state = running();
+    runDay(state, def({ deadlineDays: 5 }));
+    const save = serializeState(state);
+    delete (save.scenario!.samples as Record<string, number[]>).cash;
+    const loaded = deserializeState(save);
+    expect(loaded.scenario!.samples.cash).toEqual([]);
+    expect(loaded.scenario!.samples.money).toEqual(state.scenario!.samples.money);
+    const d = def({ fail: [bankrupt], win: [], deadlineDays: 5 });
+    runDay(loaded, d);
+    expect(loaded.scenario!.samples.cash).toEqual([loaded.money]);
+    expect(loaded.scenario!.status).toBe('running');
   });
 });

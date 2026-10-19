@@ -22,7 +22,7 @@ export const oldTown: ScenarioDef = {
     { kind: 'metric', metric: 'suppliedShare', op: '>=', value: cfg.suppliedShare },
     { kind: 'metric', metric: 'renewableShare', op: '>=', value: cfg.renewableShare },
   ],
-  fail: [{ kind: 'metric', metric: 'money', op: '<=', value: BALANCE.scenarios.bankruptMoney }],
+  fail: [{ kind: 'metric', metric: 'cash', op: '<=', value: BALANCE.scenarios.bankruptMoney }],
   setup(state) {
     const s = state.size;
     // South-east of the river. Block rows between the outer roads, minus

@@ -363,7 +363,8 @@ next, roughly in the order we would build them.
   red (spread on new credit, D refuses it); a renewable investment grant
   (30 % on renewables, 20 % on storage) from a yearly pot; a grid-fee
   slider beside the tax, smart-metered buildings pay half. Scenario
-  money goals measure net worth, so a loan cannot win them. Agents use
+  money goals measure net worth, so a loan cannot win them; bankruptcy
+  is judged on cash, so a loan spent on plants cannot lose them. Agents use
   `take_credit`, `repay_credit` and `set_grid_fee`. Probe (dunkelflaute
   town with a substation and a starter wind fleet, 20 days, 8 weather
   seeds): a 50_000 bond spent on 10 plants ended the year 500 ahead of

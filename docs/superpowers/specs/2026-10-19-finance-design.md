@@ -36,6 +36,9 @@ daysPerSeason`). Rates are configured per year and applied per tick
   tax and the grid fee.
 - Scenario `money` metric becomes **net worth** (`money − debt`), so
   borrowing cannot fake a money goal. The HUD keeps showing cash.
+  Scenario bankruptcy (`BALANCE.scenarios.bankruptMoney`) is judged on a
+  separate `cash` metric (money on hand), so a loan spent on plants —
+  which count as no asset — does not lose the run.
 
 ## 1. Credit
 
