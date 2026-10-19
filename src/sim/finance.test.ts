@@ -187,6 +187,30 @@ describe('rating', () => {
   });
 });
 
+describe('rating repricing', () => {
+  it('a second credit on the same day is priced at the rating the first one caused', () => {
+    // A new city measures debt against the income floor: 20_000 is a
+    // ratio of 20, past A's maximum, so the next loan carries B's spread.
+    const state = createSimState(1, SIZE, 0);
+    expect(takeCredit(state, 'loan', 20_000)).toEqual({});
+    expect(totalDebt(state) / credit.minIncomeBase).toBeGreaterThan(rating.maxDebtRatio.A);
+    expect(state.finance.rating).toBe('B');
+    expect(takeCredit(state, 'loan', 10_000)).toEqual({});
+    expect(state.finance.credits[1].ratePerYear).toBeCloseTo(
+      credit.loan.ratePerYear + rating.spread.B,
+    );
+    expect(state.finance.rating).toBe('C');
+  });
+
+  it('repaying a loan improves the rating at once', () => {
+    const state = createSimState(1, SIZE, 0);
+    takeCredit(state, 'loan', 20_000);
+    expect(state.finance.rating).toBe('B');
+    expect(repayCredit(state, state.finance.credits[0].id)).toEqual({});
+    expect(state.finance.rating).toBe('A');
+  });
+});
+
 describe('debt cap', () => {
   it('a new city borrows up to the floor cap, four credits at most, listed amounts only', () => {
     const state = createSimState(1, SIZE, 0);
@@ -267,6 +291,63 @@ describe('finance state', () => {
     expect(deserializeState(save).finance.dayIncome).toBe(0);
     delete save.finance!.dayIncome;
     expect(deserializeState(save).finance.dayIncome).toBe(0);
+  });
+
+  it('hardens saved credits: rate and outstanding clamped, absurd principal and duplicate ids dropped', () => {
+    const base = {
+      kind: 'loan',
+      principal: 5_000,
+      outstanding: 4_000,
+      ratePerYear: 0.08,
+      startTick: 0,
+      termTicks: 100,
+    };
+    const save = serializeState(createSimState(1, SIZE, 0));
+    const maxAmount = Math.max(...credit.loan.amounts, ...credit.bond.amounts);
+    save.finance = {
+      ...save.finance!,
+      credits: [
+        { ...base, id: 1, ratePerYear: 7 },
+        { ...base, id: 2, ratePerYear: -0.5 },
+        { ...base, id: 3, outstanding: 9_000 },
+        { ...base, id: 4, principal: maxAmount * credit.savedPrincipalFactor + 1, outstanding: 1 },
+        { ...base, id: 5, principal: maxAmount * credit.savedPrincipalFactor, outstanding: 1 },
+        { ...base, id: 1, principal: 1_234 },
+        { ...base, id: Number.MAX_SAFE_INTEGER },
+      ],
+      nextCreditId: 2,
+    } as FinanceSave;
+    const { finance } = deserializeState(save);
+    expect(finance.credits.map((c) => c.id)).toEqual([1, 2, 3, 5]);
+    expect(finance.credits[0].ratePerYear).toBe(1);
+    expect(finance.credits[0].principal).toBe(5_000);
+    expect(finance.credits[1].ratePerYear).toBe(0);
+    expect(finance.credits[2].outstanding).toBe(5_000);
+    expect(finance.nextCreditId).toBe(6);
+  });
+
+  it('caps nextCreditId at MAX_SAFE_INTEGER', () => {
+    const save = serializeState(createSimState(1, SIZE, 0));
+    save.finance = { ...save.finance!, nextCreditId: 1e300 };
+    expect(deserializeState(save).finance.nextCreditId).toBe(Number.MAX_SAFE_INTEGER);
+    save.finance = {
+      ...save.finance,
+      nextCreditId: 1,
+      credits: [
+        {
+          id: Number.MAX_SAFE_INTEGER - 1,
+          kind: 'loan',
+          principal: 5_000,
+          outstanding: 5_000,
+          ratePerYear: 0.08,
+          startTick: 0,
+          termTicks: 100,
+        },
+      ],
+    };
+    const { finance } = deserializeState(save);
+    expect(finance.nextCreditId).toBe(Number.MAX_SAFE_INTEGER);
+    expect(finance.nextCreditId).toBeGreaterThan(finance.credits[0].id);
   });
 
   it('sanitises garbage from a save', () => {

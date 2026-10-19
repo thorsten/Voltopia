@@ -22,6 +22,14 @@ export { CREDIT_KINDS, RATINGS, type Credit, type CreditKind, type Rating };
 /** Below this a credit counts as paid off (float residue of the equal shares). */
 const PAID_OFF = 1e-9;
 
+/** Largest principal a saved credit may carry (see BALANCE.finance.credit.savedPrincipalFactor). */
+const MAX_SAVED_PRINCIPAL =
+  BALANCE.finance.credit.savedPrincipalFactor *
+  Math.max(...CREDIT_KINDS.flatMap((kind) => BALANCE.finance.credit[kind].amounts));
+
+/** Highest yearly rate a saved credit may carry (100 %). */
+const MAX_SAVED_RATE = 1;
+
 export function defaultFinance(): SimState['finance'] {
   return {
     credits: [],
@@ -105,6 +113,8 @@ export function takeCredit(state: SimState, kind: CreditKind, amount: number): B
     termTicks: BALANCE.finance.credit[kind].termDays * TICKS_PER_DAY,
   });
   state.money += amount;
+  // Reprice at once: the next credit today must see this debt.
+  state.finance.rating = computeRating(state);
   state.statsDirty = true;
   return {};
 }
@@ -118,6 +128,7 @@ export function repayCredit(state: SimState, id: number): BuildResult {
   if (state.money < credit.outstanding) return { rejected: 'notEnoughMoney' };
   state.money -= credit.outstanding;
   state.finance.credits.splice(index, 1);
+  state.finance.rating = computeRating(state);
   state.statsDirty = true;
   return {};
 }
@@ -332,16 +343,19 @@ function sanitiseCredit(value: unknown): Credit | null {
   if (typeof value !== 'object' || value === null) return null;
   const c = value as Partial<Record<keyof Credit, unknown>>;
   if (!CREDIT_KINDS.includes(c.kind as CreditKind)) return null;
-  if (!finite(c.id) || !Number.isInteger(c.id)) return null;
+  // Ids stay below MAX_SAFE_INTEGER so nextCreditId can always exceed them.
+  if (!Number.isSafeInteger(c.id) || (c.id as number) >= Number.MAX_SAFE_INTEGER) return null;
   if (!finite(c.principal) || !finite(c.outstanding) || !finite(c.ratePerYear)) return null;
   if (!finite(c.startTick) || !finite(c.termTicks) || c.termTicks <= 0) return null;
-  if (c.outstanding <= PAID_OFF || c.principal <= 0 || c.ratePerYear < 0) return null;
+  if (c.principal <= 0 || c.principal > MAX_SAVED_PRINCIPAL) return null;
+  const outstanding = Math.min(c.outstanding, c.principal);
+  if (outstanding <= PAID_OFF) return null;
   return {
-    id: c.id,
+    id: c.id as number,
     kind: c.kind as CreditKind,
     principal: c.principal,
-    outstanding: c.outstanding,
-    ratePerYear: c.ratePerYear,
+    outstanding,
+    ratePerYear: Math.min(MAX_SAVED_RATE, Math.max(0, c.ratePerYear)),
     startTick: c.startTick,
     termTicks: c.termTicks,
   };
@@ -354,11 +368,14 @@ export function loadFinance(save: FinanceSave | undefined): SimState['finance'] 
   const credits = Array.isArray(save.credits) ? save.credits : [];
   for (const raw of credits) {
     const credit = sanitiseCredit(raw);
-    if (credit) finance.credits.push(credit);
+    // Ids must be unique (repayCredit addresses by id): the first one wins.
+    if (credit && !finance.credits.some((other) => other.id === credit.id)) {
+      finance.credits.push(credit);
+    }
   }
   const maxId = finance.credits.reduce((max, credit) => Math.max(max, credit.id), 0);
   const nextId = finite(save.nextCreditId) ? Math.floor(save.nextCreditId) : 1;
-  finance.nextCreditId = Math.max(nextId, maxId + 1);
+  finance.nextCreditId = Math.min(Number.MAX_SAFE_INTEGER, Math.max(nextId, maxId + 1));
   if (finite(save.gridFee)) {
     finance.gridFee = Math.min(BALANCE.finance.gridFee.maxRate, Math.max(0, save.gridFee));
   }

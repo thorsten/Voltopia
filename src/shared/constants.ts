@@ -1973,6 +1973,12 @@ export const BALANCE = {
       debtCapDays: 30,
       /** Income floor for the debt cap and the rating, so a new city can borrow. */
       minIncomeBase: 1_000,
+      /**
+       * Sanity bound for credits read from a save: a principal above this
+       * multiple of the largest amount on offer is dropped as corrupt
+       * (headroom for amounts trimmed by a later balance change).
+       */
+      savedPrincipalFactor: 10,
     },
     /**
      * Charged on a negative treasury. Measured: a 20_000 loan burnt on
