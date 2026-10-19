@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SAVE_VERSION, TICKS_PER_DAY } from '../shared/constants.ts';
-import type { LifetimeSample, SaveGame } from '../shared/types.ts';
+import { countPopulationAndJobs, createSimState, serializeState } from '../sim/state.ts';
+import { TileType, Zone, type LifetimeSample, type SaveGame } from '../shared/types.ts';
 import { newSlotId } from './storage.ts';
-import { dayOfTick, defaultSaveName, summarizeSave } from './summary.ts';
+import { dayOfTick, defaultSaveName, populationOfSave, summarizeSave } from './summary.ts';
 
 function sample(day: number, population: number): LifetimeSample {
   return {
@@ -101,5 +102,26 @@ describe('defaultSaveName', () => {
   it('counts days from 1', () => {
     expect(dayOfTick(0)).toBe(1);
     expect(dayOfTick(TICKS_PER_DAY)).toBe(2);
+  });
+});
+
+describe('populationOfSave', () => {
+  it('counts residents from the raw layers like the sim does', () => {
+    const state = createSimState(3, 16);
+    const { zone, density, tileType } = state.layers;
+    for (let d = 1; d <= 3; d++) {
+      zone[d] = Zone.Residential;
+      density[d] = d;
+    }
+    // Jobs, empty residential lots and a residential-zoned plant tile do not count.
+    zone[10] = Zone.Commercial;
+    density[10] = 2;
+    zone[11] = Zone.Residential;
+    zone[12] = Zone.Residential;
+    density[12] = 3;
+    tileType[12] = TileType.Plant;
+    const expected = countPopulationAndJobs(state).population;
+    expect(expected).toBeGreaterThan(0);
+    expect(populationOfSave(serializeState(state))).toBe(expected);
   });
 });

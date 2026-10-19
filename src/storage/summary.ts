@@ -1,5 +1,5 @@
-import { SAVE_VERSION, TICKS_PER_DAY } from '../shared/constants.ts';
-import type { SaveGame } from '../shared/types.ts';
+import { BALANCE, SAVE_VERSION, TICKS_PER_DAY } from '../shared/constants.ts';
+import { TileType, Zone, type SaveGame } from '../shared/types.ts';
 import type { SaveSummary } from './storage.ts';
 
 /** The city's display name in default save names. */
@@ -49,4 +49,22 @@ export function summarizeSave(
     compatible: save.version === SAVE_VERSION,
     ...(save.sandbox ? { sandbox: true } : {}),
   };
+}
+
+/**
+ * Residents of a save, counted from its raw layers with the same
+ * arithmetic as the sim's `countPopulationAndJobs` (built residential
+ * lots on non-road, non-plant tiles). For saves without a lifetime,
+ * e.g. a decoded share code.
+ */
+export function populationOfSave(save: SaveGame): number {
+  const tileType = new Uint8Array(save.layers.tileType);
+  const zone = new Uint8Array(save.layers.zone);
+  const density = new Uint8Array(save.layers.density);
+  let population = 0;
+  for (let i = 0; i < zone.length; i++) {
+    if (tileType[i] !== TileType.Empty || zone[i] !== Zone.Residential) continue;
+    population += BALANCE.growth.populationByDensity[density[i]] ?? 0;
+  }
+  return population;
 }

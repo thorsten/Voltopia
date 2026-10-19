@@ -4,6 +4,9 @@
  * browser bundle never includes them and node tests never import them.
  */
 
+/** Where links made in the native app point (it has no URL of its own). */
+export const PUBLIC_WEB_URL = 'https://thorsten.github.io/Voltopia/';
+
 /** True inside the Tauri (macOS / iPadOS) app, false in a browser. */
 export function isNativeApp(
   win: unknown = typeof window === 'undefined' ? undefined : window,
