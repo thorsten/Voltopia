@@ -257,6 +257,18 @@ describe('finance state', () => {
     expect(deserializeState(save).finance).toEqual(defaultFinance());
   });
 
+  it("keeps the running day's income across a mid-day save", () => {
+    const state = createSimState(1, SIZE, 0);
+    run(state, TICKS_PER_DAY / 2, 7);
+    expect(state.finance.dayIncome).toBe((TICKS_PER_DAY / 2) * 7);
+    const save = serializeState(state);
+    expect(deserializeState(save).finance.dayIncome).toBe(state.finance.dayIncome);
+    save.finance = { ...save.finance!, dayIncome: NaN };
+    expect(deserializeState(save).finance.dayIncome).toBe(0);
+    delete save.finance!.dayIncome;
+    expect(deserializeState(save).finance.dayIncome).toBe(0);
+  });
+
   it('sanitises garbage from a save', () => {
     const save = serializeState(createSimState(1, SIZE, 0));
     save.finance = {

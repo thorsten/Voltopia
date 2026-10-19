@@ -242,6 +242,8 @@ export interface FinanceSave {
   incomeWindow: number[];
   /** Consecutive days that ended with money below 0. */
   overdraftDays: number;
+  /** Operating income of the running day so far; optional for older saves (0). */
+  dayIncome?: number;
 }
 
 /** Deterministic seasonal signal for one tick (no random component). */

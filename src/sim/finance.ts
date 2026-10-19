@@ -320,6 +320,7 @@ export function saveFinance(state: SimState): FinanceSave {
     rating: finance.rating,
     incomeWindow: [...finance.incomeWindow],
     overdraftDays: finance.overdraftDays,
+    dayIncome: finance.dayIncome,
   };
 }
 
@@ -370,5 +371,6 @@ export function loadFinance(save: FinanceSave | undefined): SimState['finance'] 
   finance.incomeWindow = window.slice(-BALANCE.finance.rating.windowDays);
   if (finite(save.overdraftDays))
     finance.overdraftDays = Math.max(0, Math.floor(save.overdraftDays));
+  if (finite(save.dayIncome)) finance.dayIncome = save.dayIncome;
   return finance;
 }

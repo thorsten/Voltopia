@@ -468,7 +468,7 @@ export interface SimState {
   lastPolicyCost: number;
   /** Rooftop-PV subsidies booked by growth since the last policiesStep. */
   lastPolicySubsidy: number;
-  /** Credits, rating, grid fee and grant pot (see finance.ts); `dayIncome` is not persisted. */
+  /** Credits, rating, grid fee, grant pot and the running day's income (see finance.ts). */
   finance: FinanceSave & {
     /** Operating income accumulated over the running day, pushed into incomeWindow at rollover. */
     dayIncome: number;
