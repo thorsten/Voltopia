@@ -12,6 +12,7 @@ import type { SimCommand } from '../shared/messages.ts';
 import { isSupplySource } from '../shared/plants.ts';
 import {
   DisasterKind,
+  CREDIT_KINDS,
   POLICY_IDS,
   PlantType,
   RoadLane,
@@ -686,7 +687,10 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         'tile counts, grid size, grid islands (count, in deficit) and a disasters summary ' +
         '(intensity, warning/active counts, damaged tiles, repair cost — see get_disasters for ' +
         'the detail), and while a scenario runs its block (status, day, endedDay once over, ' +
-        'rules, conditions). Call this first and after every advance_time.',
+        'rules, conditions), and finance (debt, debtCap, rating, open credits with daysLeft and ' +
+        'repayable, gridFee and its happiness term, grantRemaining of the yearly grant pot, ' +
+        "today's credit offers with rate and per-amount availability). " +
+        'Call this first and after every advance_time.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -779,6 +783,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             hydrogenRevenue: round(s.budget.hydrogenRevenue, 3),
             goodsImport: round(s.budget.goodsImport, 3),
             policies: round(s.budget.policies, 3),
+            gridFees: round(s.budget.gridFees, 3),
+            interest: round(s.budget.interest, 3),
+            repayment: round(s.budget.repayment, 3),
             net: round(s.budget.net, 3),
             ticksPerDay: TICKS_PER_DAY,
           },
@@ -849,6 +856,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             dailyCost: s.policies.dailyCost,
             happiness: round(s.policies.happiness, 3),
           },
+          finance: financeOverview(s),
           goals: s.goals.map((goal) => ({
             id: goal.id,
             achieved: goal.achieved,
@@ -883,7 +891,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'get_build_catalog',
       description:
         'Static rules of the game: what can be built, what it costs (money), upkeep per tick, ' +
-        'placement rules, the power-line supply radius and how the grid works. Read once.',
+        'placement rules, the power-line supply radius and how the grid works, plus finance ' +
+        '(credit products, rating spreads and thresholds, renewable grant shares and pot, grid-fee ' +
+        'range); plant entries carry grantShare. Read once.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -961,6 +971,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
               cost: costs.plant[type],
               upkeepPerTick: BALANCE.upkeepPerTick.plant[type],
               placement: PLANT_PLACEMENT[name],
+              grantShare: BALANCE.finance.grant.shareByPlant[type] ?? 0,
               ...plantFigures(type),
             };
           }),
@@ -968,6 +979,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             maxRate: BALANCE.tax.maxRate,
             happinessNeutralRate: BALANCE.tax.happinessNeutralRate,
           },
+          finance: financeCatalog(),
           speeds: [0, 1, 3],
         };
       },
@@ -1339,7 +1351,9 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         `freight_terminal (needs a track; factories/depots within ${BALANCE.rail.freightRadius} tiles), ` +
         'rail_yard (needs a track; accepted anywhere beside one, but fields trains only while its tile ' +
         'is energised — find_tiles rail_yard_without_grid spots a dark yard). ' +
-        'See get_build_catalog for costs and roles.',
+        'See get_build_catalog for costs and roles. Renewables and storage get a share of their ' +
+        "price from the yearly grant pot (grantShare): 'spent' is the net price, 'grant' what the " +
+        'pot paid.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1352,13 +1366,22 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       async execute(input) {
         const plant = readEnum(input, 'plant', Object.keys(PLANT_NAMES) as PlantName[]);
         const { x, y } = readPoint({ p: input }, 'p', tiles);
-        const before = requireStats(ctx).money;
+        const stats = requireStats(ctx);
+        const before = stats.money;
+        const grantBefore = stats.finance.grantRemaining;
         const outcome = await ctx.sendCommand({
           type: 'placePlant',
           tile: tileIndex(x, y, size),
           plant: PLANT_NAMES[plant],
         });
-        return outcomeResult(outcome, { plant, x, y, ...spent(ctx, before) });
+        const grantAfter = ctx.getStats()?.finance.grantRemaining ?? grantBefore;
+        return outcomeResult(outcome, {
+          plant,
+          x,
+          y,
+          ...spent(ctx, before),
+          grant: Math.round(grantBefore - grantAfter),
+        });
       },
     },
     {
@@ -1509,6 +1532,105 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         const active = readBoolean(input, 'active');
         const outcome = await ctx.sendCommand({ type: 'setPolicy', id, active });
         return outcomeResult(outcome);
+      },
+    },
+    {
+      name: 'take_credit',
+      description:
+        `Borrow money; it lands at once and the yearly rate is fixed from then on. loan: ` +
+        `${BALANCE.finance.credit.loan.amounts.join(' / ')}, ${BALANCE.finance.credit.loan.termDays} days, ` +
+        `base rate ${BALANCE.finance.credit.loan.ratePerYear} a year, amortising (equal principal ` +
+        `share per tick), repayable early without fee. bond: ` +
+        `${BALANCE.finance.credit.bond.amounts.join(' / ')}, ${BALANCE.finance.credit.bond.termDays} days, ` +
+        `base rate ${BALANCE.finance.credit.bond.ratePerYear} a year, interest only, the full ` +
+        'principal due at maturity, not repayable early. The credit rating (A–D) adds a spread to ' +
+        'the base rate; D gets no credit. More debt relative to income and days ending in the red ' +
+        `lower the rating; at most ${BALANCE.finance.credit.maxCredits} credits, total debt capped ` +
+        `at ${BALANCE.finance.credit.debtCapDays} days of income. Debt service is never skipped — ` +
+        `a negative treasury pays ${BALANCE.finance.overdraftRatePerYear} a year overdraft interest. ` +
+        "See finance.offers in get_game_overview for today's rates and availability.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', enum: [...CREDIT_KINDS] },
+          amount: { type: 'integer', description: 'One of the amounts on offer for the kind.' },
+        },
+        required: ['kind', 'amount'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const kind = readEnum(input, 'kind', CREDIT_KINDS);
+        const amount = readInt(input, 'amount');
+        const before = requireStats(ctx).finance.credits.map((c) => c.id);
+        const outcome = await ctx.sendCommand({ type: 'takeCredit', kind, amount });
+        const finance = ctx.getStats()?.finance;
+        const credit = finance?.credits.find((c) => !before.includes(c.id));
+        return outcomeResult(outcome, {
+          kind,
+          amount,
+          ...(credit
+            ? {
+                credit: {
+                  id: credit.id,
+                  ratePerYear: credit.ratePerYear,
+                  termDays: BALANCE.finance.credit[kind].termDays,
+                },
+              }
+            : {}),
+          money: Math.round(ctx.getStats()?.money ?? 0),
+          debt: Math.round(finance?.debt ?? 0),
+          rating: finance?.rating,
+        });
+      },
+    },
+    {
+      name: 'repay_credit',
+      description:
+        'Pay off an open loan early, without fee, from the treasury (needs money for the full ' +
+        'outstanding principal). Bonds cannot be repaid early. Ids are in finance.credits of ' +
+        'get_game_overview. Less debt helps the credit rating.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: { type: 'integer' } },
+        required: ['id'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const id = readInt(input, 'id');
+        const before = requireStats(ctx).money;
+        const outcome = await ctx.sendCommand({ type: 'repayCredit', id });
+        const stats = ctx.getStats();
+        return outcomeResult(outcome, {
+          id,
+          repaid: Math.round(before - (stats?.money ?? before)),
+          money: Math.round(stats?.money ?? before),
+          debt: Math.round(stats?.finance.debt ?? 0),
+        });
+      },
+    },
+    {
+      name: 'set_grid_fee',
+      description:
+        `Set the grid fee billed to buildings per energy unit they consume, 0 to ` +
+        `${BALANCE.finance.gridFee.maxRate} (snapped to steps of ${BALANCE.finance.gridFee.step}). ` +
+        `Smart-metered buildings pay ${Math.round(BALANCE.finance.gridFee.smartMeterDiscount * 100)} % ` +
+        `less. Any fee costs happiness (${BALANCE.finance.gridFee.happinessWeight} per unit of fee); ` +
+        'the income shows as gridFees in the budget and counts towards the credit rating.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          rate: { type: 'number', minimum: 0, maximum: BALANCE.finance.gridFee.maxRate },
+        },
+        required: ['rate'],
+      },
+      annotations: { consequentialHint: true },
+      async execute(input) {
+        const rate = input.rate;
+        if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+          throw new ToolInputError('"rate" must be a number');
+        }
+        const outcome = await ctx.sendCommand({ type: 'setGridFee', rate });
+        return outcomeResult(outcome, { gridFee: ctx.getStats()?.finance.gridFee ?? rate });
       },
     },
     {
@@ -1766,6 +1888,64 @@ async function requireSave(ctx: AgentContext, id: unknown): Promise<SaveSummary>
   const summary = (await ctx.saves.list()).find((entry) => entry.id === id);
   if (!summary) throw new ToolInputError(`No save with id "${id}" — see list_saves`);
   return summary;
+}
+
+function financeOverview(s: GlobalStats): Record<string, unknown> {
+  const f = s.finance;
+  return {
+    debt: Math.round(f.debt),
+    debtCap: Math.round(f.debtCap),
+    rating: f.rating,
+    credits: f.credits.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      principal: c.principal,
+      outstanding: Math.round(c.outstanding),
+      ratePerYear: round(c.ratePerYear, 4),
+      daysLeft: c.daysLeft,
+      repayable: c.repayable,
+    })),
+    gridFee: f.gridFee,
+    gridFeeHappiness: round(f.gridFeeHappiness, 3),
+    grantRemaining: Math.round(f.grantRemaining),
+    grantPot: f.grantPot,
+    offers: f.offers.map((o) => ({
+      kind: o.kind,
+      ratePerYear: o.ratePerYear === null ? null : round(o.ratePerYear, 4),
+      termDays: o.termDays,
+      amounts: o.amounts.map((amount) => ({ amount, rejected: o.available[amount] ?? null })),
+    })),
+  };
+}
+
+function financeCatalog(): Record<string, unknown> {
+  const f = BALANCE.finance;
+  return {
+    credit: {
+      loan: { ...f.credit.loan, amounts: [...f.credit.loan.amounts] },
+      bond: { ...f.credit.bond, amounts: [...f.credit.bond.amounts] },
+      maxCredits: f.credit.maxCredits,
+      debtCapDays: f.credit.debtCapDays,
+      minIncomeBase: f.credit.minIncomeBase,
+    },
+    overdraftRatePerYear: f.overdraftRatePerYear,
+    rating: {
+      windowDays: f.rating.windowDays,
+      // Added to a product's base rate; null = no new credit at D.
+      spread: { ...f.rating.spread, D: null },
+      maxDebtRatio: { ...f.rating.maxDebtRatio },
+      maxOverdraftDays: { ...f.rating.maxOverdraftDays },
+    },
+    grant: {
+      annualPot: f.grant.annualPot,
+      shareByPlant: Object.fromEntries(
+        (Object.keys(PLANT_NAMES) as PlantName[])
+          .filter((name) => f.grant.shareByPlant[PLANT_NAMES[name]] !== undefined)
+          .map((name) => [name, f.grant.shareByPlant[PLANT_NAMES[name]]]),
+      ),
+    },
+    gridFee: { ...f.gridFee },
+  };
 }
 
 function spent(ctx: AgentContext, before: number): { spent: number; money: number } {

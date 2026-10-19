@@ -191,6 +191,9 @@ describe('agent tools: reading', () => {
       'set_market_trading',
       'buy_insulation',
       'set_policy',
+      'take_credit',
+      'repay_credit',
+      'set_grid_fee',
       'advance_time',
       'save_game',
       'list_saves',
@@ -207,6 +210,10 @@ describe('agent tools: reading', () => {
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
     expect(readOnly).toHaveLength(10);
+    const consequential = tools.filter((t) => t.annotations?.consequentialHint).map((t) => t.name);
+    expect(consequential).toEqual(
+      expect.arrayContaining(['take_credit', 'repay_credit', 'set_grid_fee']),
+    );
   });
 
   it('get_game_overview reports funds, clock, goals and counts', async () => {
@@ -441,10 +448,13 @@ describe('agent tools: building', () => {
 
     // Spent grant pot: the plant costs its gross price.
     engine.state.finance.grantUsedThisYear = BALANCE.finance.grant.annualPot;
+    // An un-ticked snapshot refreshes the stats the grant is measured against.
+    await call('inspect_tile', { x, y });
     const plant = await call('place_plant', { plant: 'solar', x, y: y + 2 });
     expect(plant).toMatchObject({
       ok: true,
       spent: priced(BALANCE.costs.plant[PlantType.SolarFarm], y + 2, 1),
+      grant: 0,
     });
     expect(engine.state.layers.plantType[tileIndex(x, y + 2, SIZE)]).toBe(PlantType.SolarFarm);
 
@@ -761,6 +771,141 @@ describe('agent tools: building', () => {
     expect(bad).toMatchObject({ ok: false, error: 'invalidInput' });
     const missing = await call('set_policy', { id: 'speedLimit' });
     expect(missing).toMatchObject({ ok: false, error: 'invalidInput' });
+  });
+
+  it('take_credit borrows, the overview shows the debt, repay_credit pays it off', async () => {
+    const { call } = createHarness();
+    const amount = BALANCE.finance.credit.loan.amounts[0];
+    const taken = await call('take_credit', { kind: 'loan', amount });
+    expect(taken).toMatchObject({
+      ok: true,
+      kind: 'loan',
+      amount,
+      money: BALANCE.startingMoney + amount,
+      debt: amount,
+      rating: 'A',
+    });
+    const credit = taken.credit as { id: number; ratePerYear: number; termDays: number };
+    expect(credit.ratePerYear).toBe(BALANCE.finance.credit.loan.ratePerYear);
+    expect(credit.termDays).toBe(BALANCE.finance.credit.loan.termDays);
+
+    const finance = (await call('get_game_overview')).finance as {
+      debt: number;
+      rating: string;
+      credits: Array<{ id: number; kind: string; outstanding: number; repayable: boolean }>;
+      offers: Array<{ kind: string }>;
+      gridFee: number;
+      grantRemaining: number;
+    };
+    expect(finance.debt).toBe(amount);
+    expect(finance.rating).toBe('A');
+    expect(finance.credits).toEqual([
+      expect.objectContaining({
+        id: credit.id,
+        kind: 'loan',
+        outstanding: amount,
+        repayable: true,
+      }),
+    ]);
+    expect(finance.offers.map((o) => o.kind)).toEqual(['loan', 'bond']);
+    expect(finance.gridFee).toBe(0);
+    expect(finance.grantRemaining).toBe(BALANCE.finance.grant.annualPot);
+
+    const repaid = await call('repay_credit', { id: credit.id });
+    expect(repaid).toMatchObject({ ok: true, debt: 0 });
+    expect(repaid.repaid).toBe(amount);
+    expect(await call('repay_credit', { id: credit.id })).toMatchObject({
+      ok: false,
+      error: 'unknownCredit',
+    });
+  });
+
+  it('take_credit and repay_credit reject bad input and refused credit', async () => {
+    const { call, engine } = createHarness();
+    expect(await call('take_credit', { kind: 'loan', amount: 1234 })).toMatchObject({
+      ok: false,
+      error: 'invalidAmount',
+    });
+    expect(await call('take_credit', { kind: 'mortgage', amount: 5_000 })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+    expect(await call('take_credit', { kind: 'loan' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+    // A new city's income base caps the debt below the smallest bond.
+    expect(
+      await call('take_credit', { kind: 'bond', amount: BALANCE.finance.credit.bond.amounts[0] }),
+    ).toMatchObject({ ok: false, error: 'creditLimit' });
+    expect(await call('repay_credit', { id: 'x' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+    engine.state.finance.credits.push({
+      id: 99,
+      kind: 'bond',
+      principal: 50_000,
+      outstanding: 50_000,
+      ratePerYear: 0.05,
+      startTick: 0,
+      termTicks: TICKS_PER_DAY * 40,
+    });
+    expect(await call('repay_credit', { id: 99 })).toMatchObject({
+      ok: false,
+      error: 'notRepayable',
+    });
+  });
+
+  it('set_grid_fee clamps to the allowed range and reports the fee', async () => {
+    const { call } = createHarness();
+    expect(await call('set_grid_fee', { rate: 0.005 })).toMatchObject({ ok: true, gridFee: 0.005 });
+    expect(await call('set_grid_fee', { rate: 1 })).toMatchObject({
+      ok: true,
+      gridFee: BALANCE.finance.gridFee.maxRate,
+    });
+    const overview = await call('get_game_overview');
+    expect((overview.finance as { gridFee: number }).gridFee).toBe(BALANCE.finance.gridFee.maxRate);
+    expect(await call('set_grid_fee', { rate: -1 })).toMatchObject({ ok: true, gridFee: 0 });
+    expect(await call('set_grid_fee', { rate: 'high' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+  });
+
+  it('get_build_catalog lists credit products, grant shares and the grid-fee range', async () => {
+    const { call } = createHarness();
+    const catalog = await call('get_build_catalog');
+    const finance = catalog.finance as {
+      credit: Record<string, { amounts: number[]; ratePerYear: number; termDays: number }>;
+      rating: { spread: Record<string, number | null> };
+      grant: { annualPot: number; shareByPlant: Record<string, number> };
+      gridFee: { maxRate: number; happinessWeight: number };
+    };
+    expect(finance.credit.loan.amounts).toEqual([...BALANCE.finance.credit.loan.amounts]);
+    expect(finance.credit.bond.termDays).toBe(BALANCE.finance.credit.bond.termDays);
+    expect(finance.rating.spread).toEqual({ ...BALANCE.finance.rating.spread, D: null });
+    expect(finance.grant.annualPot).toBe(BALANCE.finance.grant.annualPot);
+    expect(finance.grant.shareByPlant.solar).toBe(
+      BALANCE.finance.grant.shareByPlant[PlantType.SolarFarm],
+    );
+    expect(finance.grant.shareByPlant.biogas).toBeUndefined();
+    expect(finance.gridFee.maxRate).toBe(BALANCE.finance.gridFee.maxRate);
+    expect(finance.gridFee.happinessWeight).toBe(BALANCE.finance.gridFee.happinessWeight);
+    const plants = catalog.plants as Array<{ name: string; grantShare: number }>;
+    expect(plants.find((p) => p.name === 'battery')!.grantShare).toBe(
+      BALANCE.finance.grant.shareByPlant[PlantType.Battery],
+    );
+    expect(plants.find((p) => p.name === 'biogas')!.grantShare).toBe(0);
+  });
+
+  it('place_plant reports the grant the pot paid', async () => {
+    const { call, engine } = createHarness();
+    const { x, y } = findLand(engine);
+    const gross = BALANCE.costs.plant[PlantType.SolarFarm];
+    const grant = Math.round(gross * BALANCE.finance.grant.shareByPlant[PlantType.SolarFarm]!);
+    const result = await call('place_plant', { plant: 'solar', x, y });
+    expect(result).toMatchObject({ ok: true, spent: gross - grant, grant });
   });
 
   it('get_build_catalog lists the ordinances with their cost and effect', async () => {
