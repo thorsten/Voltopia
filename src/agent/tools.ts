@@ -1158,19 +1158,22 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       name: 'get_lifetime_stats',
       description:
         'One sample per in-game day since the city was founded: population, jobs, happiness, ' +
-        'average generation and consumption per tick, money, mean temperature, heating load.',
+        'average generation and consumption per tick, money (left out in a sandbox city), ' +
+        'mean temperature, heating load.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
         const samples = await ctx.requestLifetime();
+        // The treasury is pinned in sandbox, so per-day money carries no signal.
+        const sandbox = ctx.getStats()?.sandbox === true;
         return {
           days: samples.length,
-          samples: samples.map((sample) => ({
+          samples: samples.map(({ money, ...sample }) => ({
             ...sample,
             happiness: round(sample.happiness, 2),
             avgGeneration: round(sample.avgGeneration),
             avgConsumption: round(sample.avgConsumption),
-            money: Math.round(sample.money),
+            ...(sandbox ? {} : { money: Math.round(money) }),
             ...(sample.temperature !== undefined ? { temperature: round(sample.temperature) } : {}),
             ...(sample.heating !== undefined ? { heating: round(sample.heating) } : {}),
           })),
@@ -1654,7 +1657,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         `Run the simulation for a number of ticks or days (max ${MAX_ADVANCE_DAYS} days, ` +
         `${TICKS_PER_DAY} ticks per day) and return when done. Runs at very fast speed (6x) if the game ` +
-        'is paused and restores the previous speed afterwards. Returns the resulting overview summary.',
+        'is paused and restores the previous speed afterwards. Returns the resulting overview summary ' +
+        '(in a sandbox city sandbox: true instead of money).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1689,7 +1693,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             ticksAdvanced: end.tick - start.tick,
             day: end.day,
             hour: round(end.timeOfDay * 24, 1),
-            money: Math.round(end.money),
+            // The treasury is pinned in sandbox; a huge number would only mislead.
+            ...(end.sandbox ? { sandbox: true } : { money: Math.round(end.money) }),
             population: end.population,
             jobs: end.jobs,
             happiness: round(end.happiness, 2),

@@ -779,6 +779,25 @@ describe('agent tools: building', () => {
     });
   });
 
+  it('marks sandbox in advance_time and leaves money out of lifetime samples', async () => {
+    const { call } = createHarness(11, true);
+    const advanced = await call('advance_time', { days: 1 });
+    expect(advanced).toMatchObject({ ok: true, sandbox: true });
+    expect(advanced).not.toHaveProperty('money');
+    const lifetime = (await call('get_lifetime_stats')) as { samples: object[] };
+    expect(lifetime.samples.length).toBeGreaterThan(0);
+    for (const sample of lifetime.samples) expect(sample).not.toHaveProperty('money');
+  });
+
+  it('reports money in advance_time and lifetime samples outside sandbox', async () => {
+    const { call } = createHarness();
+    const advanced = await call('advance_time', { days: 1 });
+    expect(advanced).toHaveProperty('money');
+    expect(advanced).not.toHaveProperty('sandbox');
+    const lifetime = (await call('get_lifetime_stats')) as { samples: object[] };
+    expect(lifetime.samples[0]).toHaveProperty('money');
+  });
+
   it('reports a normal city as not sandbox', async () => {
     const { call } = createHarness();
     expect(await call('get_game_overview')).toMatchObject({ sandbox: false });
