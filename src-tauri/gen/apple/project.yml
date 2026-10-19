@@ -2,7 +2,7 @@ name: voltopia
 options:
   bundleIdPrefix: info.rinne.voltopia
   deploymentTarget:
-    iOS: 15.0
+    iOS: 26.0
 fileGroups: [../../src]
 configs:
   debug: debug

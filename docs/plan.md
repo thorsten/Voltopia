@@ -219,6 +219,8 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [x] CI workflow `.github/workflows/native.yml` builds the ad-hoc signed macOS app on tags and on demand
 - [x] Mac: `pnpm tauri ios init`, set `TARGETED_DEVICE_FAMILY '2'`, commit `src-tauri/gen/apple`; simulator run OK
 - [x] Mac: `pnpm tauri dev` runs; `Cargo.lock` committed
+- [x] iOS minimum is 26.0 (`bundle.iOS.minimumSystemVersion` in `src-tauri/tauri.conf.json`, `deploymentTarget` in `src-tauri/gen/apple/project.yml`; macOS stays 12.0) — share links need `CompressionStream('deflate-raw')`
+- [ ] Mac: regenerate the Xcode project (`IPHONEOS_DEPLOYMENT_TARGET` in the committed `.xcodeproj` still says 15.0) and run the iPad simulator on iOS 26
 - [ ] Mac: `pnpm tauri build` and the Cmd+Q save-then-relaunch check
 - [ ] Follow-up: Developer ID signing + notarization
 
@@ -228,6 +230,7 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [x] Ordinances: rooftop-PV mandate, night tariff, speed limit and smart-meter mandate as console switches with a daily cost, a happiness term and a sim effect; `set_policy` agent tool; costs tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-17-policies-design.md`)
 - [x] Finance: loans and bonds with fixed interest, overdraft interest and a credit rating A–D, a renewable investment grant from a yearly pot and a grid-fee slider; `take_credit`, `repay_credit`, `set_grid_fee` agent tools; scenario money goals measure net worth; tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-19-finance-design.md`)
 - [x] Sandbox mode and 6x speed: a new-game toggle founds a city with a pinned, unlimited treasury (∞), disasters off by default, no credit, grant, rating or goals; `start_new_city` takes `sandbox`; a 6x speed for every city (spec: `docs/superpowers/specs/2026-10-19-sandbox-mode-design.md`)
+- [x] Share a city: the whole city as a link (`…/#city=<code>`, deflate-raw + base64url, ~5 KB for a grown 64² city); opening it asks first and keeps the current city as a named save; paste field on the saves page; `share_city` / `open_shared_city` agent tools; the JSON export now keeps policies, finance, rules and scenario (spec: `docs/superpowers/specs/2026-10-19-share-city-design.md`)
 
 ## Testing Strategy
 

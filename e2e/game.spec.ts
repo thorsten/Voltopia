@@ -41,6 +41,37 @@ async function readAutosave(page: Page): Promise<{ tick: number; sandbox: boolea
   );
 }
 
+/** Plant type of one tile in the autosave, or -1 when there is no autosave. */
+async function readAutosavePlant(page: Page, index: number): Promise<number> {
+  return page.evaluate(
+    (index) =>
+      new Promise<number>((resolve) => {
+        const open = indexedDB.open('voltopia');
+        open.onerror = () => resolve(-1);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains('saves')) {
+            db.close();
+            resolve(-1);
+            return;
+          }
+          const get = db.transaction('saves').objectStore('saves').get('autosave');
+          get.onerror = () => {
+            db.close();
+            resolve(-1);
+          };
+          get.onsuccess = () => {
+            db.close();
+            const save = get.result as { layers?: { plantType?: ArrayBuffer } } | undefined;
+            const layer = save?.layers?.plantType;
+            resolve(layer ? (new Uint8Array(layer)[index] ?? -1) : -1);
+          };
+        };
+      }),
+    index,
+  );
+}
+
 /** True when the environment has WebGL and the 3D canvas is present. */
 async function has3dView(page: Page): Promise<boolean> {
   return (await page.locator('.game-view canvas').count()) > 0;
@@ -795,4 +826,106 @@ test('saves page keeps named saves', async ({ page }) => {
   await page.getByTestId(`save-delete-${id}`).click();
   await expect(page.getByTestId(`save-row-${id}`)).toHaveCount(0);
   await expect(page.getByTestId('saves-empty')).toBeVisible();
+});
+
+test('a shared city opens from its link and the old city is kept', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: new URL(page.url()).origin,
+  });
+  type Api = { call: (name: string, input?: unknown) => Promise<Record<string, unknown>> };
+  const call = (name: string, input: unknown = {}): Promise<Record<string, unknown>> =>
+    page.evaluate(
+      ([name, input]) => (window as unknown as { voltopia: Api }).voltopia.call(name, input),
+      [name, input] as [string, unknown],
+    );
+  const toolsReady = () =>
+    expect
+      .poll(
+        () => page.evaluate(() => Boolean((window as unknown as { voltopia?: Api }).voltopia)),
+        {
+          timeout: 15_000,
+        },
+      )
+      .toBe(true);
+  await toolsReady();
+  await call('set_speed', { speed: 0 });
+  const overview = await call('get_game_overview');
+  const size = overview.gridSize as number;
+  // Hilly seeds have steep tiles a plant refuses: take the first flat one.
+  const land = await call('find_tiles', { kind: 'empty_land', near: { x: 32, y: 32 }, limit: 50 });
+  let site: { x: number; y: number } | undefined;
+  for (const tile of land.tiles as Array<{ x: number; y: number }>) {
+    if ((await call('place_plant', { plant: 'biogas', ...tile })).ok) {
+      site = tile;
+      break;
+    }
+  }
+  if (!site) throw new Error('no flat tile for the plant');
+  const sharedTick = await readTick(page);
+
+  await page.getByTestId('open-saves').click();
+  await page.getByTestId('share-city').click();
+  const message = page.getByTestId('saves-message');
+  await expect(message).toContainText(
+    /Link copied|Link kopiert|Copying failed|Kopieren fehlgeschlagen/,
+    { timeout: 15_000 },
+  );
+  const output = page.getByTestId('share-link-output');
+  const url =
+    (await output.count()) > 0
+      ? await output.inputValue()
+      : await page.evaluate(() => navigator.clipboard.readText());
+  expect(url).toMatch(/#city=[A-Za-z0-9_-]+$/);
+
+  // Change the running city so it differs from the shared one.
+  await page.getByTestId('saves-page').locator('.modal-close').click();
+  expect((await call('bulldoze', { from: site, to: site })).ok).toBe(true);
+  await page.keyboard.press('Control+s');
+  // Wait until the autosave no longer holds the plant before navigating.
+  const plantIndex = site.y * size + site.x;
+  await expect.poll(() => readAutosavePlant(page, plantIndex), { timeout: 10_000 }).toBe(0);
+
+  // A plain hash change would not reload the page.
+  await page.goto('about:blank');
+  await page.goto(url);
+  await expect(page.getByTestId('shared-city-dialog')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('shared-city-details')).toContainText(`${size}×${size}`);
+  await expect(page.getByTestId('shared-city-details')).toContainText(/day|Tag/);
+  expect(page.url()).not.toContain('#city=');
+
+  // Loading reloads the page; the HUD only exists on the new page.
+  await page.getByTestId('shared-city-load').click();
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  await toolsReady();
+  await expect
+    .poll(async () => (await call('inspect_tile', site)).plant, { timeout: 10_000 })
+    .toBe('biogas');
+  expect(await readTick(page)).toBeLessThan(sharedTick + 60);
+
+  // The city that was running before is kept as a named save.
+  await page.getByTestId('open-saves').click();
+  await expect(
+    page
+      .locator('[data-testid^="save-name-"]')
+      .filter({ hasText: /Before shared city|Vor geteilter Stadt/ }),
+  ).toHaveCount(1);
+});
+
+test('an invalid city link shows a notice and the game starts normally', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.goto('/#city=notavalidcode');
+  await expect(page.getByTestId('share-invalid')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
+  expect(page.url()).not.toContain('#');
+});
+
+test('a pasted invalid city link is rejected on the saves page', async ({ page }) => {
+  await page.getByTestId('open-saves').click();
+  await page.getByTestId('share-open-input').fill('no city in here!');
+  await page.getByTestId('share-open').click();
+  await expect(page.getByTestId('saves-message')).toContainText(
+    /does not contain a valid city|enthält keine gültige Stadt/,
+  );
+  await expect(page.getByTestId('shared-city-dialog')).toHaveCount(0);
 });

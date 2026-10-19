@@ -36,6 +36,6 @@
       "icons/icon.ico"
     ],
     "macOS": { "minimumSystemVersion": "12.0", "signingIdentity": "-" },
-    "iOS": { "minimumSystemVersion": "15.0" }
+    "iOS": { "minimumSystemVersion": "26.0" }
   }
 }

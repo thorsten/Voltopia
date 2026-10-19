@@ -404,7 +404,15 @@ next, roughly in the order we would build them.
   the budget, but credit, the grant, the rating and the goals are off.
   The flag survives saves, and `start_new_city` takes `sandbox`. A 6x
   speed joins pause, 1x and 3x for every city.
-- **Share a city**: seed plus compressed save as a URL.
+- **Share a city** (done): the saves page packs the whole city into a
+  link (`…/#city=<code>`: header JSON plus the raw tile layers,
+  compressed with deflate-raw and encoded as base64url). Opening the
+  link asks first, keeps the current city as a named save and then
+  loads the shared one; a paste field on the saves page opens links in
+  the native app. Measured link sizes: about 5.4k characters for a
+  grown 64² city, about 17k for a grown 128² city and about 35k for the
+  128² worst case (every land tile a random building). Agents use
+  `share_city` and `open_shared_city`.
 - **Onboarding for the later systems**: the tutorial covers the basics;
   smart meters, demand response, grid islands, hydrogen and the heat
   sector each deserve a short guided introduction.

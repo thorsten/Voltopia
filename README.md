@@ -78,6 +78,9 @@ micromanagement.
 - **Sandbox mode**: a new-game toggle founds a city with unlimited
   money and disasters off — no credit, rating or goals, just building.
   Every city can also run at 6x speed.
+- **Share a city as a link**: the saves page packs the whole city into
+  a URL (a grown 64² city is about 5 KB of text). Opening it asks
+  first and keeps your current city as a save.
 - **Overlays** show supply, demand, services, traffic, deliveries,
   transit, damage, heat and grid islands; the energy panel tracks
   generation per source, consumption, state of charge, curtailment,
