@@ -38,6 +38,7 @@ import {
   datedName,
   keepAndOpenShared,
   type KeptSlot,
+  SHARE_HASH_PREFIX,
   shareSupported,
   takeShareCodeOnce,
 } from './shareLink.ts';
@@ -119,6 +120,16 @@ export function App() {
   const [sharedError, setSharedError] = useState<string | null>(null);
   // The slot the current city was kept in: a retried Load reuses it.
   const keptSlot = useRef<KeptSlot>({ id: null });
+
+  // A share link opened in this already-running tab only changes the
+  // hash (same document): reload so the boot path reads it like any link.
+  useEffect(() => {
+    const onHashChange = (): void => {
+      if (window.location.hash.startsWith(SHARE_HASH_PREFIX)) window.location.reload();
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

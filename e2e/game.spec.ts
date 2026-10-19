@@ -886,9 +886,11 @@ test('a shared city opens from its link and the old city is kept', async ({ page
   const plantIndex = site.y * size + site.x;
   await expect.poll(() => readAutosavePlant(page, plantIndex), { timeout: 10_000 }).toBe(0);
 
-  // A plain hash change would not reload the page.
-  await page.goto('about:blank');
-  await page.goto(url);
+  // Opening the link in this running tab only changes the hash (same
+  // document): the app reloads itself to read it.
+  await page.evaluate((link) => {
+    window.location.hash = new URL(link).hash;
+  }, url);
   await expect(page.getByTestId('shared-city-dialog')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('shared-city-details')).toContainText(`${size}×${size}`);
   await expect(page.getByTestId('shared-city-details')).toContainText(/day|Tag/);
