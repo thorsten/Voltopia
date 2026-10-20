@@ -42,6 +42,22 @@ describe('exportTextFile', () => {
     expect(anchor.click).not.toHaveBeenCalled();
   });
 
+  it('offers a CSV filter and MIME type for .csv files', async () => {
+    const api = {
+      save: vi.fn(async () => '/tmp/out.csv'),
+      writeTextFile: vi.fn(async () => {}),
+    };
+    await exportTextFile('voltopia-days-2026-10-20.csv', 'a,b\n1,2', {
+      native: true,
+      nativeApi: async () => api,
+    });
+    expect(api.save).toHaveBeenCalledWith({
+      defaultPath: 'voltopia-days-2026-10-20.csv',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    expect(api.writeTextFile).toHaveBeenCalledWith('/tmp/out.csv', 'a,b\n1,2');
+  });
+
   it('writes nothing when the dialog is cancelled', async () => {
     const api = { save: vi.fn(async () => null), writeTextFile: vi.fn(async () => {}) };
     await exportTextFile('a.json', '{}', { native: true, nativeApi: async () => api });

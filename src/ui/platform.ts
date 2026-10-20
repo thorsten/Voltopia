@@ -37,6 +37,15 @@ export interface ExportDeps {
   doc?: Document;
 }
 
+function fileKind(fileName: string): {
+  filter: { name: string; extensions: string[] };
+  mime: string;
+} {
+  return /\.csv$/i.test(fileName)
+    ? { filter: { name: 'CSV', extensions: ['csv'] }, mime: 'text/csv' }
+    : { filter: { name: 'JSON', extensions: ['json'] }, mime: 'application/json' };
+}
+
 /**
  * Hand `text` to the user as a file. Browsers download it; the native app
  * shows a save dialog (anchor downloads are a no-op in WKWebView). A
@@ -51,12 +60,12 @@ export async function exportTextFile(
     const api = await nativeApi();
     const path = await api.save({
       defaultPath: fileName,
-      filters: [{ name: 'JSON', extensions: ['json'] }],
+      filters: [fileKind(fileName).filter],
     });
     if (path) await api.writeTextFile(path, text);
     return;
   }
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const url = URL.createObjectURL(new Blob([text], { type: fileKind(fileName).mime }));
   const anchor = (doc ?? document).createElement('a');
   anchor.href = url;
   anchor.download = fileName;
