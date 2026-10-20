@@ -320,6 +320,7 @@ test('HUD islands never overlap, down to a phone-sized window', async ({ page })
     'toolbar',
     'select-tool',
     'open-help',
+    'open-stats',
   ];
   for (const size of [
     { width: 1440, height: 900 },

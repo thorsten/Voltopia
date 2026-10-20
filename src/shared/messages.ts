@@ -64,13 +64,13 @@ type SimCommandBody =
   | { type: 'requestSave' }
   | { type: 'requestLifetime' };
 
-/** Events sent from the simulation worker to the main thread. */
 /** Payload of the `lifetimeData` event: the daily samples and the day year 1 started on. */
 export interface LifetimeData {
   samples: LifetimeSample[];
   seasonOriginDay: number;
 }
 
+/** Events sent from the simulation worker to the main thread. */
 export type SimEvent =
   | { type: 'ready' }
   | {
