@@ -413,9 +413,15 @@ next, roughly in the order we would build them.
   grown 64² city, about 17k for a grown 128² city and about 35k for the
   128² worst case (every land tile a random building). Agents use
   `share_city` and `open_shared_city`.
-- **Onboarding for the later systems**: the tutorial covers the basics;
-  smart meters, demand response, grid islands, hydrogen and the heat
-  sector each deserve a short guided introduction.
+- **Onboarding for the later systems** (done): smart meters, demand
+  response, grid islands, hydrogen and the heat sector each get a
+  two-step coach card that starts by itself once the system matters for
+  an in-game hour (150 residents without meters, an evening shortfall
+  without a contract, a second island, curtailment without hydrogen,
+  heating at 15 % of consumption without district heat). Steps advance
+  when the sim confirms the action; each intro shows once per browser.
+  The help page restarts any intro or the first-city tutorial and resets
+  the seen list; the settings page turns automatic starts off.
 
 ## Way of Working
 

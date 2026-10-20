@@ -276,7 +276,11 @@ function Game({
   );
   // Bumped on every manual start so the card remounts at its first open step.
   const [tutorialRun, setTutorialRun] = useState(0);
-  const [activeIntro, setActiveIntro] = useState<{ id: IntroId; run: number } | null>(null);
+  const [activeIntro, setActiveIntro] = useState<{
+    id: IntroId;
+    run: number;
+    manual: boolean;
+  } | null>(null);
   const introRunRef = useRef(0);
   const introTriggerRef = useRef(createIntroTriggerState());
   // Cached copy of the seen list; refreshed whenever it changes.
@@ -429,7 +433,7 @@ function Game({
       })
     ) {
       introRunRef.current += 1;
-      setActiveIntro({ id: next, run: introRunRef.current });
+      setActiveIntro({ id: next, run: introRunRef.current, manual: false });
     }
   }, [stats, introActive, showTutorial, pageOpen, settings.introsEnabled]);
 
@@ -438,7 +442,7 @@ function Game({
     setPage(null);
     setShowTutorial(false);
     introRunRef.current += 1;
-    setActiveIntro({ id, run: introRunRef.current });
+    setActiveIntro({ id, run: introRunRef.current, manual: true });
   };
   const startTutorial = (): void => {
     resetTutorial();
@@ -640,6 +644,7 @@ function Game({
           key={activeIntro.run}
           stats={stats}
           introId={activeIntro.id}
+          manual={activeIntro.manual}
           onFinished={finishIntro}
         />
       )}

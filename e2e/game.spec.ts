@@ -78,12 +78,16 @@ async function has3dView(page: Page): Promise<boolean> {
 }
 
 test.beforeEach(async ({ page }) => {
-  // Keep the first-run tutorial out of unrelated tests (the tutorial
-  // test opts back in via the e2eAllowTutorial marker).
+  // Keep the first-run tutorial and the system intros out of unrelated
+  // tests (the tutorial test opts back in via the e2eAllowTutorial marker).
   await page.addInitScript(() => {
     if (!localStorage.getItem('voltopia.e2eAllowTutorial')) {
       localStorage.setItem('voltopia.tutorialDone', '1');
     }
+    localStorage.setItem(
+      'voltopia.introsSeen',
+      JSON.stringify(['smartMeters', 'demandResponse', 'islands', 'hydrogen', 'heat']),
+    );
   });
   await page.goto('/');
   await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
@@ -105,6 +109,19 @@ test('tutorial guides brand-new games and can be skipped', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('money')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('tutorial')).toHaveCount(0);
+});
+
+test('help page starts a system intro that can be stepped and closed', async ({ page }) => {
+  await page.getByTestId('open-help').click();
+  await page.getByTestId('help-intro-start-smartMeters').click();
+  await expect(page.getByTestId('help-page')).toHaveCount(0);
+  const intro = page.getByTestId('intro');
+  await expect(intro).toHaveAttribute('data-intro', 'smartMeters');
+  await expect(intro).toContainText('1/2');
+  await page.getByTestId('intro-next').click();
+  await expect(intro).toContainText('2/2');
+  await page.getByTestId('intro-close').click();
+  await expect(intro).toHaveCount(0);
 });
 
 test('new-game dialog starts a fresh city with chosen difficulty', async ({ page }) => {
@@ -632,7 +649,7 @@ test('help and imprint pages work in both languages', async ({ page }) => {
   await page.getByTestId('open-help').click();
   await expect(page.getByTestId('help-page')).toBeVisible();
   await expect(page.getByTestId('help-page')).toContainText('Goal');
-  await page.getByTestId('help-page').getByRole('button').click(); // close
+  await page.getByTestId('help-page').locator('.modal-close').click();
   await expect(page.getByTestId('help-page')).toHaveCount(0);
 
   // Switch to German: UI translates immediately.
@@ -640,7 +657,7 @@ test('help and imprint pages work in both languages', async ({ page }) => {
   await expect(page.getByTestId('tool-road')).toContainText('Straße');
   await page.getByTestId('open-help').click();
   await expect(page.getByTestId('help-page')).toContainText('Ziel');
-  await page.getByTestId('help-page').getByRole('button').click();
+  await page.getByTestId('help-page').locator('.modal-close').click();
 
   await page.getByTestId('open-imprint').click();
   await expect(page.getByTestId('imprint-page')).toContainText('Thorsten Rinne');

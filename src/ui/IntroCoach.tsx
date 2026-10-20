@@ -12,26 +12,30 @@ import {
 /**
  * Coach card for one system intro. Starts at the first step the city has
  * not satisfied yet, advances when a step's check becomes true and marks
- * the intro seen when it finishes or is closed.
+ * the intro seen when it finishes or is closed. A manual start from the
+ * help page shows every step with a Next button instead.
  */
 export function IntroCoach({
   stats,
   introId,
+  manual = false,
   onFinished,
 }: {
   stats: GlobalStats;
   introId: IntroId;
+  /** Started from the help page: walk every step by hand, even satisfied ones. */
+  manual?: boolean;
   onFinished: () => void;
 }) {
   const intro = introById(introId);
-  const [stepIndex, setStepIndex] = useState(() => firstOpenStep(intro, stats));
+  const [stepIndex, setStepIndex] = useState(() => (manual ? 0 : firstOpenStep(intro, stats)));
   const step = intro.steps[stepIndex];
 
   useEffect(() => {
-    if (step?.isComplete?.(stats)) {
+    if (!manual && step?.isComplete?.(stats)) {
       setStepIndex((index) => index + 1);
     }
-  }, [stats, step]);
+  }, [stats, step, manual]);
 
   const finish = (): void => {
     markIntroSeen(introId);
@@ -55,7 +59,7 @@ export function IntroCoach({
       stepCount={intro.steps.length}
       title={step.title}
       body={step.body}
-      showNext={introStepShowsNext(step)}
+      showNext={manual || introStepShowsNext(step)}
       nextLabel={isLast ? 'intro.done' : 'tutorial.next'}
       nextTestId="intro-next"
       onNext={() => (isLast ? finish() : setStepIndex((i) => i + 1))}
