@@ -124,6 +124,7 @@ export class SimEngine {
           {
             type: 'lifetimeData',
             samples: state.lifetime.samples.map((sample) => ({ ...sample })),
+            seasonOriginDay: state.seasonOriginDay,
           },
         ];
       case 'buildRoad':

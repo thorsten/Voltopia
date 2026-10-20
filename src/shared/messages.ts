@@ -83,7 +83,7 @@ export type SimEvent =
       tickMs?: number;
     }
   | { type: 'saveData'; save: SaveGame }
-  | { type: 'lifetimeData'; samples: LifetimeSample[] }
+  | { type: 'lifetimeData'; samples: LifetimeSample[]; seasonOriginDay: number }
   | { type: 'rejected'; reason: string }
   | {
       type: 'commandResult';

@@ -47,6 +47,32 @@ describe('save game JSON export/import', () => {
     expect(new Uint8Array(restored.layers.tileType)).toEqual(new Uint8Array(save.layers.tileType));
   });
 
+  it('round-trips the energy fields of a lifetime sample', () => {
+    const state = createSimState(77, 16);
+    state.lifetime.samples.push({
+      day: 0,
+      population: 1,
+      jobs: 2,
+      happiness: 0.5,
+      avgGeneration: 3,
+      avgConsumption: 4,
+      money: 5,
+      renewable: 2.5,
+      gridImport: 1.5,
+      gridExport: 0.25,
+      curtailment: 0.75,
+      deficitTicks: 7,
+    });
+    const restored = saveFromJson(saveToJson(serializeState(state)));
+    expect(restored.lifetime?.[0]).toMatchObject({
+      renewable: 2.5,
+      gridImport: 1.5,
+      gridExport: 0.25,
+      curtailment: 0.75,
+      deficitTicks: 7,
+    });
+  });
+
   it('rejects malformed input', () => {
     expect(() => saveFromJson('{}')).toThrow();
     expect(() => saveFromJson('not json')).toThrow();

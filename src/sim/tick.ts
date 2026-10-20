@@ -136,6 +136,12 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   sums.heating += e.heatingConsumption + e.heatPumpConsumption;
   sums.cooling += e.coolingConsumption;
   sums.temperature += state.season.temperature;
+  // Same renewable sum as the scenario's renewable share (scenarios/step.ts).
+  sums.renewable += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.fuelCell;
+  sums.gridImport += e.gridImport;
+  sums.gridExport += e.gridExport;
+  sums.curtailment += e.curtailment;
+  if (e.deficit > 0) sums.deficitTicks++;
   sums.ticks++;
 
   if (state.tick % TICKS_PER_DAY !== 0) return;
@@ -151,6 +157,11 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
     temperature: sums.temperature / ticks,
     heating: sums.heating / ticks,
     cooling: sums.cooling / ticks,
+    renewable: sums.renewable / ticks,
+    gridImport: sums.gridImport / ticks,
+    gridExport: sums.gridExport / ticks,
+    curtailment: sums.curtailment / ticks,
+    deficitTicks: sums.deficitTicks,
   });
   if (state.lifetime.samples.length > MAX_LIFETIME_SAMPLES) {
     state.lifetime.samples.shift();
@@ -160,6 +171,11 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   sums.heating = 0;
   sums.cooling = 0;
   sums.temperature = 0;
+  sums.renewable = 0;
+  sums.gridImport = 0;
+  sums.gridExport = 0;
+  sums.curtailment = 0;
+  sums.deficitTicks = 0;
   sums.ticks = 0;
 }
 

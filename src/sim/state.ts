@@ -587,6 +587,11 @@ export interface SimState {
       heating: number;
       cooling: number;
       temperature: number;
+      renewable: number;
+      gridImport: number;
+      gridExport: number;
+      curtailment: number;
+      deficitTicks: number;
       ticks: number;
     };
   };
@@ -836,7 +841,19 @@ export function createSimState(
     commuteCongestion: 1,
     lifetime: {
       samples: [],
-      daySums: { generation: 0, consumption: 0, heating: 0, cooling: 0, temperature: 0, ticks: 0 },
+      daySums: {
+        generation: 0,
+        consumption: 0,
+        heating: 0,
+        cooling: 0,
+        temperature: 0,
+        renewable: 0,
+        gridImport: 0,
+        gridExport: 0,
+        curtailment: 0,
+        deficitTicks: 0,
+        ticks: 0,
+      },
     },
     lastEconomy: {
       taxIncome: 0,

@@ -51,6 +51,13 @@ describe('lifetime statistics', () => {
     expect(typeof samples[2].temperature).toBe('number');
     expect(samples[2].heating).toBeGreaterThanOrEqual(0);
     expect(samples[2].cooling).toBeGreaterThanOrEqual(0);
+    // Energy outcome fields (annual report).
+    expect(samples[2].renewable).toBeGreaterThan(0);
+    expect(samples[2].gridImport).toBeGreaterThanOrEqual(0);
+    expect(samples[2].gridExport).toBeGreaterThanOrEqual(0);
+    expect(samples[2].curtailment).toBeGreaterThanOrEqual(0);
+    expect(Number.isInteger(samples[2].deficitTicks)).toBe(true);
+    expect(samples[2].deficitTicks).toBeLessThanOrEqual(TICKS_PER_DAY);
 
     // Round trip through a save keeps the history.
     const events = engine.applyCommand({ type: 'requestSave' });
@@ -65,6 +72,8 @@ describe('lifetime statistics', () => {
     expect(lifetimeEvents[0].type).toBe('lifetimeData');
     if (lifetimeEvents[0].type === 'lifetimeData') {
       expect(lifetimeEvents[0].samples.length).toBe(3);
+      expect(lifetimeEvents[0].seasonOriginDay).toBe(restored.state.seasonOriginDay);
+      expect(lifetimeEvents[0].samples[2].renewable).toBe(samples[2].renewable);
     }
   });
 });

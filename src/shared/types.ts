@@ -386,6 +386,16 @@ export interface LifetimeSample {
   heating?: number;
   /** Average cooling consumption per tick over the day (absent in older samples). */
   cooling?: number;
+  /** Average renewable output per tick (solar, wind, rooftop, hydro, tidal, geothermal, fuel cell); absent in older samples. */
+  renewable?: number;
+  /** Average grid import per tick (absent in older samples). */
+  gridImport?: number;
+  /** Average grid export per tick (absent in older samples). */
+  gridExport?: number;
+  /** Average curtailed output per tick (absent in older samples). */
+  curtailment?: number;
+  /** Ticks of the day with an unmet deficit (absent in older samples). */
+  deficitTicks?: number;
 }
 
 export interface GoalState {
