@@ -1699,6 +1699,19 @@ body,
   font-size: 13px;
 }
 
+.help-intro-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.help-intro-note {
+  font-size: 12px;
+  color: var(--hud-muted);
+}
+
 .saves-row {
   display: flex;
   align-items: center;
@@ -1770,6 +1783,7 @@ body,
   gap: 6px;
 }
 
+.help-intro-row button,
 .saves-row button,
 .saves-new button,
 .saves-row-buttons button,
@@ -1872,7 +1886,7 @@ body,
   font-size: 12px;
 }
 
-.tutorial-actions button[data-testid='tutorial-next'] {
+.tutorial-actions button.coach-next {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--hud-on-accent);

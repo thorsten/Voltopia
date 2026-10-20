@@ -3,11 +3,13 @@ import type { GlobalStats, IslandStats } from '../shared/types.ts';
 import { createSimState } from '../sim/state.ts';
 import { buildStats } from '../sim/tick.ts';
 import {
+  canAutoStartIntro,
   createIntroTriggerState,
   firstOpenStep,
   INTRO_IDS,
   INTRO_TUNING,
   introById,
+  introStepShowsNext,
   INTROS,
   loadSeenIntros,
   markIntroSeen,
@@ -418,5 +420,26 @@ describe('seen intros storage', () => {
     expect(loadSeenIntros().size).toBe(0);
     expect(() => markIntroSeen('heat')).not.toThrow();
     expect(() => resetSeenIntros()).not.toThrow();
+  });
+});
+
+describe('introStepShowsNext', () => {
+  it('shows Next on manual steps and on steps that allow it', () => {
+    expect(introStepShowsNext(introById('islands').steps[0])).toBe(true);
+    expect(introStepShowsNext(introById('islands').steps[1])).toBe(false);
+    expect(introStepShowsNext(introById('smartMeters').steps[0])).toBe(false);
+    expect(introStepShowsNext(introById('smartMeters').steps[1])).toBe(true);
+  });
+});
+
+describe('canAutoStartIntro', () => {
+  const free = { introActive: false, tutorialShowing: false, pageOpen: false, introsEnabled: true };
+
+  it('starts only on a free screen with intros enabled', () => {
+    expect(canAutoStartIntro(free)).toBe(true);
+    expect(canAutoStartIntro({ ...free, introActive: true })).toBe(false);
+    expect(canAutoStartIntro({ ...free, tutorialShowing: true })).toBe(false);
+    expect(canAutoStartIntro({ ...free, pageOpen: true })).toBe(false);
+    expect(canAutoStartIntro({ ...free, introsEnabled: false })).toBe(false);
   });
 });

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Modal } from './Modal.tsx';
 import { useI18n, type TranslationKey } from './i18n.tsx';
+import { INTROS, type IntroId } from './intros.ts';
 
 const SECTIONS: Array<{ title: TranslationKey; body: TranslationKey }> = [
   { title: 'help.goal.title', body: 'help.goal.body' },
@@ -25,10 +27,56 @@ const SECTIONS: Array<{ title: TranslationKey; body: TranslationKey }> = [
   { title: 'help.saves.title', body: 'help.saves.body' },
 ];
 
-export function HelpPage({ onClose }: { onClose: () => void }) {
+export function HelpPage({
+  onClose,
+  onStartIntro,
+  onStartTutorial,
+  onResetIntros,
+}: {
+  onClose: () => void;
+  onStartIntro: (id: IntroId) => void;
+  onStartTutorial: () => void;
+  onResetIntros: () => void;
+}) {
   const { t } = useI18n();
+  const [resetDone, setResetDone] = useState(false);
   return (
     <Modal title={t('help.title')} onClose={onClose} testId="help-page">
+      <section>
+        <h3>{t('help.intros.title')}</h3>
+        <p>{t('help.intros.body')}</p>
+        <div className="help-intro-row">
+          <span>{t('help.intros.tutorial')}</span>
+          <button type="button" data-testid="help-tutorial-start" onClick={onStartTutorial}>
+            {t('help.intros.start')}
+          </button>
+        </div>
+        {INTROS.map((intro) => (
+          <div className="help-intro-row" key={intro.id}>
+            <span>{t(intro.steps[0].title)}</span>
+            <button
+              type="button"
+              data-testid={`help-intro-start-${intro.id}`}
+              onClick={() => onStartIntro(intro.id)}
+            >
+              {t('help.intros.start')}
+            </button>
+          </div>
+        ))}
+        <div className="help-intro-row">
+          <button
+            type="button"
+            data-testid="help-intros-reset"
+            onClick={() => {
+              onResetIntros();
+              setResetDone(true);
+            }}
+          >
+            {t('help.intros.reset')}
+          </button>
+          {resetDone && <span className="help-intro-note">{t('help.intros.resetDone')}</span>}
+        </div>
+      </section>
       {SECTIONS.map((section) => (
         <section key={section.title}>
           <h3>{t(section.title)}</h3>

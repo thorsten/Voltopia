@@ -41,6 +41,18 @@ export function SettingsPage({
         </label>
       </section>
       <section>
+        <h3>{t('settings.gameplay')}</h3>
+        <label className="settings-row">
+          <input
+            type="checkbox"
+            data-testid="setting-intros"
+            checked={settings.introsEnabled}
+            onChange={(e) => update({ introsEnabled: e.target.checked })}
+          />
+          <span>{t('settings.introsEnabled')}</span>
+        </label>
+      </section>
+      <section>
         <h3>{t('settings.graphics')}</h3>
         <label className="settings-row">
           <input

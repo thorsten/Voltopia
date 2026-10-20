@@ -54,7 +54,16 @@ import {
 import { StatsPage } from './StatsPage.tsx';
 import { loadSettings, persistSettings, type AppSettings } from './settings.ts';
 import { sound } from './sound.ts';
-import { isTutorialDone, Tutorial } from './Tutorial.tsx';
+import { IntroCoach } from './IntroCoach.tsx';
+import {
+  canAutoStartIntro,
+  createIntroTriggerState,
+  loadSeenIntros,
+  nextIntroToShow,
+  resetSeenIntros,
+  type IntroId,
+} from './intros.ts';
+import { isTutorialDone, resetTutorial, Tutorial } from './Tutorial.tsx';
 import { useAgentTools } from './useAgentTools.ts';
 import { useSimBridge } from './useSimBridge.ts';
 import { useTools } from './useTools.ts';
@@ -265,6 +274,13 @@ function Game({
   const [showTutorial, setShowTutorial] = useState(
     () => save === null && !options.scenario && !isTutorialDone(),
   );
+  // Bumped on every manual start so the card remounts at its first open step.
+  const [tutorialRun, setTutorialRun] = useState(0);
+  const [activeIntro, setActiveIntro] = useState<{ id: IntroId; run: number } | null>(null);
+  const introRunRef = useRef(0);
+  const introTriggerRef = useRef(createIntroTriggerState());
+  // Cached copy of the seen list; refreshed whenever it changes.
+  const seenIntrosRef = useRef<Set<IntroId> | null>(null);
   // Evaluated once at startup; no resize listener — a phone rotated into
   // landscape is still a phone.
   const [showSmallScreenNotice, setShowSmallScreenNotice] = useState(
@@ -394,6 +410,51 @@ function Game({
     // On the root element so modals and the boot screen follow it too.
     document.documentElement.dataset.theme = settings.theme;
   }, [settings, rendererReady]);
+
+  // Feed every stats update to the intro triggers, even while something
+  // blocks a start, so the sustain counters stay honest.
+  const pageOpen = page !== null;
+  const introActive = activeIntro !== null;
+  useEffect(() => {
+    if (!stats) return;
+    seenIntrosRef.current ??= loadSeenIntros();
+    const next = nextIntroToShow(introTriggerRef.current, stats, seenIntrosRef.current);
+    if (
+      next &&
+      canAutoStartIntro({
+        introActive,
+        tutorialShowing: showTutorial,
+        pageOpen,
+        introsEnabled: settings.introsEnabled,
+      })
+    ) {
+      introRunRef.current += 1;
+      setActiveIntro({ id: next, run: introRunRef.current });
+    }
+  }, [stats, introActive, showTutorial, pageOpen, settings.introsEnabled]);
+
+  // Manual starts from the help page bypass the setting and the seen list.
+  const startIntro = (id: IntroId): void => {
+    setPage(null);
+    setShowTutorial(false);
+    introRunRef.current += 1;
+    setActiveIntro({ id, run: introRunRef.current });
+  };
+  const startTutorial = (): void => {
+    resetTutorial();
+    setPage(null);
+    setActiveIntro(null);
+    setTutorialRun((run) => run + 1);
+    setShowTutorial(true);
+  };
+  const resetIntros = (): void => {
+    resetSeenIntros();
+    seenIntrosRef.current = new Set();
+  };
+  const finishIntro = (): void => {
+    seenIntrosRef.current = loadSeenIntros();
+    setActiveIntro(null);
+  };
 
   const requestSnapshot = (): Promise<SaveGame> =>
     new Promise((resolve) => {
@@ -569,10 +630,18 @@ function Game({
           }}
         />
       )}
-      {/* Coach mark, not a HUD island: it floats above the layout for the
-          handful of steps it runs, then never comes back. */}
+      {/* Coach marks, not HUD islands: they float above the layout for the
+          handful of steps they run. The help page can restart them. */}
       {showTutorial && stats && (
-        <Tutorial stats={stats} onFinished={() => setShowTutorial(false)} />
+        <Tutorial key={tutorialRun} stats={stats} onFinished={() => setShowTutorial(false)} />
+      )}
+      {activeIntro && !showTutorial && stats && (
+        <IntroCoach
+          key={activeIntro.run}
+          stats={stats}
+          introId={activeIntro.id}
+          onFinished={finishIntro}
+        />
       )}
       {stats && (
         <EndScreen
@@ -582,7 +651,14 @@ function Game({
           onScenarios={() => setPage('scenarios')}
         />
       )}
-      {page === 'help' && <HelpPage onClose={() => setPage(null)} />}
+      {page === 'help' && (
+        <HelpPage
+          onClose={() => setPage(null)}
+          onStartIntro={startIntro}
+          onStartTutorial={startTutorial}
+          onResetIntros={resetIntros}
+        />
+      )}
       {page === 'imprint' && <ImprintPage onClose={() => setPage(null)} />}
       {page === 'stats' && (
         <StatsPage

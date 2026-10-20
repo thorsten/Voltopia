@@ -346,6 +346,13 @@ const en = {
   'footer.imprint': 'Imprint',
 
   'help.title': 'How to play',
+  'help.intros.title': 'Introductions',
+  'help.intros.body':
+    'Short guided introductions start by themselves when a system becomes relevant. Start one again here at any time.',
+  'help.intros.tutorial': 'First city tutorial',
+  'help.intros.start': 'Start',
+  'help.intros.reset': 'Reset introductions',
+  'help.intros.resetDone': 'All introductions will show again.',
   'help.goal.title': 'Goal',
   'help.goal.body':
     'Grow a happy city powered entirely by renewable energy. Generation fluctuates with sun and wind — keep it in balance with consumption, or buildings go dark, happiness drops and growth stops.',
@@ -455,6 +462,7 @@ const en = {
   'tutorial.waiting': '… waiting',
 
   'intro.close': 'Close',
+  'intro.done': 'Got it',
   'intro.smartMeters.1.title': 'Smart meters',
   'intro.smartMeters.1.body':
     'Your city is big enough for flexible load to matter. Metered buildings charge their cars on surplus and defer part of their load and heating until sun or wind return. Open Details and, under City, tick “Smart-meter rollout” to send out the crews.',
@@ -551,6 +559,8 @@ const en = {
     'Soft shading in corners and under objects. Turn off if the game stutters.',
   'settings.reducedMotion': 'Reduce motion',
   'settings.diagnostics': 'Diagnostics panel (frame time, draw calls, tick cost)',
+  'settings.gameplay': 'Gameplay',
+  'settings.introsEnabled': 'Show introductions',
   'diagnostics.title': 'Diagnostics',
   'diagnostics.frame': 'Frame',
   'diagnostics.tick': 'Sim tick',
@@ -1212,6 +1222,13 @@ const de: Record<TranslationKey, string> = {
   'footer.imprint': 'Impressum',
 
   'help.title': 'Spielanleitung',
+  'help.intros.title': 'Einführungen',
+  'help.intros.body':
+    'Kurze geführte Einführungen starten von selbst, sobald ein System wichtig wird. Hier kannst du jede jederzeit erneut starten.',
+  'help.intros.tutorial': 'Tutorial der ersten Stadt',
+  'help.intros.start': 'Starten',
+  'help.intros.reset': 'Einführungen zurücksetzen',
+  'help.intros.resetDone': 'Alle Einführungen werden wieder angezeigt.',
   'help.goal.title': 'Ziel',
   'help.goal.body':
     'Baue eine zufriedene Stadt, die vollständig mit erneuerbarer Energie läuft. Die Erzeugung schwankt mit Sonne und Wind — halte sie mit dem Verbrauch im Gleichgewicht, sonst werden Gebäude dunkel, die Zufriedenheit sinkt und das Wachstum stoppt.',
@@ -1321,6 +1338,7 @@ const de: Record<TranslationKey, string> = {
   'tutorial.waiting': '… warte',
 
   'intro.close': 'Schließen',
+  'intro.done': 'Verstanden',
   'intro.smartMeters.1.title': 'Smart Meter',
   'intro.smartMeters.1.body':
     'Deine Stadt ist groß genug, dass flexible Last zählt. Gebäude mit Smart Meter laden ihre Autos mit Überschuss und verschieben einen Teil ihres Verbrauchs und ihrer Heizung, bis Sonne oder Wind zurück sind. Öffne die Details und setze unter Stadt den Haken bei „Smart-Meter-Ausbau“, um die Montagetrupps loszuschicken.',
@@ -1418,6 +1436,8 @@ const de: Record<TranslationKey, string> = {
     'Weiche Schatten in Ecken und unter Objekten. Ausschalten, wenn das Spiel ruckelt.',
   'settings.reducedMotion': 'Bewegung reduzieren',
   'settings.diagnostics': 'Diagnose-Anzeige (Bildzeit, Draw Calls, Tick-Kosten)',
+  'settings.gameplay': 'Spiel',
+  'settings.introsEnabled': 'Einführungen anzeigen',
   'diagnostics.title': 'Diagnose',
   'diagnostics.frame': 'Bild',
   'diagnostics.tick': 'Sim-Tick',

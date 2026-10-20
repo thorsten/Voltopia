@@ -258,3 +258,23 @@ export function resetSeenIntros(): void {
     // best effort only
   }
 }
+
+/** Whether a step offers a Next button (manual steps, or `allowNext`). */
+export function introStepShowsNext(step: IntroStep): boolean {
+  return !step.isComplete || step.allowNext === true;
+}
+
+/** What blocks an intro from starting by itself. */
+export interface IntroAutoStartContext {
+  introActive: boolean;
+  tutorialShowing: boolean;
+  pageOpen: boolean;
+  introsEnabled: boolean;
+}
+
+/** Automatic starts wait for a free screen; manual starts bypass this. */
+export function canAutoStartIntro(context: IntroAutoStartContext): boolean {
+  return (
+    context.introsEnabled && !context.introActive && !context.tutorialShowing && !context.pageOpen
+  );
+}

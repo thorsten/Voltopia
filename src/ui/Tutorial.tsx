@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GlobalStats } from '../shared/types.ts';
+import { CoachCard } from './CoachCard.tsx';
 import type { CoachStep } from './coachSteps.ts';
-import { useI18n } from './i18n.tsx';
 
 const TUTORIAL_DONE_KEY = 'voltopia.tutorialDone';
 
@@ -82,7 +82,6 @@ const STEPS: CoachStep[] = [
  * actually happen in the simulation before advancing.
  */
 export function Tutorial({ stats, onFinished }: { stats: GlobalStats; onFinished: () => void }) {
-  const { t } = useI18n();
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS[stepIndex];
 
@@ -104,31 +103,22 @@ export function Tutorial({ stats, onFinished }: { stats: GlobalStats; onFinished
 
   if (!step) return null;
 
-  const isManualStep = !step.isComplete;
   const isLast = stepIndex === STEPS.length - 1;
 
   return (
-    <div className="tutorial-card" data-testid="tutorial">
-      <div className="tutorial-progress">
-        {stepIndex + 1}/{STEPS.length}
-      </div>
-      <h3>{t(step.title)}</h3>
-      <p>{t(step.body)}</p>
-      <div className="tutorial-actions">
-        {isManualStep && (
-          <button
-            type="button"
-            data-testid="tutorial-next"
-            onClick={() => (isLast ? finish() : setStepIndex((i) => i + 1))}
-          >
-            {isLast ? t('tutorial.done') : t('tutorial.next')}
-          </button>
-        )}
-        {!isManualStep && <span className="tutorial-waiting">{t('tutorial.waiting')}</span>}
-        <button type="button" data-testid="tutorial-skip" onClick={finish}>
-          {t('tutorial.skip')}
-        </button>
-      </div>
-    </div>
+    <CoachCard
+      testId="tutorial"
+      stepIndex={stepIndex}
+      stepCount={STEPS.length}
+      title={step.title}
+      body={step.body}
+      showNext={!step.isComplete}
+      nextLabel={isLast ? 'tutorial.done' : 'tutorial.next'}
+      nextTestId="tutorial-next"
+      onNext={() => (isLast ? finish() : setStepIndex((i) => i + 1))}
+      secondaryLabel="tutorial.skip"
+      secondaryTestId="tutorial-skip"
+      onSecondary={finish}
+    />
   );
 }
