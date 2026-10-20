@@ -18,14 +18,14 @@ describe('csvFileName', () => {
 });
 
 describe('compareOptions', () => {
-  it('lists compatible saves as "name · day N"', () => {
+  it('lists compatible saves with name and day', () => {
     const base = { savedAt: 0, population: 0, money: 0, size: 32 };
     expect(
       compareOptions([
         { ...base, id: 'a', name: 'Alpha', day: 12, compatible: true },
         { ...base, id: 'b', name: 'Beta', day: 3, compatible: false },
       ]),
-    ).toEqual([{ id: 'a', label: 'Alpha · day 12' }]);
+    ).toEqual([{ id: 'a', name: 'Alpha', day: 12 }]);
   });
 });
 

@@ -6,11 +6,13 @@ export function csvFileName(kind: 'days' | 'years', date: Date): string {
   return `voltopia-${kind}-${date.toISOString().slice(0, 10)}.csv`;
 }
 
-/** Saves a city can be compared with: compatible ones, labelled "name · day N". */
-export function compareOptions(saves: SaveSummary[]): Array<{ id: string; label: string }> {
+/** Saves a city can be compared with: compatible ones; the UI formats the label. */
+export function compareOptions(
+  saves: SaveSummary[],
+): Array<{ id: string; name: string; day: number }> {
   return saves
     .filter((save) => save.compatible)
-    .map((save) => ({ id: save.id, label: `${save.name} · day ${save.day}` }));
+    .map((save) => ({ id: save.id, name: save.name, day: save.day }));
 }
 
 interface History {

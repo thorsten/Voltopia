@@ -163,7 +163,16 @@ export function StatsPage({
   }, [send, onLifetime]);
 
   useEffect(() => {
-    void storage.list().then(setSaves);
+    let cancelled = false;
+    void storage
+      .list()
+      .catch((): SaveSummary[] => [])
+      .then((list) => {
+        if (!cancelled) setSaves(list);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [storage]);
 
   useEffect(() => {
@@ -172,14 +181,21 @@ export function StatsPage({
       return;
     }
     let cancelled = false;
-    void storage.load(compareId).then((save) => {
-      if (cancelled || !save) return;
-      setOther({
-        samples: save.lifetime ?? [],
-        seasonOriginDay: save.seasonOriginDay ?? Math.floor(save.tick / TICKS_PER_DAY),
-        sandbox: save.sandbox === true,
+    void storage
+      .load(compareId)
+      .catch(() => null)
+      .then((save) => {
+        if (cancelled) return;
+        if (!save) {
+          setOther(null);
+          return;
+        }
+        setOther({
+          samples: save.lifetime ?? [],
+          seasonOriginDay: save.seasonOriginDay ?? Math.floor(save.tick / TICKS_PER_DAY),
+          sandbox: save.sandbox === true,
+        });
       });
-    });
     return () => {
       cancelled = true;
     };
@@ -221,7 +237,7 @@ export function StatsPage({
             <option value="">{t('stats.compare.none')}</option>
             {compareOptions(saves).map((o) => (
               <option key={o.id} value={o.id}>
-                {o.label}
+                {t('stats.compare.option', { name: o.name, day: o.day })}
               </option>
             ))}
           </select>
