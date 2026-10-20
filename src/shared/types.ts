@@ -388,6 +388,8 @@ export interface LifetimeSample {
   cooling?: number;
   /** Average renewable output per tick (solar, wind, rooftop, hydro, tidal, geothermal, fuel cell); absent in older samples. */
   renewable?: number;
+  /** Average biogas output per tick (absent in older samples). */
+  biogas?: number;
   /** Average grid import per tick (absent in older samples). */
   gridImport?: number;
   /** Average grid export per tick (absent in older samples). */

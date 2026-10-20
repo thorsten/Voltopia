@@ -138,6 +138,7 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   sums.temperature += state.season.temperature;
   // Same renewable sum as the scenario's renewable share (scenarios/step.ts).
   sums.renewable += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.fuelCell;
+  sums.biogas += e.biogas;
   sums.gridImport += e.gridImport;
   sums.gridExport += e.gridExport;
   sums.curtailment += e.curtailment;
@@ -158,6 +159,7 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
     heating: sums.heating / ticks,
     cooling: sums.cooling / ticks,
     renewable: sums.renewable / ticks,
+    biogas: sums.biogas / ticks,
     gridImport: sums.gridImport / ticks,
     gridExport: sums.gridExport / ticks,
     curtailment: sums.curtailment / ticks,
@@ -172,6 +174,7 @@ function recordLifetime(state: SimState, population: number, jobs: number): void
   sums.cooling = 0;
   sums.temperature = 0;
   sums.renewable = 0;
+  sums.biogas = 0;
   sums.gridImport = 0;
   sums.gridExport = 0;
   sums.curtailment = 0;

@@ -588,6 +588,7 @@ export interface SimState {
       cooling: number;
       temperature: number;
       renewable: number;
+      biogas: number;
       gridImport: number;
       gridExport: number;
       curtailment: number;
@@ -848,6 +849,7 @@ export function createSimState(
         cooling: 0,
         temperature: 0,
         renewable: 0,
+        biogas: 0,
         gridImport: 0,
         gridExport: 0,
         curtailment: 0,

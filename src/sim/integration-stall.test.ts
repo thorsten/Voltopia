@@ -41,7 +41,19 @@ describe('lifetime statistics', () => {
       zone: Zone.Residential,
     });
     engine.applyCommand({ type: 'placePlant', tile: at(8, 12), plant: PlantType.WindTurbine });
-    for (let i = 0; i < TICKS_PER_DAY * 3; i++) engine.tick();
+    engine.applyCommand({ type: 'placePlant', tile: at(12, 12), plant: PlantType.BiogasPlant });
+    for (let i = 0; i < TICKS_PER_DAY * 2; i++) engine.tick();
+    // Third day: sum the per-tick energy figures the sample must average.
+    const day = { renewable: 0, biogas: 0, gridImport: 0, deficitTicks: 0 };
+    for (let i = 0; i < TICKS_PER_DAY; i++) {
+      engine.tick();
+      const e = engine.state.lastEnergy;
+      // Same renewable sum as scenarios/step.ts (fuel cells included).
+      day.renewable += e.solar + e.wind + e.rooftop + e.hydro + e.tidal + e.geothermal + e.fuelCell;
+      day.biogas += e.biogas;
+      day.gridImport += e.gridImport;
+      if (e.deficit > 0) day.deficitTicks++;
+    }
 
     const samples = engine.state.lifetime.samples;
     expect(samples.length).toBe(3);
@@ -58,6 +70,10 @@ describe('lifetime statistics', () => {
     expect(samples[2].curtailment).toBeGreaterThanOrEqual(0);
     expect(Number.isInteger(samples[2].deficitTicks)).toBe(true);
     expect(samples[2].deficitTicks).toBeLessThanOrEqual(TICKS_PER_DAY);
+    expect(samples[2].renewable).toBeCloseTo(day.renewable / TICKS_PER_DAY, 9);
+    expect(samples[2].biogas).toBeCloseTo(day.biogas / TICKS_PER_DAY, 9);
+    expect(samples[2].gridImport).toBeCloseTo(day.gridImport / TICKS_PER_DAY, 9);
+    expect(samples[2].deficitTicks).toBe(day.deficitTicks);
 
     // Round trip through a save keeps the history.
     const events = engine.applyCommand({ type: 'requestSave' });
@@ -74,6 +90,7 @@ describe('lifetime statistics', () => {
       expect(lifetimeEvents[0].samples.length).toBe(3);
       expect(lifetimeEvents[0].seasonOriginDay).toBe(restored.state.seasonOriginDay);
       expect(lifetimeEvents[0].samples[2].renewable).toBe(samples[2].renewable);
+      expect(lifetimeEvents[0].samples[2].biogas).toBe(samples[2].biogas);
     }
   });
 });

@@ -1186,8 +1186,8 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'One sample per in-game day since the city was founded: population, jobs, happiness, ' +
         'average generation and consumption per tick, money (left out in a sandbox city), ' +
-        'mean temperature, heating load, and per day the renewable output, grid import, grid export, ' +
-        'curtailment (averages per tick) and the deficit ticks.',
+        'mean temperature, heating load, and per day the renewable output (incl. fuel cells), biogas ' +
+        'output, grid import, grid export, curtailment (averages per tick) and the deficit ticks.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
@@ -1205,6 +1205,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             ...(sample.temperature !== undefined ? { temperature: round(sample.temperature) } : {}),
             ...(sample.heating !== undefined ? { heating: round(sample.heating) } : {}),
             ...(sample.renewable !== undefined ? { renewable: round(sample.renewable) } : {}),
+            ...(sample.biogas !== undefined ? { biogas: round(sample.biogas) } : {}),
             ...(sample.gridImport !== undefined ? { gridImport: round(sample.gridImport) } : {}),
             ...(sample.gridExport !== undefined ? { gridExport: round(sample.gridExport) } : {}),
             ...(sample.curtailment !== undefined ? { curtailment: round(sample.curtailment) } : {}),
@@ -1218,7 +1219,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'The lifetime statistics folded into in-game years (daysPerYear days each, year 1 starts at ' +
         'founding): residents and jobs at year end, mean happiness, generation and consumption sums, ' +
-        'renewable share of generation plus import, grid import/export, curtailment, deficit ticks, ' +
+        'renewable share (renewable / (renewable + biogas + import)), grid import/export, curtailment, deficit ticks, ' +
         'treasury at year end and its change (both left out in a sandbox city). The last row is the ' +
         'running year when complete is false. Energy figures are absent for years recorded before they were tracked.',
       inputSchema: { type: 'object', properties: {} },

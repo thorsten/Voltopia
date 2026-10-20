@@ -379,6 +379,7 @@ describe('agent tools: reading', () => {
     expect(after.days).toBe(1);
     expect(after.samples[0]).toHaveProperty('deficitTicks');
     expect(after.samples[0]).toHaveProperty('gridImport');
+    expect(after.samples[0]).toHaveProperty('biogas');
     expect(after.samples[0]).toHaveProperty('money');
   });
 
@@ -393,7 +394,39 @@ describe('agent tools: reading', () => {
     expect(report.years).toHaveLength(1);
     expect(report.years[0]).toMatchObject({ year: 1, days: 2, complete: false });
     expect(report.years[0]).toHaveProperty('moneyEnd');
-    expect(report.years[0]).toHaveProperty('renewableShare');
+    const share = report.years[0].renewableShare as number;
+    expect(share).toBeGreaterThanOrEqual(0);
+    expect(share).toBeLessThanOrEqual(1);
+  });
+
+  it('get_annual_report derives the renewable share from renewable, biogas and import', async () => {
+    const { call, engine } = createHarness();
+    // Fuel-cell-heavy day: renewable above avgGeneration (fuel cells are not generation).
+    engine.state.lifetime.samples = [0, 1].map((day) => ({
+      day,
+      population: 10,
+      jobs: 5,
+      happiness: 0.5,
+      avgGeneration: 2,
+      avgConsumption: 3,
+      money: 1000,
+      renewable: 3,
+      biogas: 0.5,
+      gridImport: 1,
+      gridExport: 0,
+      curtailment: 0,
+      deficitTicks: 0,
+    }));
+    const { samples } = (await call('get_lifetime_stats')) as {
+      samples: { renewable: number; biogas: number; gridImport: number }[];
+    };
+    const total = (pick: (s: (typeof samples)[number]) => number) =>
+      samples.reduce((acc, s) => acc + pick(s), 0);
+    const renewable = total((s) => s.renewable);
+    const expected = renewable / (renewable + total((s) => s.biogas) + total((s) => s.gridImport));
+    expect(expected).toBeCloseTo(3 / 4.5, 6);
+    const report = (await call('get_annual_report')) as { years: { renewableShare: number }[] };
+    expect(report.years[0].renewableShare).toBeCloseTo(expected, 3);
   });
 
   it('get_annual_report drops money in a sandbox city', async () => {

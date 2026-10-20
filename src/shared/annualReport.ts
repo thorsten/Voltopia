@@ -4,8 +4,9 @@ import type { LifetimeSample } from './types.ts';
 export interface AnnualRow {
   /** 1-based, as `SeasonState.year`. */
   year: number;
-  /** Samples in the year; equals `daysPerYear` when complete. */
+  /** Samples in the year; can be below `daysPerYear` for a finished first year (scenario origin before founding, truncated history). */
   days: number;
+  /** Every row but the last is complete; the last one when it has `daysPerYear` samples. */
   complete: boolean;
   /** Last sample of the year. */
   population: number;
@@ -18,7 +19,12 @@ export interface AnnualRow {
   moneyEnd: number;
   /** Against the previous year's end (first year: against its first sample). */
   moneyDelta: number;
-  /** renewable / (generation + import); absent when a sample of the year lacks the energy fields. */
+  /**
+   * renewable / (renewable + biogas + import), 1 when nothing was supplied; absent when a
+   * sample of the year lacks the energy fields. Fuel cells count as renewable (as in the
+   * scenario renewable share), so the denominator is built from the same parts, not from
+   * `generation`.
+   */
   renewableShare?: number;
   gridImport?: number;
   gridExport?: number;
@@ -33,6 +39,7 @@ export function yearOfDay(day: number, seasonOriginDay: number, daysPerYear: num
 
 const ENERGY_FIELDS = [
   'renewable',
+  'biogas',
   'gridImport',
   'gridExport',
   'curtailment',
@@ -62,6 +69,7 @@ export function annualReport(
     const row: AnnualRow = {
       year: groupYear,
       days: group.length,
+      // Raised below for every row but the last (short first year, truncated history).
       complete: group.length >= daysPerYear,
       population: last.population,
       jobs: last.jobs,
@@ -74,8 +82,9 @@ export function annualReport(
     if (group.every(hasEnergyFields)) {
       const renewable = sum((s) => s.renewable!) * ticksPerDay;
       const gridImport = sum((s) => s.gridImport!) * ticksPerDay;
-      const supplied = generation + gridImport;
-      row.renewableShare = supplied === 0 ? 1 : Math.min(1, renewable / supplied);
+      const biogas = sum((s) => s.biogas!) * ticksPerDay;
+      const supplied = renewable + biogas + gridImport;
+      row.renewableShare = supplied === 0 ? 1 : renewable / supplied;
       row.gridImport = gridImport;
       row.gridExport = sum((s) => s.gridExport!) * ticksPerDay;
       row.curtailment = sum((s) => s.curtailment!) * ticksPerDay;
@@ -94,6 +103,8 @@ export function annualReport(
     group.push(sample);
   }
   flush();
+  // Every row but the last is a finished year, even with fewer samples.
+  for (let i = 0; i < rows.length - 1; i++) rows[i].complete = true;
   return rows;
 }
 
@@ -128,6 +139,7 @@ export function lifetimeCsv(samples: LifetimeSample[], sandbox: boolean): string
     ['heating', (s) => s.heating],
     ['cooling', (s) => s.cooling],
     ['renewable', (s) => s.renewable],
+    ['biogas', (s) => s.biogas],
     ['gridImport', (s) => s.gridImport],
     ['gridExport', (s) => s.gridExport],
     ['curtailment', (s) => s.curtailment],
