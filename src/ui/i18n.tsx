@@ -454,6 +454,38 @@ const en = {
   'tutorial.skip': 'Skip tutorial',
   'tutorial.waiting': '… waiting',
 
+  'intro.close': 'Close',
+  'intro.smartMeters.1.title': 'Smart meters',
+  'intro.smartMeters.1.body':
+    'Your city is big enough for flexible load to matter. Metered buildings charge their cars on surplus and defer part of their load and heating until sun or wind return. Open Details and, under City, tick “Smart-meter rollout” to send out the crews.',
+  'intro.smartMeters.2.title': 'Coverage grows day by day',
+  'intro.smartMeters.2.body':
+    'The crews install a fixed number of meters per in-game day, and every meter has a price — the figure beside the switch shows the coverage. In the energy graph, the faint dashed line shows what consumption would have been without the shifted load.',
+  'intro.demandResponse.1.title': 'Evening peak: demand response',
+  'intro.demandResponse.1.body':
+    'Your grid runs short at the evening peak load and has to import or leave demand unserved. With the “Demand-response contract” (Details → City) your businesses shed part of their load in a deficit — for a daily retainer per building plus a price per unit shed, a few call hours a day. Sign it to shave the peak.',
+  'intro.demandResponse.2.title': 'Watch the first call',
+  'intro.demandResponse.2.body':
+    'The contract is called automatically whenever shedding is cheaper than importing or the link is full. “✂ Load shed” in the energy panel shows how much load your businesses dropped.',
+  'intro.islands.1.title': 'Your grid has split',
+  'intro.islands.1.body':
+    'No power line joins your districts, so they form separate grid islands. Each island has to balance on its own — its own generation, its own storage, its own deficit. The Grid overlay and “Districts” in the energy panel show them.',
+  'intro.islands.2.title': 'Join them or give each a gate',
+  'intro.islands.2.body':
+    'Draw a power line (⚡, key L) between the districts to merge them into one island, or place a substation (🏗, key X) in every island so each can import in a shortfall and export its surplus.',
+  'intro.hydrogen.1.title': 'Curtailment: surplus goes to waste',
+  'intro.hydrogen.1.body':
+    'Your plants generate more than the city consumes and your storage can absorb, so the surplus is curtailed. A hydrogen plant (🫧, Energy tab) electrolyses it into hydrogen and keeps it for windless weeks. Build one beside your power lines.',
+  'intro.hydrogen.2.title': 'From surplus to hydrogen and back',
+  'intro.hydrogen.2.body':
+    'Surplus now feeds the electrolysers (“Electrolysis” in the energy panel). In a lull the fuel cell re-electrifies the stored hydrogen, and once the tank is full the overflow is sold.',
+  'intro.heat.1.title': 'Winter heating load',
+  'intro.heat.1.body':
+    'Heating is now a large share of your consumption, because every building heats electrically on its own. A heat plant (🔥, Energy tab) is one large heat pump with a better COP that feeds district heating along the roads touching it. Build one beside a busy road.',
+  'intro.heat.2.title': 'Store heat, cut the load',
+  'intro.heat.2.body':
+    'A heat store (🛢) fills through the heat plants in surplus hours and covers the evening heat peak, shifting heat-pump load out of the peak. “🏠 Building insulation” (Details → City) halves the heating load for good.',
+
   'win.title': 'Voltopia shines!',
   'win.body':
     'Every goal achieved: your city runs on sun, wind and clever planning. Keep building — or start a bigger map and do it again on hard.',
@@ -1287,6 +1319,38 @@ const de: Record<TranslationKey, string> = {
   'tutorial.done': 'Los geht’s!',
   'tutorial.skip': 'Tutorial überspringen',
   'tutorial.waiting': '… warte',
+
+  'intro.close': 'Schließen',
+  'intro.smartMeters.1.title': 'Smart Meter',
+  'intro.smartMeters.1.body':
+    'Deine Stadt ist groß genug, dass flexible Last zählt. Gebäude mit Smart Meter laden ihre Autos mit Überschuss und verschieben einen Teil ihres Verbrauchs und ihrer Heizung, bis Sonne oder Wind zurück sind. Öffne die Details und setze unter Stadt den Haken bei „Smart-Meter-Ausbau“, um die Montagetrupps loszuschicken.',
+  'intro.smartMeters.2.title': 'Die Abdeckung wächst Tag für Tag',
+  'intro.smartMeters.2.body':
+    'Die Trupps installieren pro Spieltag eine feste Zahl Zähler, und jeder Zähler kostet Geld — die Zahl neben dem Schalter zeigt die Abdeckung. Die blasse gestrichelte Linie im Energiegraphen zeigt, wie hoch der Verbrauch ohne die verschobene Last gewesen wäre.',
+  'intro.demandResponse.1.title': 'Abendspitze: Demand Response',
+  'intro.demandResponse.1.body':
+    'Zur abendlichen Spitzenlast wird dein Netz knapp und muss importieren oder Verbrauch unversorgt lassen. Mit dem „Demand-Response-Vertrag“ (Details → Stadt) werfen deine Betriebe im Defizit einen Teil ihrer Last ab — gegen eine tägliche Pauschale pro Gebäude plus einen Preis pro abgeworfener Einheit, für ein paar Abrufstunden am Tag. Schließ ihn ab, um die Spitze zu kappen.',
+  'intro.demandResponse.2.title': 'Beobachte den ersten Abruf',
+  'intro.demandResponse.2.body':
+    'Der Vertrag wird automatisch abgerufen, sobald Abwerfen billiger ist als Importieren oder der Link voll ist. „✂ Abgeworfene Last“ im Energie-Panel zeigt, wie viel Last deine Betriebe abgeworfen haben.',
+  'intro.islands.1.title': 'Dein Netz ist geteilt',
+  'intro.islands.1.body':
+    'Keine Stromleitung verbindet deine Bezirke, deshalb bilden sie getrennte Netzinseln. Jede Insel muss sich allein ausgleichen — mit eigener Erzeugung, eigenem Speicher, eigenem Defizit. Das Netz-Overlay und „Bezirke“ im Energie-Panel zeigen sie.',
+  'intro.islands.2.title': 'Verbinde sie oder gib jeder ein Tor',
+  'intro.islands.2.body':
+    'Ziehe eine Stromleitung (⚡, Taste L) zwischen den Bezirken, um sie zu einer Insel zu verbinden, oder setze in jede Insel ein Umspannwerk (🏗, Taste X), damit jede bei Knappheit importieren und ihren Überschuss exportieren kann.',
+  'intro.hydrogen.1.title': 'Abregelung: Überschuss geht verloren',
+  'intro.hydrogen.1.body':
+    'Deine Anlagen erzeugen mehr, als die Stadt verbraucht und deine Speicher aufnehmen, also wird der Überschuss abgeregelt. Eine Wasserstoffanlage (🫧, Reiter Energie) elektrolysiert ihn zu Wasserstoff und hebt ihn für windstille Wochen auf. Baue eine neben deine Stromleitungen.',
+  'intro.hydrogen.2.title': 'Vom Überschuss zum Wasserstoff und zurück',
+  'intro.hydrogen.2.body':
+    'Der Überschuss speist jetzt die Elektrolyseure („Elektrolyse“ im Energie-Panel). In der Flaute verstromt die Brennstoffzelle den gespeicherten Wasserstoff wieder, und bei vollem Tank wird der Überlauf verkauft.',
+  'intro.heat.1.title': 'Heizlast im Winter',
+  'intro.heat.1.body':
+    'Die Heizung macht inzwischen einen großen Teil deines Verbrauchs aus, weil jedes Gebäude für sich elektrisch heizt. Ein Heizwerk (🔥, Reiter Energie) ist eine große Wärmepumpe mit besserem COP, die Fernwärme entlang der angrenzenden Straßen einspeist. Baue eines an eine belebte Straße.',
+  'intro.heat.2.title': 'Wärme speichern, Last senken',
+  'intro.heat.2.body':
+    'Ein Wärmespeicher (🛢) füllt sich über die Heizwerke in Überschussstunden und deckt die abendliche Wärmespitze — so wandert Wärmepumpenlast aus der Spitze. „🏠 Gebäudedämmung“ (Details → Stadt) halbiert die Heizlast dauerhaft.',
 
   'win.title': 'Voltopia strahlt!',
   'win.body':

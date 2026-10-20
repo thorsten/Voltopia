@@ -10,6 +10,8 @@ export interface AppSettings {
   theme: HudTheme;
   /** Show the diagnostics panel (frame time, draw calls, tick cost). */
   diagnostics: boolean;
+  /** Start the guided introductions of the later systems automatically. */
+  introsEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reducedMotion: false,
   theme: 'dark',
   diagnostics: false,
+  introsEnabled: true,
 };
 
 const SETTINGS_STORAGE_KEY = 'voltopia.settings';
@@ -40,6 +43,7 @@ export function loadSettings(): AppSettings {
       reducedMotion: parsed.reducedMotion ?? DEFAULT_SETTINGS.reducedMotion,
       theme: parsed.theme === 'light' ? 'light' : 'dark',
       diagnostics: parsed.diagnostics ?? DEFAULT_SETTINGS.diagnostics,
+      introsEnabled: parsed.introsEnabled ?? DEFAULT_SETTINGS.introsEnabled,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

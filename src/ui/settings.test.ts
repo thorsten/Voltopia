@@ -35,4 +35,16 @@ describe('settings', () => {
     expect(loaded.ambientOcclusion).toBe(true);
     expect(loaded.shadows).toBe(false);
   });
+
+  it('introductions are on by default and round-trip', () => {
+    expect(DEFAULT_SETTINGS.introsEnabled).toBe(true);
+    expect(loadSettings().introsEnabled).toBe(true);
+    persistSettings({ ...DEFAULT_SETTINGS, introsEnabled: false });
+    expect(loadSettings().introsEnabled).toBe(false);
+  });
+
+  it('settings stored before the intros switch existed keep introductions on', () => {
+    localStorage.setItem('voltopia.settings', JSON.stringify({ diagnostics: true }));
+    expect(loadSettings().introsEnabled).toBe(true);
+  });
 });

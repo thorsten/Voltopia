@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GlobalStats } from '../shared/types.ts';
-import { useI18n, type TranslationKey } from './i18n.tsx';
+import type { CoachStep } from './coachSteps.ts';
+import { useI18n } from './i18n.tsx';
 
 const TUTORIAL_DONE_KEY = 'voltopia.tutorialDone';
 
@@ -12,6 +13,15 @@ export function isTutorialDone(): boolean {
   }
 }
 
+/** Forget that the tutorial was finished, so it shows again. */
+export function resetTutorial(): void {
+  try {
+    localStorage.removeItem(TUTORIAL_DONE_KEY);
+  } catch {
+    // best effort only
+  }
+}
+
 function markTutorialDone(): void {
   try {
     localStorage.setItem(TUTORIAL_DONE_KEY, '1');
@@ -20,15 +30,7 @@ function markTutorialDone(): void {
   }
 }
 
-interface TutorialStep {
-  id: string;
-  title: TranslationKey;
-  body: TranslationKey;
-  /** Auto-advance when this becomes true (undefined = manual button). */
-  isComplete?: (stats: GlobalStats) => boolean;
-}
-
-const STEPS: TutorialStep[] = [
+const STEPS: CoachStep[] = [
   { id: 'welcome', title: 'tutorial.welcome.title', body: 'tutorial.welcome.body' },
   {
     id: 'road',
