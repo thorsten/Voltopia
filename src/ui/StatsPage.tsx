@@ -153,7 +153,7 @@ export function StatsPage({
   const [data, setData] = useState<LifetimeData | null>(null);
   const [saves, setSaves] = useState<SaveSummary[]>([]);
   const [compareId, setCompareId] = useState('');
-  const [other, setOther] = useState<(LifetimeData & { sandbox: boolean }) | null>(null);
+  const [other, setOther] = useState<{ samples: LifetimeSample[]; sandbox: boolean } | null>(null);
 
   const { send, onLifetime } = bridge;
   useEffect(() => {
@@ -192,7 +192,6 @@ export function StatsPage({
         }
         setOther({
           samples: save.lifetime ?? [],
-          seasonOriginDay: save.seasonOriginDay ?? Math.floor(save.tick / TICKS_PER_DAY),
           sandbox: save.sandbox === true,
         });
       });

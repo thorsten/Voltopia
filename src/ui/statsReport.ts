@@ -17,28 +17,24 @@ export function compareOptions(
 
 interface History {
   samples: LifetimeSample[];
-  seasonOriginDay: number;
-}
-
-/** Days since year 1 started; samples from before the origin collapse onto 0. */
-function offset(day: number, seasonOriginDay: number): number {
-  return Math.max(0, day - seasonOriginDay);
 }
 
 /**
- * The other city's values on this city's day axis, year-aligned:
- * result[i] belongs to own.samples[i]; NaN where the other
- * city has no sample (or no value) for that offset.
+ * The other city's values on this city's day axis, founding-aligned:
+ * `sample.day` counts from tick 0 (the founding) for every city kind —
+ * free play, pre-season saves and scenarios alike. result[i] belongs to
+ * own.samples[i]; NaN where the other city has no sample (or no value)
+ * for that day.
  */
 export function alignSeries(
   own: History,
   other: History,
   pick: (s: LifetimeSample) => number | undefined,
 ): number[] {
-  const byOffset = new Map<number, number>();
+  const byDay = new Map<number, number>();
   for (const sample of other.samples) {
     const value = pick(sample);
-    if (value !== undefined) byOffset.set(offset(sample.day, other.seasonOriginDay), value);
+    if (value !== undefined) byDay.set(sample.day, value);
   }
-  return own.samples.map((sample) => byOffset.get(offset(sample.day, own.seasonOriginDay)) ?? NaN);
+  return own.samples.map((sample) => byDay.get(sample.day) ?? NaN);
 }
