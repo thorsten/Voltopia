@@ -1786,6 +1786,7 @@ body,
 .help-intro-row button,
 .saves-row button,
 .saves-new button,
+.stats-toolbar button,
 .saves-row-buttons button,
 .saves-import {
   background: transparent;
@@ -2023,6 +2024,50 @@ body,
 .stats-empty {
   color: var(--hud-muted);
   font-size: 13px;
+}
+
+.stats-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.stats-toolbar select {
+  max-width: 220px;
+}
+
+.stats-hint {
+  color: var(--hud-muted);
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.stats-table-wrap {
+  overflow-x: auto;
+}
+
+.stats-table {
+  border-collapse: collapse;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 3px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--hud-border);
+}
+
+.stats-table th:first-child,
+.stats-table td:first-child {
+  text-align: left;
+}
+
+.stats-row-running td {
+  color: var(--hud-muted);
 }
 
 .win-backdrop {

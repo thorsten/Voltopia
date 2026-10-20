@@ -669,6 +669,7 @@ function Game({
         <StatsPage
           bridge={bridge}
           sandbox={bridge.stats?.sandbox ?? false}
+          storage={storage}
           onClose={() => setPage(null)}
         />
       )}
