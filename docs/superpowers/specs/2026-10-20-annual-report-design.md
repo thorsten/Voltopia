@@ -1,7 +1,7 @@
 # Annual report — Design
 
 Date: 2026-10-20
-Status: draft for review
+Status: implemented on branch `annual-report` (2026-10-20)
 
 ## Goal
 
@@ -104,9 +104,12 @@ export function annualReport(
   they never occur in new cities.
 - The optional figures are `undefined` for a year in which any sample
   lacks the field; a partial year is never reported with partial sums.
-  Biogas is not in the sample today: `renewableShare` uses
-  `generation − renewable` as the biogas term, so no sixth field is
-  needed (generation = all own plants, see `recordLifetime`).
+  A sixth sample field `biogas` carries the biogas term: `avgGeneration`
+  leaves out the fuel cell while `renewable` includes it, so
+  `generation − renewable` would overstate the share (review finding,
+  2026-10-20). A row is complete when it holds `daysPerYear` samples or
+  is not the last row (short first years of scenario cities, truncated
+  oldest year).
 - Rows are oldest first; the current, incomplete year is the last row
   with `complete: false`.
 
@@ -141,10 +144,11 @@ export function annualCsv(rows: AnnualRow[], sandbox: boolean): string;
    (two lines) and "Deficit ticks per day" (one line). Missing optional
    values break the line (`NaN`, as temperature does today).
 4. **Comparison**: choosing a save loads it via `storage.load(id)` and
-   reads `save.lifetime` and `save.seasonOriginDay`. Its series are
-   drawn dashed in the same colour, aligned by **year** (its day 1 of
-   year 1 under our day 1 of year 1), so two cities of different age
-   line up at founding. The money chart does not draw the compared
+   reads `save.lifetime`. Its series are drawn dashed in the same
+   colour, aligned by **day since founding** (`sample.day`, tick 0 =
+   founding for every kind of city; aligning on the season origin
+   misplaced scenario and pre-season saves — review finding,
+   2026-10-20), so two cities of different age line up at founding. The money chart does not draw the compared
    save when it is a sandbox. The table stays single-city.
 5. **CSV export**: `exportTextFile(name, csv)` from `src/ui/platform.ts`
    (web download, native save dialog). File names
