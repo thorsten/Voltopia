@@ -221,7 +221,8 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [x] Mac: `pnpm tauri dev` runs; `Cargo.lock` committed
 - [x] iOS minimum is 26.0 (`bundle.iOS.minimumSystemVersion` in `src-tauri/tauri.conf.json`, `deploymentTarget` in `src-tauri/gen/apple/project.yml`; macOS stays 12.0) — share links need `CompressionStream('deflate-raw')`
 - [ ] Mac: regenerate the Xcode project (`IPHONEOS_DEPLOYMENT_TARGET` in the committed `.xcodeproj` still says 15.0) and run the iPad simulator on iOS 26
-- [ ] Mac: `pnpm tauri build` and the Cmd+Q save-then-relaunch check
+- [x] Mac: `pnpm tauri build` (2026-10-19)
+- [ ] Mac: Cmd+Q save-then-relaunch check
 - [ ] Follow-up: Developer ID signing + notarization
 
 ## Post-MVP
@@ -231,6 +232,7 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [x] Finance: loans and bonds with fixed interest, overdraft interest and a credit rating A–D, a renewable investment grant from a yearly pot and a grid-fee slider; `take_credit`, `repay_credit`, `set_grid_fee` agent tools; scenario money goals measure net worth; tuned by a headless probe (spec: `docs/superpowers/specs/2026-10-19-finance-design.md`)
 - [x] Sandbox mode and 6x speed: a new-game toggle founds a city with a pinned, unlimited treasury (∞), disasters off by default, no credit, grant, rating or goals; `start_new_city` takes `sandbox`; a 6x speed for every city (spec: `docs/superpowers/specs/2026-10-19-sandbox-mode-design.md`)
 - [x] Share a city: the whole city as a link (`…/#city=<code>`, deflate-raw + base64url, ~5 KB for a grown 64² city); opening it asks first and keeps the current city as a named save; paste field on the saves page; `share_city` / `open_shared_city` agent tools; the JSON export now keeps policies, finance, rules and scenario (spec: `docs/superpowers/specs/2026-10-19-share-city-design.md`)
+- [x] Annual report: energy outcome fields in the daily sample, a per-year table and two more charts on the statistics page, compare-with-save overlay, CSV export, `get_annual_report` agent tool (spec: `docs/superpowers/specs/2026-10-20-annual-report-design.md`)
 
 ## Testing Strategy
 

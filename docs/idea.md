@@ -395,8 +395,13 @@ next, roughly in the order we would build them.
   last 6 measured): active share 0.32 with lanes versus 0.004
   without, evening (18:00-22:00) charging load 107 versus 167 per
   tick (-36%). The `BALANCE.cycling` values stayed unchanged.
-- **Annual report / statistics replay**: multi-year time series,
-  comparison of two saves, CSV export.
+- **Annual report / statistics replay** (done): the daily sample now
+  records renewable output, grid import/export, curtailment and deficit
+  ticks; the statistics page folds the 365-day history (18 in-game years)
+  into a per-year table, adds trade and deficit charts, overlays a second
+  save founding-aligned and exports days or years as CSV. Agents use
+  `get_annual_report`. The footer gained the Statistics button the page
+  had been missing.
 - **Difficulty and sandbox modes** (done): easy, normal and hard set
   the starting money. A sandbox toggle in the new-game dialog founds a
   city whose treasury is pinned at an unlimited amount (shown as ∞)
