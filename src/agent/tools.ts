@@ -8,7 +8,8 @@
  */
 import { BALANCE, GRID_SIZE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { lShapedPath, neighbors4, rectTiles, tileIndex, tileX, tileY } from '../shared/grid.ts';
-import type { SimCommand } from '../shared/messages.ts';
+import type { LifetimeData, SimCommand } from '../shared/messages.ts';
+import { annualReport } from '../shared/annualReport.ts';
 import { isSupplySource } from '../shared/plants.ts';
 import {
   DisasterKind,
@@ -25,7 +26,6 @@ import {
   Zone,
   type DisasterInfo,
   type GlobalStats,
-  type LifetimeSample,
   type ScenarioId,
   type Speed,
   type SaveGame,
@@ -34,6 +34,7 @@ import {
 import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
 import { decodeShareCode, encodeShareCode, ShareCodeError } from '../storage/shareCode.ts';
 import { dayOfTick, defaultSaveName, populationOfSave } from '../storage/summary.ts';
+import { daysPerYear } from '../sim/seasons.ts';
 import '../sim/scenarios/defs/index.ts';
 import { scenarioDef, scenarioDefs } from '../sim/scenarios/registry.ts';
 import { englishText, rejectionKey, type TranslationKey } from '../ui/i18n.tsx';
@@ -73,7 +74,7 @@ export interface AgentContext {
   sendCommand(command: SimCommand): Promise<CommandOutcome>;
   /** Resolves with the stats of the first tick at or after `targetTick`. */
   waitForTick(targetTick: number, signal?: AbortSignal): Promise<GlobalStats>;
-  requestLifetime(): Promise<LifetimeSample[]>;
+  requestLifetime(): Promise<LifetimeData>;
   /** Start a brand-new city (the app reloads the page). */
   startNewCity(options: NewCityOptions): void;
   /** Start a shipped scenario (the app reloads the page). */
@@ -1185,11 +1186,12 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       description:
         'One sample per in-game day since the city was founded: population, jobs, happiness, ' +
         'average generation and consumption per tick, money (left out in a sandbox city), ' +
-        'mean temperature, heating load.',
+        'mean temperature, heating load, and per day the renewable output, grid import, grid export, ' +
+        'curtailment (averages per tick) and the deficit ticks.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
-        const samples = await ctx.requestLifetime();
+        const { samples } = await ctx.requestLifetime();
         // The treasury is pinned in sandbox, so per-day money carries no signal.
         const sandbox = ctx.getStats()?.sandbox === true;
         return {
@@ -1202,8 +1204,46 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             ...(sandbox ? {} : { money: Math.round(money) }),
             ...(sample.temperature !== undefined ? { temperature: round(sample.temperature) } : {}),
             ...(sample.heating !== undefined ? { heating: round(sample.heating) } : {}),
+            ...(sample.renewable !== undefined ? { renewable: round(sample.renewable) } : {}),
+            ...(sample.gridImport !== undefined ? { gridImport: round(sample.gridImport) } : {}),
+            ...(sample.gridExport !== undefined ? { gridExport: round(sample.gridExport) } : {}),
+            ...(sample.curtailment !== undefined ? { curtailment: round(sample.curtailment) } : {}),
+            ...(sample.deficitTicks !== undefined ? { deficitTicks: sample.deficitTicks } : {}),
           })),
         };
+      },
+    },
+    {
+      name: 'get_annual_report',
+      description:
+        'The lifetime statistics folded into in-game years (daysPerYear days each, year 1 starts at ' +
+        'founding): residents and jobs at year end, mean happiness, generation and consumption sums, ' +
+        'renewable share of generation plus import, grid import/export, curtailment, deficit ticks, ' +
+        'treasury at year end and its change (both left out in a sandbox city). The last row is the ' +
+        'running year when complete is false. Energy figures are absent for years recorded before they were tracked.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const { samples, seasonOriginDay } = await ctx.requestLifetime();
+        const sandbox = ctx.getStats()?.sandbox === true;
+        const years = annualReport(samples, seasonOriginDay, daysPerYear(), TICKS_PER_DAY).map(
+          ({ moneyEnd, moneyDelta, ...row }) => ({
+            ...row,
+            happiness: round(row.happiness, 2),
+            generation: round(row.generation),
+            consumption: round(row.consumption),
+            ...(row.renewableShare !== undefined
+              ? { renewableShare: round(row.renewableShare, 3) }
+              : {}),
+            ...(row.gridImport !== undefined ? { gridImport: round(row.gridImport) } : {}),
+            ...(row.gridExport !== undefined ? { gridExport: round(row.gridExport) } : {}),
+            ...(row.curtailment !== undefined ? { curtailment: round(row.curtailment) } : {}),
+            ...(sandbox
+              ? {}
+              : { moneyEnd: Math.round(moneyEnd), moneyDelta: Math.round(moneyDelta) }),
+          }),
+        );
+        return { daysPerYear: daysPerYear(), years };
       },
     },
     {

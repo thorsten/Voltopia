@@ -76,9 +76,9 @@ export function useAgentTools(
         }),
       requestLifetime: () =>
         new Promise((resolve) => {
-          const unsubscribe = onLifetime((samples) => {
+          const unsubscribe = onLifetime((data) => {
             unsubscribe();
-            resolve(samples);
+            resolve(data);
           });
           send({ type: 'requestLifetime' });
         }),

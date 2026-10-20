@@ -7,6 +7,7 @@ import {
   TICKS_PER_HISTORY_SAMPLE,
 } from '../shared/constants.ts';
 import { tileIndex, tileX, tileY } from '../shared/grid.ts';
+import { daysPerYear } from '../sim/seasons.ts';
 import type { SimCommand, SimEvent } from '../shared/messages.ts';
 import {
   DisasterKind,
@@ -96,7 +97,9 @@ function createHarness(
     },
     async requestLifetime() {
       const [event] = engine.applyCommand({ type: 'requestLifetime' });
-      return event && event.type === 'lifetimeData' ? event.samples : [];
+      return event && event.type === 'lifetimeData'
+        ? { samples: event.samples, seasonOriginDay: event.seasonOriginDay }
+        : { samples: [], seasonOriginDay: 0 };
     },
     startNewCity(options) {
       newCities.push(options);
@@ -184,6 +187,7 @@ describe('agent tools: reading', () => {
       'inspect_tile',
       'find_tiles',
       'get_lifetime_stats',
+      'get_annual_report',
       'get_disasters',
       'build_road',
       'build_power_line',
@@ -223,7 +227,7 @@ describe('agent tools: reading', () => {
       expect(tool.inputSchema.type).toBe('object');
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toHaveLength(11);
+    expect(readOnly).toHaveLength(12);
     expect(readOnly).toContain('share_city');
     const consequential = tools.filter((t) => t.annotations?.consequentialHint).map((t) => t.name);
     expect(consequential).toEqual(
@@ -364,12 +368,40 @@ describe('agent tools: reading', () => {
     expect(await call('find_tiles', { kind: 'unicorns' })).toMatchObject({ ok: false });
   });
 
-  it('get_lifetime_stats returns one sample per day', async () => {
+  it('get_lifetime_stats returns one sample per day with the energy figures', async () => {
     const { call } = createHarness();
     expect(await call('get_lifetime_stats')).toMatchObject({ days: 0, samples: [] });
     await call('advance_time', { days: 1 });
-    const after = await call('get_lifetime_stats');
+    const after = (await call('get_lifetime_stats')) as {
+      days: number;
+      samples: Record<string, number>[];
+    };
     expect(after.days).toBe(1);
+    expect(after.samples[0]).toHaveProperty('deficitTicks');
+    expect(after.samples[0]).toHaveProperty('gridImport');
+    expect(after.samples[0]).toHaveProperty('money');
+  });
+
+  it('get_annual_report folds the days into years, the last one running', async () => {
+    const { call } = createHarness();
+    expect(await call('get_annual_report')).toMatchObject({
+      daysPerYear: daysPerYear(),
+      years: [],
+    });
+    await call('advance_time', { days: 2 });
+    const report = (await call('get_annual_report')) as { years: Record<string, unknown>[] };
+    expect(report.years).toHaveLength(1);
+    expect(report.years[0]).toMatchObject({ year: 1, days: 2, complete: false });
+    expect(report.years[0]).toHaveProperty('moneyEnd');
+    expect(report.years[0]).toHaveProperty('renewableShare');
+  });
+
+  it('get_annual_report drops money in a sandbox city', async () => {
+    const { call } = createHarness(11, true);
+    await call('advance_time', { days: 1 });
+    const report = (await call('get_annual_report')) as { years: Record<string, unknown>[] };
+    expect(report.years[0]).not.toHaveProperty('moneyEnd');
+    expect(report.years[0]).not.toHaveProperty('moneyDelta');
   });
 
   it('get_disasters reports intensity, warnings and active events', async () => {

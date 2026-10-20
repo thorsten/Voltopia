@@ -84,7 +84,7 @@ export function StatsPage({
 
   const { send, onLifetime } = bridge;
   useEffect(() => {
-    const unsubscribe = onLifetime((data) => setSamples(data));
+    const unsubscribe = onLifetime((data) => setSamples(data.samples));
     send({ type: 'requestLifetime' });
     return unsubscribe;
   }, [send, onLifetime]);
