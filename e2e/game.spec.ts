@@ -239,6 +239,14 @@ test('a scenario starts from the scenarios page and survives a reload', async ({
   await expect(page.getByTestId('scenario-panel')).toBeVisible({ timeout: 60_000 });
 });
 
+test('statistics page opens from the footer', async ({ page }) => {
+  await page.getByTestId('open-stats').click();
+  await expect(page.getByTestId('stats-page')).toBeVisible();
+  await expect(page.getByTestId('stats-compare')).toBeVisible();
+  await expect(page.getByTestId('stats-csv-days')).toBeVisible();
+  await expect(page.getByTestId('stats-csv-years')).toBeVisible();
+});
+
 test('settings page toggles persist', async ({ page }) => {
   await page.getByTestId('open-settings').click();
   await expect(page.getByTestId('settings-page')).toBeVisible();

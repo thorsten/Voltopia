@@ -598,6 +598,9 @@ function Game({
               <button type="button" data-testid="open-saves" onClick={() => setPage('saves')}>
                 {t('footer.saves')}
               </button>
+              <button type="button" data-testid="open-stats" onClick={() => setPage('stats')}>
+                {t('footer.stats')}
+              </button>
               <button type="button" data-testid="open-settings" onClick={() => setPage('settings')}>
                 {t('footer.settings')}
               </button>

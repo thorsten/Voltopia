@@ -213,7 +213,11 @@ export function StatsPage({
       <div className="stats-toolbar">
         <label>
           {t('stats.compare')}{' '}
-          <select value={compareId} onChange={(e) => setCompareId(e.target.value)}>
+          <select
+            data-testid="stats-compare"
+            value={compareId}
+            onChange={(e) => setCompareId(e.target.value)}
+          >
             <option value="">{t('stats.compare.none')}</option>
             {compareOptions(saves).map((o) => (
               <option key={o.id} value={o.id}>
@@ -222,10 +226,20 @@ export function StatsPage({
             ))}
           </select>
         </label>
-        <button type="button" onClick={() => exportCsv('days')} disabled={samples.length === 0}>
+        <button
+          type="button"
+          data-testid="stats-csv-days"
+          onClick={() => exportCsv('days')}
+          disabled={samples.length === 0}
+        >
           {t('stats.csvDays')}
         </button>
-        <button type="button" onClick={() => exportCsv('years')} disabled={rows.length === 0}>
+        <button
+          type="button"
+          data-testid="stats-csv-years"
+          onClick={() => exportCsv('years')}
+          disabled={rows.length === 0}
+        >
           {t('stats.csvYears')}
         </button>
       </div>
