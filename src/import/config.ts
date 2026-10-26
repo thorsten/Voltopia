@@ -46,6 +46,21 @@ export const OSM_IMPORT = {
   } as Readonly<Record<string, Zone>>,
   /** `place=*` values that can name the town, best first. */
   placeRanks: ['city', 'town', 'village'] as const,
+  /** Nominatim place search (usage policy: at most one request per second, no autocomplete). */
+  nominatimUrl: 'https://nominatim.openstreetmap.org/search',
+  /** Overpass API endpoints, tried in order. */
+  overpassEndpoints: [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ] as const,
+  /** Sides in kilometres of the square excerpt the player can choose. */
+  sideKm: [2.5, 3.5, 5] as const,
+  /** Overpass server-side timeout; the client waits as long. */
+  overpassTimeoutS: 60,
+  /** Minimum gap between two place searches in milliseconds. */
+  searchMinIntervalMs: 1000,
+  /** Maximum number of place hits requested. */
+  searchLimit: 8,
   /** Longest side of the box in kilometres the rasteriser accepts. */
   maxBoxKm: 20,
   /** Width of a rasterised river line in tiles. */

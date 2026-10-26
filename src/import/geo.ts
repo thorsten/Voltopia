@@ -21,6 +21,14 @@ export function boundsOf(points: Iterable<LonLat>): Bbox {
   return box;
 }
 
+/** The square box of `sideKm` kilometres around a centre. */
+export function squareBbox(lat: number, lon: number, sideKm: number): Bbox {
+  const halfM = (sideKm * 1000) / 2;
+  const halfLat = halfM / METRES_PER_DEGREE;
+  const halfLon = halfM / metresPerDegreeLon(lat);
+  return [lon - halfLon, lat - halfLat, lon + halfLon, lat + halfLat];
+}
+
 export interface Projection {
   /** Width and height of the box in metres. */
   widthM: number;
