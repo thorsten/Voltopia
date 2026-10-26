@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { OSM_IMPORT } from '../import/config.ts';
+import { resetSearchGate } from '../import/fetch.ts';
+import { squareBbox } from '../import/geo.ts';
+import { parseOsm } from '../import/osm.ts';
+import { rasteriseTown } from '../import/rasterise.ts';
 import {
   BALANCE,
   MAP_SIZES,
@@ -219,6 +225,8 @@ describe('agent tools: reading', () => {
       'share_city',
       'open_shared_city',
       'start_new_city',
+      'search_places',
+      'import_town',
       'list_scenarios',
       'start_scenario',
     ]);
@@ -1673,5 +1681,256 @@ describe('railways', () => {
     expect(track.total).toBe(11);
     const info = await call('inspect_tile', { x: 8, y: 11 });
     expect(info.railYard).toMatchObject({ powered: false, stationsInNetwork: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Town import: Nominatim and Overpass are stubbed through AgentContext.fetch.
+
+const TOWN_XML = readFileSync(new URL('../import/fixtures/town.osm', import.meta.url), 'utf8');
+/** Centre of the fixture's bounds. */
+const TOWN_CENTRE = { lat: 49.8835, lon: 8.6709 };
+const NOMINATIM_HIT = {
+  name: 'Bach & Berg',
+  display_name: 'Bach & Berg, Landkreis Musterstadt, Hessen, Germany',
+  type: 'town',
+  lat: String(TOWN_CENTRE.lat),
+  lon: String(TOWN_CENTRE.lon),
+};
+
+type FetchCall = { url: string; init: RequestInit | undefined };
+
+/**
+ * A fetch stub answering Nominatim with `hits` (JSON) and every Overpass
+ * endpoint with `overpass` (XML text, or an HTTP status for a failure).
+ */
+function fakeOsmFetch(
+  hits: unknown[] | null = [NOMINATIM_HIT],
+  overpass: string | number = TOWN_XML,
+): { fetch: typeof fetch; calls: FetchCall[] } {
+  const calls: FetchCall[] = [];
+  const stub = ((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    if (String(url).startsWith(OSM_IMPORT.nominatimUrl)) {
+      return Promise.resolve(
+        hits
+          ? new Response(JSON.stringify(hits), {
+              headers: { 'content-type': 'application/json' },
+            })
+          : new Response('busy', { status: 503 }),
+      );
+    }
+    if (typeof overpass === 'number') {
+      return Promise.resolve(new Response('no', { status: overpass }));
+    }
+    return Promise.resolve(
+      new Response(overpass, { headers: { 'content-type': 'application/osm3s+xml' } }),
+    );
+  }) as typeof fetch;
+  return { fetch: stub, calls };
+}
+
+describe('agent tools: town import', () => {
+  beforeEach(() => resetSearchGate());
+
+  it('search_places maps the Nominatim hits and reports a search failure', async () => {
+    const harness = createHarness();
+    const { fetch, calls } = fakeOsmFetch([NOMINATIM_HIT, { display_name: 'Bach, Elsewhere' }]);
+    harness.ctx.fetch = fetch;
+    const result = await harness.call('search_places', { query: ' Bach & Berg ' });
+    expect(result).toMatchObject({ ok: true, query: 'Bach & Berg' });
+    expect(result.hits).toEqual([
+      {
+        name: 'Bach & Berg',
+        displayName: NOMINATIM_HIT.display_name,
+        type: 'town',
+        lat: TOWN_CENTRE.lat,
+        lon: TOWN_CENTRE.lon,
+      },
+      { name: 'Bach', displayName: 'Bach, Elsewhere', type: '', lat: NaN, lon: NaN },
+    ]);
+    expect(calls).toHaveLength(1);
+    const url = new URL(calls[0]!.url);
+    expect(url.searchParams.get('q')).toBe('Bach & Berg');
+    expect(url.searchParams.get('accept-language')).toBe('en');
+
+    resetSearchGate();
+    harness.ctx.fetch = fakeOsmFetch(null).fetch;
+    expect(await harness.call('search_places', { query: 'Bach' })).toMatchObject({
+      ok: false,
+      error: 'importFailed',
+      code: 'searchFailed',
+      message: 'Town import failed (searchFailed)',
+    });
+    expect(await harness.call('search_places', { query: '  ' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+    });
+    expect(await harness.call('search_places', {})).toMatchObject({ ok: false });
+  });
+
+  it('import tools report noNetwork on a host without fetch', async () => {
+    const { call } = createHarness();
+    expect(await call('search_places', { query: 'Bach' })).toMatchObject({
+      ok: false,
+      error: 'noNetwork',
+    });
+    expect(await call('import_town', { query: 'Bach' })).toMatchObject({
+      ok: false,
+      error: 'noNetwork',
+    });
+  });
+
+  it('import_town searches, downloads, rasterises and starts the city', async () => {
+    const harness = createHarness();
+    const { fetch, calls } = fakeOsmFetch();
+    harness.ctx.fetch = fetch;
+    const result = await harness.call('import_town', { query: 'Bach & Berg' });
+    const bbox = squareBbox(TOWN_CENTRE.lat, TOWN_CENTRE.lon, OSM_IMPORT.sideKm[1]);
+    expect(result).toMatchObject({
+      ok: true,
+      name: 'Bach & Berg',
+      size: 96,
+      sideKm: OSM_IMPORT.sideKm[1],
+      difficulty: 'normal',
+      disasters: 'normal',
+      sandbox: false,
+      bbox,
+    });
+    const report = result.report as { metresPerTile: number; counts: Record<string, number> };
+    expect(report.metresPerTile).toBeCloseTo((OSM_IMPORT.sideKm[1] * 1000) / 96, 0);
+    expect(report.counts.street).toBeGreaterThan(0);
+    expect(report.counts.buildings).toBeGreaterThan(0);
+    // One Nominatim GET, then the first Overpass endpoint with the bbox query.
+    expect(calls.map((c) => c.init?.method)).toEqual(['GET', 'POST']);
+    expect(calls[1]!.url).toBe(OSM_IMPORT.overpassEndpoints[0]);
+    expect(harness.newCities).toHaveLength(1);
+    const city = harness.newCities[0]!;
+    expect(city).toMatchObject({
+      size: 96,
+      startingMoney: BALANCE.startingMoney,
+      seed: null,
+      disasterScale: 1,
+    });
+    expect(city.layout).toMatchObject({ size: 96, name: 'Bach & Berg', bbox });
+    expect(city.layout!.road.length).toBe(96 * 96);
+  });
+
+  it('import_town takes coordinates without a search and the start_new_city options', async () => {
+    const harness = createHarness();
+    const { fetch, calls } = fakeOsmFetch();
+    harness.ctx.fetch = fetch;
+    const result = await harness.call('import_town', {
+      lat: TOWN_CENTRE.lat,
+      lon: TOWN_CENTRE.lon,
+      sideKm: 2.5,
+      size: 48,
+      difficulty: 'hard',
+      seed: 7,
+      sandbox: true,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      size: 48,
+      sideKm: 2.5,
+      difficulty: 'hard',
+      seed: 7,
+      disasters: 'off',
+      sandbox: true,
+      name: 'Bach & Berg',
+    });
+    expect(calls.map((c) => c.init?.method)).toEqual(['POST']);
+    expect(harness.newCities[0]).toMatchObject({
+      size: 48,
+      startingMoney: 15_000,
+      seed: 7,
+      disasterScale: 0,
+      sandbox: true,
+    });
+    expect(harness.newCities[0]!.layout!.size).toBe(48);
+    // The fixture's own name wins over whatever the caller searched for;
+    // without a place node in the box the hit name stands in.
+    expect(harness.newCities[0]!.layout!.name).toBe('Bach & Berg');
+  });
+
+  it('import_town validates its arguments before touching the network', async () => {
+    const harness = createHarness();
+    const { fetch, calls } = fakeOsmFetch();
+    harness.ctx.fetch = fetch;
+    const bad = async (input: unknown): Promise<void> => {
+      expect(await harness.call('import_town', input)).toMatchObject({
+        ok: false,
+        error: 'invalidInput',
+      });
+    };
+    await bad({});
+    await bad({ query: '' });
+    await bad({ lat: TOWN_CENTRE.lat });
+    await bad({ lat: 'north', lon: 8 });
+    await bad({ lat: 95, lon: 8 });
+    await bad({ query: 'Bach', sideKm: 4 });
+    await bad({ query: 'Bach', size: 50 });
+    await bad({ query: 'Bach', difficulty: 'brutal' });
+    await bad({ query: 'Bach', sandbox: 'yes' });
+    expect(calls).toHaveLength(0);
+    expect(harness.newCities).toHaveLength(0);
+  });
+
+  it('import_town reports no hit, a failed download and a non-OSM answer', async () => {
+    const harness = createHarness();
+    harness.ctx.fetch = fakeOsmFetch([]).fetch;
+    expect(await harness.call('import_town', { query: 'Nowhere' })).toMatchObject({
+      ok: false,
+      error: 'invalidInput',
+      message: 'No place found for "Nowhere"',
+    });
+
+    resetSearchGate();
+    const failing = fakeOsmFetch([NOMINATIM_HIT], 503);
+    harness.ctx.fetch = failing.fetch;
+    expect(await harness.call('import_town', { query: 'Bach' })).toMatchObject({
+      ok: false,
+      error: 'importFailed',
+      code: 'fetchFailed',
+      message: 'Town import failed (fetchFailed)',
+    });
+    // Every Overpass endpoint was tried.
+    expect(failing.calls.filter((c) => c.init?.method === 'POST')).toHaveLength(
+      OSM_IMPORT.overpassEndpoints.length,
+    );
+
+    harness.ctx.fetch = fakeOsmFetch([NOMINATIM_HIT], '<html>maintenance</html>').fetch;
+    expect(
+      await harness.call('import_town', { lat: TOWN_CENTRE.lat, lon: TOWN_CENTRE.lon }),
+    ).toMatchObject({ ok: false, error: 'importFailed', code: 'notOsm' });
+    expect(harness.newCities).toHaveLength(0);
+  });
+
+  it('get_game_overview carries the origin of an imported town', async () => {
+    const { call, engine, ctx } = createHarness();
+    expect((await call('get_game_overview')).origin).toBeUndefined();
+    const { layout } = rasteriseTown(parseOsm(TOWN_XML), 48);
+    engine.applyCommand({ type: 'init', seed: 3, size: 48, layout });
+    await ctx.waitForTick(ctx.getStats()!.tick + 1);
+    expect((await call('get_game_overview')).origin).toEqual({
+      source: 'osm',
+      name: 'Bach & Berg',
+      bbox: layout.bbox,
+    });
+  });
+
+  it('get_build_catalog lists the import mapping and settling thresholds', async () => {
+    const { call } = createHarness();
+    const catalog = await call('get_build_catalog');
+    expect(catalog.osmImport).toMatchObject({
+      sideKm: [...OSM_IMPORT.sideKm],
+      maxBoxKm: OSM_IMPORT.maxBoxKm,
+      buildingsPerDensity: [...BALANCE.osmImport.buildingsPerDensity],
+    });
+    const mapping = (catalog.osmImport as { mapping: Record<string, string[]> }).mapping;
+    expect(mapping.avenueHighways).toContain('primary');
+    expect(mapping.streetHighways).toContain('residential');
+    expect(mapping.railways).toEqual(['rail']);
+    expect(mapping.zoneLanduses).toEqual(['residential', 'commercial', 'retail', 'industrial']);
   });
 });

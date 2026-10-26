@@ -50,6 +50,8 @@ export function useAgentTools(
 
     const ctx: AgentContext = {
       tiles,
+      // The town import's only network access; bound so the tools can call it detached.
+      fetch: globalThis.fetch.bind(globalThis),
       getStats,
       sendCommand: (command: SimCommand) =>
         new Promise((resolve) => {

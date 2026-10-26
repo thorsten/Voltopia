@@ -6,6 +6,11 @@
  * this module has no DOM dependency so it can be tested against a
  * headless engine.
  */
+import { OSM_IMPORT } from '../import/config.ts';
+import { fetchTown, searchPlaces } from '../import/fetch.ts';
+import { squareBbox } from '../import/geo.ts';
+import { OsmImportError, parseOsm } from '../import/osm.ts';
+import { rasteriseTown } from '../import/rasterise.ts';
 import { BALANCE, GRID_SIZE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { lShapedPath, neighbors4, rectTiles, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { LifetimeData, SimCommand } from '../shared/messages.ts';
@@ -30,6 +35,7 @@ import {
   type Speed,
   type SaveGame,
   type TileInfo,
+  type TownLayout,
 } from '../shared/types.ts';
 import { newSlotId, type SaveStorage, type SaveSummary } from '../storage/storage.ts';
 import { decodeShareCode, encodeShareCode, ShareCodeError } from '../storage/shareCode.ts';
@@ -65,11 +71,19 @@ export interface NewCityOptions {
   disasterScale?: number;
   /** Sandbox free play: unlimited money, no credit, grant or goals. */
   sandbox?: boolean;
+  /** Start on an imported town instead of a seeded map (same size). */
+  layout?: TownLayout;
 }
 
 /** What the tools need from the host (bridge in the app, engine in tests). */
 export interface AgentContext {
   tiles: TileMirror;
+  /**
+   * Network access for the town import (Nominatim, Overpass); the app
+   * passes the browser's fetch, tests a stub. Absent: the import tools
+   * report `noNetwork`.
+   */
+  fetch?: typeof fetch;
   getStats(): GlobalStats | null;
   sendCommand(command: SimCommand): Promise<CommandOutcome>;
   /** Resolves with the stats of the first tick at or after `targetTick`. */
@@ -102,6 +116,12 @@ export interface AgentSaves {
    */
   importShared(input: string, name: string): Promise<SaveSummary>;
 }
+
+/**
+ * Map size import_town defaults to: the spike found a 3.5 km town at 96
+ * tiles (about 37 m per tile) recognisable, see docs/idea.md.
+ */
+const IMPORT_DEFAULT_SIZE: (typeof MAP_SIZES)[number] = 96;
 
 /** Longest save name, matching the saves page's input. */
 export const MAX_SAVE_NAME_LENGTH = 80;
@@ -383,6 +403,15 @@ function readInt(input: Record<string, unknown>, key: string, fallback?: number)
   return value;
 }
 
+/** A finite number within [min, max] (coordinates, kilometres). */
+function readNumber(input: Record<string, unknown>, key: string, min: number, max: number): number {
+  const value = input[key];
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+    throw new ToolInputError(`"${key}" must be a number between ${min} and ${max}`);
+  }
+  return value;
+}
+
 function readPoint(
   input: Record<string, unknown>,
   key: string,
@@ -418,6 +447,78 @@ function readBoolean(input: Record<string, unknown>, key: string): boolean {
   const value = input[key];
   if (typeof value !== 'boolean') throw new ToolInputError(`"${key}" must be boolean`);
   return value;
+}
+
+/**
+ * The new-city options shared by start_new_city and import_town: size,
+ * difficulty (starting money), seed, disasters and sandbox, validated
+ * like the new-game dialog does it, plus the echo for the tool result.
+ */
+function readNewCityOptions(
+  input: Record<string, unknown>,
+  defaultSize: number,
+): { options: NewCityOptions; summary: Record<string, unknown> } {
+  const size = readInt(input, 'size', defaultSize);
+  if (!MAP_SIZES.includes(size as (typeof MAP_SIZES)[number]))
+    throw new ToolInputError(`"size" must be one of ${MAP_SIZES.join(', ')}`);
+  const difficulty = readEnum(
+    input,
+    'difficulty',
+    DIFFICULTIES.map((d) => d.id),
+    'normal',
+  );
+  const startingMoney = DIFFICULTIES.find((d) => d.id === difficulty)!.startingMoney;
+  const seed = 'seed' in input ? readInt(input, 'seed') : null;
+  const sandbox = 'sandbox' in input ? readBoolean(input, 'sandbox') : false;
+  const disasters = readEnum(input, 'disasters', DISASTER_LEVEL_NAMES, sandbox ? 'off' : 'normal');
+  return {
+    options: {
+      size,
+      startingMoney,
+      seed,
+      disasterScale: DISASTER_LEVEL_SCALE[disasters],
+      ...(sandbox ? { sandbox: true } : {}),
+    },
+    summary: { size, difficulty, seed, disasters, sandbox },
+  };
+}
+
+/** A non-blank place query for the Nominatim search. */
+function readQuery(input: Record<string, unknown>): string {
+  const value = input.query;
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new ToolInputError('"query" must be a non-empty string (or give lat and lon)');
+  }
+  return value.trim();
+}
+
+/** The excerpt side of an imported town, one of OSM_IMPORT.sideKm. */
+function readSideKm(input: Record<string, unknown>): number {
+  const value = input.sideKm ?? OSM_IMPORT.sideKm[1];
+  if (!OSM_IMPORT.sideKm.includes(value as (typeof OSM_IMPORT.sideKm)[number])) {
+    throw new ToolInputError(`"sideKm" must be one of ${OSM_IMPORT.sideKm.join(', ')}`);
+  }
+  return value as number;
+}
+
+/** Result of the import tools on a host without network access. */
+const NO_NETWORK = {
+  ok: false,
+  error: 'noNetwork',
+  message: 'This host has no network access to OpenStreetMap',
+} as const;
+
+/** An import error as a tool result; anything else keeps propagating. */
+function importFailure(error: unknown): Record<string, unknown> {
+  if (error instanceof OsmImportError) {
+    return {
+      ok: false,
+      error: 'importFailed',
+      code: error.code,
+      message: `Town import failed (${error.code})`,
+    };
+  }
+  throw error;
 }
 
 /** Tiles of an L-shaped path from→to, or the explicit `tiles` list. */
@@ -890,6 +991,7 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
             happiness: round(s.policies.happiness, 3),
           },
           finance: financeOverview(s),
+          ...(s.origin ? { origin: s.origin } : {}),
           goals: s.goals.map((goal) => ({
             id: goal.id,
             achieved: goal.achieved,
@@ -935,6 +1037,29 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
           coordinates: 'Tiles are { x, y }, 0-based, x grows east, y grows south.',
           gridSize: size,
           ticksPerDay: TICKS_PER_DAY,
+          osmImport: {
+            sideKm: [...OSM_IMPORT.sideKm],
+            maxBoxKm: OSM_IMPORT.maxBoxKm,
+            mapping: {
+              avenueHighways: [...OSM_IMPORT.avenueHighways],
+              streetHighways: [...OSM_IMPORT.streetHighways],
+              pedestrianHighways: [...OSM_IMPORT.pedestrianHighways],
+              railways: [...OSM_IMPORT.railways],
+              waterways: [...OSM_IMPORT.waterways],
+              waterNaturals: [...OSM_IMPORT.waterNaturals],
+              waterLanduses: [...OSM_IMPORT.waterLanduses],
+              forestLanduses: [...OSM_IMPORT.forestLanduses],
+              forestNaturals: [...OSM_IMPORT.forestNaturals],
+              zoneLanduses: Object.keys(OSM_IMPORT.zoneLanduses),
+              placeRanks: [...OSM_IMPORT.placeRanks],
+            },
+            buildingsPerDensity: [...BALANCE.osmImport.buildingsPerDensity],
+            note:
+              'import_town: OSM highways become streets/avenues, railway=rail track, waterways ' +
+              'the river, water/wood areas lake/forest, landuse zones; a zoned, road-served ' +
+              'tile with at least buildingsPerDensity[d-1] OSM buildings starts with a density-d ' +
+              'building.',
+          },
           policies: Object.fromEntries(
             POLICY_IDS.map((id) => [
               id,
@@ -1949,40 +2074,115 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
       },
       annotations: { consequentialHint: true },
       async execute(input) {
-        const mapSize = readInt(input, 'size', GRID_SIZE);
-        if (!MAP_SIZES.includes(mapSize as (typeof MAP_SIZES)[number]))
-          throw new ToolInputError(`"size" must be one of ${MAP_SIZES.join(', ')}`);
-        const difficulty = readEnum(
-          input,
-          'difficulty',
-          DIFFICULTIES.map((d) => d.id),
-          'normal',
-        );
-        const startingMoney = DIFFICULTIES.find((d) => d.id === difficulty)!.startingMoney;
-        const seed = 'seed' in input ? readInt(input, 'seed') : null;
-        const sandbox = 'sandbox' in input ? readBoolean(input, 'sandbox') : false;
-        const disasters = readEnum(
-          input,
-          'disasters',
-          DISASTER_LEVEL_NAMES,
-          sandbox ? 'off' : 'normal',
-        );
-        ctx.startNewCity({
-          size: mapSize,
-          startingMoney,
-          seed,
-          disasterScale: DISASTER_LEVEL_SCALE[disasters],
-          ...(sandbox ? { sandbox: true } : {}),
-        });
+        const { options, summary } = readNewCityOptions(input, GRID_SIZE);
+        ctx.startNewCity(options);
         return {
           ok: true,
-          size: mapSize,
-          difficulty,
-          seed,
-          disasters,
-          sandbox,
+          ...summary,
           note: 'The page is reloading with the new city.',
         };
+      },
+    },
+    {
+      name: 'search_places',
+      description:
+        'Find a real town for import_town: a free-text place search on OpenStreetMap Nominatim ' +
+        '(English names) returning up to ' +
+        `${OSM_IMPORT.searchLimit} hits with name, displayName, type, lat and lon. ` +
+        "Nominatim's usage policy allows one request per second and no search loops: search " +
+        'once for a place the user named, pick a hit, then call import_town with its lat/lon ' +
+        '(or let import_town search by query itself).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Place name, e.g. "Schwabmünchen".' },
+        },
+        required: ['query'],
+      },
+      annotations: { readOnlyHint: true },
+      async execute(input) {
+        const query = readQuery(input);
+        const fetch = ctx.fetch;
+        if (!fetch) return NO_NETWORK;
+        try {
+          const hits = await searchPlaces(query, 'en', { fetch });
+          return { ok: true, query, hits };
+        } catch (error) {
+          return importFailure(error);
+        }
+      },
+    },
+    {
+      name: 'import_town',
+      description:
+        'Abandon the current city and start one on a real town from OpenStreetMap (the page ' +
+        'reloads; the old autosave is replaced). Give a `query` (the first Nominatim hit wins) ' +
+        'or `lat` + `lon` from search_places, the excerpt side in km (sideKm ' +
+        `${OSM_IMPORT.sideKm.join(', ')}; default ${OSM_IMPORT.sideKm[1]}) and the map size ` +
+        `(${MAP_SIZES.join(', ')}; default ${IMPORT_DEFAULT_SIZE}) — a ` +
+        `${OSM_IMPORT.sideKm[1]} km town on ${IMPORT_DEFAULT_SIZE} tiles is about ` +
+        `${Math.round((OSM_IMPORT.sideKm[1] * 1000) / IMPORT_DEFAULT_SIZE)} m per tile. Downloads the ` +
+        'roads, rail, water, woods, landuse zones and buildings from Overpass (tens of seconds), ' +
+        'rasterises them onto the grid and settles buildings where OpenStreetMap has them; the ' +
+        'player then electrifies the town. Returns the town name, the bbox (west, south, east, ' +
+        'north) and the rasterisation report (metresPerTile, counts per layer, roadComponents, ' +
+        'droppedZones, thinned, skippedHighways). difficulty, seed, disasters and sandbox work ' +
+        "as in start_new_city. Nominatim's usage policy: one request per second, no search " +
+        'loops — one search per town the user named. Errors carry the import code (searchFailed, ' +
+        'fetchFailed, notOsm, empty, boxTooLarge, aborted).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Place name; ignored when lat and lon are given.' },
+          lat: { type: 'number', description: 'Latitude of the town centre (with lon).' },
+          lon: { type: 'number', description: 'Longitude of the town centre (with lat).' },
+          sideKm: { type: 'number', enum: [...OSM_IMPORT.sideKm] },
+          size: { type: 'integer', enum: [...MAP_SIZES] },
+          difficulty: { type: 'string', enum: DIFFICULTIES.map((d) => d.id) },
+          seed: { type: 'integer', description: 'Fixed seed for the hotspots and weather.' },
+          disasters: { type: 'string', enum: [...DISASTER_LEVEL_NAMES] },
+          sandbox: {
+            type: 'boolean',
+            description: 'Unlimited money, no credit, grant or goals; disasters default to off.',
+          },
+        },
+      },
+      annotations: { consequentialHint: true },
+      async execute(input, options) {
+        const { options: city, summary } = readNewCityOptions(input, IMPORT_DEFAULT_SIZE);
+        const sideKm = readSideKm(input);
+        const hasCoordinates = 'lat' in input || 'lon' in input;
+        const centre = hasCoordinates
+          ? { lat: readNumber(input, 'lat', -90, 90), lon: readNumber(input, 'lon', -180, 180) }
+          : null;
+        const query = centre ? null : readQuery(input);
+        const fetch = ctx.fetch;
+        if (!fetch) return NO_NETWORK;
+        try {
+          let place: { name: string | null; lat: number; lon: number };
+          if (centre) {
+            place = { name: null, ...centre };
+          } else {
+            const [hit] = await searchPlaces(query!, 'en', { fetch });
+            if (!hit) throw new ToolInputError(`No place found for "${query}"`);
+            place = hit;
+          }
+          const bbox = squareBbox(place.lat, place.lon, sideKm);
+          const xml = await fetchTown(bbox, { fetch }, options?.signal);
+          const { layout, report } = rasteriseTown(parseOsm(xml), city.size, bbox);
+          ctx.startNewCity({ ...city, layout });
+          return {
+            ok: true,
+            ...summary,
+            name: layout.name ?? place.name,
+            sideKm,
+            bbox,
+            report,
+            note: 'The page is reloading with the imported town.',
+          };
+        } catch (error) {
+          return importFailure(error);
+        }
       },
     },
     {
