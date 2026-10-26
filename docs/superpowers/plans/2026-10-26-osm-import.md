@@ -4,8 +4,9 @@ Spec: `docs/superpowers/specs/2026-10-26-osm-import-design.md`.
 Branch `feature/osm-import` (continues `spike/osm-import`, which holds
 the probe). Every task ends with
 `pnpm format && pnpm typecheck && pnpm lint && pnpm test` green and one
-commit. Tasks 1–2 are pure and can run in parallel with task 3's sim
-side once the `TownLayout` type (task 3, first bullet) is committed.
+commit. Tasks 1, 2 and 4 are pure and can run in parallel with task 3's sim
+side once the `TownLayout` type (task 2, first bullet) is committed;
+task 5 needs 2–4, task 6 needs 3–5.
 
 ## Task 1 — OSM parser (`src/import/osm.ts`)
 
@@ -120,7 +121,40 @@ startingMoney)`, `disasterScale`, `sandbox` as for free play,
   `beforeAll`); `loadFuzz.test.ts` gets an origin case if it lists
   optional save fields.
 
-## Task 4 — UI: import on the new-game page, preview, attribution
+## Task 4 — fetching (`src/import/fetch.ts`)
+
+- `src/import/config.ts` gains `nominatimUrl`, `overpassEndpoints`
+  (`https://overpass-api.de/api/interpreter`,
+  `https://overpass.kumi.systems/api/interpreter`), `sideKm: [2.5,
+3.5, 5]`, `overpassTimeoutS: 60`, `searchMinIntervalMs: 1000`.
+- `src/import/fetch.ts`, DOM-free, every function takes `{ fetch }`
+  (defaults to `globalThis.fetch`):
+  - `buildOverpassQuery(bbox): string` — `[out:xml][timeout:60]
+[bbox:S,W,N,E];` then a union built from the same tag tables the
+    rasteriser uses (`OSM_IMPORT`): highway regex, `railway=rail`,
+    waterway regex, `natural` water/wood, `water`, landuse regex,
+    `building`, multipolygon relations for water / wood / forest /
+    the zone landuses, `place` nodes; `out body; >; out skel qt;`.
+    One source of truth: a test asserts every mapping tag appears.
+  - `searchPlaces(query, locale, deps): Promise<PlaceHit[]>` —
+    `GET nominatim/search?q=&format=jsonv2&limit=8&accept-language=`,
+    hits mapped to `{ name, displayName, type, lat, lon }` (`name` =
+    first part of `display_name`), HTTP error → `OsmImportError
+('searchFailed')`, empty → `[]`. A module-level gate delays a call
+    that comes within `searchMinIntervalMs` of the previous one.
+  - `fetchTown(bbox, deps, signal): Promise<string>` — POST
+    `data=<query>` to each endpoint in turn; retry on network error,
+    HTTP 429/503/504 or timeout (AbortSignal.timeout combined with the
+    caller's signal); last failure → `OsmImportError('fetchFailed')`,
+    abort → `('aborted')`.
+  - `squareBbox(lat, lon, sideKm): [w, s, e, n]` shared with the
+    rasteriser's projection helpers (`src/import/geo.ts`).
+- `src-tauri/tauri.conf.json`: `connect-src` gains the three hosts.
+- `src/import/fetch.test.ts`: query text (tags, bbox order), Nominatim
+  URL/params and mapping, errors, the rate gate (fake timers),
+  endpoint fallback order and the retry conditions, abort.
+
+## Task 5 — UI: import on the new-game page, preview, attribution
 
 - `src/ui/newGame.ts`: `NewGameOptions.layout?: TownLayout`; pending
   storage encodes typed arrays with `toBase64Url`/`fromBase64Url`
@@ -130,56 +164,78 @@ startingMoney)`, `disasterScale`, `sandbox` as for free play,
   `decodePendingLayout` for tests.
 - `src/ui/importTown.ts` (main thread, DOM-free except `File`):
   `readTownFile(file): Promise<OsmData>` (`file.text()`, `parseOsm`),
-  mapping `OsmImportError` codes to i18n keys.
+  `loadTown(place, sideKm, signal): Promise<{ data: OsmData; bbox }>`
+  (`fetchTown` + `parseOsm`), and the map of `OsmImportError` codes to
+  i18n keys. A small reducer `importTownReducer` holds the flow state
+  (`idle | searching | results | loading | parsed | error`, with the
+  chosen place, side, size, data, bbox, layout, report) so the page
+  logic is unit-testable without React.
 - `src/ui/NewGamePage.tsx`: section "Import a town" below the map-size
-  control: file input (`accept=".osm,.xml,application/xml"`, testid
-  `import-town-file`), status line (reading / error, testid
-  `import-town-status`), `TownPreview` (canvas, `size`×`size` pixels
-  scaled by CSS, colours from a shared `src/ui/townColors.ts` that
-  `minimapLayer.ts` also imports — move its `COLORS` there) and the
-  report line (testid `import-town-report`). Size buttons re-rasterise
-  the parsed `OsmData` (kept in component state, rasterising in a
-  `useEffect` with the size). Start stores options with the layout.
-  While a layout is loaded the seed field is hidden (the seed still
-  seeds geothermal and building variants; take a random one).
+  control, as the spec lists: search field + button (testids
+  `import-town-query`, `import-town-search`), result list
+  (`import-town-result`), chosen-place chip, side buttons
+  (`import-town-side`), metres-per-tile line, "Load town" button
+  (`import-town-load`, shows a spinner and a Cancel while loading,
+  aborts on unmount), the collapsed file row (file input
+  `accept=".osm,.xml,application/xml"`, testid `import-town-file`),
+  status line (testid `import-town-status`), `TownPreview` (canvas,
+  `size`×`size` pixels scaled by CSS, colours from a shared
+  `src/ui/townColors.ts` that `minimapLayer.ts` also imports — move
+  its `COLORS` there) and the report line (testid
+  `import-town-report`). Map-size buttons re-rasterise the parsed
+  `OsmData`; a new side or place clears data and preview. Start stores
+  options with the layout. While a layout is loaded the seed field is
+  hidden (the seed still seeds geothermal and building variants; take
+  a random one).
 - `src/ui/HudConsole.tsx` (or wherever the HUD footer lives — check
   `App.tsx` bottom bar): `OsmAttribution` when `stats.origin?.source
 === 'osm'`: "© OpenStreetMap contributors", link to
   `https://www.openstreetmap.org/copyright`, testid `osm-attribution`;
   in the native app the link goes through `platform.ts` (opener
   plugin), as other external links do.
-- `src/ui/ImprintPage.tsx`: ODbL paragraph.
+- `src/ui/ImprintPage.tsx`: ODbL paragraph and the Nominatim/Overpass
+  data-flow paragraph; the import section links to the imprint.
 - `src/ui/SavesPage.tsx`: default name of a new slot = `stats.origin
 ?.name` when set.
 - `src/ui/useSimBridge.ts`: pass `options.layout` into `init`.
-- i18n EN + DE: `newGame.import.*` (title, help text naming
-  openstreetmap.org's export, file label, reading, errors `notOsm`,
-  `boxTooLarge`, `empty`, report template with named placeholders),
-  `hud.osmAttribution`, `imprint.osm*`.
+- i18n EN + DE: `newGame.import.*` (title, search placeholder and
+  button, no results, service note, side labels, load/cancel, file
+  row, reading, errors `searchFailed`, `fetchFailed`, `aborted`,
+  `notOsm`, `boxTooLarge`, `empty`, report template with named
+  placeholders), `hud.osmAttribution`, `imprint.osm*`.
 - Tests: `newGame.test.ts` pending layout round trip and invalid code
-  dropped; `importTown.test.ts` error mapping; a small render test of
-  the attribution if the HUD has component tests (grep `HudConsole`
-  tests).
+  dropped; `importTown.test.ts` reducer transitions and error mapping;
+  a small render test of the attribution if the HUD has component
+  tests (grep `HudConsole` tests).
 
-## Task 5 — agent tools, docs, e2e
+## Task 6 — agent tools, docs, e2e
 
-- `src/agent/tools.ts`: `get_game_overview` adds `origin`;
-  `get_build_catalog` adds `osmImport` (the mapping table from
-  `OSM_IMPORT`, `buildingsPerDensity`); descriptions mention that a
-  town is imported on the new-game page and reaches agents via shared
-  links. `docs/agent-tools.md`: table rows updated, a short "Imported
-  towns" note.
-- e2e `e2e/game.spec.ts`: open the new-game page, `setInputFiles` with
-  `src/import/fixtures/town.osm`, expect the report line, start, expect
-  `osm-attribution` visible and the population counter > 0 within the
-  usual wait. Run in the sandbox with the temporary Playwright config
-  (memory) if possible, otherwise note it for the Mac.
+- `src/agent/tools.ts`: `AgentContext.fetch?: typeof fetch` (webmcp
+  passes the browser's; tests stub it). New tools `search_places`
+  (`query`, returns the hits) and `import_town` (`query` or `lat` +
+  `lon`, `sideKm` ∈ `OSM_IMPORT.sideKm`, `size`, and the
+  `start_new_city` options; searches when no coordinates, fetches,
+  parses, rasterises, then `ctx.startNewCity({ ..., layout })`;
+  `NewCityOptions.layout?`). `get_game_overview` adds `origin`;
+  `get_build_catalog` adds `osmImport` (mapping table, sides,
+  `buildingsPerDensity`). `docs/agent-tools.md`: table rows, a short
+  "Imported towns" note with the usage-policy sentence. Tests in
+  `tools.test.ts` with a stubbed fetch returning the fixture.
+- e2e `e2e/game.spec.ts`: (a) file path — open the new-game page,
+  `setInputFiles` with `src/import/fixtures/town.osm`, expect the
+  report line, start, expect `osm-attribution` visible and the
+  population counter > 0 within the usual wait; (b) search path —
+  `page.route` stubs Nominatim (one hit) and the Overpass endpoint
+  (fixture body), search, pick, load, same assertions. Run in the
+  sandbox with the temporary Playwright config (memory) if possible,
+  otherwise note it for the Mac.
 - `docs/idea.md`: "Import a town from OpenStreetMap" entry under Next
   ideas (done, with the spike figures and the probe command);
   `docs/plan.md` Post-MVP checkbox; `CLAUDE.md` architecture list gets
-  `src/import/` (DOM-free parser + rasteriser, tested in node).
+  `src/import/` (DOM-free parser, rasteriser and fetch wrappers, tested
+  in node; the only network code in the app) and the CSP note.
 
-## Task 6 — settling probe and tuning
+## Task 7 — settling probe and tuning
 
 - `scripts/probe-osm.mjs --sim [days]` (or a sibling
   `scripts/probe-osm-sim.mjs`): rasterise, init a headless `SimEngine`
