@@ -605,9 +605,18 @@ export const BALANCE = {
   osmImport: {
     /**
      * OpenStreetMap building centroids a zoned, road-served land tile
-     * needs to start with a density 1 / 2 / 3 building. Initial guess;
-     * tuned by the settling probe so a real small town starts with a
-     * population in the range of the old-town scenario.
+     * needs to start with a density 1 / 2 / 3 building. Confirmed by the
+     * settling probe (2026-10-26, Schwabmünchen, 3.5 km): at 96 tiles
+     * the town settles 467 / 232 / 48 buildings, 5_936 residents and a
+     * base load of 2_443 EU/tick (old-town scenario: 96 buildings,
+     * 1_216 residents, 584 EU/tick) and earns 39_200 a day in tax
+     * against 13_500 of road and rail upkeep from day 1 on, so it pays
+     * its own way and needs no founding grant (at 64: 199 buildings,
+     * 2_128 residents, 15_400 against 7_300). Covering the base load
+     * costs about three days of net income either way (16 solar farms
+     * at peak for 25_700 a day, four for the old town's 8_900). Break-even
+     * is roughly one settled building per eight road tiles; the synthetic
+     * fixture (20 on 605) runs 950 against 4_200 and is broke on day 8.
      */
     buildingsPerDensity: [1, 3, 6] as const,
   },

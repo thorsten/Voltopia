@@ -437,6 +437,15 @@ next, roughly in the order we would build them.
   kept / 303 dropped (no road), 747 settled buildings; the ASCII probe
   is `node scripts/probe-osm.mjs town.osm 96`. Imported cities carry
   the ODbL attribution; agents use `search_places` and `import_town`.
+  Settling probe (2026-10-26, thresholds 1 / 3 / 6 centroids per tile):
+  at 96 the town starts with 5,936 residents in 747 buildings and earns
+  39,200 a day in tax against 13,500 of road and rail upkeep from day 1
+  (unchanged on day 10, treasury 282,000 from 25,000); at 64 it is
+  2,128 residents, 15,400 against 7,300. No founding grant: the town
+  pays its own way, and its base load (2,443 EU/tick, four times the
+  old-town scenario's 584) costs the same three days of net income to
+  supply. Break-even is about one settled building per eight road
+  tiles; only the synthetic fixture (20 on 605) falls below it.
 
 ## Way of Working
 
