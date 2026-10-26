@@ -20,3 +20,4 @@ playwright-report
 # Tauri (Rust target dir and generated schemas; gen/apple is committed once generated)
 src-tauri/target/
 src-tauri/gen/schemas/
+*.osm

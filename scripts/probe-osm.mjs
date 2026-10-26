@@ -341,6 +341,23 @@ for (let y = 0; y < size; y++)
     if (deg === 1) deadEnds++;
     if (deg === 2 && nb[0] !== nb[2]) corners++;
   }
+// Zone tiles need a road neighbour in the sim to grow buildings.
+const isZone = (i) => grid[i] === 'R' || grid[i] === 'C' || grid[i] === 'S' || grid[i] === 'I';
+let zones = 0;
+let zonesServed = 0;
+for (let y = 0; y < size; y++)
+  for (let x = 0; x < size; x++) {
+    const i = y * size + x;
+    if (!isZone(i)) continue;
+    zones++;
+    if (
+      (inside(x, y - 1) && isRoad(i - size)) ||
+      (inside(x + 1, y) && isRoad(i + 1)) ||
+      (inside(x, y + 1) && isRoad(i + size)) ||
+      (inside(x - 1, y) && isRoad(i - 1))
+    )
+      zonesServed++;
+  }
 // Road components (4-connected).
 const seen = new Uint8Array(size * size);
 let components = 0;
@@ -393,5 +410,8 @@ console.log(
 console.log('tiles', JSON.stringify(tally));
 console.log(
   `roads ${roads}: corners ${corners} (${((100 * corners) / Math.max(1, roads)).toFixed(0)} %), dead ends ${deadEnds}, components ${components}, largest ${largest} (${((100 * largest) / Math.max(1, roads)).toFixed(0)} %)`,
+);
+console.log(
+  `zones ${zones}: ${zonesServed} beside a road (${((100 * zonesServed) / Math.max(1, zones)).toFixed(0)} %)`,
 );
 console.log('skipped highway tags', JSON.stringify(counts.skippedHighways));
