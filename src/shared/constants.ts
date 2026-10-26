@@ -619,6 +619,16 @@ export const BALANCE = {
      * fixture (20 on 605) runs 950 against 4_200 and is broke on day 8.
      */
     buildingsPerDensity: [1, 3, 6] as const,
+    /**
+     * Grace before unsupplied buildings of an imported town start to
+     * decay, in days (replaces growth.abandonAfterTicks while
+     * state.origin is set). A real town arrives with hundreds of
+     * settled buildings and no grid; with the one-day free-play grace
+     * the first plant emptied Schwabmünchen within three days
+     * (5_936 → ~120 residents). Five days of tax income (~200_000 at
+     * 96 tiles) pay for lines along the roads and the first plants.
+     */
+    abandonAfterDays: 5,
   },
 
   forest: {

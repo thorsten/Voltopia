@@ -446,6 +446,11 @@ next, roughly in the order we would build them.
   old-town scenario's 584) costs the same three days of net income to
   supply. Break-even is about one settled building per eight road
   tiles; only the synthetic fixture (20 on 605) falls below it.
+  Imported towns get `BALANCE.osmImport.abandonAfterDays` (5) of grace
+  before unsupplied buildings decay instead of free play's one day: the
+  probe's first plant otherwise emptied Schwabmünchen within three days
+  (5_936 → ~120 residents), while five days of tax income pay for lines
+  along the roads and the first plants.
 
 ## Way of Working
 

@@ -228,6 +228,26 @@ describe('growthStep', () => {
     expect(state.layers.density[at(4, 4)]).toBe(0);
   });
 
+  it('imported towns get a longer grace before decay', () => {
+    const state = cityWithRoad();
+    state.origin = { source: 'osm', name: null, bbox: [0, 0, 0, 0] };
+    placePlant(state, at(14, 14), PlantType.WindTurbine);
+    state.layers.zone[at(4, 4)] = Zone.Residential;
+    state.layers.density[at(4, 4)] = 3;
+    const grace = BALANCE.osmImport.abandonAfterDays * TICKS_PER_DAY;
+    expect(grace).toBeGreaterThan(BALANCE.growth.abandonAfterTicks);
+    const troubled = () => {
+      state.layers.supplied[at(4, 4)] = SupplyStatus.Undersupplied;
+      decayStep(state);
+    };
+    // Below the imported grace nothing decays, however unlucky the rng.
+    for (let i = 0; i < grace - 1; i++) troubled();
+    expect(state.layers.density[at(4, 4)]).toBe(3);
+    // Each lost level restarts the grace: three levels, then the rng.
+    for (let i = 0; i < grace * 3 + TICKS_PER_DAY * 8; i++) troubled();
+    expect(state.layers.density[at(4, 4)]).toBe(0);
+  });
+
   it('supplied buildings never decay', () => {
     const state = cityWithRoad();
     placePlant(state, at(14, 14), PlantType.WindTurbine);

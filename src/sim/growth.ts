@@ -1,4 +1,4 @@
-import { BALANCE } from '../shared/constants.ts';
+import { BALANCE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { neighbors4 } from '../shared/grid.ts';
 import { isShopSupplied } from './deliveries.ts';
 import { hasPowerInfrastructure } from './energy.ts';
@@ -179,6 +179,17 @@ export function energySystemActive(state: SimState): boolean {
 }
 
 /**
+ * Ticks without full supply before a building starts to decay: an
+ * imported town gets days instead of the free-play day, because it
+ * starts with every building settled and no grid at all.
+ */
+export function abandonAfterTicks(state: SimState): number {
+  return state.origin
+    ? BALANCE.osmImport.abandonAfterDays * TICKS_PER_DAY
+    : BALANCE.growth.abandonAfterTicks;
+}
+
+/**
  * Abandonment: buildings track how long they have been without full
  * supply; after a grace period they decay one density level at a time
  * until the lot is vacant again. Inactive until the first plant exists,
@@ -187,6 +198,7 @@ export function energySystemActive(state: SimState): boolean {
 export function decayStep(state: SimState): void {
   const { layers } = state;
   const active = energySystemActive(state);
+  const grace = abandonAfterTicks(state);
   for (let i = 0; i < layers.density.length; i++) {
     if (layers.tileType[i] !== TileType.Empty || layers.density[i] === 0) {
       layers.troubledTicks[i] = 0;
@@ -204,7 +216,7 @@ export function decayStep(state: SimState): void {
       continue;
     }
     layers.troubledTicks[i]++;
-    if (layers.troubledTicks[i] < BALANCE.growth.abandonAfterTicks) continue;
+    if (layers.troubledTicks[i] < grace) continue;
     if (!state.rng.chance(BALANCE.growth.abandonChancePerTick)) continue;
     layers.density[i]--;
     if (layers.density[i] === 0) layers.pvMandated[i] = 0;
