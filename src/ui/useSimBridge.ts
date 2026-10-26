@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GRID_SIZE } from '../shared/constants.ts';
 import type { LifetimeData, SimCommand, SimEvent } from '../shared/messages.ts';
-import type { GlobalStats, SaveGame, ScenarioId, TileDiff, VehicleState } from '../shared/types.ts';
+import type {
+  GlobalStats,
+  SaveGame,
+  ScenarioId,
+  TileDiff,
+  TownLayout,
+  VehicleState,
+} from '../shared/types.ts';
 
 export interface SimBridge {
   /** Latest global stats from the worker (null until the first tick). */
@@ -41,6 +48,8 @@ export interface SimBridgeOptions {
   scenario?: ScenarioId;
   /** Found a sandbox city (brand-new free city only). */
   sandbox?: boolean;
+  /** Start on an imported town (brand-new free city only; same size). */
+  layout?: TownLayout;
 }
 
 const REJECTION_DISPLAY_MS = 2500;
@@ -113,6 +122,8 @@ export function useSimBridge(options: SimBridgeOptions): SimBridge {
       ...(options.disasterScale !== undefined ? { disasterScale: options.disasterScale } : {}),
       ...(options.scenario ? { scenario: options.scenario } : {}),
       ...(options.sandbox ? { sandbox: true } : {}),
+      // Typed arrays cross to the worker by structured clone.
+      ...(options.layout ? { layout: options.layout } : {}),
       ...(options.save ? { save: options.save } : {}),
     };
     worker.postMessage(init);

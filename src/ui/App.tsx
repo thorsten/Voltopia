@@ -32,6 +32,7 @@ import {
   type NewGameOptions,
 } from './newGame.ts';
 import { NewGamePage } from './NewGamePage.tsx';
+import { OsmAttribution } from './OsmAttribution.tsx';
 import { SavesPage } from './SavesPage.tsx';
 import { SharedCityDialog } from './SharedCityDialog.tsx';
 import {
@@ -253,6 +254,7 @@ function Game({
     disasterScale: options.disasterScale,
     ...(save === null && options.scenario ? { scenario: options.scenario } : {}),
     ...(save === null && options.sandbox ? { sandbox: true } : {}),
+    ...(save === null && options.layout ? { layout: options.layout } : {}),
     ...(save ? { save } : {}),
   });
   const callbacksRef = useRef<RendererCallbacks>({});
@@ -589,6 +591,7 @@ function Game({
               <TileInspector info={stats.inspected} onClose={clearSelectedTile} />
             )}
             <footer className="hud-plate hud-footer">
+              {stats?.origin?.source === 'osm' && <OsmAttribution />}
               <button type="button" data-testid="open-help" onClick={() => setPage('help')}>
                 {t('footer.help')}
               </button>
@@ -680,7 +683,11 @@ function Game({
         <ScenariosPage onStart={startScenario} onClose={() => setPage(null)} />
       )}
       {page === 'newGame' && (
-        <NewGamePage onStart={() => void startNewGame()} onClose={() => setPage(null)} />
+        <NewGamePage
+          onStart={() => void startNewGame()}
+          onClose={() => setPage(null)}
+          onOpenImprint={() => setPage('imprint')}
+        />
       )}
       {page === 'settings' && (
         <SettingsPage
@@ -696,6 +703,7 @@ function Game({
           replaceCityAndReload={cityReloader.replaceCityAndReload}
           population={stats.population}
           tick={stats.tick}
+          cityName={stats.origin?.name ?? null}
           canShare={!stats.scenario}
           onClose={() => setPage(null)}
         />

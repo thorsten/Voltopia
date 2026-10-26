@@ -42,6 +42,7 @@ const en = {
   'hud.districtInDeficit': '{count} district in deficit',
   'hud.districtsInDeficit': '{count} districts in deficit',
   'hud.section.city': 'City',
+  'hud.osmAttribution': '© OpenStreetMap contributors',
 
   'speed.pause': 'Pause',
   'speed.normal': 'Normal speed',
@@ -279,6 +280,41 @@ const en = {
   'newGame.start': 'Found city',
   'newGame.cancel': 'Cancel',
   'newGame.warning': 'Starting a new city erases the current one.',
+  'newGame.import.title': 'Import a town',
+  'newGame.import.intro':
+    'Start on a real town from OpenStreetMap: search a place, choose the excerpt and load it — or import an exported .osm file.',
+  'newGame.import.searchPlaceholder': 'Town or village',
+  'newGame.import.search': 'Search',
+  'newGame.import.searching': 'Searching…',
+  'newGame.import.noResults': 'No place found — try another spelling or add the region.',
+  'newGame.import.chip': '{name} ({type}) · {lat}, {lon}',
+  'newGame.import.side': '{km} km',
+  'newGame.import.metresPerTile': 'About {metres} m per tile at {size}×{size}',
+  'newGame.import.load': 'Load town',
+  'newGame.import.cancel': 'Cancel',
+  'newGame.import.loading': 'Loading from OpenStreetMap…',
+  'newGame.import.serviceNote':
+    'Searching and loading contact openstreetmap.org services (Nominatim, Overpass).',
+  'newGame.import.serviceNoteLink': 'What is sent',
+  'newGame.import.fileSummary': 'Import a file instead',
+  'newGame.import.fileLabel': 'OpenStreetMap XML export (.osm, .xml)',
+  'newGame.import.reading': 'Reading file…',
+  'newGame.import.loaded': 'Loaded: {name}',
+  'newGame.import.unnamed': 'unnamed town',
+  'newGame.import.report':
+    '{metres} m per tile · {roads} road tiles · {zones} zone tiles · {buildings} buildings · {dropped} zone tiles dropped (no road)',
+  'newGame.import.seedNote':
+    'An imported town takes a random seed; it only places the geothermal spots and picks building variants.',
+  'newGame.import.error.searchFailed':
+    'The place search is not reachable right now. Try again in a moment.',
+  'newGame.import.error.fetchFailed':
+    'The town could not be downloaded (service busy or timed out). Try again, or import a file instead.',
+  'newGame.import.error.aborted': 'Loading was cancelled.',
+  'newGame.import.error.notOsm': 'This is not an OpenStreetMap XML file.',
+  'newGame.import.error.boxTooLarge':
+    'The area is wider than {km} km; export a smaller one or pick a smaller excerpt.',
+  'newGame.import.error.empty': 'Nothing to build on here: the area has no roads or buildings.',
+  'newGame.import.error.unknown': 'The import failed unexpectedly.',
   'newCity.label': 'New city',
   'newCity.confirm': 'Start a new city? The current one will be erased.',
 
@@ -421,6 +457,11 @@ const en = {
   'imprint.disclaimer.title': 'Disclaimer',
   'imprint.disclaimer.body':
     'This is a free, open-source browser game (MIT license). Despite careful review, no liability is assumed for external links; their content is the sole responsibility of their operators.',
+  'imprint.osm.title': 'Map data from OpenStreetMap',
+  'imprint.osm.data':
+    'Imported towns are built from OpenStreetMap data, © OpenStreetMap contributors, licensed under the Open Database License (ODbL). Details:',
+  'imprint.osm.requests':
+    'When you import a town, your search text and the chosen coordinates are sent to the OpenStreetMap Foundation services Nominatim (place search) and Overpass (map data) — and, as with any web request, your IP address; if the first Overpass server is busy, the fallback overpass.kumi.systems receives the coordinates instead. Voltopia stores none of it: the downloaded data stays in your browser.',
 
   'modal.close': 'Close',
 
@@ -940,6 +981,7 @@ const de: Record<TranslationKey, string> = {
   'hud.districtInDeficit': '{count} Bezirk im Defizit',
   'hud.districtsInDeficit': '{count} Bezirke im Defizit',
   'hud.section.city': 'Stadt',
+  'hud.osmAttribution': '© OpenStreetMap-Mitwirkende',
 
   'speed.pause': 'Pause',
   'speed.normal': 'Normale Geschwindigkeit',
@@ -1178,6 +1220,43 @@ const de: Record<TranslationKey, string> = {
   'newGame.start': 'Stadt gründen',
   'newGame.cancel': 'Abbrechen',
   'newGame.warning': 'Eine neue Stadt löscht die aktuelle Stadt.',
+  'newGame.import.title': 'Stadt importieren',
+  'newGame.import.intro':
+    'Beginne auf einer echten Stadt aus OpenStreetMap: Ort suchen, Ausschnitt wählen und laden — oder eine exportierte .osm-Datei importieren.',
+  'newGame.import.searchPlaceholder': 'Stadt oder Dorf',
+  'newGame.import.search': 'Suchen',
+  'newGame.import.searching': 'Suche…',
+  'newGame.import.noResults':
+    'Kein Ort gefunden — probiere eine andere Schreibweise oder ergänze die Region.',
+  'newGame.import.chip': '{name} ({type}) · {lat}, {lon}',
+  'newGame.import.side': '{km} km',
+  'newGame.import.metresPerTile': 'Etwa {metres} m pro Kachel bei {size}×{size}',
+  'newGame.import.load': 'Stadt laden',
+  'newGame.import.cancel': 'Abbrechen',
+  'newGame.import.loading': 'Lade von OpenStreetMap…',
+  'newGame.import.serviceNote':
+    'Suche und Laden kontaktieren Dienste von openstreetmap.org (Nominatim, Overpass).',
+  'newGame.import.serviceNoteLink': 'Was gesendet wird',
+  'newGame.import.fileSummary': 'Stattdessen eine Datei importieren',
+  'newGame.import.fileLabel': 'OpenStreetMap-XML-Export (.osm, .xml)',
+  'newGame.import.reading': 'Lese Datei…',
+  'newGame.import.loaded': 'Geladen: {name}',
+  'newGame.import.unnamed': 'Ort ohne Namen',
+  'newGame.import.report':
+    '{metres} m pro Kachel · {roads} Straßenkacheln · {zones} Zonenkacheln · {buildings} Gebäude · {dropped} Zonenkacheln verworfen (keine Straße)',
+  'newGame.import.seedNote':
+    'Eine importierte Stadt bekommt einen zufälligen Startwert; er setzt nur die Geothermie-Stellen und wählt Gebäudevarianten.',
+  'newGame.import.error.searchFailed':
+    'Die Ortssuche ist gerade nicht erreichbar. Versuche es gleich noch einmal.',
+  'newGame.import.error.fetchFailed':
+    'Die Stadt ließ sich nicht herunterladen (Dienst ausgelastet oder Zeitüberschreitung). Versuche es erneut oder importiere eine Datei.',
+  'newGame.import.error.aborted': 'Das Laden wurde abgebrochen.',
+  'newGame.import.error.notOsm': 'Das ist keine OpenStreetMap-XML-Datei.',
+  'newGame.import.error.boxTooLarge':
+    'Das Gebiet ist breiter als {km} km; exportiere ein kleineres oder wähle einen kleineren Ausschnitt.',
+  'newGame.import.error.empty':
+    'Hier lässt sich nichts bauen: das Gebiet hat weder Straßen noch Gebäude.',
+  'newGame.import.error.unknown': 'Der Import ist unerwartet fehlgeschlagen.',
   'newCity.label': 'Neue Stadt',
   'newCity.confirm': 'Eine neue Stadt beginnen? Die aktuelle Stadt wird gelöscht.',
 
@@ -1321,6 +1400,11 @@ const de: Record<TranslationKey, string> = {
   'imprint.disclaimer.title': 'Haftungsausschluss',
   'imprint.disclaimer.body':
     'Dies ist ein kostenloses Open-Source-Browserspiel (MIT-Lizenz). Trotz sorgfältiger Prüfung wird keine Haftung für externe Links übernommen; für deren Inhalte sind ausschließlich die jeweiligen Betreiber verantwortlich.',
+  'imprint.osm.title': 'Kartendaten von OpenStreetMap',
+  'imprint.osm.data':
+    'Importierte Städte entstehen aus OpenStreetMap-Daten, © OpenStreetMap-Mitwirkende, lizenziert unter der Open Database License (ODbL). Details:',
+  'imprint.osm.requests':
+    'Beim Import einer Stadt gehen dein Suchtext und die gewählten Koordinaten an die Dienste Nominatim (Ortssuche) und Overpass (Kartendaten) der OpenStreetMap Foundation — und, wie bei jeder Webanfrage, deine IP-Adresse; ist der erste Overpass-Server ausgelastet, erhält stattdessen der Ersatzserver overpass.kumi.systems die Koordinaten. Voltopia speichert nichts davon: die geladenen Daten bleiben in deinem Browser.',
 
   'modal.close': 'Schließen',
 

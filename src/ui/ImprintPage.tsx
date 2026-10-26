@@ -1,5 +1,6 @@
 import { Modal } from './Modal.tsx';
 import { useI18n } from './i18n.tsx';
+import { OSM_COPYRIGHT_URL } from './OsmAttribution.tsx';
 
 /** Legal notice / Impressum contact details. */
 const IMPRINT = {
@@ -44,6 +45,16 @@ export function ImprintPage({ onClose }: { onClose: () => void }) {
       <section>
         <h3>{t('imprint.disclaimer.title')}</h3>
         <p>{t('imprint.disclaimer.body')}</p>
+      </section>
+      <section data-testid="imprint-osm">
+        <h3>{t('imprint.osm.title')}</h3>
+        <p>
+          {t('imprint.osm.data')}{' '}
+          <a href={OSM_COPYRIGHT_URL} target="_blank" rel="noreferrer">
+            openstreetmap.org/copyright
+          </a>
+        </p>
+        <p>{t('imprint.osm.requests')}</p>
       </section>
     </Modal>
   );

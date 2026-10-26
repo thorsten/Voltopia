@@ -43,6 +43,7 @@ export function SavesPage({
   replaceCityAndReload,
   population,
   tick,
+  cityName = null,
   canShare,
   onClose,
 }: {
@@ -55,13 +56,17 @@ export function SavesPage({
   population: number;
   /** Current sim tick, for the default name's day. */
   tick: number;
+  /** An imported town's name; it replaces the city label in the default name. */
+  cityName?: string | null;
   /** Sharing is off during a scenario. */
   canShare: boolean;
   onClose: () => void;
 }) {
   const { t, locale } = useI18n();
   const [saves, setSaves] = useState<SaveSummary[] | null>(null);
-  const [name, setName] = useState(() => defaultSaveName(dayOfTick(tick), t('saves.defaultName')));
+  const newSlotName = (): string =>
+    defaultSaveName(dayOfTick(tick), t('saves.defaultName'), cityName ?? undefined);
+  const [name, setName] = useState(newSlotName);
   const [message, setMessage] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ id: string; action: ConfirmAction } | null>(null);
@@ -115,7 +120,7 @@ export function SavesPage({
 
   const saveNew = (): Promise<void> =>
     run(async () => {
-      const label = name.trim() || defaultSaveName(dayOfTick(tick), t('saves.defaultName'));
+      const label = name.trim() || newSlotName();
       const snapshot = await requestSnapshot();
       const id = newSlotId();
       await storage.save(snapshot, id, label, population);

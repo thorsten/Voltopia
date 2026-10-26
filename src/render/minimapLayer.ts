@@ -1,55 +1,9 @@
 import type { TileDiff } from '../shared/types.ts';
-import { PlantType, RoadClass, Terrain, TileType, Zone } from '../shared/types.ts';
+import { RoadClass, Terrain, TileType, Zone } from '../shared/types.ts';
+import { MINIMAP_COLORS } from '../ui/townColors.ts';
 import type { DiffLayer } from './renderer.ts';
 
-const COLORS = {
-  ground: '#8fb573',
-  forest: '#3f6b3c',
-  road: '#5a6068',
-  avenue: '#8b929c',
-  river: '#4d8fc4',
-  lake: '#3f7fb5',
-  sea: '#2f6ea8',
-  powerLine: '#e8d76a',
-  rail: '#8a8f99',
-  busStop: '#f2d16b',
-  /** Same heavy-damage red as the Damage overlay (overlays.ts DAMAGE_COLORS.heavy). */
-  damaged: '#e05263',
-  zoned: {
-    [Zone.Residential]: '#a9d3ab',
-    [Zone.Commercial]: '#a9c3e0',
-    [Zone.Retail]: '#e0bfa9',
-    [Zone.Industrial]: '#d9cfa9',
-  } as Record<number, string>,
-  building: {
-    [Zone.Residential]: '#4c9a51',
-    [Zone.Commercial]: '#3c6fb4',
-    [Zone.Retail]: '#c07a45',
-    [Zone.Industrial]: '#8a7a3c',
-  } as Record<number, string>,
-  plant: {
-    [PlantType.SolarFarm]: '#2b3d66',
-    [PlantType.WindTurbine]: '#e8eaec',
-    [PlantType.Battery]: '#4d6b57',
-    [PlantType.BiogasPlant]: '#93ab6d',
-    [PlantType.ChargingHub]: '#58b7a4',
-    [PlantType.Park]: '#3f7d46',
-    [PlantType.RunOfRiver]: '#9aa3ad',
-    [PlantType.PumpedStorage]: '#5d6b7a',
-    [PlantType.HydrogenPlant]: '#54b8c9',
-    [PlantType.FireStation]: '#c0392b',
-    [PlantType.PoliceStation]: '#2f5fa8',
-    [PlantType.LogisticsDepot]: '#8d99a6',
-    [PlantType.BusDepot]: '#5b8fc7',
-    [PlantType.TidalPlant]: '#1d7373',
-    [PlantType.GeothermalPlant]: '#b5482f',
-    [PlantType.HeatPlant]: '#d9822b',
-    [PlantType.HeatStore]: '#c9a227',
-    [PlantType.TrainStation]: '#d84a3a',
-    [PlantType.FreightTerminal]: '#d9a441',
-    [PlantType.RailYard]: '#6e5a9e',
-  } as Record<number, string>,
-} as const;
+const COLORS = MINIMAP_COLORS;
 
 /**
  * Keeps a one-pixel-per-tile canvas of the city in sync with the sim
