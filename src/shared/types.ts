@@ -41,6 +41,42 @@ export const Zone = {
 } as const;
 export type Zone = (typeof Zone)[keyof typeof Zone];
 
+/** Road class of a TownLayout tile: 0 none, 1 street, 2 avenue. */
+export const TownRoad = { None: 0, Street: 1, Avenue: 2 } as const;
+export type TownRoad = (typeof TownRoad)[keyof typeof TownRoad];
+
+/**
+ * A town rasterised from OpenStreetMap data (`src/import/`), the map an
+ * imported city starts from. Plain typed arrays of `size * size` so the
+ * layout crosses the worker boundary by structured clone. Values follow
+ * the sim enums: `terrain` is a Terrain, `zone` a Zone, `forest` 0 or
+ * `BALANCE.forest.maxStage`, `density` 0 (no building) or 1..3.
+ */
+export interface TownLayout {
+  size: number;
+  terrain: Uint8Array;
+  forest: Uint8Array;
+  /** TownRoad values. */
+  road: Uint8Array;
+  /** 1 on street tiles that carry the pedestrian lane. */
+  pedestrian: Uint8Array;
+  /** 1 on track tiles. */
+  rail: Uint8Array;
+  zone: Uint8Array;
+  density: Uint8Array;
+  /** The largest place inside the box, or null when the data names none. */
+  name: string | null;
+  /** West, south, east, north in degrees. */
+  bbox: [number, number, number, number];
+}
+
+/** Where an imported city's map came from; carried through saves for the attribution. */
+export interface TownOrigin {
+  source: 'osm';
+  name: string | null;
+  bbox: [number, number, number, number];
+}
+
 export const PlantType = {
   None: 0,
   SolarFarm: 1,

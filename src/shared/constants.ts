@@ -601,6 +601,17 @@ export const BALANCE = {
     storeLossPerTick: 0.0005,
   },
 
+  /** Settling an imported town (src/import/rasterise.ts). */
+  osmImport: {
+    /**
+     * OpenStreetMap building centroids a zoned, road-served land tile
+     * needs to start with a density 1 / 2 / 3 building. Initial guess;
+     * tuned by the settling probe so a real small town starts with a
+     * population in the range of the old-town scenario.
+     */
+    buildingsPerDensity: [1, 3, 6] as const,
+  },
+
   forest: {
     /** Growth stages of a wooded tile: 1 sapling .. maxStage mature. */
     maxStage: 3,
