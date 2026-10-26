@@ -34,6 +34,7 @@ import { generateTerrain } from './terrain.ts';
 import { buildStats, stepTick } from './tick.ts';
 import { pinSandboxTreasury } from './sandbox.ts';
 import { generateForest, plantForest } from './forest.ts';
+import { applyTownLayout, validateTownLayout } from './importTown.ts';
 import { generateWater } from './water.ts';
 
 /**
@@ -75,6 +76,17 @@ export class SimEngine {
           discoverGeothermalFields(this.state);
           generateForest(this.state);
           startScenario(this.state, def);
+        } else if (command.layout && validateTownLayout(command.layout, command.size)) {
+          // An imported town: flat land with the layout's water and woods
+          // instead of a generated map. Hotspots are still seeded by the
+          // city seed so an import is as deterministic as a free city.
+          const { layout } = command;
+          this.state = createSimState(command.seed, layout.size, command.startingMoney);
+          this.state.disasterScale = command.disasterScale ?? 1;
+          this.state.sandbox = command.sandbox === true;
+          generateGeothermal(this.state);
+          discoverGeothermalFields(this.state);
+          applyTownLayout(this.state, layout);
         } else {
           this.state = createSimState(command.seed, command.size, command.startingMoney);
           // createSimState defaults to 0 (disasters off) so tests never run
@@ -87,6 +99,10 @@ export class SimEngine {
           generateGeothermal(this.state);
           discoverGeothermalFields(this.state);
           generateForest(this.state);
+          // A layout that failed validation (wrong size, torn arrays, values
+          // out of range — it may come from localStorage) lands here: the
+          // player still gets a playable seeded city, and hears why.
+          if (command.layout) return [{ type: 'rejected', reason: 'invalidLayout' }];
         }
         return [];
       case 'setSpeed':

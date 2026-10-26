@@ -238,6 +238,7 @@ export function buildStats(state: SimState): GlobalStats {
     tick: state.tick,
     money: state.money,
     sandbox: state.sandbox,
+    ...(state.origin ? { origin: structuredClone(state.origin) } : {}),
     population,
     jobs,
     happiness: state.happiness,

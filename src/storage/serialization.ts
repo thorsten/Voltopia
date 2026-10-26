@@ -10,6 +10,7 @@ import {
   type SavedScenario,
   type SavedTrain,
   type SeasonId,
+  type TownOrigin,
 } from '../shared/types.ts';
 
 /** Canonical layer order. Share format v1 depends on it: APPEND ONLY. */
@@ -223,6 +224,13 @@ function isSavedScenario(value: unknown): value is SavedScenario {
   ).every((key) => isFiniteNumber(today[key]));
 }
 
+/** All or nothing: the attribution needs the source, and the bbox is shown as is. */
+function isTownOrigin(value: unknown): value is TownOrigin {
+  if (!isPlainObject(value) || value.source !== 'osm') return false;
+  if (value.name !== null && typeof value.name !== 'string') return false;
+  return Array.isArray(value.bbox) && value.bbox.length === 4 && value.bbox.every(isFiniteNumber);
+}
+
 function isSeasonId(value: unknown): value is SeasonId {
   return (SEASON_ORDER as readonly unknown[]).includes(value);
 }
@@ -300,6 +308,7 @@ const FIELD_READERS: FieldReaders = {
   shedTotal: finiteNum,
   disasterScale: num,
   disasters: (value) => (isSavedDisasters(value) ? value : undefined),
+  origin: (value) => (isTownOrigin(value) ? value : undefined),
 };
 
 /** Every field but `layers`, copied as is: the writer can never drop a field. */

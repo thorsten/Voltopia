@@ -64,6 +64,7 @@ export function fullSave(): FullSave {
     marketTrading: true,
     seasonOriginDay: 2,
     sandbox: true,
+    origin: { source: 'osm', name: 'Fixture Town', bbox: [8.65, 48.1, 8.69, 48.13] },
     snowpack: 0.3,
     insulation: true,
     winterTicks: 11,

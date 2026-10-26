@@ -1,8 +1,17 @@
 import { BALANCE } from '../../shared/constants.ts';
-import { type PlantType, RoadClass, Terrain, TileType, Zone } from '../../shared/types.ts';
+import {
+  type PlantType,
+  RoadClass,
+  type RoadLane,
+  Terrain,
+  TileType,
+  Zone,
+} from '../../shared/types.ts';
 import { placePlant } from '../energy.ts';
 import { BUILDING_VARIANTS, hasRoadAccess } from '../growth.ts';
+import { buildLanes } from '../lanes.ts';
 import { buildPowerLines } from '../powerLines.ts';
+import { buildRail } from '../rail.ts';
 import { type BuildResult, buildRoads } from '../roads.ts';
 import { markDirty, type SimState } from '../state.ts';
 import { paintZones } from '../zones.ts';
@@ -66,6 +75,17 @@ export function stampPlant(state: SimState, tile: number, plant: PlantType): voi
 export function stampLines(state: SimState, tiles: number[]): void {
   check(buildPowerLines(state, tiles), 'power line');
   verify(tiles, 'power line', (i) => state.layers.powerLine[i] !== 0);
+}
+
+export function stampRail(state: SimState, tiles: number[]): void {
+  check(buildRail(state, tiles), 'rail');
+  verify(tiles, 'rail', (i) => state.layers.rail[i] !== 0);
+}
+
+/** Put a lane kind on existing road tiles (a pedestrian street, a bike lane). */
+export function stampLanes(state: SimState, tiles: number[], kind: RoadLane): void {
+  check(buildLanes(state, tiles, kind), 'lane');
+  verify(tiles, 'lane', (i) => state.layers.roadLane[i] === kind);
 }
 
 /**

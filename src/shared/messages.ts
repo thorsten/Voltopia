@@ -9,6 +9,7 @@ import type {
   ScenarioId,
   Speed,
   TileDiff,
+  TownLayout,
   VehicleState,
   Zone,
 } from './types.ts';
@@ -34,6 +35,12 @@ type SimCommandBody =
       scenario?: ScenarioId;
       /** Free play with the treasury pinned (new free cities only; scenarios ignore it). */
       sandbox?: boolean;
+      /**
+       * Free city built from an imported town (src/import/). Ignored with
+       * `save`, exclusive with `scenario`; an invalid layout falls back to
+       * the seeded free city and is reported as `rejected: 'invalidLayout'`.
+       */
+      layout?: TownLayout;
     }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'buildRoad'; tiles: number[]; avenue?: boolean }

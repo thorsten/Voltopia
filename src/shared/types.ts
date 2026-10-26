@@ -845,6 +845,8 @@ export interface GlobalStats {
   money: number;
   /** Sandbox city: unlimited money, no finance, no goals. */
   sandbox: boolean;
+  /** Where an imported city's map came from (absent for generated maps). */
+  origin?: TownOrigin;
   population: number;
   jobs: number;
   /** 0..1 average citizen happiness. */
@@ -1159,6 +1161,8 @@ export interface SaveGame {
   scenario?: SavedScenario;
   /** Sandbox city (absent in older saves → false). */
   sandbox?: boolean;
+  /** Imported-town origin for the attribution (absent for generated maps and older saves). */
+  origin?: TownOrigin;
   /** Snow cover 0..1 (absent in older saves → 0). */
   snowpack?: number;
   /** Building insulation bought (absent in older saves → false). */

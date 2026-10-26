@@ -303,6 +303,24 @@ describe('save game JSON export/import', () => {
     expect(saveFromJson(JSON.stringify(json)).sandbox).toBeUndefined();
   });
 
+  it('round-trips an imported town origin and drops a malformed one', () => {
+    const save = makeSave();
+    save.origin = { source: 'osm', name: 'Bach & Berg', bbox: [8.65, 48.1, 8.69, 48.13] };
+    expect(saveFromJson(saveToJson(save)).origin).toEqual(save.origin);
+    expect(saveFromJson(saveToJson(makeSave())).origin).toBeUndefined();
+    const json = JSON.parse(saveToJson(save)) as Record<string, unknown>;
+    for (const bad of [
+      { ...save.origin, source: 'map' },
+      { ...save.origin, name: 7 },
+      { ...save.origin, bbox: [8.65, 48.1, 8.69] },
+      { ...save.origin, bbox: [8.65, 48.1, 8.69, 'north'] },
+      'osm',
+    ]) {
+      json.origin = bad;
+      expect(saveFromJson(JSON.stringify(json)).origin).toBeUndefined();
+    }
+  });
+
   it('round-trips winter resilience progress', () => {
     const save = makeSave();
     save.winterTicks = 4321;

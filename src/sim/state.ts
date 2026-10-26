@@ -22,6 +22,7 @@ import type {
   Speed,
   PolicyId,
   TileDiff,
+  TownOrigin,
   TransitStats,
   Weather,
 } from '../shared/types.ts';
@@ -398,6 +399,8 @@ export interface SimState {
   rules: ScenarioRules;
   /** The running (or finished) scenario; absent in free play. */
   scenario?: ScenarioRun;
+  /** Where an imported city's map came from; absent for generated maps. */
+  origin?: TownOrigin;
   /** Seasonal signal for the current tick, recomputed in stepTick. */
   season: SeasonState;
   happiness: number;
@@ -1388,6 +1391,7 @@ export function serializeState(state: SimState): SaveGame {
     rules: { ...state.rules },
     ...(state.scenario ? { scenario: structuredClone(state.scenario) } : {}),
     ...(state.sandbox ? { sandbox: true } : {}),
+    ...(state.origin ? { origin: structuredClone(state.origin) } : {}),
     snowpack: state.weather.snowpack,
     insulation: state.insulation,
     smartMeters: { active: state.smartMeters.active, metered: state.smartMeters.metered },
@@ -1524,6 +1528,19 @@ function sanitizeGroundLayers(state: SimState): void {
   capLayer(layers.roadLane, MAX_ROAD_LANE, RoadLane.None);
 }
 
+/**
+ * The origin of a loaded save, or null when it carries none or a
+ * hand-edited one that does not describe an OpenStreetMap excerpt.
+ */
+function loadOrigin(saved: SaveGame['origin']): TownOrigin | null {
+  if (!saved || saved.source !== 'osm') return null;
+  if (saved.name !== null && typeof saved.name !== 'string') return null;
+  if (!Array.isArray(saved.bbox) || saved.bbox.length !== 4) return null;
+  if (!saved.bbox.every((edge) => typeof edge === 'number' && Number.isFinite(edge))) return null;
+  const [west, south, east, north] = saved.bbox;
+  return { source: 'osm', name: saved.name, bbox: [west, south, east, north] };
+}
+
 export function deserializeState(save: SaveGame): SimState {
   const state = createSimState(save.seed, save.size);
   state.tick = save.tick;
@@ -1612,6 +1629,8 @@ export function deserializeState(save: SaveGame): SimState {
   } else if (save.scenario) {
     state.rules = { ...DEFAULT_RULES };
   }
+  const origin = loadOrigin(save.origin);
+  if (origin) state.origin = origin;
   state.season = seasonState({
     day: Math.floor(save.tick / TICKS_PER_DAY),
     timeOfDay: (save.tick % TICKS_PER_DAY) / TICKS_PER_DAY,
