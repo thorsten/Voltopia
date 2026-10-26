@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { TownLayout } from '../shared/types.ts';
-import { townTileColor } from './townColors.ts';
+import { townTileColor } from '../render/townColors.ts';
 
 /** Paint a layout one pixel per tile in the minimap colours. */
 export function paintTownPreview(context: CanvasRenderingContext2D, layout: TownLayout): void {

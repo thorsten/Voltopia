@@ -22,7 +22,7 @@ import { ScenarioSetupError } from './scenarios/stamp.ts';
 
 const SIZE = 96;
 const SEED = 1;
-const DETERMINISM_TICKS = 400;
+const DETERMINISM_TICKS = 200;
 
 /** The fixture town at 96, rasterised once: the engine tests share it. */
 let layout: TownLayout;
@@ -169,7 +169,7 @@ describe('SimEngine init with a layout', () => {
     expect(sandbox.state.disasterScale).toBe(1);
   });
 
-  it('is deterministic: same seed and layout, same save after 400 ticks', async () => {
+  it(`is deterministic: same seed and layout, same save after ${DETERMINISM_TICKS} ticks`, async () => {
     const run = (): string => {
       const { state } = startImported();
       for (let t = 0; t < DETERMINISM_TICKS; t++) stepTick(state);

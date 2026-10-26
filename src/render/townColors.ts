@@ -1,8 +1,9 @@
 /**
  * One palette for the one-pixel-per-tile pictures of a city: the HUD
- * minimap (src/render/minimapLayer.ts) and the import preview on the
- * new-game page paint from it, so an imported town looks in the preview
- * as it will on the minimap.
+ * minimap (minimapLayer.ts) and the import preview on the new-game page
+ * (src/ui/TownPreview.tsx) paint from it, so an imported town looks in
+ * the preview as it will on the minimap. Lives in render/ because the
+ * minimap layer reads it and render never imports from ui/.
  */
 import { PlantType, Terrain, TownRoad, Zone, type TownLayout } from '../shared/types.ts';
 

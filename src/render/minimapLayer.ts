@@ -1,6 +1,6 @@
 import type { TileDiff } from '../shared/types.ts';
 import { RoadClass, Terrain, TileType, Zone } from '../shared/types.ts';
-import { MINIMAP_COLORS } from '../ui/townColors.ts';
+import { MINIMAP_COLORS } from './townColors.ts';
 import type { DiffLayer } from './renderer.ts';
 
 const COLORS = MINIMAP_COLORS;

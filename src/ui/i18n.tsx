@@ -1895,7 +1895,7 @@ function fill(text: string, vars?: Record<string, string | number>): string {
   if (!vars) return text;
   let filled = text;
   for (const [name, value] of Object.entries(vars)) {
-    filled = filled.replace(`{${name}}`, String(value));
+    filled = filled.replaceAll(`{${name}}`, String(value));
   }
   return filled;
 }
