@@ -20,4 +20,7 @@ playwright-report
 # Tauri (Rust target dir and generated schemas; gen/apple is committed once generated)
 src-tauri/target/
 src-tauri/gen/schemas/
+
+# OpenStreetMap exports dropped in for the import probe stay local; the test fixture is committed
 *.osm
+!src/import/fixtures/town.osm
