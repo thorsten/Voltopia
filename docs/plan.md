@@ -233,6 +233,7 @@ Milestone numbering follows `docs/idea.md` (Way of Working). Each milestone ends
 - [x] Sandbox mode and 6x speed: a new-game toggle founds a city with a pinned, unlimited treasury (∞), disasters off by default, no credit, grant, rating or goals; `start_new_city` takes `sandbox`; a 6x speed for every city (spec: `docs/superpowers/specs/2026-10-19-sandbox-mode-design.md`)
 - [x] Share a city: the whole city as a link (`…/#city=<code>`, deflate-raw + base64url, ~5 KB for a grown 64² city); opening it asks first and keeps the current city as a named save; paste field on the saves page; `share_city` / `open_shared_city` agent tools; the JSON export now keeps policies, finance, rules and scenario (spec: `docs/superpowers/specs/2026-10-19-share-city-design.md`)
 - [x] Annual report: energy outcome fields in the daily sample, a per-year table and two more charts on the statistics page, compare-with-save overlay, CSV export, `get_annual_report` agent tool (spec: `docs/superpowers/specs/2026-10-20-annual-report-design.md`)
+- [x] Import a town from OpenStreetMap: Nominatim search + Overpass download (or an `.osm` file) rasterised onto the grid, settled buildings, ODbL attribution, `search_places` / `import_town` agent tools, Tauri CSP for the three hosts; probed on Schwabmünchen at 96 tiles (spec: `docs/superpowers/specs/2026-10-26-osm-import-design.md`)
 
 ## Testing Strategy
 

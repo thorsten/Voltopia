@@ -427,6 +427,16 @@ next, roughly in the order we would build them.
   when the sim confirms the action; each intro shows once per browser.
   The help page restarts any intro or the first-city tutorial and resets
   the seen list; the settings page turns automatic starts off.
+- **Import a town from OpenStreetMap** (done): the new-game page
+  searches a place (Nominatim), downloads a 2.5 / 3.5 / 5 km square
+  (Overpass) or reads an exported `.osm` file, and rasterises roads,
+  rail, river, lakes, woods and landuse zones onto the grid; buildings
+  settle where OpenStreetMap has them, the player electrifies the town.
+  Spike on Schwabmünchen, 3.5 km at 96 tiles (37 m per tile): 1857 road
+  tiles, 26 % corners after thinning, 408 tiles thinned, 943 zone tiles
+  kept / 303 dropped (no road), 747 settled buildings; the ASCII probe
+  is `node scripts/probe-osm.mjs town.osm 96`. Imported cities carry
+  the ODbL attribution; agents use `search_places` and `import_town`.
 
 ## Way of Working
 
