@@ -6,6 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 const FIXTURE_PATH = fileURLToPath(new URL('../src/import/fixtures/town.osm', import.meta.url));
 const FIXTURE_XML = readFileSync(FIXTURE_PATH, 'utf8');
 const TOWN_NAME = 'Bach & Berg';
+/** How long the stubbed Overpass holds its answer, so the progress bar shows. */
+const OVERPASS_STUB_DELAY_MS = 500;
 
 async function readPopulation(page: Page): Promise<number> {
   const text = await page.getByTestId('population').locator('.hud-stat-value').textContent();
@@ -75,9 +77,11 @@ test('searches a place, downloads the town and starts the city on it', async ({ 
       ]),
     }),
   );
-  await page.route('**/api/interpreter', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/xml', body: FIXTURE_XML }),
-  );
+  // Overpass answers after a short delay so the progress bar is observable.
+  await page.route('**/api/interpreter', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, OVERPASS_STUB_DELAY_MS));
+    await route.fulfill({ status: 200, contentType: 'text/xml', body: FIXTURE_XML });
+  });
   await openNewGame(page);
   await page.getByTestId('size-64').click();
   await page.getByTestId('import-town-query').fill('Bach');
@@ -88,6 +92,11 @@ test('searches a place, downloads the town and starts the city on it', async ({ 
   await expect(page.getByTestId('import-town-place')).toContainText(TOWN_NAME);
   await page.getByTestId('import-town-side').filter({ hasText: '3.5' }).click();
   await page.getByTestId('import-town-load').click();
+  const progress = page.getByTestId('import-town-progress');
+  await expect(progress).toBeVisible();
+  await expect(progress.getByRole('progressbar')).toHaveAttribute('aria-valuenow', /^\d+$/);
+  await expect(page.getByTestId('import-town-progress-label')).toContainText('%');
+  await expect(page.getByTestId('import-town-cancel')).toBeVisible();
   await expect(page.getByTestId('import-town-preview')).toBeVisible({ timeout: 15_000 });
   await startImportedTown(page);
 });

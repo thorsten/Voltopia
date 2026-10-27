@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OSM_IMPORT } from '../import/config.ts';
 import type { PlaceHit } from '../import/fetch.ts';
 import { type OsmData, OsmImportError } from '../import/osm.ts';
 import type { ImportReport } from '../import/rasterise.ts';
@@ -7,6 +8,7 @@ import {
   DEFAULT_SIDE_KM,
   importBlocksStart,
   importErrorKey,
+  importProgressPercent,
   importTownReducer,
   importedLayout,
   initialImportState,
@@ -14,6 +16,8 @@ import {
   metresPerTile,
   readTownFile,
   type ImportFlowState,
+  type ImportProgress,
+  type LoadProgress,
 } from './importTown.ts';
 
 const hit: PlaceHit = {
@@ -291,9 +295,19 @@ describe('loaders', () => {
     await expect(readTownFile(file)).rejects.toMatchObject({ code: 'notOsm' });
   });
 
+  it('reports reading and parsing around a file read', async () => {
+    const file = { size: 42, text: async () => xml } as unknown as File;
+    const steps: LoadProgress[] = [];
+    await readTownFile(file, (p) => steps.push(p));
+    expect(steps).toEqual([
+      { phase: 'reading', bytes: 0, total: 42 },
+      { phase: 'parsing', bytes: 42, total: 42 },
+    ]);
+  });
+
   it('fetches the square box around the place and parses the answer', async () => {
     const calls: unknown[] = [];
-    const { data: loaded, bbox } = await loadTown(hit, 2.5, undefined, {
+    const { data: loaded, bbox } = await loadTown(hit, 2.5, undefined, undefined, {
       fetchTown: async (box, _deps, signal) => {
         calls.push([box, signal]);
         return xml;
@@ -304,5 +318,223 @@ describe('loaders', () => {
     // A 2.5 km box: about 0.0225° of latitude either side of the centre.
     expect(bbox[3] - bbox[1]).toBeCloseTo(2500 / 111_320, 5);
     expect((bbox[0] + bbox[2]) / 2).toBeCloseTo(hit.lon, 6);
+  });
+
+  it('forwards the download progress and reports parsing with the received size', async () => {
+    const steps: LoadProgress[] = [];
+    await loadTown(hit, 2.5, undefined, (p) => steps.push(p), {
+      fetchTown: async (_box, _deps, _signal, onProgress) => {
+        onProgress?.({ phase: 'connecting', bytes: 0, total: null, endpoint: 0 });
+        onProgress?.({ phase: 'downloading', bytes: 100, total: 200, endpoint: 0 });
+        onProgress?.({ phase: 'downloading', bytes: 200, total: 200, endpoint: 0 });
+        return xml;
+      },
+    });
+    expect(steps.map((s) => [s.phase, s.bytes, s.total])).toEqual([
+      ['connecting', 0, null],
+      ['downloading', 100, 200],
+      ['downloading', 200, 200],
+      ['parsing', 200, 200],
+    ]);
+  });
+
+  it('reports parsing with no size when the download did not report', async () => {
+    const steps: LoadProgress[] = [];
+    await loadTown(hit, 2.5, undefined, (p) => steps.push(p), { fetchTown: async () => xml });
+    expect(steps).toEqual([{ phase: 'parsing', bytes: 0, total: null }]);
+  });
+});
+
+describe('importProgressPercent', () => {
+  const base: ImportProgress = {
+    phase: 'connecting',
+    bytes: 0,
+    total: null,
+    elapsedMs: 0,
+    sideKm: 3.5,
+  };
+  const { expectedBytesPerKm2, expectedConnectMs } = OSM_IMPORT.progress;
+
+  it('creeps through 0–10 % while connecting, never reaching 10', () => {
+    expect(importProgressPercent(base)).toBe(0);
+    const one = importProgressPercent({ ...base, elapsedMs: expectedConnectMs });
+    expect(one).toBeCloseTo(10 * (1 - Math.exp(-1)), 6);
+    const late = importProgressPercent({ ...base, elapsedMs: expectedConnectMs * 20 });
+    expect(late).toBeGreaterThan(9.9);
+    expect(late).toBeLessThan(10);
+  });
+
+  it('treats a file read like the connecting wait', () => {
+    expect(importProgressPercent({ ...base, phase: 'reading', elapsedMs: 0 })).toBe(0);
+    expect(importProgressPercent({ ...base, phase: 'reading', elapsedMs: expectedConnectMs })).toBe(
+      importProgressPercent({ ...base, elapsedMs: expectedConnectMs }),
+    );
+  });
+
+  it('fills 10–80 % exactly when the total is known, clamped at the band end', () => {
+    const down = { ...base, phase: 'downloading' as const, total: 1000 };
+    expect(importProgressPercent({ ...down, bytes: 0 })).toBe(10);
+    expect(importProgressPercent({ ...down, bytes: 500 })).toBe(45);
+    expect(importProgressPercent({ ...down, bytes: 1000 })).toBe(80);
+    // Decompressed bytes can exceed a compressed Content-Length.
+    expect(importProgressPercent({ ...down, bytes: 3000 })).toBe(80);
+  });
+
+  it('estimates a chunked download by the expected size of the excerpt', () => {
+    const down = { ...base, phase: 'downloading' as const, total: null };
+    const expected = expectedBytesPerKm2 * 3.5 * 3.5;
+    expect(importProgressPercent({ ...down, bytes: 0 })).toBe(10);
+    expect(importProgressPercent({ ...down, bytes: expected })).toBeCloseTo(
+      10 + 70 * (1 - Math.exp(-1)),
+      6,
+    );
+    const huge = importProgressPercent({ ...down, bytes: expected * 50 });
+    expect(huge).toBeGreaterThan(79.9);
+    expect(huge).toBeLessThanOrEqual(80);
+    // A bigger excerpt expects more bytes, so the same bytes count for less.
+    expect(importProgressPercent({ ...down, bytes: expected, sideKm: 5 })).toBeLessThan(
+      importProgressPercent({ ...down, bytes: expected }),
+    );
+  });
+
+  it('parks at 85 for parsing and 95 for rasterising', () => {
+    expect(importProgressPercent({ ...base, phase: 'parsing' })).toBe(85);
+    expect(importProgressPercent({ ...base, phase: 'rasterising' })).toBe(95);
+  });
+});
+
+describe('importTownReducer: progress', () => {
+  const loading = (): ImportFlowState =>
+    run([
+      { type: 'search' },
+      { type: 'searched', hits: [hit] },
+      { type: 'pick', place: hit },
+      { type: 'side', sideKm: 5 },
+      { type: 'load', source: 'search' },
+    ]);
+
+  it('starts a search load connecting at 0 % with the chosen side', () => {
+    const state = loading();
+    expect(state.progress).toEqual({
+      phase: 'connecting',
+      bytes: 0,
+      total: null,
+      elapsedMs: 0,
+      sideKm: 5,
+    });
+    expect(state.percent).toBe(0);
+  });
+
+  it('starts a file load reading', () => {
+    const state = run([{ type: 'load', source: 'file' }]);
+    expect(state.progress?.phase).toBe('reading');
+    expect(state.percent).toBe(0);
+  });
+
+  it('ticks the elapsed time and creeps the percent', () => {
+    const ticked = importTownReducer(loading(), { type: 'tick', elapsedMs: 3000 });
+    expect(ticked.progress?.elapsedMs).toBe(3000);
+    expect(ticked.percent).toBeGreaterThan(0);
+    expect(ticked.percent).toBeLessThan(10);
+    // Ticks outside a load change nothing.
+    const idle = initialImportState();
+    expect(importTownReducer(idle, { type: 'tick', elapsedMs: 3000 })).toBe(idle);
+  });
+
+  it('never reports less than before', () => {
+    const connected = importTownReducer(loading(), {
+      type: 'tick',
+      elapsedMs: OSM_IMPORT.progress.expectedConnectMs * 10,
+    });
+    const nearTen = connected.percent;
+    // A second endpoint starts connecting again: the bar holds.
+    const again = importTownReducer(connected, {
+      type: 'progress',
+      phase: 'connecting',
+      bytes: 0,
+      total: null,
+    });
+    expect(again.progress?.phase).toBe('connecting');
+    expect(again.percent).toBe(nearTen);
+    const half = importTownReducer(again, {
+      type: 'progress',
+      phase: 'downloading',
+      bytes: 500,
+      total: 1000,
+    });
+    expect(half.percent).toBe(45);
+    const less = importTownReducer(half, {
+      type: 'progress',
+      phase: 'downloading',
+      bytes: 100,
+      total: 1000,
+    });
+    expect(less.percent).toBe(45);
+    expect(less.progress?.bytes).toBe(100);
+  });
+
+  it('keeps the elapsed time and side across progress steps', () => {
+    const ticked = importTownReducer(loading(), { type: 'tick', elapsedMs: 1200 });
+    const down = importTownReducer(ticked, {
+      type: 'progress',
+      phase: 'downloading',
+      bytes: 10,
+      total: null,
+    });
+    expect(down.progress).toEqual({
+      phase: 'downloading',
+      bytes: 10,
+      total: null,
+      elapsedMs: 1200,
+      sideKm: 5,
+    });
+  });
+
+  it('ignores progress of a load that is no longer running', () => {
+    const cancelled = importTownReducer(loading(), { type: 'cancel' });
+    expect(cancelled.progress).toBeNull();
+    expect(cancelled.percent).toBe(0);
+    const stale = importTownReducer(cancelled, {
+      type: 'progress',
+      phase: 'downloading',
+      bytes: 10,
+      total: null,
+    });
+    expect(stale).toBe(cancelled);
+  });
+
+  it('moves to rasterising when parsed and finishes at 100 when rasterised', () => {
+    const parsed = importTownReducer(
+      importTownReducer(loading(), { type: 'progress', phase: 'parsing', bytes: 9, total: 9 }),
+      { type: 'parsed', data, bbox: [1, 2, 3, 4] },
+    );
+    expect(parsed.progress?.phase).toBe('rasterising');
+    expect(parsed.progress?.bytes).toBe(9);
+    expect(parsed.percent).toBe(95);
+    const done = importTownReducer(parsed, {
+      type: 'rasterised',
+      layout: layoutOf(96),
+      report,
+    });
+    expect(done.progress).toBeNull();
+    expect(done.percent).toBe(100);
+  });
+
+  it('a failed load drops the progress', () => {
+    const failed = importTownReducer(loading(), {
+      type: 'failed',
+      step: 'load',
+      errorKey: 'newGame.import.error.fetchFailed',
+    });
+    expect(failed.progress).toBeNull();
+    expect(failed.percent).toBe(0);
+  });
+
+  it('a new load starts the bar over', () => {
+    const done = parsedSearch();
+    expect(done.percent).toBe(100);
+    const reloaded = importTownReducer(done, { type: 'load', source: 'search' });
+    expect(reloaded.percent).toBe(0);
+    expect(reloaded.progress?.phase).toBe('connecting');
   });
 });

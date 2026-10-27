@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { OSM_IMPORT } from '../import/config.ts';
 import { searchPlaces, type PlaceHit } from '../import/fetch.ts';
 import { rasteriseTown } from '../import/rasterise.ts';
+import { ImportProgressBar } from './ImportProgressBar.tsx';
 import { Modal } from './Modal.tsx';
 import { useI18n, type TranslationKey } from './i18n.tsx';
 import {
@@ -27,6 +28,9 @@ import { TownPreview } from './TownPreview.tsx';
 
 /** Decimals of the coordinates shown in the chosen-place chip (~10 m). */
 const CHIP_COORDINATE_DECIMALS = 4;
+
+/** How often the progress bar's elapsed time advances while loading. */
+const PROGRESS_TICK_MS = 250;
 
 export function NewGamePage({
   onStart,
@@ -55,6 +59,18 @@ export function NewGamePage({
   const layout = importedLayout(flow);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // While loading, the bar's waiting phases creep with the elapsed time.
+  const loading = flow.status === 'loading';
+  useEffect(() => {
+    if (!loading) return;
+    const started = Date.now();
+    const id = setInterval(
+      () => dispatch({ type: 'tick', elapsedMs: Date.now() - started }),
+      PROGRESS_TICK_MS,
+    );
+    return () => clearInterval(id);
+  }, [loading]);
 
   // Rasterising is pure and fast (tens of milliseconds); it reruns when
   // the data, its box or the map size changes and feeds the preview.
@@ -105,7 +121,9 @@ export function NewGamePage({
     runRef.current++;
     dispatch({ type: 'load', source: 'search' });
     try {
-      const { data, bbox } = await loadTown(flow.place, flow.sideKm, controller.signal);
+      const { data, bbox } = await loadTown(flow.place, flow.sideKm, controller.signal, (p) => {
+        if (!controller.signal.aborted) dispatch({ type: 'progress', ...p });
+      });
       if (!controller.signal.aborted) dispatch({ type: 'parsed', data, bbox });
     } catch (error) {
       // A cancelled download already dispatched `cancel`.
@@ -127,7 +145,9 @@ export function NewGamePage({
     const run = ++runRef.current;
     dispatch({ type: 'load', source: 'file' });
     try {
-      const data = await readTownFile(file);
+      const data = await readTownFile(file, (p) => {
+        if (run === runRef.current) dispatch({ type: 'progress', ...p });
+      });
       if (run === runRef.current) dispatch({ type: 'parsed', data, bbox: null });
     } catch (error) {
       if (run === runRef.current) {
@@ -151,16 +171,19 @@ export function NewGamePage({
     onStart();
   };
 
-  /** The one status line of the import, under the step it belongs to. */
+  /**
+   * The one status line of the import, under the step it belongs to: the
+   * progress bar of a running load, or an error.
+   */
   const statusUnder = (step: ImportStep): ReactNode => {
+    const loadStep: ImportStep = flow.source === 'file' ? 'file' : 'load';
+    if (flow.progress && step === loadStep) {
+      return <ImportProgressBar progress={flow.progress} percent={flow.percent} />;
+    }
     let text: string | null = null;
     let error = false;
     if (flow.status === 'searching' && step === 'search') text = t('newGame.import.searching');
-    else if (flow.status === 'loading' && step === 'load' && flow.source === 'search') {
-      text = t('newGame.import.loading');
-    } else if (flow.status === 'loading' && step === 'file' && flow.source === 'file') {
-      text = t('newGame.import.reading');
-    } else if (flow.status === 'error' && flow.errorStep === step && flow.errorKey) {
+    else if (flow.status === 'error' && flow.errorStep === step && flow.errorKey) {
       text = t(flow.errorKey, { km: OSM_IMPORT.maxBoxKm });
       error = true;
     }

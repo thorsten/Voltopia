@@ -18,6 +18,25 @@ export interface FetchDeps {
   overpassTimeoutMs?: number;
 }
 
+/**
+ * One step of an Overpass download. `connecting` is reported once per
+ * endpoint attempt before the request goes out; `downloading` after each
+ * chunk. `total` is the `Content-Length` when the server sent one — a hint
+ * only: a gzip-encoded response reports the compressed length while the
+ * browser yields decompressed bytes, so callers clamp the ratio to 1.
+ */
+export interface FetchProgress {
+  phase: 'connecting' | 'downloading';
+  /** Bytes received so far. */
+  bytes: number;
+  /** Declared body length in bytes, or null when the response is chunked. */
+  total: number | null;
+  /** Index into OSM_IMPORT.overpassEndpoints of the endpoint being tried. */
+  endpoint: number;
+}
+
+export type FetchProgressListener = (progress: FetchProgress) => void;
+
 export interface PlaceHit {
   name: string;
   displayName: string;
@@ -148,23 +167,56 @@ export async function searchPlaces(
   }));
 }
 
+/** The declared body length of a response, or null when absent or unusable. */
+function contentLength(response: Response): number | null {
+  const header = response.headers.get('content-length');
+  if (header === null) return null;
+  const total = Number(header);
+  return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+/**
+ * Reads a response body as text chunk by chunk, reporting the bytes so
+ * far after each one. A response without a stream (test stubs) is read
+ * in one go without progress.
+ */
+async function readBody(response: Response, onChunk: (bytes: number) => void): Promise<string> {
+  const stream = response.body;
+  if (!stream) return response.text();
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    text += decoder.decode(value, { stream: true });
+    onChunk(bytes);
+  }
+  return text + decoder.decode();
+}
+
 /**
  * Downloads the OSM XML of a box from the Overpass endpoints in turn:
  * a network error, HTTP error or timeout moves on to the next one, the
  * last failure surfaces as `fetchFailed`. The caller's `signal` aborts
- * the download with `aborted`.
+ * the download with `aborted`. `onProgress` hears every endpoint attempt
+ * and every received chunk, so the page can show a bar.
  */
 export async function fetchTown(
   bbox: Bbox,
   deps: FetchDeps = {},
   signal?: AbortSignal,
+  onProgress?: FetchProgressListener,
 ): Promise<string> {
   if (signal?.aborted) throw new OsmImportError('aborted');
   const { fetch, overpassTimeoutMs } = resolveDeps(deps);
   const body = new URLSearchParams({ data: buildOverpassQuery(bbox) }).toString();
-  for (const endpoint of OSM_IMPORT.overpassEndpoints) {
+  for (const [index, endpoint] of OSM_IMPORT.overpassEndpoints.entries()) {
     const timeout = AbortSignal.timeout(overpassTimeoutMs);
     const combined = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+    onProgress?.({ phase: 'connecting', bytes: 0, total: null, endpoint: index });
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -172,7 +224,12 @@ export async function fetchTown(
         body,
         signal: combined,
       });
-      if (response.ok) return await response.text();
+      if (response.ok) {
+        const total = contentLength(response);
+        return await readBody(response, (bytes) =>
+          onProgress?.({ phase: 'downloading', bytes, total, endpoint: index }),
+        );
+      }
       // 429/503/504 is the endpoint saying "not now"; any other status is
       // unexpected for the same query — either way the next endpoint gets a go.
     } catch {

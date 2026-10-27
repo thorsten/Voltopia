@@ -3,6 +3,7 @@ import { OSM_IMPORT } from './config.ts';
 import {
   buildOverpassQuery,
   type FetchDeps,
+  type FetchProgress,
   fetchTown,
   resetSearchGate,
   searchPlaces,
@@ -42,6 +43,21 @@ function fakeFetch(answers: Array<Response | Error | 'hang'>): {
     return Promise.resolve(answer);
   }) as typeof fetch;
   return { fetch: stub, calls };
+}
+
+/** A response whose body arrives in the given chunks, optionally with a Content-Length. */
+function chunkedResponse(chunks: string[], total?: number): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: total === undefined ? {} : { 'content-length': String(total) },
+  });
 }
 
 async function errorCode(promise: Promise<unknown>): Promise<string> {
@@ -298,6 +314,71 @@ describe('fetchTown', () => {
     controller.abort();
     expect(await errorCode(fetchTown(bbox, { fetch }, controller.signal))).toBe('aborted');
     expect(calls).toHaveLength(0);
+  });
+
+  it('reports connecting, then the bytes of each chunk with the declared total', async () => {
+    const { fetch } = fakeFetch([chunkedResponse(['<osm>', '</osm>'], 11)]);
+    const events: FetchProgress[] = [];
+    expect(await fetchTown(bbox, { fetch }, undefined, (p) => events.push(p))).toBe('<osm></osm>');
+    expect(events).toEqual([
+      { phase: 'connecting', bytes: 0, total: null, endpoint: 0 },
+      { phase: 'downloading', bytes: 5, total: 11, endpoint: 0 },
+      { phase: 'downloading', bytes: 11, total: 11, endpoint: 0 },
+    ]);
+  });
+
+  it('reports a null total for a chunked response without Content-Length', async () => {
+    const { fetch } = fakeFetch([chunkedResponse(['<os', 'm/>'])]);
+    const events: FetchProgress[] = [];
+    expect(await fetchTown(bbox, { fetch }, undefined, (p) => events.push(p))).toBe('<osm/>');
+    expect(events.filter((e) => e.phase === 'downloading')).toEqual([
+      { phase: 'downloading', bytes: 3, total: null, endpoint: 0 },
+      { phase: 'downloading', bytes: 6, total: null, endpoint: 0 },
+    ]);
+  });
+
+  it('decodes a multi-byte character split across chunks', async () => {
+    const bytes = new TextEncoder().encode('Schwabmünchen');
+    const { fetch } = fakeFetch([
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            // Split inside the two-byte "ü".
+            controller.enqueue(bytes.slice(0, 8));
+            controller.enqueue(bytes.slice(8));
+            controller.close();
+          },
+        }),
+      ),
+    ]);
+    expect(await fetchTown(bbox, { fetch })).toBe('Schwabmünchen');
+  });
+
+  it('falls back to text() for a response without a body stream', async () => {
+    const stub = {
+      ok: true,
+      body: null,
+      headers: new Headers(),
+      text: async () => '<osm/>',
+    } as unknown as Response;
+    const { fetch } = fakeFetch([stub]);
+    const events: FetchProgress[] = [];
+    expect(await fetchTown(bbox, { fetch }, undefined, (p) => events.push(p))).toBe('<osm/>');
+    expect(events).toEqual([{ phase: 'connecting', bytes: 0, total: null, endpoint: 0 }]);
+  });
+
+  it('reports connecting again for the second endpoint', async () => {
+    const { fetch } = fakeFetch([
+      new Response('busy', { status: 429 }),
+      chunkedResponse(['<osm/>']),
+    ]);
+    const events: FetchProgress[] = [];
+    expect(await fetchTown(bbox, { fetch }, undefined, (p) => events.push(p))).toBe('<osm/>');
+    expect(events).toEqual([
+      { phase: 'connecting', bytes: 0, total: null, endpoint: 0 },
+      { phase: 'connecting', bytes: 0, total: null, endpoint: 1 },
+      { phase: 'downloading', bytes: 6, total: null, endpoint: 1 },
+    ]);
   });
 
   it('fails with aborted when the caller aborts mid-flight', async () => {

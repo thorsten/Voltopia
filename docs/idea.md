@@ -437,6 +437,9 @@ next, roughly in the order we would build them.
   kept / 303 dropped (no road), 747 settled buildings; the ASCII probe
   is `node scripts/probe-osm.mjs town.osm 96`. Imported cities carry
   the ODbL attribution; agents use `search_places` and `import_town`.
+  A load shows a progress bar with the phase and a percent: the Overpass
+  wait and a chunked download are honest estimates (`OSM_IMPORT.progress`),
+  only a download with a Content-Length is exact; the bar never steps back.
   Settling probe (2026-10-26, thresholds 1 / 3 / 6 centroids per tile):
   at 96 the town starts with 5,936 residents in 747 buildings and earns
   39,200 a day in tax against 13,500 of road and rail upkeep from day 1

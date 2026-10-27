@@ -2925,6 +2925,66 @@ body,
   color: var(--hud-negative);
 }
 
+/* Progress of a town load: the fill follows the flow's monotonic percent;
+   while waiting for the first byte the track carries moving stripes. */
+.import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+}
+
+.import-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hud-border);
+  background-color: var(--hud-hover-soft);
+  overflow: hidden;
+}
+
+.import-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 250ms ease-out;
+}
+
+.import-progress-connecting .import-progress-track,
+.import-progress-reading .import-progress-track {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    var(--hud-border) 6px 12px
+  );
+  background-size: 17px 100%;
+  animation: import-progress-stripes 1s linear infinite;
+}
+
+@keyframes import-progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 17px 0;
+  }
+}
+
+.import-progress-label {
+  font-size: 12px;
+  color: var(--hud-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .import-progress-fill {
+    transition: none;
+  }
+  .import-progress-connecting .import-progress-track,
+  .import-progress-reading .import-progress-track {
+    animation: none;
+  }
+}
+
 .import-file {
   margin-top: 10px;
   font-size: 12px;

@@ -70,4 +70,19 @@ export const OSM_IMPORT = {
    * road neighbours stay connected without it before removing it.
    */
   thinningWindow: 3,
+  /**
+   * Estimates behind the import progress bar where nothing exact is
+   * known: Overpass answers chunked, without a Content-Length, after
+   * running the query server-side.
+   */
+  progress: {
+    /**
+     * Expected download size per square kilometre of the excerpt, in
+     * bytes: Schwabmünchen's 3.5 km filtered download is about 2.5 MB over
+     * 12.7 km².
+     */
+    expectedBytesPerKm2: 200_000,
+    /** How long the Overpass queue typically takes to send the first byte. */
+    expectedConnectMs: 15_000,
+  },
 } as const;
