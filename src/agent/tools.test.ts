@@ -235,7 +235,7 @@ describe('agent tools: reading', () => {
       expect(tool.inputSchema.type).toBe('object');
     }
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toHaveLength(12);
+    expect(readOnly).toHaveLength(13);
     expect(readOnly).toContain('share_city');
     const consequential = tools.filter((t) => t.annotations?.consequentialHint).map((t) => t.name);
     expect(consequential).toEqual(
