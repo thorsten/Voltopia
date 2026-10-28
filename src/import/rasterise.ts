@@ -93,17 +93,24 @@ function isClosed(refs: string[]): boolean {
   return refs.length > 3 && refs[0] === refs[refs.length - 1];
 }
 
+/** Width of the unzoned ring around the excerpt on a `size` grid. */
+export function marginTiles(size: number): number {
+  return Math.round(size * OSM_IMPORT.marginShare);
+}
+
 /**
  * Rasterise `data` onto a `size` x `size` grid. The box comes from the
  * argument (search flow), else the file's `<bounds>`, else the nodes.
+ * `margin` tiles on every side stay free of zones and buildings.
  */
 export function rasteriseTown(
   data: OsmData,
   size: number,
   bbox?: Bbox,
+  margin = marginTiles(size),
 ): { layout: TownLayout; report: ImportReport } {
   const box = bbox ?? data.bounds ?? boundsOf(data.nodes.values());
-  const projection = createProjection(box, size);
+  const projection = createProjection(box, size, margin);
   if (!Number.isFinite(projection.sideM)) throw new OsmImportError('empty');
   if (projection.sideM > OSM_IMPORT.maxBoxKm * 1000) throw new OsmImportError('boxTooLarge');
 
@@ -119,6 +126,8 @@ export function rasteriseTown(
 
   const points = (way: OsmWay): Point[] => wayPoints(data, projection, way.refs);
   const inside = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < size && y < size;
+  const insideBox = (x: number, y: number): boolean =>
+    x >= margin && y >= margin && x < size - margin && y < size - margin;
   const stamp = (x: number, y: number, width: number, paint: (index: number) => void): void => {
     for (let dy = 0; dy < width; dy++) {
       for (let dx = 0; dx < width; dx++) {
@@ -162,7 +171,7 @@ export function rasteriseTown(
       const index = y * size + x;
       if (kind.layer === 'lake') terrain[index] = Terrain.Lake;
       else if (kind.layer === 'forest') forest[index] = BALANCE.forest.maxStage;
-      else zone[index] = kind.zone;
+      else if (insideBox(x, y)) zone[index] = kind.zone;
     });
   }
 
@@ -252,7 +261,7 @@ export function rasteriseTown(
     }
     const x = Math.floor(sx / ring.length);
     const y = Math.floor(sy / ring.length);
-    if (inside(x, y)) centroids[y * size + x]++;
+    if (insideBox(x, y)) centroids[y * size + x]++;
   }
   const thresholds = BALANCE.osmImport.buildingsPerDensity;
   for (let index = 0; index < tiles; index++) {

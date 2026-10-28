@@ -10,7 +10,7 @@ import { OSM_IMPORT } from '../import/config.ts';
 import { fetchTown, searchPlaces } from '../import/fetch.ts';
 import { squareBbox } from '../import/geo.ts';
 import { OsmImportError, parseOsm } from '../import/osm.ts';
-import { rasteriseTown } from '../import/rasterise.ts';
+import { marginTiles, rasteriseTown } from '../import/rasterise.ts';
 import { BALANCE, GRID_SIZE, TICKS_PER_DAY } from '../shared/constants.ts';
 import { lShapedPath, neighbors4, rectTiles, tileIndex, tileX, tileY } from '../shared/grid.ts';
 import type { LifetimeData, SimCommand } from '../shared/messages.ts';
@@ -1053,12 +1053,18 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
               zoneLanduses: Object.keys(OSM_IMPORT.zoneLanduses),
               placeRanks: [...OSM_IMPORT.placeRanks],
             },
+            marginShare: OSM_IMPORT.marginShare,
             buildingsPerDensity: [...BALANCE.osmImport.buildingsPerDensity],
+            foundingGrantByDensity: [...BALANCE.osmImport.foundingGrantByDensity],
+            abandonAfterDays: BALANCE.osmImport.abandonAfterDays,
             note:
               'import_town: OSM highways become streets/avenues, railway=rail track, waterways ' +
               'the river, water/wood areas lake/forest, landuse zones; a zoned, road-served ' +
               'tile with at least buildingsPerDensity[d-1] OSM buildings starts with a density-d ' +
-              'building.',
+              'building. Zones and buildings stop at the box, leaving marginShare of the size ' +
+              'free on every side; every road tile carries a power line; the treasury gets ' +
+              'foundingGrantByDensity per building; unsupplied buildings decay only after ' +
+              'abandonAfterDays.',
           },
           policies: Object.fromEntries(
             POLICY_IDS.map((id) => [
@@ -2121,10 +2127,16 @@ export function createAgentTools(ctx: AgentContext): AgentTool[] {
         `${OSM_IMPORT.sideKm.join(', ')}; default ${OSM_IMPORT.sideKm[1]}) and the map size ` +
         `(${MAP_SIZES.join(', ')}; default ${IMPORT_DEFAULT_SIZE}) — a ` +
         `${OSM_IMPORT.sideKm[1]} km town on ${IMPORT_DEFAULT_SIZE} tiles is about ` +
-        `${Math.round((OSM_IMPORT.sideKm[1] * 1000) / IMPORT_DEFAULT_SIZE)} m per tile. Downloads the ` +
+        `${Math.round(
+          (OSM_IMPORT.sideKm[1] * 1000) /
+            (IMPORT_DEFAULT_SIZE - 2 * marginTiles(IMPORT_DEFAULT_SIZE)),
+        )} m per tile. Downloads the ` +
         'roads, rail, water, woods, landuse zones and buildings from Overpass (tens of seconds), ' +
-        'rasterises them onto the grid and settles buildings where OpenStreetMap has them; the ' +
-        'player then electrifies the town. Returns the town name, the bbox (west, south, east, ' +
+        'rasterises them onto the grid inside a ring of open land (marginShare of the size on ' +
+        'every side) and settles buildings where OpenStreetMap has them. The town arrives with ' +
+        'power lines on every road tile and a founding grant per building on top of the ' +
+        "difficulty's money; the player then builds generation and storage. Returns the " +
+        'town name, the bbox (west, south, east, ' +
         'north) and the rasterisation report (metresPerTile, counts per layer, roadComponents, ' +
         'droppedZones, thinned, skippedHighways). difficulty, seed, disasters and sandbox work ' +
         "as in start_new_city. Nominatim's usage policy: one request per second, no search " +

@@ -15,7 +15,7 @@ import { parseOsm } from '../import/osm.ts';
 import { rasteriseTown } from '../import/rasterise.ts';
 import { SimEngine } from './engine.ts';
 import { hasRoadAccess } from './growth.ts';
-import { applyTownLayout, validateTownLayout } from './importTown.ts';
+import { applyTownLayout, foundingGrant, validateTownLayout } from './importTown.ts';
 import { createSimState, serializeState } from './state.ts';
 import { stepTick } from './tick.ts';
 import { ScenarioSetupError } from './scenarios/stamp.ts';
@@ -131,12 +131,32 @@ describe('SimEngine init with a layout', () => {
     expect(buildings).toBeGreaterThan(0);
   });
 
+  it('wires every road tile into the grid for free', () => {
+    const { layers } = startImported().state;
+    let lines = 0;
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      const road = layout.road[i] !== TownRoad.None;
+      expect(layers.powerLine[i] !== 0).toBe(road);
+      if (road) lines++;
+    }
+    expect(lines).toBeGreaterThan(0);
+  });
+
+  it('adds a founding grant per settled building to the starting money', () => {
+    const perBuilding = BALANCE.osmImport.foundingGrantByDensity;
+    let grant = 0;
+    for (let i = 0; i < SIZE * SIZE; i++) grant += perBuilding[layout.density[i]];
+    expect(grant).toBeGreaterThan(0);
+    expect(foundingGrant(layout)).toBe(grant);
+    expect(startImported().state.money).toBe(BALANCE.startingMoney + grant);
+  });
+
   it('sets the origin, costs nothing and cannot be undone', () => {
     const engine = startImported();
     const { state } = engine;
     expect(state.origin).toEqual({ source: 'osm', name: layout.name, bbox: layout.bbox });
     expect(state.origin?.bbox).not.toBe(layout.bbox);
-    expect(state.money).toBe(BALANCE.startingMoney);
+    expect(state.money).toBe(BALANCE.startingMoney + foundingGrant(layout));
     expect(state.undoStack).toEqual([]);
     expect(state.statsDirty).toBe(true);
     expect(state.gridVersion).toBeGreaterThan(0);
@@ -160,7 +180,7 @@ describe('SimEngine init with a layout', () => {
       disasterScale: 0.5,
       sandbox: false,
     });
-    expect(engine.state.money).toBe(12_345);
+    expect(engine.state.money).toBe(12_345 + foundingGrant(layout));
     expect(engine.state.disasterScale).toBe(0.5);
     expect(engine.state.sandbox).toBe(false);
     const sandbox = new SimEngine(SEED, SIZE);

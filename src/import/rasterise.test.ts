@@ -14,7 +14,7 @@ import {
   type OsmWay,
   parseOsm,
 } from './osm.ts';
-import { rasteriseTown } from './rasterise.ts';
+import { marginTiles, rasteriseTown } from './rasterise.ts';
 
 /** A 16-tile grid over a 0.01° box on the equator: tile (x, y) spans lon x/16 %, lat from the top. */
 const SIZE = 16;
@@ -95,7 +95,7 @@ describe('rasteriseTown mapping', () => {
       [2, 5],
       [10, 5],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.road[idx(6, 5)]).toBe(TownRoad.Avenue);
     expect(report.counts.avenue).toBe(9);
     expect(report.counts.street).toBe(0);
@@ -107,7 +107,7 @@ describe('rasteriseTown mapping', () => {
       [2, 5],
       [10, 5],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.road[idx(6, 5)]).toBe(TownRoad.Street);
     expect(layout.pedestrian[idx(6, 5)]).toBe(0);
     expect(report.counts.street).toBe(9);
@@ -119,7 +119,7 @@ describe('rasteriseTown mapping', () => {
       [2, 5],
       [10, 5],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.road[idx(6, 5)]).toBe(TownRoad.Street);
     expect(layout.pedestrian[idx(6, 5)]).toBe(1);
     expect(report.counts.pedestrian).toBe(9);
@@ -136,7 +136,7 @@ describe('rasteriseTown mapping', () => {
       [6, 2],
       [6, 9],
     ]);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.road[idx(6, 5)]).toBe(TownRoad.Avenue);
     expect(layout.pedestrian[idx(6, 5)]).toBe(0);
     expect(layout.pedestrian[idx(5, 5)]).toBe(1);
@@ -156,7 +156,7 @@ describe('rasteriseTown mapping', () => {
       [0, 12],
       [15, 12],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.rail[idx(7, 3)]).toBe(1);
     expect(layout.rail[idx(7, 8)]).toBe(0);
     expect(layout.rail[idx(7, 12)]).toBe(0);
@@ -169,7 +169,7 @@ describe('rasteriseTown mapping', () => {
       [0, 7],
       [15, 7],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.terrain[idx(4, 7)]).toBe(Terrain.River);
     expect(layout.terrain[idx(4, 8)]).toBe(Terrain.Land);
     expect(report.counts.river).toBe(16 * OSM_IMPORT.riverWidthTiles);
@@ -183,7 +183,7 @@ describe('rasteriseTown mapping', () => {
   ])('%o fills a lake', (tags) => {
     const t = town();
     t.rect(tags, 4, 4, 8, 8);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.terrain[idx(5, 5)]).toBe(Terrain.Lake);
     expect(layout.terrain[idx(3, 5)]).toBe(Terrain.Land);
     expect(layout.terrain[idx(8, 5)]).toBe(Terrain.Land);
@@ -193,7 +193,7 @@ describe('rasteriseTown mapping', () => {
   it('skips a closed way tagged area=no', () => {
     const t = town();
     t.rect({ natural: 'water', area: 'no' }, 4, 4, 8, 8);
-    expect(rasteriseTown(t.data(), SIZE).report.counts.lake).toBe(0);
+    expect(rasteriseTown(t.data(), SIZE, undefined, 0).report.counts.lake).toBe(0);
   });
 
   it.each<Record<string, string>>([{ landuse: 'forest' }, { natural: 'wood' }])(
@@ -201,7 +201,7 @@ describe('rasteriseTown mapping', () => {
     (tags) => {
       const t = town();
       t.rect(tags, 1, 1, 5, 4);
-      const { layout, report } = rasteriseTown(t.data(), SIZE);
+      const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
       expect(layout.forest[idx(2, 2)]).toBe(BALANCE.forest.maxStage);
       expect(layout.forest[idx(5, 2)]).toBe(0);
       expect(report.counts.forest).toBe(12);
@@ -220,7 +220,7 @@ describe('rasteriseTown mapping', () => {
       [1, 6],
     ]);
     t.rect({ landuse }, 2, 2, 4, 7);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     for (let y = 2; y < 7; y++) {
       expect(layout.zone[idx(2, y)]).toBe(zone);
       expect(layout.zone[idx(3, y)]).toBe(Zone.None);
@@ -240,7 +240,7 @@ describe('rasteriseTown mapping', () => {
     t.place(7, 7, { place: 'hamlet', name: 'Weiler' });
     t.place(30, 30, { place: 'city', name: 'Far Away' });
     t.place(8, 8, { place: 'city' });
-    expect(rasteriseTown(t.data(), SIZE).layout.name).toBe('Mittelstadt');
+    expect(rasteriseTown(t.data(), SIZE, undefined, 0).layout.name).toBe('Mittelstadt');
   });
 
   it('has no name without a place node', () => {
@@ -249,7 +249,7 @@ describe('rasteriseTown mapping', () => {
       [1, 1],
       [3, 1],
     ]);
-    expect(rasteriseTown(t.data(), SIZE).layout.name).toBeNull();
+    expect(rasteriseTown(t.data(), SIZE, undefined, 0).layout.name).toBeNull();
   });
 
   it('counts skipped highway classes and draws nothing for them', () => {
@@ -266,7 +266,7 @@ describe('rasteriseTown mapping', () => {
       [1, 5],
       [9, 5],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(report.skippedHighways).toEqual({ footway: 1, service: 2 });
     expect(layout.road.every((v) => v === TownRoad.None)).toBe(true);
     expect(report.roadComponents).toBe(0);
@@ -282,7 +282,7 @@ describe('rasteriseTown areas and lines', () => {
       [2, 3],
       [9, 3],
     ]);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.zone[idx(5, 4)]).toBe(Zone.Retail);
     expect(layout.zone[idx(3, 4)]).toBe(Zone.Residential);
     expect(layout.zone[idx(8, 4)]).toBe(Zone.Residential);
@@ -293,7 +293,7 @@ describe('rasteriseTown areas and lines', () => {
     const outer = t.rect({}, 4, 4, 9, 9);
     t.rect({}, 6, 6, 7, 7);
     t.relation({ type: 'multipolygon', natural: 'water' }, [outer]);
-    const { report, layout } = rasteriseTown(t.data(), SIZE);
+    const { report, layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(report.counts.lake).toBe(25);
     expect(layout.terrain[idx(6, 6)]).toBe(Terrain.Lake);
   });
@@ -304,7 +304,7 @@ describe('rasteriseTown areas and lines', () => {
       [1, 1],
       [13, 9],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     const { road } = layout;
     let tiles = 0;
     for (let y = 0; y < SIZE; y++) {
@@ -333,7 +333,7 @@ describe('rasteriseTown areas and lines', () => {
       [7, 2],
       [7, 9],
     ]);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.terrain[idx(7, 5)]).toBe(Terrain.River);
     expect(layout.road[idx(7, 5)]).toBe(TownRoad.Street);
     expect(layout.pedestrian[idx(7, 5)]).toBe(0);
@@ -351,7 +351,7 @@ describe('rasteriseTown areas and lines', () => {
       [2, 8],
       [11, 8],
     ]);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.terrain[idx(6, 6)]).toBe(Terrain.Land);
     expect(layout.road[idx(6, 6)]).toBe(TownRoad.Street);
     expect(layout.terrain[idx(6, 8)]).toBe(Terrain.Land);
@@ -369,7 +369,7 @@ describe('rasteriseTown areas and lines', () => {
       [7, 2],
       [7, 9],
     ]);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.rail[idx(7, 5)]).toBe(1);
     expect(layout.road[idx(7, 5)]).toBe(TownRoad.Street);
     expect(layout.pedestrian[idx(7, 5)]).toBe(0);
@@ -384,7 +384,7 @@ describe('rasteriseTown areas and lines', () => {
       [2, 4],
       [11, 4],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(report.counts.residential).toBe(0);
     expect(report.counts.forest).toBe(0);
     expect(report.droppedZones).toBe(0);
@@ -404,7 +404,7 @@ describe('rasteriseTown areas and lines', () => {
       [11, 9],
     ]);
     t.rect({ natural: 'wood' }, 2, 5, 5, 6);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.zone[idx(5, 4)]).toBe(Zone.None);
     expect(layout.zone[idx(5, 9)]).toBe(Zone.None);
     expect(layout.forest[idx(9, 9)]).toBe(0);
@@ -427,7 +427,7 @@ describe('rasteriseTown thinning', () => {
       [5, 6],
       [6, 6],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     // One tile per block, then the stub the remaining L would leave.
     expect(report.thinned).toBe(2);
     expect(report.counts.street).toBe(2);
@@ -452,7 +452,7 @@ describe('rasteriseTown thinning', () => {
       [7, 6],
       [7, 12],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(noBlock(layout.road)).toBe(true);
     expect(report.roadComponents).toBe(1);
     // A band of 11 columns keeps 11 tiles: the lower row, no stub at either end.
@@ -484,7 +484,7 @@ describe('rasteriseTown thinning', () => {
       [14, 6],
       [12, 6],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(noBlock(layout.road)).toBe(true);
     expect(report.roadComponents).toBe(1);
     expect(layout.road[idx(7, 5)]).toBe(TownRoad.Avenue);
@@ -511,7 +511,7 @@ describe('rasteriseTown thinning', () => {
       [3, 6],
       [5, 6],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(report.thinned).toBe(0);
     expect(report.roadComponents).toBe(1);
     for (const [x, y] of [
@@ -534,7 +534,7 @@ describe('rasteriseTown thinning', () => {
       [0, 8],
       [15, 8],
     ]);
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(noBlock(layout.rail)).toBe(true);
     expect(countComponents(layout.rail, SIZE)).toBe(1);
     expect(report.thinned).toBe(16);
@@ -550,7 +550,7 @@ describe('rasteriseTown zones and settling', () => {
       [10, 10],
       [12, 10],
     ]);
-    const { report } = rasteriseTown(t.data(), SIZE);
+    const { report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(report.counts.industrial).toBe(0);
     expect(report.droppedZones).toBe(16);
   });
@@ -570,7 +570,7 @@ describe('rasteriseTown zones and settling', () => {
     t.building(4, 4); // zoned but unserved: dropped before settling
     t.building(13, 3); // unzoned
     t.building(6, 2); // on the road
-    const { layout, report } = rasteriseTown(t.data(), SIZE);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(layout.density[idx(2, 3)]).toBe(0);
     expect(layout.density[idx(3, 3)]).toBe(1);
     expect(layout.density[idx(5, 3)]).toBe(2);
@@ -590,9 +590,9 @@ describe('rasteriseTown box handling', () => {
       [1, 1],
       [3, 1],
     ]);
-    expect(() => rasteriseTown(t.data(), SIZE)).toThrow(OsmImportError);
+    expect(() => rasteriseTown(t.data(), SIZE, undefined, 0)).toThrow(OsmImportError);
     try {
-      rasteriseTown(t.data(), SIZE);
+      rasteriseTown(t.data(), SIZE, undefined, 0);
     } catch (error) {
       expect((error as OsmImportError).code).toBe('boxTooLarge');
     }
@@ -607,7 +607,7 @@ describe('rasteriseTown box handling', () => {
       bounds: null,
     };
     try {
-      rasteriseTown(data, SIZE);
+      rasteriseTown(data, SIZE, undefined, 0);
       expect.unreachable();
     } catch (error) {
       expect((error as OsmImportError).code).toBe('empty');
@@ -620,7 +620,7 @@ describe('rasteriseTown box handling', () => {
       [2, 3],
       [9, 7],
     ]);
-    const { layout } = rasteriseTown(t.data(), SIZE);
+    const { layout } = rasteriseTown(t.data(), SIZE, undefined, 0);
     const [w, s, e, n] = layout.bbox;
     expect(w).toBeCloseTo(centre(2, 3)[0], 9);
     expect(e).toBeCloseTo(centre(9, 7)[0], 9);
@@ -633,15 +633,17 @@ describe('rasteriseTown box handling', () => {
     // In the south-west quarter: lands on row 4, columns 6..14 of the quarter's own grid.
     t.way({ highway: 'residential' }, [pt(3.25, 10.25), pt(7.25, 10.25)]);
     const half: Bbox = [0, 0, 0.005, 0.005];
-    const { layout, report } = rasteriseTown(t.data(), SIZE, half);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, half, 0);
     expect(layout.bbox).toEqual(half);
     expect(report.metresPerTile).toBeCloseTo(
-      rasteriseTown(t.data(), SIZE).report.metresPerTile / 2,
+      rasteriseTown(t.data(), SIZE, undefined, 0).report.metresPerTile / 2,
     );
     expect(layout.road[idx(10, 4)]).toBe(TownRoad.Street);
     expect(layout.road[idx(5, 4)]).toBe(TownRoad.None);
     expect(report.counts.street).toBe(9);
-    expect(rasteriseTown(t.data(), SIZE).layout.road[idx(5, 10)]).toBe(TownRoad.Street);
+    expect(rasteriseTown(t.data(), SIZE, undefined, 0).layout.road[idx(5, 10)]).toBe(
+      TownRoad.Street,
+    );
   });
 
   it('reports metres per tile from the longer side', () => {
@@ -650,9 +652,55 @@ describe('rasteriseTown box handling', () => {
       [2, 5],
       [10, 5],
     ]);
-    const { report } = rasteriseTown(t.data(), SIZE);
+    const { report } = rasteriseTown(t.data(), SIZE, undefined, 0);
     expect(report.widthM).toBeCloseTo(2 * report.heightM, 0);
     expect(report.metresPerTile).toBeCloseTo(report.widthM / SIZE);
+  });
+});
+
+describe('rasteriseTown margin ring', () => {
+  it('leaves a ring of a tenth of the size by default', () => {
+    expect(marginTiles(96)).toBe(10);
+    expect(marginTiles(64)).toBe(6);
+    expect(marginTiles(128)).toBe(13);
+    expect(marginTiles(16)).toBe(2);
+  });
+
+  it('maps the box onto the inner square so the tiles grow', () => {
+    const t = town();
+    t.line({ highway: 'residential' }, [
+      [0, 8],
+      [15, 8],
+    ]);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 2);
+    expect(report.metresPerTile).toBeCloseTo(report.widthM / 12);
+    // tile x on the 16-box lands on 2 + 0.75 x in the inner 12
+    expect(layout.road[idx(2, 8)]).toBe(TownRoad.Street);
+    expect(layout.road[idx(13, 8)]).toBe(TownRoad.Street);
+    expect(layout.road[idx(1, 8)]).toBe(TownRoad.None);
+    expect(layout.road[idx(14, 8)]).toBe(TownRoad.None);
+  });
+
+  it('keeps the ring free of zones and buildings; roads may run out into it', () => {
+    const t = town();
+    t.rect({ landuse: 'residential' }, -4, -4, 20, 20);
+    t.line({ highway: 'residential' }, [
+      [-4, 8],
+      [20, 8],
+    ]);
+    for (let x = -4; x < 20; x++) t.building(x, 7);
+    const { layout, report } = rasteriseTown(t.data(), SIZE, undefined, 2);
+    expect(layout.road[idx(0, 8)]).toBe(TownRoad.Street);
+    expect(layout.road[idx(15, 8)]).toBe(TownRoad.Street);
+    for (let x = 0; x < SIZE; x++) {
+      const inner = x >= 2 && x < 14;
+      expect(layout.zone[idx(x, 7)]).toBe(inner ? Zone.Residential : Zone.None);
+      expect(layout.density[idx(x, 7)] !== 0).toBe(inner);
+      expect(layout.zone[idx(x, 1)]).toBe(Zone.None);
+      expect(layout.zone[idx(x, 14)]).toBe(Zone.None);
+    }
+    // only the rows beside the road keep their zone
+    expect(report.counts.residential).toBe(12 * 2);
   });
 });
 
@@ -674,13 +722,13 @@ describe('rasteriseTown on the fixture', () => {
       expect(layout[key]).toBeInstanceOf(Uint8Array);
       expect(layout[key]).toHaveLength(size * size);
     }
-    expect(report.metresPerTile).toBeCloseTo(3000 / size, 0);
+    expect(report.metresPerTile).toBeCloseTo(3000 / (size - 2 * marginTiles(size)), 0);
     expect(report.roadComponents).toBe(1);
   });
 
   it('reports a sane town at 96', () => {
     const { layout, report } = rasteriseTown(data, 96);
-    expect(report.metresPerTile).toBeCloseTo(31.25, 1);
+    expect(report.metresPerTile).toBeCloseTo(3000 / 76, 1);
     expect(report.roadComponents).toBe(1);
     expect(layout.name).toBe('Bach & Berg');
     expect(layout.bbox[0]).toBeCloseTo(8.65, 6);
@@ -688,8 +736,10 @@ describe('rasteriseTown on the fixture', () => {
     expect(report.skippedHighways).toEqual({ footway: 1, service: 1 });
     expect(report.thinned).toBeGreaterThan(0);
     expect(report.droppedZones).toBeGreaterThan(0);
-    // the multipolygon lake, including its island (outer ring only)
-    expect(layout.terrain[Math.floor(0.82 * 96) * 96 + Math.floor(0.47 * 96)]).toBe(Terrain.Lake);
+    // the multipolygon lake, including its island (outer ring only), on
+    // the inner 76 tiles behind the 10-tile ring
+    const at = (share: number): number => 10 + Math.floor(share * 76);
+    expect(layout.terrain[at(0.82) * 96 + at(0.47)]).toBe(Terrain.Lake);
   });
 
   it('never breaks the sim rules a stamp would reject', () => {

@@ -257,9 +257,9 @@ describe('importTownReducer: load, parse, rasterise', () => {
 });
 
 describe('metres per tile', () => {
-  it('divides the side by the map size', () => {
-    expect(metresPerTile(3.5, 96)).toBeCloseTo(36.46, 2);
-    expect(metresPerTile(5, 128)).toBeCloseTo(39.06, 2);
+  it('divides the side by the map size inside the margin ring', () => {
+    expect(metresPerTile(3.5, 96)).toBeCloseTo(3500 / 76, 2);
+    expect(metresPerTile(5, 128)).toBeCloseTo(5000 / 102, 2);
   });
 });
 

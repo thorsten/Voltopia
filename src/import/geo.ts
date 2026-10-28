@@ -41,18 +41,19 @@ export interface Projection {
 }
 
 /**
- * Projection of a box onto a `size` x `size` grid. The box is made
- * square in metres around its centre, so the longer side spans the grid
- * and the shorter one is centred with margins.
+ * Projection of a box onto a `size` x `size` grid, leaving `margin`
+ * tiles free on every side. The box is made square in metres around its
+ * centre, so the longer side spans the inner square and the shorter one
+ * is centred with margins.
  */
-export function createProjection(bbox: Bbox, size: number): Projection {
+export function createProjection(bbox: Bbox, size: number, margin = 0): Projection {
   const [w, s, e, n] = bbox;
   const midLat = (s + n) / 2;
   const mPerDegLon = metresPerDegreeLon(midLat);
   const widthM = (e - w) * mPerDegLon;
   const heightM = (n - s) * METRES_PER_DEGREE;
   const sideM = Math.max(widthM, heightM);
-  const metresPerTile = sideM / size;
+  const metresPerTile = sideM / (size - 2 * margin);
   const cx = (w + e) / 2;
   const cy = midLat;
   const half = size / 2;

@@ -112,8 +112,28 @@ bbox: [w, s, e, n] }`.
 Out of the mapping, deliberately: the sea (`natural=coastline` is a
 ring around the planet, not a polygon; tidal plants stay for generated
 maps), elevation (flat map, level 0 everywhere — no slope surcharges,
-no flood basins beyond the river tiles), power lines, bus stops and
-plants (the player builds the energy system; that is the game).
+no flood basins beyond the river tiles), bus stops and plants (the
+player builds the energy system; that is the game). Power lines are
+not imported either, but every road tile gets one for free when the
+town starts (see Starting conditions).
+
+### Starting conditions (2026-10-28)
+
+Playtesting the first version showed a town that was almost impossible
+to electrify: no grid, 25_000 to buy plants for a load of ~2_400
+EU/tick, no free lot inside town and a five-day decay clock. Four
+changes, all in `BALANCE.osmImport` / `OSM_IMPORT`:
+
+- **Margin ring** (`OSM_IMPORT.marginShare`, 0.1 of the size per side):
+  the box maps onto the inner square; zones and buildings stop at the
+  box, roads, rail, water and woods may run out into the ring. The ring
+  is where wind and solar farms go.
+- **Grid included**: `applyTownLayout` stamps a power line on every
+  road tile at no cost — a real town has a grid, what it lacks is
+  generation. Any plant beside any road feeds the whole town.
+- **Founding grant** (`foundingGrantByDensity`, per settled building
+  by density) on top of the difficulty's starting money.
+- **Decay grace** 15 days instead of 5.
 
 ## Fetching (`src/import/fetch.ts`)
 

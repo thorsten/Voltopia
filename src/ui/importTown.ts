@@ -9,7 +9,7 @@ import { OSM_IMPORT } from '../import/config.ts';
 import { fetchTown, type PlaceHit } from '../import/fetch.ts';
 import { squareBbox } from '../import/geo.ts';
 import { type Bbox, type OsmData, OsmImportError, parseOsm } from '../import/osm.ts';
-import type { ImportReport } from '../import/rasterise.ts';
+import { type ImportReport, marginTiles } from '../import/rasterise.ts';
 import { GRID_SIZE } from '../shared/constants.ts';
 import type { TownLayout } from '../shared/types.ts';
 import type { TranslationKey } from './i18n.tsx';
@@ -291,7 +291,7 @@ export function importBlocksStart(state: ImportFlowState): boolean {
 
 /** Metres one tile covers for a side and map size (shown before loading). */
 export function metresPerTile(sideKm: number, size: number): number {
-  return (sideKm * 1000) / size;
+  return (sideKm * 1000) / (size - 2 * marginTiles(size));
 }
 
 const ERROR_KEYS: Record<OsmImportError['code'], TranslationKey> = {

@@ -55,6 +55,15 @@ export const OSM_IMPORT = {
   ] as const,
   /** Sides in kilometres of the square excerpt the player can choose. */
   sideKm: [2.5, 3.5, 5] as const,
+  /**
+   * Share of the grid's side left as an unzoned ring around the excerpt:
+   * the box maps onto the inner square, so an imported town has open
+   * land on every edge for the plants and storage it arrives without
+   * (inside, every road-served lot is already built). Roads, rail,
+   * water and woods may run out into the ring; zones and buildings stop
+   * at the box.
+   */
+  marginShare: 0.1,
   /** Overpass server-side timeout; the client waits as long. */
   overpassTimeoutS: 60,
   /** Minimum gap between two place searches in milliseconds. */

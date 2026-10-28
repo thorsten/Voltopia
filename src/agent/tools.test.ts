@@ -4,7 +4,7 @@ import { OSM_IMPORT } from '../import/config.ts';
 import { resetSearchGate } from '../import/fetch.ts';
 import { squareBbox } from '../import/geo.ts';
 import { parseOsm } from '../import/osm.ts';
-import { rasteriseTown } from '../import/rasterise.ts';
+import { marginTiles, rasteriseTown } from '../import/rasterise.ts';
 import {
   BALANCE,
   MAP_SIZES,
@@ -1798,7 +1798,10 @@ describe('agent tools: town import', () => {
       bbox,
     });
     const report = result.report as { metresPerTile: number; counts: Record<string, number> };
-    expect(report.metresPerTile).toBeCloseTo((OSM_IMPORT.sideKm[1] * 1000) / 96, 0);
+    expect(report.metresPerTile).toBeCloseTo(
+      (OSM_IMPORT.sideKm[1] * 1000) / (96 - 2 * marginTiles(96)),
+      0,
+    );
     expect(report.counts.street).toBeGreaterThan(0);
     expect(report.counts.buildings).toBeGreaterThan(0);
     // One Nominatim GET, then the first Overpass endpoint with the bbox query.
@@ -1925,7 +1928,10 @@ describe('agent tools: town import', () => {
     expect(catalog.osmImport).toMatchObject({
       sideKm: [...OSM_IMPORT.sideKm],
       maxBoxKm: OSM_IMPORT.maxBoxKm,
+      marginShare: OSM_IMPORT.marginShare,
       buildingsPerDensity: [...BALANCE.osmImport.buildingsPerDensity],
+      foundingGrantByDensity: [...BALANCE.osmImport.foundingGrantByDensity],
+      abandonAfterDays: BALANCE.osmImport.abandonAfterDays,
     });
     const mapping = (catalog.osmImport as { mapping: Record<string, string[]> }).mapping;
     expect(mapping.avenueHighways).toContain('primary');

@@ -625,10 +625,20 @@ export const BALANCE = {
      * state.origin is set). A real town arrives with hundreds of
      * settled buildings and no grid; with the one-day free-play grace
      * the first plant emptied Schwabmünchen within three days
-     * (5_936 → ~120 residents). Five days of tax income (~200_000 at
-     * 96 tiles) pay for lines along the roads and the first plants.
+     * (5_936 → ~120 residents). Fifteen days: the town now arrives with
+     * its grid and a founding grant, so the clock only has to outlast a
+     * player who builds in bursts rather than every day (the scripted
+     * probe of 2026-10-28 never saw decay at five days either, but a
+     * real player drags lines to the ring sites first).
      */
-    abandonAfterDays: 5,
+    abandonAfterDays: 15,
+    /**
+     * Founding grant per settled building by density level, paid on top
+     * of the difficulty's starting money: the town arrives with its load
+     * fully grown and only the grid along its streets, so the treasury
+     * has to buy the first plants and storage before tax income does.
+     */
+    foundingGrantByDensity: [0, 60, 120, 240] as const,
   },
 
   forest: {

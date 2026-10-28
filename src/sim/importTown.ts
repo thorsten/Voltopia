@@ -4,6 +4,7 @@ import { markDirty, type SimState } from './state.ts';
 import {
   stampBuildings,
   stampLanes,
+  stampLines,
   stampRail,
   stampRoads,
   stampZone,
@@ -66,11 +67,21 @@ function tilesWhere(layout: TownLayout, pick: (index: number) => boolean): numbe
   return tiles;
 }
 
+/** The founding grant a layout earns: a sum over its settled buildings by density. */
+export function foundingGrant(layout: TownLayout): number {
+  const byDensity = BALANCE.osmImport.foundingGrantByDensity;
+  let grant = 0;
+  for (let i = 0; i < layout.density.length; i++) grant += byDensity[layout.density[i]] ?? 0;
+  return grant;
+}
+
 /**
  * Turn a fresh, flat state into the imported town: terrain and woods are
  * copied, then roads, pedestrian streets, track, zones and settled
- * buildings are stamped at no cost. Elevation stays 0 everywhere. The
- * stamps throw a ScenarioSetupError on anything the sim refuses; the
+ * buildings are stamped at no cost, and every road tile carries a power
+ * line (a real town has a grid; what it lacks is generation). The
+ * founding grant is added to the treasury. Elevation stays 0 everywhere.
+ * The stamps throw a ScenarioSetupError on anything the sim refuses; the
  * rasteriser's rules are built so that never happens.
  */
 export function applyTownLayout(state: SimState, layout: TownLayout): void {
@@ -97,6 +108,10 @@ export function applyTownLayout(state: SimState, layout: TownLayout): void {
       state,
       tilesWhere(layout, (i) => layout.rail[i] !== 0),
     );
+    stampLines(
+      state,
+      tilesWhere(layout, (i) => layout.road[i] !== TownRoad.None),
+    );
     for (const zone of ZONES) {
       stampZone(
         state,
@@ -112,6 +127,7 @@ export function applyTownLayout(state: SimState, layout: TownLayout): void {
       );
     }
   });
+  state.money += foundingGrant(layout);
   // The stamp is the city's starting point, not something to undo.
   state.undoStack = [];
   state.origin = { source: 'osm', name: layout.name, bbox: [...layout.bbox] };
